@@ -21,6 +21,32 @@ type Interpreter struct {
 
 func New() *Interpreter { return &Interpreter{} }
 
+// RunWithResult executes a function procedure and captures its return value.
+func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *any, extraVars ...map[string]any) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch s := r.(type) {
+			case dslStop:
+				err = s.err
+			case dslReturn:
+				if result != nil {
+					*result = s.val
+				}
+			default:
+				panic(r)
+			}
+		}
+	}()
+	e := newEnv(this)
+	for _, m := range extraVars {
+		for k, v := range m {
+			e.set(k, v)
+		}
+	}
+	i.execBlock(proc.Body, e)
+	return nil
+}
+
 // Run executes a procedure. Optional extra vars (e.g. {"Движения": collector}) are
 // injected into the top-level environment.
 func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[string]any) (err error) {
@@ -76,6 +102,18 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 				child.set(v.Var.Literal, item)
 				i.execBlock(v.Body, child)
 			}
+		case *Array:
+			for _, item := range items.Iterate() {
+				child := e.child()
+				child.set(v.Var.Literal, item)
+				i.execBlock(v.Body, child)
+			}
+		case *Map:
+			for idx, key := range items.keys {
+				child := e.child()
+				child.set(v.Var.Literal, &KeyValue{Key: key, Value: items.vals[idx]})
+				i.execBlock(v.Body, child)
+			}
 		}
 	case *ast.AssignStmt:
 		val := i.evalExpr(v.Value, e)
@@ -107,8 +145,20 @@ func (i *Interpreter) assign(target ast.Expr, val any, e *env) {
 		e.set(t.Tok.Literal, val)
 	case *ast.MemberExpr:
 		obj := i.evalExpr(t.Object, e)
-		if th, ok := obj.(This); ok {
-			th.Set(t.Field.Literal, val)
+		switch o := obj.(type) {
+		case This:
+			o.Set(t.Field.Literal, val)
+		case *Struct:
+			o.Set(t.Field.Literal, val)
+		}
+	case *ast.IndexExpr:
+		obj := i.evalExpr(t.Object, e)
+		idx := i.evalExpr(t.Index, e)
+		switch o := obj.(type) {
+		case *Array:
+			o.SetIndex(int(toFloatOr0(idx)), val)
+		case *Map:
+			o.CallMethod("Вставить", []any{idx, val})
 		}
 	}
 }
@@ -120,15 +170,36 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 	case *ast.NumberLit:
 		f, _ := strconv.ParseFloat(v.Value, 64)
 		return f
+	case *ast.BoolLit:
+		return v.Value
 	case *ast.Ident:
 		val, _ := e.get(v.Tok.Literal)
 		return val
 	case *ast.MemberExpr:
 		obj := i.evalExpr(v.Object, e)
-		if th, ok := obj.(This); ok {
-			return th.Get(v.Field.Literal)
+		switch o := obj.(type) {
+		case This:
+			return o.Get(v.Field.Literal)
+		case *Struct:
+			return o.Get(v.Field.Literal)
+		case *KeyValue:
+			return o.Get(v.Field.Literal)
 		}
 		return nil
+	case *ast.IndexExpr:
+		obj := i.evalExpr(v.Object, e)
+		idx := i.evalExpr(v.Index, e)
+		switch o := obj.(type) {
+		case *Array:
+			return o.Index(int(toFloatOr0(idx)))
+		case *Map:
+			return o.CallMethod("Получить", []any{idx})
+		}
+		return nil
+	case *ast.NewExpr:
+		return i.evalNew(v, e)
+	case *ast.UnaryExpr:
+		return i.evalUnary(v, e)
 	case *ast.BinaryExpr:
 		return i.evalBinary(v, e)
 	case *ast.CallExpr:
@@ -137,7 +208,47 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 	return nil
 }
 
+func (i *Interpreter) evalNew(n *ast.NewExpr, e *env) any {
+	args := i.evalArgs(n.Args, e)
+	switch n.TypeName.Literal {
+	case "Массив", "Array":
+		return &Array{}
+	case "Соответствие", "Map":
+		return &Map{}
+	case "Структура", "Structure":
+		return newStruct(args)
+	}
+	return nil
+}
+
+func (i *Interpreter) evalUnary(u *ast.UnaryExpr, e *env) any {
+	val := i.evalExpr(u.Operand, e)
+	switch u.Op.Type {
+	case token.NOT:
+		return !truthy(val)
+	case token.MINUS:
+		f, _ := toFloat(val)
+		return -f
+	}
+	return nil
+}
+
 func (i *Interpreter) evalBinary(b *ast.BinaryExpr, e *env) any {
+	// short-circuit для AND/OR
+	if b.Op.Type == token.AND {
+		l := i.evalExpr(b.Left, e)
+		if !truthy(l) {
+			return false
+		}
+		return truthy(i.evalExpr(b.Right, e))
+	}
+	if b.Op.Type == token.OR {
+		l := i.evalExpr(b.Left, e)
+		if truthy(l) {
+			return true
+		}
+		return truthy(i.evalExpr(b.Right, e))
+	}
 	l := i.evalExpr(b.Left, e)
 	r := i.evalExpr(b.Right, e)
 	switch b.Op.Type {
@@ -212,8 +323,11 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 		return result
 	case *ast.MemberExpr:
 		recv := i.evalExpr(callee.Object, e)
-		if mc, ok := recv.(MethodCallable); ok {
-			return mc.CallMethod(callee.Field.Literal, args)
+		switch o := recv.(type) {
+		case MethodCallable:
+			return o.CallMethod(callee.Field.Literal, args)
+		case *Struct:
+			return o.CallMethod(callee.Field.Literal, args)
 		}
 		return nil
 	}

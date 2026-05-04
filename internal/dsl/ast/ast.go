@@ -85,6 +85,30 @@ type BinaryExpr struct {
 	Right Expr
 }
 
+// NewExpr — Новый Массив / Новый Структура("A,B", v1, v2)
+type NewExpr struct {
+	TypeName token.Token
+	Args     []Expr
+}
+
+// IndexExpr — arr[i]
+type IndexExpr struct {
+	Object Expr
+	Index  Expr
+}
+
+// BoolLit — Истина / Ложь
+type BoolLit struct {
+	Tok   token.Token
+	Value bool
+}
+
+// UnaryExpr — НЕ expr
+type UnaryExpr struct {
+	Op      token.Token
+	Operand Expr
+}
+
 func (*Program) nodeType() string       { return "Program" }
 func (*ProcedureDecl) nodeType() string { return "ProcedureDecl" }
 func (*IfStmt) nodeType() string        { return "IfStmt" }
@@ -100,6 +124,10 @@ func (*Ident) nodeType() string         { return "Ident" }
 func (*StringLit) nodeType() string     { return "StringLit" }
 func (*NumberLit) nodeType() string     { return "NumberLit" }
 func (*BinaryExpr) nodeType() string    { return "BinaryExpr" }
+func (*NewExpr) nodeType() string       { return "NewExpr" }
+func (*IndexExpr) nodeType() string     { return "IndexExpr" }
+func (*BoolLit) nodeType() string       { return "BoolLit" }
+func (*UnaryExpr) nodeType() string     { return "UnaryExpr" }
 
 func (*IfStmt) stmtNode()      {}
 func (*ExprStmt) stmtNode()    {}
@@ -115,3 +143,7 @@ func (*Ident) exprNode()      {}
 func (*StringLit) exprNode()  {}
 func (*NumberLit) exprNode()  {}
 func (*BinaryExpr) exprNode() {}
+func (*NewExpr) exprNode()    {}
+func (*IndexExpr) exprNode()  {}
+func (*BoolLit) exprNode()    {}
+func (*UnaryExpr) exprNode()  {}

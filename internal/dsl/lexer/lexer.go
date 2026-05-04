@@ -75,6 +75,10 @@ func (l *Lexer) NextToken() token.Token {
 		return l.tok(token.LPAREN, "(", line, col)
 	case ')':
 		return l.tok(token.RPAREN, ")", line, col)
+	case '[':
+		return l.tok(token.LBRACKET, "[", line, col)
+	case ']':
+		return l.tok(token.RBRACKET, "]", line, col)
 	case '+':
 		return l.tok(token.PLUS, "+", line, col)
 	case '-':

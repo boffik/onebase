@@ -26,6 +26,12 @@ const (
 	ENDDO
 	TO     // To / По  (numeric for loop upper bound)
 	RETURN // Return / Возврат
+	NEW    // Новый / New
+	AND    // И / And
+	OR     // ИЛИ / Or
+	NOT    // НЕ / Not
+	TRUE   // Истина / True
+	FALSE  // Ложь / False
 
 	ASSIGN // =
 	NEQ    // <>
@@ -43,6 +49,8 @@ const (
 	SEMICOLON
 	LPAREN
 	RPAREN
+	LBRACKET // [
+	RBRACKET // ]
 )
 
 var keywords = map[string]Type{
@@ -80,6 +88,21 @@ var keywords = map[string]Type{
 	"КонецЦикла":     ENDDO,
 	"По":             TO,
 	"Возврат":        RETURN,
+	// новый / new
+	"Новый": NEW,
+	"New":   NEW,
+	// логика
+	"И":     AND,
+	"And":   AND,
+	"ИЛИ":   OR,
+	"Or":    OR,
+	"НЕ":    NOT,
+	"Not":   NOT,
+	// булевы литералы
+	"Истина": TRUE,
+	"True":   TRUE,
+	"Ложь":   FALSE,
+	"False":  FALSE,
 }
 
 type Token struct {
@@ -137,6 +160,26 @@ func (t Type) String() string {
 		return "Do"
 	case ENDDO:
 		return "EndDo"
+	case TO:
+		return "To"
+	case RETURN:
+		return "Return"
+	case NEW:
+		return "Новый"
+	case AND:
+		return "И"
+	case OR:
+		return "ИЛИ"
+	case NOT:
+		return "НЕ"
+	case TRUE:
+		return "Истина"
+	case FALSE:
+		return "Ложь"
+	case LBRACKET:
+		return "["
+	case RBRACKET:
+		return "]"
 	case ASSIGN:
 		return "="
 	case NEQ:
