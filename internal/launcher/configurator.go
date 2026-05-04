@@ -74,13 +74,14 @@ type cfgTablePart struct {
 }
 
 type cfgEntity struct {
-	Name          string
-	Kind          string // "Справочник" / "Документ"
-	Posting       bool
-	Fields        []cfgField
-	TableParts    []cfgTablePart
-	Source        string // raw .os content (object module)
-	PostingSource string // raw .posting.os content (ОбработкаПроведения)
+	Name             string
+	Kind             string // "Справочник" / "Документ"
+	Posting          bool
+	Fields           []cfgField
+	TableParts       []cfgTablePart
+	Source           string // raw .os content (object module)
+	PostingSource    string // raw .posting.os content (ОбработкаПроведения)
+	LinkedPrintForms []cfgPrintForm
 }
 
 type cfgRegister struct {
@@ -115,6 +116,13 @@ type cfgProcessor struct {
 	Params []cfgParam
 }
 
+type cfgPrintForm struct {
+	Name     string
+	Document string
+	Source   string
+	FileName string
+}
+
 type cfgInfoRegister struct {
 	Name       string
 	Periodic   bool
@@ -137,6 +145,7 @@ type configuratorData struct {
 	Reports   []cfgReport
 	Modules    []cfgModule
 	Processors []cfgProcessor
+	PrintForms []cfgPrintForm
 	Error     string
 	// all entity names for reference picker
 	AllEntityNames []string
@@ -313,8 +322,20 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	sort.Slice(data.Entities, func(i, j int) bool {
 		return data.Entities[i].Name < data.Entities[j].Name
 	})
+
+	// load print forms and link to entities
+	pfSources := readPrintFormSources(proj.Dir)
+	pfByDoc := make(map[string][]cfgPrintForm)
+	for _, pf := range proj.PrintForms {
+		entry := pfSources[pf.Name]
+		cpf := cfgPrintForm{Name: pf.Name, Document: pf.Document, Source: entry.source, FileName: entry.filename}
+		data.PrintForms = append(data.PrintForms, cpf)
+		pfByDoc[strings.ToLower(pf.Document)] = append(pfByDoc[strings.ToLower(pf.Document)], cpf)
+	}
+
 	for _, e := range data.Entities {
 		data.AllEntityNames = append(data.AllEntityNames, e.Name)
+		e.LinkedPrintForms = pfByDoc[strings.ToLower(e.Name)]
 		if e.Kind == "Справочник" {
 			data.Catalogs = append(data.Catalogs, e)
 		} else {
@@ -467,6 +488,35 @@ func readModuleAndProcSources(dir string) (moduleSources, procSources map[string
 	return
 }
 
+type pfSourceEntry struct {
+	source   string
+	filename string
+}
+
+func readPrintFormSources(dir string) map[string]pfSourceEntry {
+	result := make(map[string]pfSourceEntry)
+	entries, err := os.ReadDir(filepath.Join(dir, "printforms"))
+	if err != nil {
+		return result
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, "printforms", e.Name()))
+		if err != nil {
+			continue
+		}
+		var hdr struct {
+			Name string `yaml:"name"`
+		}
+		if yaml.Unmarshal(raw, &hdr) == nil && hdr.Name != "" {
+			result[hdr.Name] = pfSourceEntry{source: string(raw), filename: e.Name()}
+		}
+	}
+	return result
+}
+
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -580,16 +630,19 @@ func findEntityFilePath(dir, entityName string) (string, error) {
 	return "", fmt.Errorf("entity %q not found", entityName)
 }
 
-func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]saveField) {
+func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]saveField, posting *bool) {
 	ent.Fields = fields
 	for i, tp := range ent.TableParts {
 		if f, ok := tpFields[tp.Name]; ok {
 			ent.TableParts[i].Fields = f
 		}
 	}
+	if posting != nil {
+		ent.Posting = *posting
+	}
 }
 
-func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField) error {
+func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool) error {
 	filePath, err := findEntityFilePath(dir, entityName)
 	if err != nil {
 		return err
@@ -602,7 +655,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	if err := yaml.Unmarshal(raw, &ent); err != nil {
 		return err
 	}
-	applyFieldEdits(&ent, fields, tpFields)
+	applyFieldEdits(&ent, fields, tpFields, posting)
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -610,7 +663,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	return os.WriteFile(filePath, out, 0o644)
 }
 
-func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField) error {
+func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool) error {
 	db, err := storage.Connect(ctx, b.DB)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -647,7 +700,7 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 		return fmt.Errorf("entity %q not found in DB config", entityName)
 	}
 
-	applyFieldEdits(&ent, fields, tpFields)
+	applyFieldEdits(&ent, fields, tpFields, posting)
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -672,6 +725,14 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 	}
 	entityName := r.FormValue("entity")
 	tpNames := r.Form["tp_names"]
+	entityKind := r.FormValue("entity_kind")
+
+	// read posting checkbox (only meaningful for documents)
+	var posting *bool
+	if entityKind == "Документ" {
+		v := r.FormValue("posting") == "true"
+		posting = &v
+	}
 
 	var fields []saveField
 	for i := 0; i < 500; i++ {
@@ -719,9 +780,9 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields)
+		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting)
 	} else {
-		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields)
+		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -1427,6 +1488,118 @@ func processorSrcFilename(name string) string {
 	runes := []rune(name)
 	runes[0] = unicode.ToLower(runes[0])
 	return string(runes) + ".proc.os"
+}
+
+// ── Print form save ───────────────────────────────────────────────────────────
+
+func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	r.ParseForm()
+	filename := strings.TrimSpace(r.FormValue("printform_filename"))
+	source := r.FormValue("source")
+
+	if filename == "" {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = "Имя файла печатной формы не указано"
+		renderCfg(w, data)
+		return
+	}
+
+	var saveErr error
+	if b.ConfigSource == "database" {
+		db, cerr := storage.Connect(r.Context(), b.DB)
+		if cerr != nil {
+			saveErr = cerr
+		} else {
+			defer db.Close()
+			_, saveErr = db.Pool().Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "printforms/"+filename, []byte(source))
+		}
+	} else {
+		pfDir := filepath.Join(b.Path, "printforms")
+		os.MkdirAll(pfDir, 0o755)
+		saveErr = os.WriteFile(filepath.Join(pfDir, filename), []byte(source), 0o644)
+	}
+
+	var hdr struct {
+		Name string `yaml:"name"`
+	}
+	yaml.Unmarshal([]byte(source), &hdr) //nolint
+	pfName := hdr.Name
+	if pfName == "" {
+		pfName = strings.TrimSuffix(filename, ".yaml")
+	}
+
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if saveErr != nil {
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
+	} else {
+		data.FieldsSaved = true
+		data.FieldsSavedEntity = pfName
+	}
+	renderCfg(w, data)
+}
+
+func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("name"))
+	document := strings.TrimSpace(r.FormValue("document"))
+
+	if name == "" {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = "Имя печатной формы обязательно"
+		renderCfg(w, data)
+		return
+	}
+
+	runes := []rune(name)
+	runes[0] = unicode.ToLower(runes[0])
+	filename := string(runes) + ".yaml"
+
+	source := fmt.Sprintf("name: %s\ndocument: %s\ntitle: \"{{Номер}} от {{Дата | date}}\"\n\nheader: |\n  ## %s\n\ntable:\n  source: Товары\n  columns:\n    - field: \"@row\"\n      label: \"№\"\n      width: 36px\n      align: center\n", name, document, name)
+
+	var saveErr error
+	if b.ConfigSource == "database" {
+		db, cerr := storage.Connect(r.Context(), b.DB)
+		if cerr != nil {
+			saveErr = cerr
+		} else {
+			defer db.Close()
+			_, saveErr = db.Pool().Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "printforms/"+filename, []byte(source))
+		}
+	} else {
+		pfDir := filepath.Join(b.Path, "printforms")
+		os.MkdirAll(pfDir, 0o755)
+		fullPath := filepath.Join(pfDir, filename)
+		if _, statErr := os.Stat(fullPath); os.IsNotExist(statErr) {
+			saveErr = os.WriteFile(fullPath, []byte(source), 0o644)
+		}
+	}
+
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if saveErr != nil {
+		data.Error = "Ошибка создания: " + saveErr.Error()
+	} else {
+		data.FieldsSaved = true
+		data.FieldsSavedEntity = name
+	}
+	renderCfg(w, data)
 }
 
 // ── App config save ───────────────────────────────────────────────────────────

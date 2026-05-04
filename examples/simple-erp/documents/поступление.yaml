@@ -1,4 +1,5 @@
 name: Поступление
+posting: true
 fields:
   - name: Номер
     type: string

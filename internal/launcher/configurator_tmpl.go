@@ -210,15 +210,24 @@ const cfgFoot = `{{define "cfg-foot"}}
 // ── New object form ────────────────────────────────────────────
 var _cfgNewTitles = {catalog:'Новый справочник', document:'Новый документ', register:'Новый регистр', inforeg:'Новый регистр сведений', enum:'Новое перечисление'};
 function cfgNewObj(kind) {
+  if (kind === 'printform') { cfgNewPrintFormShow(); return; }
   var f = document.getElementById('cfg-new-form');
   document.getElementById('cfg-new-title').textContent = _cfgNewTitles[kind] || 'Новый объект';
   document.getElementById('cfg-new-kind-inp').value = kind;
   document.getElementById('cfg-new-name').value = '';
   f.style.display = 'block';
+  document.getElementById('cfg-new-form-pf').style.display = 'none';
   document.getElementById('cfg-new-name').focus();
 }
 function cfgHideNew() {
   document.getElementById('cfg-new-form').style.display = 'none';
+  document.getElementById('cfg-new-form-pf').style.display = 'none';
+}
+function cfgNewPrintFormShow() {
+  document.getElementById('cfg-new-form').style.display = 'none';
+  document.getElementById('cfg-new-form-pf').style.display = 'block';
+  document.getElementById('cfg-new-pf-name').value = '';
+  document.getElementById('cfg-new-pf-name').focus();
 }
 
 // ── Reference picker toggle ────────────────────────────────────
@@ -259,6 +268,10 @@ function selItem(el) {
   el.classList.add('sel');
   var panel = document.getElementById(el.dataset.id);
   if (panel) panel.classList.add('active');
+}
+function cfgSelectPanel(id) {
+  var el = document.querySelector('[data-id="' + id + '"]');
+  if (el) selItem(el);
 }
 (function(){
   var first = document.querySelector('.cfg-item');
@@ -468,11 +481,35 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   {{end}}
 
+  <div class="cfg-group cfg-group-hd">
+    <span>Печатные формы</span>
+    <span class="cfg-add-btn" onclick="cfgNewObj('printform')" title="Добавить печатную форму">+</span>
+  </div>
+  {{range .PrintForms}}
+  <div class="cfg-item" data-id="pf-{{.Name}}" onclick="selItem(this)">
+    <span class="ic">🖨</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}</span>
+  </div>
+  {{end}}
+
   <div id="cfg-new-form" class="cfg-new-form" style="display:none">
     <div id="cfg-new-title" style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px"></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/new">
       <input type="hidden" name="kind" id="cfg-new-kind-inp" value="">
       <input type="text" name="name" id="cfg-new-name" placeholder="Имя объекта" autocomplete="off">
+      <div class="row">
+        <button type="submit" class="btn-create">Создать</button>
+        <button type="button" class="btn-cancel" onclick="cfgHideNew()">✕</button>
+      </div>
+    </form>
+  </div>
+  <div id="cfg-new-form-pf" class="cfg-new-form" style="display:none">
+    <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">Новая печатная форма</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/new-printform">
+      <input type="text" name="name" id="cfg-new-pf-name" placeholder="Имя формы (напр. СчётНаОплату)" autocomplete="off">
+      <select name="document" style="width:100%;padding:5px 6px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px;margin-bottom:6px">
+        <option value="">— документ/справочник —</option>
+        {{range $.AllEntityNames}}<option value="{{.}}">{{.}}</option>{{end}}
+      </select>
       <div class="row">
         <button type="submit" class="btn-create">Создать</button>
         <button type="button" class="btn-cancel" onclick="cfgHideNew()">✕</button>
@@ -743,6 +780,28 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
 
+  {{/* Print forms */}}
+  {{range .PrintForms}}
+  <div class="cfg-panel" id="pf-{{.Name}}">
+    <div class="panel-title">🖨 {{.Name}}</div>
+    <div class="panel-kind">Печатная форма · документ: {{.Document}}</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/printform">
+      <input type="hidden" name="printform_filename" value="{{.FileName}}">
+      <div class="section-hd">YAML-описание <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="code-wrap">
+        <pre class="os-code" id="pre-pf-{{.Name}}" onclick="startEdit('pf-{{.Name}}')">{{.Source}}</pre>
+        <textarea class="os-edit" id="ta-pf-{{.Name}}" name="source"
+                  style="display:none"
+                  oninput="hlLive('pf-{{.Name}}')">{{.Source}}</textarea>
+      </div>
+      <div class="module-save-row">
+        <button class="btn-save" type="submit">Сохранить</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+      </div>
+    </form>
+  </div>
+  {{end}}
+
 </div>{{/* cfg-right */}}
 </div>{{/* cfg-split */}}
 {{end}}
@@ -756,7 +815,18 @@ const cfgTabTree = `{{define "tab-tree"}}
 
 <form method="POST" action="/bases/{{$baseID}}/configurator/fields">
 <input type="hidden" name="entity" value="{{$e.Name}}">
+<input type="hidden" name="entity_kind" value="{{$e.Kind}}">
 {{range $e.TableParts}}<input type="hidden" name="tp_names" value="{{.Name}}">{{end}}
+
+{{if eq $e.Kind "Документ"}}
+<div class="section-hd">Свойства</div>
+<div style="margin-bottom:10px">
+  <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+    <input type="checkbox" name="posting" value="true" {{if $e.Posting}}checked{{end}}>
+    <span>Проводится — поддержка кнопки «Провести» и обработки проведения</span>
+  </label>
+</div>
+{{end}}
 
 {{if $e.Fields}}
 <div class="section-hd">Реквизиты</div>
@@ -827,7 +897,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 <div class="module-editor-wrap">
   <div class="module-tabs">
     <div class="module-tab active" onclick="modTab(this,'mp-obj-{{$e.Name}}')">📝 Модуль объекта</div>
-    {{if $e.Posting}}<div class="module-tab" onclick="modTab(this,'mp-post-{{$e.Name}}')">✅ ОбработкаПроведения</div>{{end}}
+    {{if eq $e.Kind "Документ"}}<div class="module-tab" onclick="modTab(this,'mp-post-{{$e.Name}}')">✅ ОбработкаПроведения</div>{{end}}
     <div class="module-tab" onclick="modTab(this,'mp-mgr-{{$e.Name}}')">📋 Модуль менеджера</div>
   </div>
 
@@ -850,15 +920,15 @@ const cfgTabTree = `{{define "tab-tree"}}
     </form>
   </div>
 
-  {{if $e.Posting}}
+  {{if eq $e.Kind "Документ"}}
   <div class="module-pane" id="mp-post-{{$e.Name}}">
-    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Процедура <b>ОбработкаПроведения()</b> — вызывается при нажатии «Провести». Здесь пишите движения регистров.</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Процедура <b>ОбработкаПроведения()</b> — вызывается при нажатии «Провести». Активируется флагом <b>Проводится</b> в свойствах документа. Здесь пишите движения регистров.</div>
     <form method="POST" action="/bases/{{.BaseID}}/configurator/module">
       <input type="hidden" name="entity" value="{{$e.Name}}">
       <input type="hidden" name="module_type" value="posting">
       <div class="code-wrap" title="Кликните для редактирования">
         <pre class="os-code clickable-code" id="pre-post-{{$e.Name}}"
-             onclick="startEdit('post-{{$e.Name}}')">{{if $e.PostingSource}}{{$e.PostingSource}}{{else}}Процедура ОбработкаПроведения()&#10;  // Движения.ИмяРегистра.Добавить(...)&#10;КонецПроцедуры{{end}}</pre>
+             onclick="startEdit('post-{{$e.Name}}')">{{if $e.PostingSource}}{{$e.PostingSource}}{{else}}Процедура ОбработкаПроведения()&#10;  // Движения.ИмяРегистра.Очистить()&#10;  // Дв = Движения.ИмяРегистра.Добавить()&#10;  // Дв.ВидДвижения = "Приход"&#10;  // Дв.Номенклатура = Строка.Номенклатура&#10;  // Дв.Количество = Строка.Количество&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-post-{{$e.Name}}" name="source"
                   style="display:none"
                   oninput="hlLive('post-{{$e.Name}}')">{{$e.PostingSource}}</textarea>
@@ -875,6 +945,30 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="module-pane" id="mp-mgr-{{$e.Name}}">
     <div class="module-empty" style="padding:12px 0">Модуль менеджера — в разработке.</div>
   </div>
+</div>
+
+{{/* Linked print forms */}}
+{{if $e.LinkedPrintForms}}
+<div class="section-hd" style="margin-top:18px">Печатные формы</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+  {{range $e.LinkedPrintForms}}
+  <a href="#" onclick="cfgSelectPanel('pf-{{.Name}}');return false"
+     style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:#f0f4ff;border:1px solid #c8d4f0;border-radius:4px;font-size:12px;color:#1a4a80;text-decoration:none">
+    🖨 {{.Name}}
+  </a>
+  {{end}}
+</div>
+{{end}}
+
+{{/* Forms section */}}
+<div class="section-hd" style="margin-top:18px">Формы</div>
+<div style="background:#f8f9fc;border:1px solid #e8ecf4;border-radius:5px;padding:12px;font-size:12px;color:#64748b">
+  <div style="display:flex;gap:12px;margin-bottom:8px">
+    <span style="font-weight:600;color:#334">📋 Форма списка</span>
+    <span style="font-weight:600;color:#334">📄 Форма элемента</span>
+  </div>
+  <div>Поля: {{range $i, $f := $e.Fields}}{{if $i}}, {{end}}<span style="color:#1a4a80">{{$f.Name}}</span>{{end}}{{if $e.TableParts}}; табл. части: {{range $j, $tp := $e.TableParts}}{{if $j}}, {{end}}<span style="color:#7c3aed">{{$tp.Name}}</span>{{end}}{{end}}</div>
+  <div style="margin-top:6px;color:#94a3b8;font-style:italic">Настройка форм — в разработке. Сейчас поля отображаются автоматически в порядке объявления.</div>
 </div>
 {{end}}`
 
