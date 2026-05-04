@@ -109,6 +109,13 @@ type UnaryExpr struct {
 	Operand Expr
 }
 
+// TryStmt — Попытка ... Исключение ... КонецПопытки
+type TryStmt struct {
+	Tok    token.Token
+	Try    []Stmt
+	Except []Stmt
+}
+
 func (*Program) nodeType() string       { return "Program" }
 func (*ProcedureDecl) nodeType() string { return "ProcedureDecl" }
 func (*IfStmt) nodeType() string        { return "IfStmt" }
@@ -128,6 +135,7 @@ func (*NewExpr) nodeType() string       { return "NewExpr" }
 func (*IndexExpr) nodeType() string     { return "IndexExpr" }
 func (*BoolLit) nodeType() string       { return "BoolLit" }
 func (*UnaryExpr) nodeType() string     { return "UnaryExpr" }
+func (*TryStmt) nodeType() string       { return "TryStmt" }
 
 func (*IfStmt) stmtNode()      {}
 func (*ExprStmt) stmtNode()    {}
@@ -136,6 +144,7 @@ func (*VarDecl) stmtNode()     {}
 func (*ForEachStmt) stmtNode()    {}
 func (*NumericForStmt) stmtNode() {}
 func (*ReturnStmt) stmtNode()     {}
+func (*TryStmt) stmtNode()        {}
 
 func (*CallExpr) exprNode()   {}
 func (*MemberExpr) exprNode() {}

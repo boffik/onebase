@@ -32,6 +32,9 @@ const (
 	NOT    // НЕ / Not
 	TRUE   // Истина / True
 	FALSE  // Ложь / False
+	TRY    // Попытка / Try
+	EXCEPT // Исключение / Except
+	ENDTRY // КонецПопытки / EndTry
 
 	ASSIGN // =
 	NEQ    // <>
@@ -103,6 +106,13 @@ var keywords = map[string]Type{
 	"True":   TRUE,
 	"Ложь":   FALSE,
 	"False":  FALSE,
+	// попытка / исключение
+	"Попытка":      TRY,
+	"Try":          TRY,
+	"Исключение":   EXCEPT,
+	"Except":       EXCEPT,
+	"КонецПопытки": ENDTRY,
+	"EndTry":       ENDTRY,
 }
 
 type Token struct {
@@ -176,6 +186,12 @@ func (t Type) String() string {
 		return "Истина"
 	case FALSE:
 		return "Ложь"
+	case TRY:
+		return "Попытка"
+	case EXCEPT:
+		return "Исключение"
+	case ENDTRY:
+		return "КонецПопытки"
 	case LBRACKET:
 		return "["
 	case RBRACKET:

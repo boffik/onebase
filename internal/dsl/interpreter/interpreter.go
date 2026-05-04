@@ -8,11 +8,14 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/token"
 )
 
-// sentinel to unwind call stack on Error()
+// dslStop — системная остановка (Error без Попытки, внутренние ошибки интерпретатора)
 type dslStop struct{ err error }
 
-// sentinel to unwind call stack on Return
+// dslReturn — ранний выход через Возврат
 type dslReturn struct{ val any }
+
+// userError — пользовательская ошибка через Error(), перехватывается Попыткой
+type userError struct{ Msg string }
 
 
 type Interpreter struct {
@@ -28,6 +31,8 @@ func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *
 			switch s := r.(type) {
 			case dslStop:
 				err = s.err
+			case userError:
+				err = &DSLError{Msg: s.Msg}
 			case dslReturn:
 				if result != nil {
 					*result = s.val
@@ -55,6 +60,8 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 			switch s := r.(type) {
 			case dslStop:
 				err = s.err
+			case userError:
+				err = &DSLError{Msg: s.Msg}
 			case dslReturn:
 				// early return from procedure — not an error
 			default:
@@ -136,6 +143,8 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 			val = i.evalExpr(v.Value, e)
 		}
 		panic(dslReturn{val: val})
+	case *ast.TryStmt:
+		i.execTry(v, e)
 	}
 }
 
@@ -410,6 +419,38 @@ func compare(a, b any) int {
 func toFloatOr0(v any) float64 {
 	f, _ := toFloat(v)
 	return f
+}
+
+// execTry выполняет Попытка/Исключение.
+// Только userError перехватывается; системные паники и dslReturn пробрасываются дальше.
+func (i *Interpreter) execTry(t *ast.TryStmt, e *env) {
+	var caught *userError
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if ue, ok := r.(userError); ok {
+					caught = &ue
+					return
+				}
+				panic(r) // dslReturn, dslStop, Go panic — пробрасываем
+			}
+		}()
+		i.execBlock(t.Try, e)
+	}()
+	if caught != nil {
+		if len(t.Except) == 0 {
+			// Нет блока Исключение — пробрасываем ошибку дальше
+			panic(*caught)
+		}
+		msg := caught.Msg
+		exceptEnv := e.child()
+		descFn := BuiltinFunc(func(args []any, file string, line int) (any, error) {
+			return msg, nil
+		})
+		exceptEnv.set("ОписаниеОшибки", descFn)
+		exceptEnv.set("ErrorDescription", descFn)
+		i.execBlock(t.Except, exceptEnv)
+	}
 }
 
 func toFloat(v any) (float64, bool) {

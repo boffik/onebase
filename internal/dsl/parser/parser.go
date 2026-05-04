@@ -97,7 +97,8 @@ func (p *Parser) parseProcedure() (*ast.ProcedureDecl, error) {
 // isBlockEnd returns true for tokens that end a block from the outside.
 func isBlockEnd(t token.Type) bool {
 	switch t {
-	case token.EOF, token.ELSE, token.ENDIF, token.ENDDO, token.ENDPROCEDURE, token.ENDFUNCTION:
+	case token.EOF, token.ELSE, token.ENDIF, token.ENDDO, token.ENDPROCEDURE, token.ENDFUNCTION,
+		token.EXCEPT, token.ENDTRY:
 		return true
 	}
 	return false
@@ -130,6 +131,8 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		return p.parseVarDecl()
 	case token.RETURN:
 		return p.parseReturn()
+	case token.TRY:
+		return p.parseTry()
 	default:
 		return p.parseExprOrAssign()
 	}
@@ -456,6 +459,29 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 		return nil, fmt.Errorf("%s:%d:%d: unexpected %q in expression",
 			p.cur.File, p.cur.Line, p.cur.Col, p.cur.Literal)
 	}
+}
+
+// parseTry разбирает: Попытка <stmts> Исключение <stmts> КонецПопытки
+func (p *Parser) parseTry() (*ast.TryStmt, error) {
+	tok := p.cur
+	p.advance() // consume Попытка
+	tryBody, err := p.parseBlock(token.ENDTRY)
+	if err != nil {
+		return nil, err
+	}
+	var exceptBody []ast.Stmt
+	if p.cur.Type == token.EXCEPT {
+		p.advance()
+		exceptBody, err = p.parseBlock(token.ENDTRY)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if _, err := p.expect(token.ENDTRY); err != nil {
+		return nil, err
+	}
+	p.consumeSemi()
+	return &ast.TryStmt{Tok: tok, Try: tryBody, Except: exceptBody}, nil
 }
 
 // parseNew разбирает: Новый ТипКоллекции[(args)]

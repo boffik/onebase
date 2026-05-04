@@ -29,12 +29,21 @@ var builtins = map[string]func(args []any, file string, line int) (any, error){
 	"Message":  func(args []any, file string, line int) (any, error) { return nil, nil },
 
 	// ─── Ошибки ───────────────────────────────────────────────────────────
+	// Error/ВызватьИсключение панит userError — перехватывается Попыткой.
+	// Если не внутри Попытки — всплывает до Run() и конвертируется в DSLError.
 	"Error": func(args []any, file string, line int) (any, error) {
 		msg := ""
 		if len(args) > 0 {
 			msg = fmt.Sprintf("%v", args[0])
 		}
-		return nil, &DSLError{File: file, Line: line, Msg: msg}
+		panic(userError{Msg: msg})
+	},
+	"ВызватьИсключение": func(args []any, file string, line int) (any, error) {
+		msg := ""
+		if len(args) > 0 {
+			msg = fmt.Sprintf("%v", args[0])
+		}
+		panic(userError{Msg: msg})
 	},
 
 	// ─── Даты ─────────────────────────────────────────────────────────────
