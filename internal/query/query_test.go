@@ -15,7 +15,7 @@ func TestCompile_BalancesQuery(t *testing.T) {
 СГРУППИРОВАТЬ ПО Номенклатура
 УПОРЯДОЧИТЬ ПО Номенклатура`
 
-	r, err := query.Compile(src, nil)
+	r, err := query.Compile(src, query.CompileOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestCompile_BalancesQuery(t *testing.T) {
 func TestCompile_WithParam(t *testing.T) {
 	src := `ВЫБРАТЬ Номенклатура ИЗ РегистрНакопления.ТоварноеДвижение ГДЕ вид_движения = &ВидДвижения`
 
-	r, err := query.Compile(src, map[string]any{"ВидДвижения": "Приход"})
+	r, err := query.Compile(src, query.CompileOpts{Params: map[string]any{"ВидДвижения": "Приход"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestCompile_WithParam(t *testing.T) {
 func TestCompile_StringLiteral(t *testing.T) {
 	src := `ВЫБРАТЬ Номенклатура ИЗ РегистрНакопления.ТоварноеДвижение ГДЕ вид_движения = "Приход"`
 
-	r, err := query.Compile(src, nil)
+	r, err := query.Compile(src, query.CompileOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}

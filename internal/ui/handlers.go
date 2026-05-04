@@ -741,7 +741,11 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 			}
 		}
 	}
-	compiled, err := query.Compile(rep.Query, queryValues)
+	compiled, err := query.Compile(rep.Query, query.CompileOpts{
+		Params:    queryValues,
+		Registers: s.reg.Registers(),
+		InfoRegs:  s.reg.InfoRegisters(),
+	})
 	if err != nil {
 		s.render(w, "page-report", map[string]any{
 			"Nav":         s.buildNav(),

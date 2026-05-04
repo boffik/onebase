@@ -5,7 +5,17 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/ivantit66/onebase/internal/metadata"
 )
+
+// CompileOpts holds options for query compilation including register metadata
+// needed to resolve virtual table references (Остатки, Обороты, СрезПоследних, …).
+type CompileOpts struct {
+	Params    map[string]any
+	Registers []*metadata.Register
+	InfoRegs  []*metadata.InfoRegister
+}
 
 // Result holds compiled PostgreSQL SQL and positional arguments.
 type Result struct {
@@ -14,9 +24,8 @@ type Result struct {
 }
 
 // Compile translates a 1C-style query to PostgreSQL SQL.
-// paramValues maps &ParamName → value (nil becomes SQL NULL).
-func Compile(src string, paramValues map[string]any) (Result, error) {
-	return translate(tokenize(src), paramValues)
+func Compile(src string, opts CompileOpts) (Result, error) {
+	return translate(tokenize(src), opts)
 }
 
 // --- tokenizer ---
@@ -143,11 +152,11 @@ func tokenize(src string) []tok {
 
 // --- source type mapping ---
 
-// sourcePrefix maps uppercased 1C source type names to SQL table prefix.
-// Empty prefix means the entity name is the table name as-is (lowercased).
 var sourcePrefix = map[string]string{
 	"РЕГИСТРНАКОПЛЕНИЯ":    "рег_",
 	"ACCUMULATIONREGISTER": "рег_",
+	"РЕГИСТРСВЕДЕНИЙ":      "инфо_",
+	"INFORMATIONREGISTER":  "инфо_",
 	"СПРАВОЧНИК":           "",
 	"CATALOG":              "",
 	"ДОКУМЕНТ":             "",
@@ -159,15 +168,38 @@ func isSourceType(upper string) bool {
 	return ok
 }
 
+func isAccumRegType(upper string) bool {
+	return upper == "РЕГИСТРНАКОПЛЕНИЯ" || upper == "ACCUMULATIONREGISTER"
+}
+
+func isInfoRegType(upper string) bool {
+	return upper == "РЕГИСТРСВЕДЕНИЙ" || upper == "INFORMATIONREGISTER"
+}
+
 func sourceToTable(typeUpper, entityName string) string {
 	return sourcePrefix[typeUpper] + strings.ToLower(entityName)
 }
 
+// --- virtual table kind maps ---
+
+var accumVTKinds = map[string]string{
+	"ОСТАТКИ":               "balances",
+	"BALANCES":              "balances",
+	"ОБОРОТЫ":               "turnovers",
+	"TURNOVERS":             "turnovers",
+	"ОСТАТКИИОБОРОТЫ":       "balances_turnovers",
+	"BALANCESANDTURNOVERS":  "balances_turnovers",
+}
+
+var infoVTKinds = map[string]string{
+	"СРЕЗПОСЛЕДНИХ": "last_slice",
+	"LASTSLICE":     "last_slice",
+	"СРЕЗПЕРВЫХ":    "first_slice",
+	"FIRSTSLICE":    "first_slice",
+}
+
 // --- keyword mapping ---
 
-// kwMap maps Russian/English keywords to SQL equivalents.
-// Aggregate functions are NOT included here — they are handled separately
-// because they must only match when followed by "(".
 var kwMap = map[string]string{
 	// Russian structural keywords
 	"ВЫБРАТЬ":       "SELECT",
@@ -221,7 +253,6 @@ var kwMap = map[string]string{
 	"ALL":      "ALL",
 }
 
-// aggFuncs maps aggregate function names (only valid before "(").
 var aggFuncs = map[string]string{
 	"СУММА":      "SUM",
 	"КОЛИЧЕСТВО": "COUNT",
@@ -251,8 +282,9 @@ type translator struct {
 	tokens      []tok
 	pos         int
 	args        []any
-	params      map[string]int // param name → 1-based position in args
+	params      map[string]int // param name → 1-based index in args (0 = NULL sentinel)
 	paramValues map[string]any
+	opts        CompileOpts
 	parts       []string
 }
 
@@ -290,14 +322,435 @@ func (tr *translator) build() string {
 	return sb.String()
 }
 
-func translate(tokens []tok, paramValues map[string]any) (Result, error) {
-	if paramValues == nil {
-		paramValues = map[string]any{}
+// addParam registers a named parameter and returns its SQL placeholder.
+func (tr *translator) addParam(name string) string {
+	if _, exists := tr.params[name]; !exists {
+		v := tr.paramValues[name]
+		if v == nil {
+			tr.params[name] = 0
+		} else {
+			tr.args = append(tr.args, v)
+			tr.params[name] = len(tr.args)
+		}
+	}
+	if tr.params[name] == 0 {
+		return "NULL"
+	}
+	return fmt.Sprintf("$%d%s", tr.params[name], pgCast(tr.paramValues[name]))
+}
+
+// parseVTArgs collects argument groups from a virtual-table call.
+// The opening "(" has already been consumed; this method consumes until the matching ")".
+func (tr *translator) parseVTArgs() [][]tok {
+	var groups [][]tok
+	var current []tok
+	depth := 0
+	for {
+		t := tr.advance()
+		if t.kind == tEOF {
+			break
+		}
+		switch {
+		case t.kind == tLParen:
+			depth++
+			current = append(current, t)
+		case t.kind == tRParen && depth > 0:
+			depth--
+			current = append(current, t)
+		case t.kind == tRParen: // depth == 0, closing paren
+			groups = append(groups, current)
+			return groups
+		case t.kind == tComma && depth == 0:
+			groups = append(groups, current)
+			current = nil
+		default:
+			current = append(current, t)
+		}
+	}
+	return groups
+}
+
+// translateFilterTokens translates a token slice to a SQL expression fragment,
+// resolving &params through the translator's shared state.
+func (tr *translator) translateFilterTokens(tokens []tok) string {
+	var parts []string
+	for i := 0; i < len(tokens); i++ {
+		t := tokens[i]
+		switch t.kind {
+		case tParam:
+			parts = append(parts, tr.addParam(t.val))
+		case tIdent:
+			upper := strings.ToUpper(t.val)
+			if kw, ok := kwMap[upper]; ok {
+				parts = append(parts, kw)
+			} else if agg, ok := aggFuncs[upper]; ok && i+1 < len(tokens) && tokens[i+1].kind == tLParen {
+				parts = append(parts, agg)
+			} else {
+				parts = append(parts, strings.ToLower(t.val))
+			}
+		case tStr:
+			parts = append(parts, "'"+strings.ReplaceAll(t.val, "'", "''")+"'")
+		case tNum, tOp, tStar:
+			parts = append(parts, t.val)
+		case tComma:
+			parts = append(parts, ",")
+		case tLParen:
+			parts = append(parts, "(")
+		case tRParen:
+			parts = append(parts, ")")
+		case tDot:
+			parts = append(parts, ".")
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+func (tr *translator) findRegister(name string) *metadata.Register {
+	nl := strings.ToLower(name)
+	for _, r := range tr.opts.Registers {
+		if strings.ToLower(r.Name) == nl {
+			return r
+		}
+	}
+	return nil
+}
+
+func (tr *translator) findInfoRegister(name string) *metadata.InfoRegister {
+	nl := strings.ToLower(name)
+	for _, r := range tr.opts.InfoRegs {
+		if strings.ToLower(r.Name) == nl {
+			return r
+		}
+	}
+	return nil
+}
+
+func dimCols(dims []metadata.Field) []string {
+	names := make([]string, len(dims))
+	for i, d := range dims {
+		names[i] = strings.ToLower(d.Name)
+	}
+	return names
+}
+
+// buildAccumVT generates a SQL subquery for an accumulation register virtual table.
+func (tr *translator) buildAccumVT(vtKind, regName string, args [][]tok) (subq, alias string, err error) {
+	reg := tr.findRegister(regName)
+	if reg == nil {
+		return "", "", fmt.Errorf("accumulation register %q not found; pass Registers in CompileOpts", regName)
+	}
+	switch vtKind {
+	case "balances":
+		return tr.genBalances(reg, args)
+	case "turnovers":
+		return tr.genTurnovers(reg, args)
+	case "balances_turnovers":
+		return tr.genBalancesAndTurnovers(reg, args)
+	}
+	return "", "", fmt.Errorf("unknown accumulation virtual table: %s", vtKind)
+}
+
+// buildInfoVT generates a SQL subquery for an information register virtual table.
+func (tr *translator) buildInfoVT(vtKind, regName string, args [][]tok) (subq, alias string, err error) {
+	ir := tr.findInfoRegister(regName)
+	if ir == nil {
+		return "", "", fmt.Errorf("information register %q not found; pass InfoRegs in CompileOpts", regName)
+	}
+	switch vtKind {
+	case "last_slice":
+		return tr.genLastSlice(ir, args)
+	case "first_slice":
+		return tr.genFirstSlice(ir, args)
+	}
+	return "", "", fmt.Errorf("unknown information virtual table: %s", vtKind)
+}
+
+func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string, string, error) {
+	tableName := metadata.RegisterTableName(reg.Name)
+	alias := "остатки_" + strings.ToLower(reg.Name)
+	dims := dimCols(reg.Dimensions)
+
+	var cols []string
+	cols = append(cols, dims...)
+	for _, r := range reg.Resources {
+		col := strings.ToLower(r.Name)
+		cols = append(cols,
+			"SUM(CASE WHEN вид_движения = 'Приход' THEN "+col+" ELSE -"+col+" END) AS "+col+"остаток")
+	}
+
+	var sb strings.Builder
+	sb.WriteString("SELECT ")
+	sb.WriteString(strings.Join(cols, ", "))
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+
+	var conds []string
+	if len(args) > 0 && len(args[0]) > 0 {
+		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
+			conds = append(conds, "period <= "+s)
+		}
+	}
+	if len(args) > 1 && len(args[1]) > 0 {
+		if s := tr.translateFilterTokens(args[1]); s != "" {
+			conds = append(conds, s)
+		}
+	}
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+	if len(dims) > 0 {
+		sb.WriteString(" GROUP BY ")
+		sb.WriteString(strings.Join(dims, ", "))
+	}
+
+	return sb.String(), alias, nil
+}
+
+func (tr *translator) genTurnovers(reg *metadata.Register, args [][]tok) (string, string, error) {
+	tableName := metadata.RegisterTableName(reg.Name)
+	alias := "обороты_" + strings.ToLower(reg.Name)
+	dims := dimCols(reg.Dimensions)
+
+	var cols []string
+	cols = append(cols, dims...)
+	for _, r := range reg.Resources {
+		col := strings.ToLower(r.Name)
+		cols = append(cols,
+			"SUM(CASE WHEN вид_движения = 'Приход' THEN "+col+" ELSE 0 END) AS "+col+"приход",
+			"SUM(CASE WHEN вид_движения = 'Расход' THEN "+col+" ELSE 0 END) AS "+col+"расход",
+			"SUM(CASE WHEN вид_движения = 'Приход' THEN "+col+" ELSE -"+col+" END) AS "+col+"оборот",
+		)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("SELECT ")
+	sb.WriteString(strings.Join(cols, ", "))
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+
+	var conds []string
+	if len(args) > 0 && len(args[0]) > 0 {
+		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
+			conds = append(conds, "period >= "+s)
+		}
+	}
+	if len(args) > 1 && len(args[1]) > 0 {
+		if s := tr.translateFilterTokens(args[1]); s != "" && s != "NULL" {
+			conds = append(conds, "period <= "+s)
+		}
+	}
+	if len(args) > 2 && len(args[2]) > 0 {
+		if s := tr.translateFilterTokens(args[2]); s != "" {
+			conds = append(conds, s)
+		}
+	}
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+	if len(dims) > 0 {
+		sb.WriteString(" GROUP BY ")
+		sb.WriteString(strings.Join(dims, ", "))
+	}
+
+	return sb.String(), alias, nil
+}
+
+func (tr *translator) genBalancesAndTurnovers(reg *metadata.Register, args [][]tok) (string, string, error) {
+	tableName := metadata.RegisterTableName(reg.Name)
+	alias := "остаткиоборотов_" + strings.ToLower(reg.Name)
+	dims := dimCols(reg.Dimensions)
+
+	var startSQL, endSQL, filterSQL string
+	if len(args) > 0 && len(args[0]) > 0 {
+		if s := tr.translateFilterTokens(args[0]); s != "NULL" {
+			startSQL = s
+		}
+	}
+	if len(args) > 1 && len(args[1]) > 0 {
+		if s := tr.translateFilterTokens(args[1]); s != "NULL" {
+			endSQL = s
+		}
+	}
+	if len(args) > 2 && len(args[2]) > 0 {
+		filterSQL = tr.translateFilterTokens(args[2])
+	}
+
+	var cols []string
+	cols = append(cols, dims...)
+	for _, r := range reg.Resources {
+		col := strings.ToLower(r.Name)
+		if startSQL != "" {
+			cols = append(cols,
+				"SUM(CASE WHEN вид_движения = 'Приход' AND period < "+startSQL+
+					" THEN "+col+" WHEN вид_движения = 'Расход' AND period < "+startSQL+
+					" THEN -"+col+" ELSE 0 END) AS "+col+"начальный")
+		}
+		periodCond := ""
+		if startSQL != "" && endSQL != "" {
+			periodCond = " AND period >= " + startSQL + " AND period <= " + endSQL
+		} else if startSQL != "" {
+			periodCond = " AND period >= " + startSQL
+		} else if endSQL != "" {
+			periodCond = " AND period <= " + endSQL
+		}
+		cols = append(cols,
+			"SUM(CASE WHEN вид_движения = 'Приход'"+periodCond+" THEN "+col+" ELSE 0 END) AS "+col+"приход",
+			"SUM(CASE WHEN вид_движения = 'Расход'"+periodCond+" THEN "+col+" ELSE 0 END) AS "+col+"расход",
+		)
+		if endSQL != "" {
+			cols = append(cols,
+				"SUM(CASE WHEN вид_движения = 'Приход' AND period <= "+endSQL+
+					" THEN "+col+" WHEN вид_движения = 'Расход' AND period <= "+endSQL+
+					" THEN -"+col+" ELSE 0 END) AS "+col+"конечный")
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("SELECT ")
+	sb.WriteString(strings.Join(cols, ", "))
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+
+	var conds []string
+	if endSQL != "" {
+		conds = append(conds, "period <= "+endSQL)
+	}
+	if filterSQL != "" {
+		conds = append(conds, filterSQL)
+	}
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+	if len(dims) > 0 {
+		sb.WriteString(" GROUP BY ")
+		sb.WriteString(strings.Join(dims, ", "))
+	}
+
+	return sb.String(), alias, nil
+}
+
+func (tr *translator) genLastSlice(ir *metadata.InfoRegister, args [][]tok) (string, string, error) {
+	tableName := metadata.InfoRegTableName(ir.Name)
+	alias := "срезпоследних_" + strings.ToLower(ir.Name)
+	dims := dimCols(ir.Dimensions)
+
+	var resCols []string
+	for _, r := range ir.Resources {
+		resCols = append(resCols, strings.ToLower(r.Name))
+	}
+
+	var sb strings.Builder
+	if ir.Periodic && len(dims) > 0 {
+		sb.WriteString("SELECT DISTINCT ON (")
+		sb.WriteString(strings.Join(dims, ", "))
+		sb.WriteString(") period, ")
+		sb.WriteString(strings.Join(append(dims, resCols...), ", "))
+	} else {
+		var allCols []string
+		allCols = append(allCols, dims...)
+		allCols = append(allCols, resCols...)
+		sb.WriteString("SELECT ")
+		sb.WriteString(strings.Join(allCols, ", "))
+	}
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+
+	var conds []string
+	if ir.Periodic && len(args) > 0 && len(args[0]) > 0 {
+		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
+			conds = append(conds, "period <= "+s)
+		}
+	}
+	filterIdx := 1
+	if !ir.Periodic {
+		filterIdx = 0
+	}
+	if len(args) > filterIdx && len(args[filterIdx]) > 0 {
+		if s := tr.translateFilterTokens(args[filterIdx]); s != "" {
+			conds = append(conds, s)
+		}
+	}
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+	if ir.Periodic && len(dims) > 0 {
+		sb.WriteString(" ORDER BY ")
+		sb.WriteString(strings.Join(dims, ", "))
+		sb.WriteString(", period DESC")
+	}
+
+	return sb.String(), alias, nil
+}
+
+func (tr *translator) genFirstSlice(ir *metadata.InfoRegister, args [][]tok) (string, string, error) {
+	tableName := metadata.InfoRegTableName(ir.Name)
+	alias := "срезпервых_" + strings.ToLower(ir.Name)
+	dims := dimCols(ir.Dimensions)
+
+	var resCols []string
+	for _, r := range ir.Resources {
+		resCols = append(resCols, strings.ToLower(r.Name))
+	}
+
+	var sb strings.Builder
+	if ir.Periodic && len(dims) > 0 {
+		sb.WriteString("SELECT DISTINCT ON (")
+		sb.WriteString(strings.Join(dims, ", "))
+		sb.WriteString(") period, ")
+		sb.WriteString(strings.Join(append(dims, resCols...), ", "))
+	} else {
+		var allCols []string
+		allCols = append(allCols, dims...)
+		allCols = append(allCols, resCols...)
+		sb.WriteString("SELECT ")
+		sb.WriteString(strings.Join(allCols, ", "))
+	}
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+
+	var conds []string
+	if ir.Periodic && len(args) > 0 && len(args[0]) > 0 {
+		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
+			conds = append(conds, "period >= "+s)
+		}
+	}
+	filterIdx := 1
+	if !ir.Periodic {
+		filterIdx = 0
+	}
+	if len(args) > filterIdx && len(args[filterIdx]) > 0 {
+		if s := tr.translateFilterTokens(args[filterIdx]); s != "" {
+			conds = append(conds, s)
+		}
+	}
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+	if ir.Periodic && len(dims) > 0 {
+		sb.WriteString(" ORDER BY ")
+		sb.WriteString(strings.Join(dims, ", "))
+		sb.WriteString(", period ASC")
+	}
+
+	return sb.String(), alias, nil
+}
+
+// --- main translator loop ---
+
+func translate(tokens []tok, opts CompileOpts) (Result, error) {
+	if opts.Params == nil {
+		opts.Params = map[string]any{}
 	}
 	tr := &translator{
 		tokens:      tokens,
 		params:      map[string]int{},
-		paramValues: paramValues,
+		paramValues: opts.Params,
+		opts:        opts,
 	}
 	for {
 		t := tr.peek(0)
@@ -306,9 +759,49 @@ func translate(tokens []tok, paramValues map[string]any) (Result, error) {
 		}
 		upper := strings.ToUpper(t.val)
 
-		// Source type: TypeName.EntityName → table_name
+		// Source type: TypeName.EntityName[.VirtualTable(args)] → table or subquery
 		if t.kind == tIdent && isSourceType(upper) &&
 			tr.peek(1).kind == tDot && tr.peek(2).kind == tIdent {
+
+			// Check for virtual table: TypeName.EntityName.VTName(...)
+			if tr.peek(3).kind == tDot && tr.peek(4).kind == tIdent &&
+				tr.peek(5).kind == tLParen {
+				vt4Upper := strings.ToUpper(tr.peek(4).val)
+
+				if vtKind, ok := accumVTKinds[vt4Upper]; ok && isAccumRegType(upper) {
+					tr.advance() // TypeName
+					tr.advance() // .
+					regName := tr.advance().val
+					tr.advance() // .
+					tr.advance() // VTName
+					tr.advance() // (
+					vtArgs := tr.parseVTArgs()
+					subq, alias, err := tr.buildAccumVT(vtKind, regName, vtArgs)
+					if err != nil {
+						return Result{}, err
+					}
+					tr.emit("(" + subq + ") AS " + alias)
+					continue
+				}
+
+				if vtKind, ok := infoVTKinds[vt4Upper]; ok && isInfoRegType(upper) {
+					tr.advance() // TypeName
+					tr.advance() // .
+					regName := tr.advance().val
+					tr.advance() // .
+					tr.advance() // VTName
+					tr.advance() // (
+					vtArgs := tr.parseVTArgs()
+					subq, alias, err := tr.buildInfoVT(vtKind, regName, vtArgs)
+					if err != nil {
+						return Result{}, err
+					}
+					tr.emit("(" + subq + ") AS " + alias)
+					continue
+				}
+			}
+
+			// Regular source: TypeName.EntityName → table_name
 			tr.advance()
 			tr.advance()
 			entity := tr.advance()
@@ -330,25 +823,10 @@ func translate(tokens []tok, paramValues map[string]any) (Result, error) {
 			continue
 		}
 
-		// Parameter: &Name → $N, or NULL literal when value is nil.
-		// Emitting NULL avoids "could not determine data type of parameter $N"
-		// errors in PostgreSQL when the parameter is only used in IS NULL checks.
+		// Parameter: &Name → $N or NULL
 		if t.kind == tParam {
 			tr.advance()
-			if _, exists := tr.params[t.val]; !exists {
-				v := tr.paramValues[t.val]
-				if v == nil {
-					tr.params[t.val] = 0 // sentinel: emit NULL literal
-				} else {
-					tr.args = append(tr.args, v)
-					tr.params[t.val] = len(tr.args)
-				}
-			}
-			if tr.params[t.val] == 0 {
-				tr.emit("NULL")
-			} else {
-				tr.emit(fmt.Sprintf("$%d%s", tr.params[t.val], pgCast(tr.paramValues[t.val])))
-			}
+			tr.emit(tr.addParam(t.val))
 			continue
 		}
 
@@ -366,7 +844,7 @@ func translate(tokens []tok, paramValues map[string]any) (Result, error) {
 			continue
 		}
 
-		// Punctuation (no extra spaces around , . parens)
+		// Punctuation
 		if t.kind == tComma || t.kind == tDot || t.kind == tLParen || t.kind == tRParen {
 			tr.advance()
 			tr.emit(t.val)
@@ -391,8 +869,7 @@ func translate(tokens []tok, paramValues map[string]any) (Result, error) {
 	return Result{SQL: tr.build(), Args: tr.args}, nil
 }
 
-// pgCast returns a PostgreSQL explicit cast suffix for v so that PostgreSQL
-// can determine the parameter type even when context alone is insufficient.
+// pgCast returns a PostgreSQL explicit cast suffix for v.
 func pgCast(v any) string {
 	switch v.(type) {
 	case time.Time:
