@@ -74,6 +74,18 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return "&" + strings.Join(parts, "&")
 	},
+	"mul": func(a, b int) int { return a * b },
+	"int": func(v any) int {
+		switch t := v.(type) {
+		case int:
+			return t
+		case int64:
+			return int(t)
+		case float64:
+			return int(t)
+		}
+		return 0
+	},
 	"seq": func(n int) []int {
 		s := make([]int, n)
 		for i := range s {
@@ -227,6 +239,11 @@ const tplList = `
   <h2>{{.Entity.Name}}</h2>
   <div style="display:flex;gap:8px">
     {{if .Entity.Hierarchical}}
+      {{if .TreeView}}
+        <a class="btn btn-secondary btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">☰ Список</a>
+      {{else}}
+        <a class="btn btn-secondary btn-sm" href="?view=tree{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">📂 Дерево</a>
+      {{end}}
       <a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new{{if .ParentStr}}?parent={{.ParentStr}}{{end}}">+ Элемент</a>
       <a class="btn btn-secondary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?is_folder=true{{if .ParentStr}}&parent={{.ParentStr}}{{end}}">📁 Группа</a>
     {{else}}
@@ -284,6 +301,54 @@ const tplList = `
 </details>
 
 <div class="card">
+{{if .TreeView}}
+{{/* ===== TREE VIEW ===== */}}
+{{if .TreeRows}}
+<table><thead><tr>
+  {{range .Entity.Fields}}<th>{{.Name}}</th>{{end}}
+  <th style="width:90px"></th>
+</tr></thead><tbody>
+{{range .TreeRows}}{{$row := .}}{{$isFolder := index $row "is_folder"}}{{$depth := index $row "_depth"}}
+<tr {{if index $row "deletion_mark"}}style="opacity:0.45;text-decoration:line-through;cursor:pointer"{{else}}style="cursor:pointer"{{end}}
+  onclick="listRowClick(event,this)"
+  ondblclick="listRowDblClick(event,this)"
+  oncontextmenu="listCtxMenu(event,this)"
+  data-tree-id="{{index $row "id"}}"
+  data-tree-parent="{{index $row "parent_id"}}"
+  data-predefined="{{if index $row "_is_predefined"}}1{{end}}"
+  data-is-folder="{{if $isFolder}}1{{end}}"
+  data-folder-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}"
+  data-mark-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}/delete?mark=1"
+  data-del-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}/delete"
+  data-open-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}">
+  {{range $.Entity.Fields}}
+    {{if eq .Name "Наименование"}}
+      <td>
+        <span style="display:inline-block;width:{{mul (int $depth) 20}}px"></span>
+        {{if $isFolder}}
+          <button type="button" class="tree-toggle" data-folder-id="{{index $row "id"}}" title="Свернуть/Развернуть"
+            style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px">▼</button>
+          📁
+        {{else}}📄{{end}}
+        {{index $row .Name}}{{if index $row "_is_predefined"}} <span title="Предопределённый" style="color:#f59e0b;font-size:11px">★</span>{{end}}
+      </td>
+    {{else if eq (str .Type) "date"}}<td>{{fmtDate (index $row .Name)}}</td>
+    {{else}}<td>{{index $row .Name}}</td>{{end}}
+  {{end}}
+  <td>
+    {{if $isFolder}}
+      <a class="btn btn-sm btn-secondary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">▶ Войти</a>
+    {{else}}
+      <a class="btn btn-sm btn-primary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}">Открыть</a>
+    {{end}}
+  </td>
+</tr>{{end}}
+</tbody></table>
+{{else}}
+<p class="empty">Записей нет — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">создать первую</a></p>
+{{end}}
+{{else}}
+{{/* ===== LIST VIEW (default) ===== */}}
 {{if .Rows}}
 <table><thead><tr>
   {{if eq (str .Entity.Kind) "document"}}<th style="width:36px">✓</th>{{end}}
@@ -299,6 +364,7 @@ const tplList = `
 {{range .Rows}}{{$row := .}}{{$isFolder := index $row "is_folder"}}
 <tr {{if index $row "deletion_mark"}}style="opacity:0.45;text-decoration:line-through;cursor:pointer"{{else}}style="cursor:pointer"{{end}}
   onclick="listRowClick(event,this)"
+  ondblclick="listRowDblClick(event,this)"
   oncontextmenu="listCtxMenu(event,this)"
   data-predefined="{{if index $row "_is_predefined"}}1{{end}}"
   data-is-folder="{{if $isFolder}}1{{end}}"
@@ -327,6 +393,7 @@ const tplList = `
 {{else}}
 <p class="empty">Записей нет — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">создать первую</a></p>
 {{end}}
+{{end}}
 </div></main>
 <script>
 var _isAdmin={{if .IsAdmin}}true{{else}}false{{end}};
@@ -336,6 +403,29 @@ function listRowClick(e,tr){
   if(_listSel)_listSel.querySelectorAll('td').forEach(function(td){td.style.background='';});
   _listSel=tr;
   tr.querySelectorAll('td').forEach(function(td){td.style.background='#dbeafe';});
+}
+function listRowDblClick(e,tr){
+  if(e.target.closest('a,button'))return;
+  if(tr.dataset.isFolder==='1'){window.location.href=tr.dataset.folderUrl;}
+  else{window.location.href=tr.dataset.openUrl;}
+}
+// Tree view: collapse/expand subtrees
+document.querySelectorAll('.tree-toggle').forEach(function(btn){
+  btn.addEventListener('click',function(e){
+    e.stopPropagation();
+    var fid=btn.dataset.folderId;
+    var expanded=btn.getAttribute('data-expanded')!=='0';
+    treeSetVisible(fid,!expanded);
+    btn.setAttribute('data-expanded',expanded?'0':'1');
+    btn.textContent=expanded?'▶':'▼';
+  });
+});
+function treeSetVisible(parentId,visible){
+  document.querySelectorAll('[data-tree-parent="'+parentId+'"]').forEach(function(row){
+    row.style.display=visible?'':'none';
+    var childId=row.dataset.treeId;
+    if(childId){treeSetVisible(childId,visible&&row.dataset.isFolder!=='1'||row.querySelector('.tree-toggle[data-expanded="1"]')!==null);}
+  });
 }
 function listCtxMenu(e,tr){
   if(e.target.closest('a,button'))return;

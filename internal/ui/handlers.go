@@ -53,9 +53,11 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	}
 	params := parseListParams(r, entity)
 
+	treeView := entity.Hierarchical && r.URL.Query().Get("view") == "tree"
+
 	var breadcrumbs []map[string]string
 	var parentStr string
-	if entity.Hierarchical {
+	if entity.Hierarchical && !treeView {
 		parentStr = r.URL.Query().Get("parent")
 		if parentStr == "" {
 			params.ParentStr = "root"
@@ -72,6 +74,14 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	}
 	s.resolveRefs(r.Context(), entity, rows)
 
+	// For tree view: fetch ALL items and build hierarchical order with depth info
+	var treeRows []map[string]any
+	if treeView {
+		allRows, _ := s.store.List(r.Context(), entity.Name, entity, storage.ListParams{})
+		s.resolveRefs(r.Context(), entity, allRows)
+		treeRows = buildCatalogTree(allRows)
+	}
+
 	refFilterOptions, _ := s.loadRefOptions(r.Context(), entity)
 
 	user := auth.UserFromContext(r.Context())
@@ -85,7 +95,35 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		"IsAdmin":          isAdmin,
 		"Breadcrumbs":      breadcrumbs,
 		"ParentStr":        parentStr,
+		"TreeView":         treeView,
+		"TreeRows":         treeRows,
 	})
+}
+
+// buildCatalogTree converts a flat list of catalog rows into a depth-first ordered
+// list, adding "_depth" (int) and "_label" to each row for tree rendering.
+func buildCatalogTree(rows []map[string]any) []map[string]any {
+	children := make(map[string][]map[string]any)
+	for _, row := range rows {
+		pid := ""
+		if v := row["parent_id"]; v != nil {
+			pid = fmt.Sprintf("%v", v)
+		}
+		children[pid] = append(children[pid], row)
+	}
+
+	var result []map[string]any
+	var walk func(pid string, depth int)
+	walk = func(pid string, depth int) {
+		for _, row := range children[pid] {
+			row["_depth"] = depth
+			result = append(result, row)
+			id := fmt.Sprintf("%v", row["id"])
+			walk(id, depth+1)
+		}
+	}
+	walk("", 0)
+	return result
 }
 
 func (s *Server) form(w http.ResponseWriter, r *http.Request) {
@@ -1177,6 +1215,7 @@ func (s *Server) loadRefOptions(ctx context.Context, entity *metadata.Entity) (m
 		if err != nil {
 			return nil, err
 		}
+		rows = filterOutFolders(rows)
 		for _, row := range rows {
 			row["_label"] = firstStringField(row, refEntity)
 		}
@@ -1205,6 +1244,7 @@ func (s *Server) loadTPRefOptions(ctx context.Context, entity *metadata.Entity) 
 			if err != nil {
 				continue
 			}
+			rows = filterOutFolders(rows)
 			for _, row := range rows {
 				row["_label"] = firstStringField(row, refEntity)
 			}
@@ -1302,6 +1342,19 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+// filterOutFolders removes rows where is_folder=true (hierarchical catalog groups).
+// Used to prevent selecting groups in reference fields of documents/table parts.
+func filterOutFolders(rows []map[string]any) []map[string]any {
+	out := rows[:0:len(rows)]
+	for _, row := range rows {
+		if v, ok := row["is_folder"].(bool); ok && v {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 func firstStringField(row map[string]any, e *metadata.Entity) string {

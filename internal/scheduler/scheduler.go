@@ -94,7 +94,8 @@ func (s *Scheduler) RunNow(ctx context.Context, jobName string) error {
 	if job == nil {
 		return fmt.Errorf("job not found: %s", jobName)
 	}
-	go s.executeJob(ctx, job)
+	// Use background context: request context will be cancelled after redirect
+	go s.executeJob(context.Background(), job)
 	return nil
 }
 
