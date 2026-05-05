@@ -1,4 +1,4 @@
-package ui
+﻿package ui
 
 import (
 	"fmt"
@@ -394,8 +394,7 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	s.render(w, "page-history", map[string]any{
-		"Nav":        s.buildNav(),
+	s.render(w, r, "page-history", map[string]any{
 		"EntityName": entity.Name,
 		"ID":         id.String(),
 		"Entries":    entries,
@@ -619,3 +618,4 @@ const tplAdminCleanup = `{{define "admin-cleanup"}}` + adminHead + `
 {{end}}
 </main></body></html>
 {{end}}`
+

@@ -116,7 +116,139 @@ type navGroup struct {
 	Items []navItem
 }
 
-func (s *Server) buildNav() []navGroup {
+func (s *Server) buildNav(sub string) []navGroup {
+	subs := s.reg.Subsystems()
+	if len(subs) > 0 {
+		cur := s.reg.GetSubsystem(sub)
+		if cur == nil {
+			cur = subs[0]
+		}
+		return s.buildNavForSubsystem(cur, sub)
+	}
+	return s.buildFlatNav()
+}
+
+func strSet(names []string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
+func (s *Server) buildNavForSubsystem(sub *metadata.Subsystem, subName string) []navGroup {
+	q := "?subsystem=" + subName
+	var nav []navGroup
+
+	if len(sub.Contents.Catalogs) > 0 || len(sub.Contents.Documents) > 0 {
+		catSet := strSet(sub.Contents.Catalogs)
+		docSet := strSet(sub.Contents.Documents)
+		entities := s.reg.Entities()
+		sort.Slice(entities, func(i, j int) bool { return entities[i].Name < entities[j].Name })
+		var catalogs, documents []navItem
+		for _, e := range entities {
+			url := "/ui/" + strings.ToLower(string(e.Kind)) + "/" + e.Name + q
+			if e.Kind == metadata.KindCatalog && catSet[e.Name] {
+				catalogs = append(catalogs, navItem{Label: e.Name, URL: url})
+			} else if e.Kind == metadata.KindDocument && docSet[e.Name] {
+				documents = append(documents, navItem{Label: e.Name, URL: url})
+			}
+		}
+		if len(catalogs) > 0 {
+			nav = append(nav, navGroup{Kind: "Справочники", Items: catalogs})
+		}
+		if len(documents) > 0 {
+			nav = append(nav, navGroup{Kind: "Документы", Items: documents})
+		}
+	}
+
+	if len(sub.Contents.Registers) > 0 {
+		regSet := strSet(sub.Contents.Registers)
+		registers := s.reg.Registers()
+		sort.Slice(registers, func(i, j int) bool { return registers[i].Name < registers[j].Name })
+		var regItems []navItem
+		for _, reg := range registers {
+			if !regSet[reg.Name] {
+				continue
+			}
+			regItems = append(regItems, navItem{
+				Label: reg.Name + " (движения)",
+				URL:   "/ui/register/" + strings.ToLower(reg.Name) + q,
+			})
+			regItems = append(regItems, navItem{
+				Label: reg.Name + " (остатки)",
+				URL:   "/ui/register/" + strings.ToLower(reg.Name) + "/balances" + q,
+			})
+		}
+		if len(regItems) > 0 {
+			nav = append(nav, navGroup{Kind: "Регистры", Items: regItems})
+		}
+	}
+
+	if len(sub.Contents.InfoRegs) > 0 {
+		irSet := strSet(sub.Contents.InfoRegs)
+		inforegs := s.reg.InfoRegisters()
+		sort.Slice(inforegs, func(i, j int) bool { return inforegs[i].Name < inforegs[j].Name })
+		var irItems []navItem
+		for _, ir := range inforegs {
+			if !irSet[ir.Name] {
+				continue
+			}
+			label := ir.Name
+			if ir.Periodic {
+				label += " (периодический)"
+			}
+			irItems = append(irItems, navItem{Label: label, URL: "/ui/inforeg/" + strings.ToLower(ir.Name) + q})
+		}
+		if len(irItems) > 0 {
+			nav = append(nav, navGroup{Kind: "Регистры сведений", Items: irItems})
+		}
+	}
+
+	if len(sub.Contents.Reports) > 0 {
+		repSet := strSet(sub.Contents.Reports)
+		reps := s.reg.Reports()
+		sort.Slice(reps, func(i, j int) bool { return reps[i].Name < reps[j].Name })
+		var repItems []navItem
+		for _, rep := range reps {
+			if !repSet[rep.Name] {
+				continue
+			}
+			label := rep.Title
+			if label == "" {
+				label = rep.Name
+			}
+			repItems = append(repItems, navItem{Label: label, URL: "/ui/report/" + strings.ToLower(rep.Name) + q})
+		}
+		if len(repItems) > 0 {
+			nav = append(nav, navGroup{Kind: "Отчёты", Items: repItems})
+		}
+	}
+
+	if len(sub.Contents.Processors) > 0 {
+		procSet := strSet(sub.Contents.Processors)
+		procs := s.reg.Processors()
+		sort.Slice(procs, func(i, j int) bool { return procs[i].Name < procs[j].Name })
+		var procItems []navItem
+		for _, proc := range procs {
+			if !procSet[proc.Name] {
+				continue
+			}
+			label := proc.Title
+			if label == "" {
+				label = proc.Name
+			}
+			procItems = append(procItems, navItem{Label: label, URL: "/ui/processor/" + strings.ToLower(proc.Name) + q})
+		}
+		if len(procItems) > 0 {
+			nav = append(nav, navGroup{Kind: "Обработки", Items: procItems})
+		}
+	}
+
+	return nav
+}
+
+func (s *Server) buildFlatNav() []navGroup {
 	entities := s.reg.Entities()
 	sort.Slice(entities, func(i, j int) bool { return entities[i].Name < entities[j].Name })
 

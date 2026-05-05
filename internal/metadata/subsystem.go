@@ -1,0 +1,101 @@
+package metadata
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Subsystem struct {
+	Name     string
+	Title    string
+	Icon     string
+	Order    int
+	Contents SubsystemContents
+}
+
+type SubsystemContents struct {
+	Documents  []string
+	Catalogs   []string
+	Reports    []string
+	InfoRegs   []string
+	Registers  []string
+	Processors []string
+}
+
+type rawSubsystem struct {
+	Name     string `yaml:"name"`
+	Title    string `yaml:"title"`
+	Icon     string `yaml:"icon"`
+	Order    int    `yaml:"order"`
+	Contents struct {
+		Documents  []string `yaml:"documents"`
+		Catalogs   []string `yaml:"catalogs"`
+		Reports    []string `yaml:"reports"`
+		InfoRegs   []string `yaml:"inforegs"`
+		Registers  []string `yaml:"registers"`
+		Processors []string `yaml:"processors"`
+	} `yaml:"contents"`
+}
+
+func LoadSubsystemFile(path string) (*Subsystem, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw rawSubsystem
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	if raw.Name == "" {
+		raw.Name = strings.TrimSuffix(filepath.Base(path), ".yaml")
+	}
+	if raw.Title == "" {
+		raw.Title = raw.Name
+	}
+	return &Subsystem{
+		Name:  raw.Name,
+		Title: raw.Title,
+		Icon:  raw.Icon,
+		Order: raw.Order,
+		Contents: SubsystemContents{
+			Documents:  raw.Contents.Documents,
+			Catalogs:   raw.Contents.Catalogs,
+			Reports:    raw.Contents.Reports,
+			InfoRegs:   raw.Contents.InfoRegs,
+			Registers:  raw.Contents.Registers,
+			Processors: raw.Contents.Processors,
+		},
+	}, nil
+}
+
+func LoadSubsystemDir(dir string) ([]*Subsystem, error) {
+	items, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var subs []*Subsystem
+	for _, item := range items {
+		if item.IsDir() || !strings.HasSuffix(item.Name(), ".yaml") {
+			continue
+		}
+		s, err := LoadSubsystemFile(filepath.Join(dir, item.Name()))
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, s)
+	}
+	sort.Slice(subs, func(i, j int) bool {
+		if subs[i].Order != subs[j].Order {
+			return subs[i].Order < subs[j].Order
+		}
+		return subs[i].Name < subs[j].Name
+	})
+	return subs, nil
+}

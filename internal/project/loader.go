@@ -32,6 +32,7 @@ type Project struct {
 	Programs      map[string]*ast.Program  // entity name → parsed DSL
 	Processors    []*processor.Processor
 	Modules       map[string]*ast.Program  // module name → parsed procs
+	Subsystems    []*metadata.Subsystem
 	cleanup       func()
 }
 
@@ -105,6 +106,9 @@ func Load(dir string) (*Project, error) {
 	if err := p.loadProcessors(); err != nil {
 		return nil, err
 	}
+	if err := p.loadSubsystems(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -114,6 +118,15 @@ func (p *Project) loadProcessors() error {
 		return fmt.Errorf("project: load processors: %w", err)
 	}
 	p.Processors = procs
+	return nil
+}
+
+func (p *Project) loadSubsystems() error {
+	subs, err := metadata.LoadSubsystemDir(filepath.Join(p.Dir, "subsystems"))
+	if err != nil {
+		return fmt.Errorf("project: load subsystems: %w", err)
+	}
+	p.Subsystems = subs
 	return nil
 }
 

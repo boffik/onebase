@@ -24,6 +24,7 @@ type Registry struct {
 	procs       map[string]map[string]*ast.ProcedureDecl
 	moduleProcs map[string]*ast.ProcedureDecl // flat: proc name → decl
 	processors  map[string]*processor.Processor
+	subsystems  []*metadata.Subsystem // sorted by Order
 }
 
 func NewRegistry() *Registry {
@@ -294,6 +295,31 @@ func (r *Registry) GetProcessor(name string) *processor.Processor {
 	for k, v := range r.processors {
 		if strings.ToLower(k) == nl {
 			return v
+		}
+	}
+	return nil
+}
+
+func (r *Registry) LoadSubsystems(subs []*metadata.Subsystem) {
+	r.mu.Lock()
+	r.subsystems = subs
+	r.mu.Unlock()
+}
+
+func (r *Registry) Subsystems() []*metadata.Subsystem {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*metadata.Subsystem, len(r.subsystems))
+	copy(out, r.subsystems)
+	return out
+}
+
+func (r *Registry) GetSubsystem(name string) *metadata.Subsystem {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.subsystems {
+		if s.Name == name {
+			return s
 		}
 	}
 	return nil

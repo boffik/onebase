@@ -164,6 +164,10 @@ details[open] summary::before{content:"▼ "}
 .tp-table td{padding:4px 6px;border-bottom:1px solid #f1f5f9}
 .tp-table input,.tp-table select{padding:5px 8px;font-size:13px;border:1px solid #e2e8f0;border-radius:5px;width:100%}
 .tp-table .del-btn{background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:0 4px}
+.subsys-bar{background:#0f172a;display:flex;padding:0 12px;gap:2px;flex-shrink:0}
+.subsys-bar a{display:inline-block;padding:7px 18px;color:#94a3b8;text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid transparent;transition:color .15s}
+.subsys-bar a:hover{color:#e2e8f0;background:rgba(255,255,255,.04)}
+.subsys-bar a.active{color:#7dd3fc;border-bottom-color:#3b82f6}
 </style></head><body>
 {{end}}
 `
@@ -186,9 +190,14 @@ const tplNav = `
     </div>
   </div>
 </header>
+{{if .Subsystems}}
+<nav class="subsys-bar">
+  {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{.Title}}</a>{{end}}
+</nav>
+{{end}}
 <div class="app-body">
 <aside>
-  <a href="/ui" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">Главная</a>
+  <a href="/ui{{if .CurrentSubsystem}}/?subsystem={{.CurrentSubsystem}}{{end}}" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">Главная</a>
   {{range .Nav}}
   <div class="sec">{{.Kind}}</div>
   {{range .Items}}<a href="{{.URL}}">{{.Label}}</a>
@@ -255,6 +264,7 @@ const tplList = `
     <a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569">Сбросить</a>
   </div>
   {{if $params.Sort}}<input type="hidden" name="sort" value="{{$params.Sort}}"><input type="hidden" name="dir" value="{{$params.Dir}}">{{end}}
+  {{if $.CurrentSubsystem}}<input type="hidden" name="subsystem" value="{{$.CurrentSubsystem}}">{{end}}
   </form>
 </details>
 

@@ -1,4 +1,4 @@
-package ui
+﻿package ui
 
 import (
 	"context"
@@ -33,8 +33,7 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 			docs++
 		}
 	}
-	s.render(w, "page-about", map[string]any{
-		"Nav":        s.buildNav(),
+	s.render(w, r, "page-about", map[string]any{
 		"Cfg":        s.cfg,
 		"Catalogs":   catalogs,
 		"Documents":  docs,
@@ -44,7 +43,7 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "page-index", map[string]any{"Nav": s.buildNav()})
+	s.render(w, r, "page-index", map[string]any{})
 }
 
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
@@ -65,8 +64,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	isAdmin := user == nil || user.IsAdmin
 
-	s.render(w, "page-list", map[string]any{
-		"Nav":              s.buildNav(),
+	s.render(w, r, "page-list", map[string]any{
 		"Entity":           entity,
 		"Rows":             rows,
 		"Params":           params,
@@ -93,8 +91,7 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, "page-form", map[string]any{
-		"Nav":           s.buildNav(),
+	s.render(w, r, "page-form", map[string]any{
 		"Entity":        entity,
 		"IsNew":         true,
 		"Values":        values,
@@ -150,8 +147,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	if dslErrMsg != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
 		tpRefOpts, _ := s.loadTPRefOptions(r.Context(), entity)
-		s.render(w, "page-form", map[string]any{
-			"Nav":           s.buildNav(),
+		s.render(w, r, "page-form", map[string]any{
 			"Entity":        entity,
 			"IsNew":         true,
 			"Error":         dslErrMsg,
@@ -242,8 +238,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	editUser := auth.UserFromContext(r.Context())
 	editIsAdmin := editUser == nil || editUser.IsAdmin
 
-	s.render(w, "page-form", map[string]any{
-		"Nav":           s.buildNav(),
+	s.render(w, r, "page-form", map[string]any{
 		"Entity":        entity,
 		"IsNew":         false,
 		"Values":        vals,
@@ -296,8 +291,7 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 	if dslErr2 != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
 		tpRefOpts2, _ := s.loadTPRefOptions(r.Context(), entity)
-		s.render(w, "page-form", map[string]any{
-			"Nav":           s.buildNav(),
+		s.render(w, r, "page-form", map[string]any{
 			"Entity":        entity,
 			"IsNew":         false,
 			"Error":         dslErr2,
@@ -550,8 +544,7 @@ func (s *Server) deleteMarkedAll(w http.ResponseWriter, r *http.Request) {
 
 	deleted, _ := strconv.Atoi(r.URL.Query().Get("deleted"))
 	skipped, _ := strconv.Atoi(r.URL.Query().Get("skipped"))
-	s.render(w, "page-delete-marked", map[string]any{
-		"Nav":     s.buildNav(),
+	s.render(w, r, "page-delete-marked", map[string]any{
 		"Entries": entries,
 		"Deleted": deleted,
 		"Skipped": skipped,
@@ -645,8 +638,7 @@ func (s *Server) registerMovements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.resolveRegisterRows(r.Context(), rows, reg)
-	s.render(w, "page-register-movements", map[string]any{
-		"Nav":      s.buildNav(),
+	s.render(w, r, "page-register-movements", map[string]any{
 		"Register": reg,
 		"Rows":     rows,
 	})
@@ -665,8 +657,7 @@ func (s *Server) registerBalances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.resolveRegisterRows(r.Context(), rows, reg)
-	s.render(w, "page-register-balances", map[string]any{
-		"Nav":      s.buildNav(),
+	s.render(w, r, "page-register-balances", map[string]any{
 		"Register": reg,
 		"Rows":     rows,
 	})
@@ -682,8 +673,7 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 		s.runReport(w, r, rep, map[string]any{})
 		return
 	}
-	s.render(w, "page-report", map[string]any{
-		"Nav":         s.buildNav(),
+	s.render(w, r, "page-report", map[string]any{
 		"Report":      rep,
 		"ParamValues": map[string]any{},
 	})
@@ -745,8 +735,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		InfoRegs:  s.reg.InfoRegisters(),
 	})
 	if err != nil {
-		s.render(w, "page-report", map[string]any{
-			"Nav":         s.buildNav(),
+		s.render(w, r, "page-report", map[string]any{
 			"Report":      rep,
 			"QueryError":  err.Error(),
 			"ParamValues": paramValues,
@@ -755,8 +744,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	}
 	rows, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
 	if err != nil {
-		s.render(w, "page-report", map[string]any{
-			"Nav":         s.buildNav(),
+		s.render(w, r, "page-report", map[string]any{
 			"Report":      rep,
 			"QueryError":  err.Error(),
 			"ParamValues": paramValues,
@@ -764,8 +752,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		return
 	}
 	s.resolveUUIDsInReport(r.Context(), rows)
-	s.render(w, "page-report", map[string]any{
-		"Nav":         s.buildNav(),
+	s.render(w, r, "page-report", map[string]any{
 		"Report":      rep,
 		"Cols":        cols,
 		"Rows":        rows,
@@ -778,8 +765,7 @@ func (s *Server) processorForm(w http.ResponseWriter, r *http.Request) {
 	if proc == nil {
 		return
 	}
-	s.render(w, "page-processor", map[string]any{
-		"Nav":         s.buildNav(),
+	s.render(w, r, "page-processor", map[string]any{
 		"Processor":   proc,
 		"ParamValues": map[string]any{},
 	})
@@ -798,8 +784,7 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 
 	procDecl := s.reg.GetProcedure(proc.Name, "Выполнить")
 	if procDecl == nil {
-		s.render(w, "page-processor", map[string]any{
-			"Nav":         s.buildNav(),
+		s.render(w, r, "page-processor", map[string]any{
 			"Processor":   proc,
 			"ParamValues": paramValues,
 			"RunError":    "Процедура Выполнить() не найдена в src/" + strings.ToLower(string([]rune(proc.Name)[:1])) + string([]rune(proc.Name)[1:]) + ".proc.os",
@@ -827,8 +812,7 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 		runErr = err.Error()
 	}
 
-	s.render(w, "page-processor", map[string]any{
-		"Nav":         s.buildNav(),
+	s.render(w, r, "page-processor", map[string]any{
 		"Processor":   proc,
 		"ParamValues": paramValues,
 		"Messages":    messages,
@@ -1235,11 +1219,20 @@ func regFmtDate(v any) string {
 	return fmt.Sprintf("%v", v)
 }
 
-func (s *Server) render(w http.ResponseWriter, name string, data map[string]any) {
+func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data map[string]any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// Always inject Cfg so every template can access app name / version
 	if _, ok := data["Cfg"]; !ok {
 		data["Cfg"] = s.cfg
+	}
+	if _, ok := data["Nav"]; !ok {
+		sub := r.URL.Query().Get("subsystem")
+		subs := s.reg.Subsystems()
+		if sub == "" && len(subs) > 0 {
+			sub = subs[0].Name
+		}
+		data["Nav"] = s.buildNav(sub)
+		data["Subsystems"] = subs
+		data["CurrentSubsystem"] = sub
 	}
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -1479,8 +1472,7 @@ func (s *Server) infoRegList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	s.render(w, "page-inforeg-list", map[string]any{
-		"Nav":      s.buildNav(),
+	s.render(w, r, "page-inforeg-list", map[string]any{
 		"InfoReg":  ir,
 		"Rows":     rows,
 	})
@@ -1492,8 +1484,7 @@ func (s *Server) infoRegForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().Format("2006-01-02")
-	s.render(w, "page-inforeg-form", map[string]any{
-		"Nav":     s.buildNav(),
+	s.render(w, r, "page-inforeg-form", map[string]any{
 		"InfoReg": ir,
 		"Values":  map[string]string{"period": now},
 		"Error":   "",
@@ -1511,10 +1502,10 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 	if ir.Periodic {
 		pStr := r.FormValue("period")
 		if pStr == "" {
-			s.render(w, "page-inforeg-form", map[string]any{
-				"Nav": s.buildNav(), "InfoReg": ir,
-				"Values": formValuesFromRequest(r, ir),
-				"Error":  "Период обязателен для периодического регистра",
+			s.render(w, r, "page-inforeg-form", map[string]any{
+				"InfoReg": ir,
+				"Values":  formValuesFromRequest(r, ir),
+				"Error":   "Период обязателен для периодического регистра",
 			})
 			return
 		}
@@ -1525,10 +1516,10 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if periodPtr == nil {
-			s.render(w, "page-inforeg-form", map[string]any{
-				"Nav": s.buildNav(), "InfoReg": ir,
-				"Values": formValuesFromRequest(r, ir),
-				"Error":  "Неверный формат даты периода",
+			s.render(w, r, "page-inforeg-form", map[string]any{
+				"InfoReg": ir,
+				"Values":  formValuesFromRequest(r, ir),
+				"Error":   "Неверный формат даты периода",
 			})
 			return
 		}
@@ -1538,10 +1529,10 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 	resources := parseInfoRegFields(r, ir.Resources)
 
 	if err := s.store.InfoRegSet(r.Context(), ir, dims, resources, periodPtr); err != nil {
-		s.render(w, "page-inforeg-form", map[string]any{
-			"Nav": s.buildNav(), "InfoReg": ir,
-			"Values": formValuesFromRequest(r, ir),
-			"Error":  err.Error(),
+		s.render(w, r, "page-inforeg-form", map[string]any{
+			"InfoReg": ir,
+			"Values":  formValuesFromRequest(r, ir),
+			"Error":   err.Error(),
 		})
 		return
 	}
@@ -1634,8 +1625,7 @@ func (s *Server) constantsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msg := r.URL.Query().Get("saved")
-	s.render(w, "page-constants", map[string]any{
-		"Nav":       s.buildNav(),
+	s.render(w, r, "page-constants", map[string]any{
 		"Constants": consts,
 		"Values":    valStrs,
 		"RefOpts":   refOpts,
@@ -1692,3 +1682,4 @@ func (s *Server) generateNumber(ctx context.Context, entity *metadata.Entity, fi
 	}
 	return ""
 }
+
