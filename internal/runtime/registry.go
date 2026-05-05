@@ -25,6 +25,7 @@ type Registry struct {
 	moduleProcs map[string]*ast.ProcedureDecl // flat: proc name → decl
 	processors  map[string]*processor.Processor
 	subsystems  []*metadata.Subsystem // sorted by Order
+	journals    map[string]*metadata.Journal
 }
 
 func NewRegistry() *Registry {
@@ -40,6 +41,7 @@ func NewRegistry() *Registry {
 		procs:       make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs: make(map[string]*ast.ProcedureDecl),
 		processors:  make(map[string]*processor.Processor),
+		journals:    make(map[string]*metadata.Journal),
 	}
 }
 
@@ -323,6 +325,32 @@ func (r *Registry) GetSubsystem(name string) *metadata.Subsystem {
 		}
 	}
 	return nil
+}
+
+func (r *Registry) LoadJournals(journals []*metadata.Journal) {
+	m := make(map[string]*metadata.Journal, len(journals))
+	for _, j := range journals {
+		m[strings.ToLower(j.Name)] = j
+	}
+	r.mu.Lock()
+	r.journals = m
+	r.mu.Unlock()
+}
+
+func (r *Registry) GetJournal(name string) *metadata.Journal {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.journals[strings.ToLower(name)]
+}
+
+func (r *Registry) Journals() []*metadata.Journal {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*metadata.Journal, 0, len(r.journals))
+	for _, j := range r.journals {
+		out = append(out, j)
+	}
+	return out
 }
 
 func (r *Registry) GetProcedure(entityName, procName string) *ast.ProcedureDecl {

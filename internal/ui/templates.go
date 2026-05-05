@@ -101,7 +101,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return template.JS(b)
 	},
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -870,6 +870,92 @@ const tplConstants = `
 {{end}}
 </form>
 </div></main></div></body></html>
+{{end}}
+`
+
+const tplJournal = `
+{{define "page-journal"}}
+{{template "head" .}}{{template "nav" .}}
+<main>
+<div class="row-top">
+  <h2>{{.Journal.Title}}</h2>
+  <span style="color:#94a3b8;font-size:13px">Всего: {{.Total}}</span>
+</div>
+{{$j := .Journal}}{{$params := .Params}}{{$fmts := .ColFormats}}
+<details{{if hasFilter $params}} open{{end}}>
+  <summary>Отбор</summary>
+  <form method="GET" action="">
+  <div class="filter-body">
+  {{range $j.Filters}}
+    {{if eq .Type "date_range"}}
+    <div>
+      <label>{{.Field}} с</label>
+      <input type="date" name="f.{{.Field}}.from" value="{{(filterVal $params .Field).From}}">
+    </div>
+    <div>
+      <label>{{.Field}} по</label>
+      <input type="date" name="f.{{.Field}}.to" value="{{(filterVal $params .Field).To}}">
+    </div>
+    {{else}}
+    <div>
+      <label>{{.Field}}</label>
+      {{if index $.FilterOptions .Field}}
+      <select name="f.{{.Field}}">
+        <option value="">— все —</option>
+        {{range index $.FilterOptions .Field}}
+        <option value="{{index . "id"}}" {{if eq (index . "id") (filterVal $params .Field).Value}}selected{{end}}>{{index . "_label"}}</option>
+        {{end}}
+      </select>
+      {{else}}
+      <input type="text" name="f.{{.Field}}" value="{{(filterVal $params .Field).Value}}">
+      {{end}}
+    </div>
+    {{end}}
+  {{end}}
+  </div>
+  <div class="filter-actions">
+    <button class="btn btn-primary btn-sm" type="submit">Применить</button>
+    <a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569">Сбросить</a>
+  </div>
+  {{if $.CurrentSubsystem}}<input type="hidden" name="subsystem" value="{{$.CurrentSubsystem}}">{{end}}
+  </form>
+</details>
+
+<div class="card">
+{{if .Rows}}
+<table><thead><tr>
+  <th>Документ</th>
+  {{range $j.Columns}}<th>{{.Label}}</th>{{end}}
+  <th style="width:90px"></th>
+</tr></thead>
+<tbody>
+{{range .Rows}}{{$row := .}}
+<tr style="cursor:pointer"
+  onclick="if(event.target.tagName!=='A'&&event.target.tagName!=='BUTTON'){window.location='/ui/document/'+encodeURIComponent('{{lower (str (index . "_doc_kind"))}}')+'/'+'{{str (index . "id")}}'}"
+>
+  <td>{{index . "_doc_kind"}}</td>
+  {{range $j.Columns}}
+    {{$v := index $row .Field}}
+    {{if eq (index $fmts .Field) "date"}}<td>{{fmtDate $v}}</td>
+    {{else}}<td>{{$v}}</td>{{end}}
+  {{end}}
+  <td><a class="btn btn-sm btn-primary" href="/ui/document/{{lower (str (index . "_doc_kind"))}}/{{str (index . "id")}}">Открыть</a></td>
+</tr>
+{{end}}
+</tbody></table>
+{{else}}
+<p class="empty">Документов нет</p>
+{{end}}
+</div>
+
+{{if or .HasPrev .HasNext}}
+<div style="display:flex;gap:8px;margin-top:12px">
+  {{if .HasPrev}}<a class="btn btn-secondary" href="?offset={{.PrevOffset}}{{filterQuery $params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">← Назад</a>{{end}}
+  {{if .HasNext}}<a class="btn btn-secondary" href="?offset={{.NextOffset}}{{filterQuery $params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">Вперёд →</a>{{end}}
+</div>
+{{end}}
+
+</main></div></body></html>
 {{end}}
 `
 

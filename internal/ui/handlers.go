@@ -1462,6 +1462,172 @@ func (s *Server) getInfoReg(w http.ResponseWriter, r *http.Request) *metadata.In
 	return ir
 }
 
+func (s *Server) journalList(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if dec, err := url.PathUnescape(name); err == nil {
+		name = dec
+	}
+	j := s.reg.GetJournal(name)
+	if j == nil {
+		http.Error(w, "unknown journal: "+name, 404)
+		return
+	}
+
+	// Build docs map
+	docs := make(map[string]*metadata.Entity, len(j.Documents))
+	for _, docName := range j.Documents {
+		if e := s.reg.GetEntity(docName); e != nil {
+			docs[docName] = e
+		}
+	}
+
+	// Parse filter params from request
+	params := storage.ListParams{Filters: make(map[string]storage.FilterValue)}
+	for _, jf := range j.Filters {
+		fv := storage.FilterValue{}
+		switch {
+		case jf.Type == "date_range":
+			fv.From = r.URL.Query().Get("f." + jf.Field + ".from")
+			fv.To = r.URL.Query().Get("f." + jf.Field + ".to")
+		default:
+			fv.Value = r.URL.Query().Get("f." + jf.Field)
+		}
+		params.Filters[jf.Field] = fv
+	}
+
+	const pageSize = 50
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	rows, total, colRefMap, err := s.store.JournalQuery(r.Context(), j, docs, params, pageSize, offset)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	// Resolve ref columns
+	s.resolveJournalRefs(r.Context(), j, colRefMap, rows)
+
+	// Load filter options for reference filters
+	filterOpts := make(map[string][]map[string]any)
+	for _, jf := range j.Filters {
+		if !strings.HasPrefix(jf.Type, "reference:") {
+			continue
+		}
+		refName := strings.TrimPrefix(jf.Type, "reference:")
+		refEntity := s.reg.GetEntity(refName)
+		if refEntity == nil {
+			continue
+		}
+		refRows, err := s.store.List(r.Context(), refEntity.Name, refEntity, storage.ListParams{})
+		if err != nil {
+			continue
+		}
+		for _, row := range refRows {
+			row["_label"] = firstStringField(row, refEntity)
+		}
+		filterOpts[jf.Field] = refRows
+	}
+
+	// Compute column formats from entity metadata
+	colFormats := make(map[string]string)
+	for _, jcol := range j.Columns {
+		if jcol.Format != "" {
+			colFormats[jcol.Field] = jcol.Format
+			continue
+		}
+		for _, entity := range docs {
+			for _, f := range entity.Fields {
+				if strings.EqualFold(f.Name, jcol.Field) {
+					if f.Type == metadata.FieldTypeDate {
+						colFormats[jcol.Field] = "date"
+					}
+					goto nextCol
+				}
+				for _, fb := range jcol.Fallback {
+					if strings.EqualFold(f.Name, fb) && f.Type == metadata.FieldTypeDate {
+						colFormats[jcol.Field] = "date"
+					}
+				}
+			}
+		}
+	nextCol:
+	}
+
+	hasNext := offset+pageSize < total
+	hasPrev := offset > 0
+	prevOffset := offset - pageSize
+	if prevOffset < 0 {
+		prevOffset = 0
+	}
+
+	s.render(w, r, "page-journal", map[string]any{
+		"Journal":       j,
+		"Rows":          rows,
+		"Total":         total,
+		"Params":        params,
+		"FilterOptions": filterOpts,
+		"ColFormats":    colFormats,
+		"Offset":        offset,
+		"Limit":         pageSize,
+		"HasPrev":       hasPrev,
+		"HasNext":       hasNext,
+		"PrevOffset":    prevOffset,
+		"NextOffset":    offset + pageSize,
+	})
+}
+
+// resolveJournalRefs resolves UUID values in reference journal columns to display labels.
+func (s *Server) resolveJournalRefs(ctx context.Context, j *metadata.Journal, colRefMap storage.ColRefMap, rows []map[string]any) {
+	for colAlias, refEntityName := range colRefMap {
+		refEntity := s.reg.GetEntity(refEntityName)
+		if refEntity == nil {
+			continue
+		}
+		// Find the JournalColumn with this field name
+		var colField string
+		for _, jcol := range j.Columns {
+			if strings.ToLower(jcol.Field) == colAlias {
+				colField = jcol.Field
+				break
+			}
+		}
+		if colField == "" {
+			continue
+		}
+		// Collect unique UUIDs
+		seen := map[string]bool{}
+		for _, row := range rows {
+			if v := row[colField]; v != nil {
+				seen[fmt.Sprintf("%v", v)] = true
+			}
+		}
+		// Resolve labels
+		labels := make(map[string]string, len(seen))
+		for idStr := range seen {
+			id, err := uuid.Parse(idStr)
+			if err != nil {
+				continue
+			}
+			refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
+			if err != nil {
+				continue
+			}
+			labels[idStr] = firstStringField(refRow, refEntity)
+		}
+		// Replace in rows
+		for _, row := range rows {
+			if v := row[colField]; v != nil {
+				if label, ok := labels[fmt.Sprintf("%v", v)]; ok {
+					row[colField] = label
+				}
+			}
+		}
+	}
+}
+
 func (s *Server) infoRegList(w http.ResponseWriter, r *http.Request) {
 	ir := s.getInfoReg(w, r)
 	if ir == nil {

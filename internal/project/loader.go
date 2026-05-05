@@ -33,6 +33,7 @@ type Project struct {
 	Processors    []*processor.Processor
 	Modules       map[string]*ast.Program  // module name → parsed procs
 	Subsystems    []*metadata.Subsystem
+	Journals      []*metadata.Journal
 	cleanup       func()
 }
 
@@ -109,6 +110,9 @@ func Load(dir string) (*Project, error) {
 	if err := p.loadSubsystems(); err != nil {
 		return nil, err
 	}
+	if err := p.loadJournals(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -127,6 +131,15 @@ func (p *Project) loadSubsystems() error {
 		return fmt.Errorf("project: load subsystems: %w", err)
 	}
 	p.Subsystems = subs
+	return nil
+}
+
+func (p *Project) loadJournals() error {
+	journals, err := metadata.LoadJournalDir(filepath.Join(p.Dir, "journals"))
+	if err != nil {
+		return fmt.Errorf("project: load journals: %w", err)
+	}
+	p.Journals = journals
 	return nil
 }
 

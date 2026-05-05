@@ -1,0 +1,88 @@
+package metadata
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestLoadJournalFile(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: ВсеОперации
+title: Все операции
+documents:
+  - ПоступлениеТоваров
+  - РеализацияТоваров
+columns:
+  - field: Дата
+    label: Дата
+    format: date
+  - field: Контрагент
+    fallback: [Поставщик, Покупатель]
+filters:
+  - field: Дата
+    type: date_range
+  - field: Контрагент
+    type: reference:Контрагент
+`
+	path := filepath.Join(dir, "всеоперации.yaml")
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	j, err := LoadJournalFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Name != "ВсеОперации" {
+		t.Errorf("name: got %q", j.Name)
+	}
+	if j.Title != "Все операции" {
+		t.Errorf("title: got %q", j.Title)
+	}
+	if len(j.Documents) != 2 {
+		t.Errorf("documents: got %d", len(j.Documents))
+	}
+	if len(j.Columns) != 2 {
+		t.Fatalf("columns: got %d", len(j.Columns))
+	}
+	if j.Columns[0].Format != "date" {
+		t.Errorf("column[0].format: got %q", j.Columns[0].Format)
+	}
+	if len(j.Columns[1].Fallback) != 2 {
+		t.Errorf("column[1].fallback: got %v", j.Columns[1].Fallback)
+	}
+	if len(j.Filters) != 2 {
+		t.Errorf("filters: got %d", len(j.Filters))
+	}
+	if j.Filters[1].Type != "reference:Контрагент" {
+		t.Errorf("filter[1].type: got %q", j.Filters[1].Type)
+	}
+}
+
+func TestLoadJournalDir_Empty(t *testing.T) {
+	journals, err := LoadJournalDir("/nonexistent/path")
+	if err != nil {
+		t.Errorf("expected nil error, got: %v", err)
+	}
+	if journals != nil {
+		t.Errorf("expected nil, got %v", journals)
+	}
+}
+
+func TestLoadJournalFile_DefaultLabel(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: Тест
+documents: [Д1]
+columns:
+  - field: Дата
+`
+	path := filepath.Join(dir, "тест.yaml")
+	os.WriteFile(path, []byte(yaml), 0644)
+	j, err := LoadJournalFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Columns[0].Label != "Дата" {
+		t.Errorf("default label: got %q", j.Columns[0].Label)
+	}
+}

@@ -96,6 +96,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	reg.LoadModules(proj.Modules)
 	reg.LoadProcessors(proj.Processors)
 	reg.LoadSubsystems(proj.Subsystems)
+	reg.LoadJournals(proj.Journals)
 
 	appCfg, _ := project.LoadConfig(proj.Dir)
 	uiCfg := ui.Config{

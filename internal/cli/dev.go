@@ -106,6 +106,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		reg.LoadModules(proj.Modules)
 		reg.LoadProcessors(proj.Processors)
 		reg.LoadSubsystems(proj.Subsystems)
+		reg.LoadJournals(proj.Journals)
 		fmt.Fprintln(os.Stdout, "[dev] reloaded")
 	}
 	load()

@@ -24,6 +24,7 @@ type SubsystemContents struct {
 	InfoRegs   []string
 	Registers  []string
 	Processors []string
+	Journals   []string
 }
 
 type rawSubsystem struct {
@@ -38,6 +39,7 @@ type rawSubsystem struct {
 		InfoRegs   []string `yaml:"inforegs"`
 		Registers  []string `yaml:"registers"`
 		Processors []string `yaml:"processors"`
+		Journals   []string `yaml:"journals"`
 	} `yaml:"contents"`
 }
 
@@ -68,6 +70,7 @@ func LoadSubsystemFile(path string) (*Subsystem, error) {
 			InfoRegs:   raw.Contents.InfoRegs,
 			Registers:  raw.Contents.Registers,
 			Processors: raw.Contents.Processors,
+			Journals:   raw.Contents.Journals,
 		},
 	}, nil
 }

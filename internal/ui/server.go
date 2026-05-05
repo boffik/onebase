@@ -97,6 +97,9 @@ func (s *Server) Mount(r chi.Router) {
 	// Print forms
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}", s.printDocument)
 
+	// Journals
+	r.Get("/ui/journal/{name}", s.journalList)
+
 	// About
 	r.Get("/ui/about", s.about)
 }
@@ -245,6 +248,26 @@ func (s *Server) buildNavForSubsystem(sub *metadata.Subsystem, subName string) [
 		}
 	}
 
+	if len(sub.Contents.Journals) > 0 {
+		jSet := strSet(sub.Contents.Journals)
+		journals := s.reg.Journals()
+		sort.Slice(journals, func(i, j int) bool { return journals[i].Name < journals[j].Name })
+		var jItems []navItem
+		for _, j2 := range journals {
+			if !jSet[j2.Name] {
+				continue
+			}
+			label := j2.Title
+			if label == "" {
+				label = j2.Name
+			}
+			jItems = append(jItems, navItem{Label: label, URL: "/ui/journal/" + strings.ToLower(j2.Name) + q})
+		}
+		if len(jItems) > 0 {
+			nav = append(nav, navGroup{Kind: "Журналы", Items: jItems})
+		}
+	}
+
 	return nav
 }
 
@@ -337,6 +360,20 @@ func (s *Server) buildFlatNav() []navGroup {
 	}
 	if len(procItems) > 0 {
 		nav = append(nav, navGroup{Kind: "Обработки", Items: procItems})
+	}
+
+	journals := s.reg.Journals()
+	sort.Slice(journals, func(i, j int) bool { return journals[i].Name < journals[j].Name })
+	var journalItems []navItem
+	for _, j := range journals {
+		label := j.Title
+		if label == "" {
+			label = j.Name
+		}
+		journalItems = append(journalItems, navItem{Label: label, URL: "/ui/journal/" + strings.ToLower(j.Name)})
+	}
+	if len(journalItems) > 0 {
+		nav = append(nav, navGroup{Kind: "Журналы", Items: journalItems})
 	}
 
 	if len(s.reg.Constants()) > 0 {
