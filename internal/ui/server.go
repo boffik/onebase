@@ -98,6 +98,9 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/accountreg/{name}", s.accountRegMovements)
 	r.Get("/ui/accountreg/{name}/balances", s.accountRegBalances)
 
+	// Query builder
+	r.Get("/ui/query-builder", s.queryBuilder)
+
 	// Constants
 	r.Get("/ui/constants", s.constantsList)
 	r.Post("/ui/constants", s.constantsSave)

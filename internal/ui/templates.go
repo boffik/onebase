@@ -113,7 +113,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return template.JS(b)
 	},
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -202,6 +202,7 @@ const tplNav = `
       <a href="/ui/admin/scheduled">Регламентные задания</a>
       <a href="/ui/delete-marked">Удалить помеченные</a>
       <a href="/ui/admin/cleanup">Очистка регистров</a>
+      <a href="/ui/query-builder">Конструктор запросов</a>
       <form method="POST" action="/logout"><button type="submit">Выйти</button></form>
     </div>
   </div>

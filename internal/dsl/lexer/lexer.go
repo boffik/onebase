@@ -113,15 +113,27 @@ func (l *Lexer) NextToken() token.Token {
 		return l.tok(token.GT, ">", line, col)
 	case '"':
 		// "" inside a string literal is an escaped double-quote (1C convention).
+		// Multi-line strings: a newline followed by optional whitespace and '|'
+		// strips the whitespace+'|' (1C-style continuation marker).
 		var buf []rune
 		for l.pos < len(l.input) {
-			if l.peek() == '"' {
-				l.next() // consume the quote
+			ch := l.peek()
+			if ch == '"' {
+				l.next()
 				if l.pos < len(l.input) && l.peek() == '"' {
-					l.next()        // consume second quote
-					buf = append(buf, '"') // one literal "
+					l.next()
+					buf = append(buf, '"')
 				} else {
-					break // end of string
+					break
+				}
+			} else if ch == '\n' {
+				buf = append(buf, l.next()) // keep the newline
+				// Strip leading whitespace + '|' continuation marker
+				for l.pos < len(l.input) && (l.peek() == ' ' || l.peek() == '\t') {
+					l.next()
+				}
+				if l.pos < len(l.input) && l.peek() == '|' {
+					l.next() // consume '|'
 				}
 			} else {
 				buf = append(buf, l.next())

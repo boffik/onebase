@@ -75,3 +75,17 @@ func TestLexer_Operators(t *testing.T) {
 		}
 	}
 }
+
+func TestLexer_MultilineStringPipe(t *testing.T) {
+	// 1C-style: '|' at start of continuation line is stripped
+	input := "\"ВЫБРАТЬ\n|  Номер,\n|  Дата\n|ИЗ Документ.Заявка\""
+	l := lexer.New(input, "test.os")
+	tok := l.NextToken()
+	if tok.Type != token.STRING {
+		t.Fatalf("want STRING, got %v", tok.Type)
+	}
+	want := "ВЫБРАТЬ\n  Номер,\n  Дата\nИЗ Документ.Заявка"
+	if tok.Literal != want {
+		t.Fatalf("want %q, got %q", want, tok.Literal)
+	}
+}
