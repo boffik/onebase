@@ -107,15 +107,16 @@ func (db *DB) Migrate(ctx context.Context, entities []*metadata.Entity) error {
 	if err := db.EnsureNumeratorSchema(ctx); err != nil {
 		return fmt.Errorf("migrate: numerators table: %w", err)
 	}
-	if err := db.EnsurePredefinedColumns(ctx, entities); err != nil {
-		return fmt.Errorf("migrate: predefined columns: %w", err)
-	}
 	// create tables in dependency order (catalogs first, then documents)
 	ordered := orderByDependency(entities)
 	for _, e := range ordered {
 		sql := CreateTableSQL(e)
 		if _, err := db.pool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("migrate %s: %w", e.Name, err)
+		}
+		// predefined columns must be added after CREATE TABLE (table must exist)
+		if err := db.EnsurePredefinedColumns(ctx, []*metadata.Entity{e}); err != nil {
+			return fmt.Errorf("migrate: predefined columns: %w", err)
 		}
 		// add any missing columns
 		table := metadata.TableName(e.Name)
