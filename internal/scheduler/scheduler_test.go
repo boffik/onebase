@@ -56,11 +56,11 @@ func TestResolveParamTemplates_Mixed(t *testing.T) {
 		"Процент":  float64(10),
 		"Название": "тест",
 	}
-	result := resolveParamTemplates(params)
+	result := resolveParamTemplatesAt(params, now)
 	got, ok := result["Дата"].(time.Time)
 	assert.True(t, ok)
-	assert.Equal(t, 28, got.Day()) // 5 - 7 = April 28
+	assert.Equal(t, 28, got.Day()) // 2026-05-05 minus 7 days = April 28
+	assert.Equal(t, time.April, got.Month())
 	assert.Equal(t, float64(10), result["Процент"])
 	assert.Equal(t, "тест", result["Название"])
-	_ = now
 }

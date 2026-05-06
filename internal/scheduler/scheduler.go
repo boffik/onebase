@@ -202,10 +202,13 @@ func (s *Scheduler) buildDSLVars(ctx context.Context, mc *runtime.MovementsColle
 
 // resolveParamTemplates replaces template expressions like {{today}} with actual values.
 func resolveParamTemplates(params map[string]any) map[string]any {
+	return resolveParamTemplatesAt(params, time.Now())
+}
+
+func resolveParamTemplatesAt(params map[string]any, now time.Time) map[string]any {
 	if len(params) == 0 {
 		return params
 	}
-	now := time.Now()
 	result := make(map[string]any, len(params))
 	for k, v := range params {
 		if s, ok := v.(string); ok {

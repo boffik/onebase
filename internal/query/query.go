@@ -215,7 +215,7 @@ var kwMap = map[string]string{
 	"ГДЕ":           "WHERE",
 	"СГРУППИРОВАТЬ": "GROUP",
 	"УПОРЯДОЧИТЬ":   "ORDER",
-	"ПО":            "BY",
+	"ПО":            "ON", // standalone ПО without СГРУППИРОВАТЬ/УПОРЯДОЧИТЬ is always JOIN ON
 	"ИМЕЯ":          "HAVING",
 	"КАК":           "AS",
 	"И":             "AND",
@@ -233,6 +233,12 @@ var kwMap = map[string]string{
 	"В":             "IN",
 	"ОБЪЕДИНИТЬ":    "UNION",
 	"ВСЕ":           "ALL",
+	// JOIN keywords (Russian)
+	"ВНУТРЕННЕЕ": "INNER",
+	"ЛЕВОЕ":      "LEFT",
+	"ПРАВОЕ":     "RIGHT",
+	"ПОЛНОЕ":     "FULL",
+	"СОЕДИНЕНИЕ": "JOIN",
 	// English pass-through
 	"SELECT":   "SELECT",
 	"DISTINCT": "DISTINCT",
@@ -241,6 +247,7 @@ var kwMap = map[string]string{
 	"GROUP":    "GROUP",
 	"ORDER":    "ORDER",
 	"BY":       "BY",
+	"ON":       "ON",
 	"HAVING":   "HAVING",
 	"AS":       "AS",
 	"AND":      "AND",
@@ -258,6 +265,14 @@ var kwMap = map[string]string{
 	"IN":       "IN",
 	"UNION":    "UNION",
 	"ALL":      "ALL",
+	// JOIN keywords (English pass-through)
+	"INNER": "INNER",
+	"LEFT":  "LEFT",
+	"RIGHT": "RIGHT",
+	"FULL":  "FULL",
+	"OUTER": "OUTER",
+	"JOIN":  "JOIN",
+	"CROSS": "CROSS",
 }
 
 var aggFuncs = map[string]string{
@@ -293,6 +308,7 @@ type translator struct {
 	paramValues map[string]any
 	opts        CompileOpts
 	parts       []string
+	prevWasDot  bool // true after emitting "." — used to resolve .Ссылка → .id
 }
 
 func (tr *translator) peek(offset int) tok {
@@ -966,6 +982,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 
 		// Parameter: &Name → $N or NULL
 		if t.kind == tParam {
+			tr.prevWasDot = false
 			tr.advance()
 			tr.emit(tr.addParam(t.val))
 			continue
@@ -973,6 +990,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 
 		// String literal
 		if t.kind == tStr {
+			tr.prevWasDot = false
 			tr.advance()
 			tr.emit("'" + strings.ReplaceAll(t.val, "'", "''") + "'")
 			continue
@@ -980,21 +998,37 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 
 		// Number / star / operator
 		if t.kind == tNum || t.kind == tStar || t.kind == tOp {
+			tr.prevWasDot = false
 			tr.advance()
 			tr.emit(t.val)
 			continue
 		}
 
 		// Punctuation
-		if t.kind == tComma || t.kind == tDot || t.kind == tLParen || t.kind == tRParen {
+		if t.kind == tComma || t.kind == tLParen || t.kind == tRParen {
+			tr.prevWasDot = false
 			tr.advance()
 			tr.emit(t.val)
+			continue
+		}
+
+		if t.kind == tDot {
+			tr.advance()
+			tr.emit(".")
+			tr.prevWasDot = true
 			continue
 		}
 
 		// Identifiers: aggregate function (only before "("), keyword, or lowercase field name
 		if t.kind == tIdent {
 			tr.advance()
+			prevDot := tr.prevWasDot
+			tr.prevWasDot = false
+			// .Ссылка / .Reference → .id (virtual primary-key field, like 1C)
+			if prevDot && (strings.ToUpper(t.val) == "ССЫЛКА" || strings.ToUpper(t.val) == "REFERENCE" || strings.ToUpper(t.val) == "REF") {
+				tr.emit("id")
+				continue
+			}
 			if agg, ok := sqlAgg(t.val); ok && tr.peek(0).kind == tLParen {
 				tr.emit(agg)
 			} else if kw, ok := sqlKW(t.val); ok {
