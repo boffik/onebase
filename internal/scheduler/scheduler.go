@@ -189,7 +189,7 @@ func (s *Scheduler) buildDSLVars(ctx context.Context, mc *runtime.MovementsColle
 	}
 	queryFactory := interpreter.NewQueryFactory(ctx, s.db, s.reg)
 	predefined := interpreter.NewPredefinedRoot(ctx, s.db)
-	return map[string]any{
+	vars := map[string]any{
 		"Движения":                  mc,
 		"Перечисления":              &interpreter.MapThis{M: enumsMap},
 		"Константы":                 &interpreter.MapThis{M: constsMap},
@@ -198,6 +198,10 @@ func (s *Scheduler) buildDSLVars(ctx context.Context, mc *runtime.MovementsColle
 		"ПредопределённыеЗначения": predefined,
 		"PredefinedValues":          predefined,
 	}
+	for k, v := range interpreter.NewHTTPFunctions() {
+		vars[k] = v
+	}
+	return vars
 }
 
 // resolveParamTemplates replaces template expressions like {{today}} with actual values.

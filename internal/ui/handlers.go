@@ -1132,7 +1132,7 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	}
 	queryFactory := interpreter.NewQueryFactory(ctx, s.store, s.reg)
 	predefined := interpreter.NewPredefinedRoot(ctx, s.store)
-	return map[string]any{
+	vars := map[string]any{
 		"Движения":                  mc,
 		"Перечисления":              &interpreter.MapThis{M: enumsMap},
 		"Константы":                 &interpreter.MapThis{M: constsMap},
@@ -1141,6 +1141,10 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 		"ПредопределённыеЗначения": predefined,
 		"PredefinedValues":          predefined,
 	}
+	for k, v := range interpreter.NewHTTPFunctions() {
+		vars[k] = v
+	}
+	return vars
 }
 
 func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) string {
