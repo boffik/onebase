@@ -300,6 +300,25 @@ func sqlAgg(ident string) (string, bool) {
 
 // --- translator ---
 
+type querySection int
+
+const (
+	sectionSelect  querySection = iota
+	sectionFrom
+	sectionWhere
+	sectionGroupBy
+	sectionOrderBy
+	sectionHaving
+	sectionOther
+)
+
+type refDimInfo struct {
+	fieldName string // lowercase dim name: "номенклатура"
+	idCol     string // DB column: "номенклатура_id"
+	joinAlias string // SQL alias for auto-JOIN: "ref_номенклатура"
+	joinTable string // referenced catalog table: "номенклатура"
+}
+
 type translator struct {
 	tokens      []tok
 	pos         int
@@ -308,8 +327,11 @@ type translator struct {
 	paramValues map[string]any
 	opts        CompileOpts
 	parts       []string
-	prevWasDot  bool         // true after emitting "." — used to resolve .Ссылка → .id
+	prevWasDot  bool              // true after emitting "." — used to resolve .Ссылка → .id
 	colMap      map[string]string // lowercase field name → actual column name (for reference dims)
+	refDims     []refDimInfo      // reference dimensions with auto-JOIN info
+	mainTable   string            // main FROM table (set when source is emitted)
+	section     querySection      // current clause context
 }
 
 func (tr *translator) peek(offset int) tok {
@@ -887,6 +909,66 @@ func (tr *translator) genFirstSlice(ir *metadata.InfoRegister, args [][]tok) (st
 	return sb.String(), alias, nil
 }
 
+// --- reference dimension auto-join ---
+
+// preScanRefDims pre-scans tokens to find the first simple (non-virtual) register source
+// and returns reference dimension info for auto-JOIN generation.
+func preScanRefDims(tokens []tok, opts CompileOpts) []refDimInfo {
+	for i := 0; i+2 < len(tokens); i++ {
+		t := tokens[i]
+		if t.kind != tIdent {
+			continue
+		}
+		upper := strings.ToUpper(t.val)
+		if !isSourceType(upper) || tokens[i+1].kind != tDot || tokens[i+2].kind != tIdent {
+			continue
+		}
+		// skip virtual tables: TypeName.EntityName.VTName(...)
+		if i+3 < len(tokens) && tokens[i+3].kind == tDot {
+			continue
+		}
+		regName := tokens[i+2].val
+		if isAccumRegType(upper) {
+			for _, reg := range opts.Registers {
+				if strings.EqualFold(reg.Name, regName) {
+					return buildRefDimInfos(reg.Dimensions)
+				}
+			}
+		} else if isInfoRegType(upper) {
+			for _, ir := range opts.InfoRegs {
+				if strings.EqualFold(ir.Name, regName) {
+					return buildRefDimInfos(ir.Dimensions)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func buildRefDimInfos(dims []metadata.Field) []refDimInfo {
+	var result []refDimInfo
+	for _, d := range dims {
+		if d.RefEntity != "" {
+			result = append(result, refDimInfo{
+				fieldName: strings.ToLower(d.Name),
+				idCol:     strings.ToLower(d.Name) + "_id",
+				joinAlias: "ref_" + strings.ToLower(d.Name),
+				joinTable: strings.ToLower(d.RefEntity),
+			})
+		}
+	}
+	return result
+}
+
+func (tr *translator) findRefDim(name string) *refDimInfo {
+	for i := range tr.refDims {
+		if tr.refDims[i].fieldName == name {
+			return &tr.refDims[i]
+		}
+	}
+	return nil
+}
+
 // --- main translator loop ---
 
 // buildColMap creates a mapping from lowercase field name to actual DB column name
@@ -934,6 +1016,8 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		paramValues: opts.Params,
 		opts:        opts,
 		colMap:      buildColMap(opts),
+		refDims:     preScanRefDims(tokens, opts),
+		section:     sectionOther,
 	}
 	for {
 		t := tr.peek(0)
@@ -1000,25 +1084,35 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				}
 			}
 
-			// Regular source: TypeName.EntityName → table_name
+			// Regular source: TypeName.EntityName → table_name [+ auto-JOINs]
 			tr.advance()
 			tr.advance()
 			entity := tr.advance()
-			tr.emit(sourceToTable(upper, entity.val))
+			tableName := sourceToTable(upper, entity.val)
+			tr.mainTable = tableName
+			tr.emit(tableName)
+			if tr.section == sectionFrom {
+				for _, rd := range tr.refDims {
+					tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
+						rd.joinTable, rd.joinAlias, rd.joinAlias, tableName, rd.idCol))
+				}
+			}
 			continue
 		}
 
 		// Multi-word: СГРУППИРОВАТЬ ПО / УПОРЯДОЧИТЬ ПО
 		if t.kind == tIdent && (upper == "СГРУППИРОВАТЬ" || upper == "УПОРЯДОЧИТЬ") {
 			tr.advance()
-			kw := "GROUP BY"
 			if upper == "УПОРЯДОЧИТЬ" {
-				kw = "ORDER BY"
+				tr.section = sectionOrderBy
+				tr.emit("ORDER BY")
+			} else {
+				tr.section = sectionGroupBy
+				tr.emit("GROUP BY")
 			}
 			if tr.peek(0).kind == tIdent && strings.ToUpper(tr.peek(0).val) == "ПО" {
 				tr.advance()
 			}
-			tr.emit(kw)
 			continue
 		}
 
@@ -1075,9 +1169,32 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				tr.emit(agg)
 			} else if kw, ok := sqlKW(t.val); ok {
 				tr.emit(kw)
+				// track clause context
+				switch kw {
+				case "SELECT":
+					tr.section = sectionSelect
+				case "FROM":
+					tr.section = sectionFrom
+				case "WHERE":
+					tr.section = sectionWhere
+				case "HAVING":
+					tr.section = sectionHaving
+				}
 			} else {
 				lower := strings.ToLower(t.val)
-				if col, ok := tr.colMap[lower]; ok {
+				// ref dim substitution is only for top-level (not after a dot)
+				if rd := tr.findRefDim(lower); rd != nil && !prevDot {
+					switch tr.section {
+					case sectionSelect:
+						tr.emit(rd.joinAlias + ".наименование")
+						tr.emit("AS")
+						tr.emit(rd.fieldName)
+					case sectionGroupBy:
+						tr.emit(rd.joinAlias + ".наименование")
+					default: // WHERE, HAVING, ORDER BY, FROM, OTHER → use _id column
+						tr.emit(rd.idCol)
+					}
+				} else if col, ok := tr.colMap[lower]; ok && !prevDot {
 					tr.emit(col)
 				} else {
 					tr.emit(lower)

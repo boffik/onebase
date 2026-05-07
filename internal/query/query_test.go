@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
 )
 
@@ -177,5 +178,54 @@ func TestCompile_Ssylka_InSelect(t *testing.T) {
 	// Н.Ссылка → н.id
 	if !strings.Contains(r.SQL, "н.id") {
 		t.Errorf("expected н.id, got: %s", r.SQL)
+	}
+}
+
+func TestCompile_RefDim_AutoJoin(t *testing.T) {
+	// When a register has a reference-type dimension, the query compiler should:
+	// • SELECT:   Номенклатура → ref_номенклатура.наименование AS номенклатура
+	// • FROM:     inject LEFT JOIN номенклатура ref_номенклатура ON ...
+	// • WHERE:    Номенклатура → номенклатура_id
+	// • GROUP BY: Номенклатура → ref_номенклатура.наименование
+	src := `ВЫБРАТЬ
+  Номенклатура,
+  СУММА(Выручка) КАК Выручка
+ИЗ РегистрНакопления.ВаловаяПрибыль
+ГДЕ (&Номенклатура ЕСТЬ ПУСТО ИЛИ Номенклатура = &Номенклатура)
+СГРУППИРОВАТЬ ПО Номенклатура`
+
+	reg := &metadata.Register{
+		Name: "ВаловаяПрибыль",
+		Dimensions: []metadata.Field{
+			{Name: "Номенклатура", RefEntity: "Номенклатура"},
+		},
+		Resources: []metadata.Field{
+			{Name: "Выручка"},
+		},
+	}
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Registers: []*metadata.Register{reg},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+
+	// SELECT must reference наименование from the join alias, not the raw dim name
+	if !strings.Contains(sql, "ref_номенклатура.наименование") {
+		t.Errorf("expected ref_номенклатура.наименование in SELECT, got: %s", sql)
+	}
+	// Auto-JOIN must be present
+	if !strings.Contains(sql, "LEFT JOIN номенклатура ref_номенклатура") {
+		t.Errorf("expected LEFT JOIN, got: %s", sql)
+	}
+	// WHERE must use the _id column
+	if !strings.Contains(sql, "номенклатура_id") {
+		t.Errorf("expected номенклатура_id in WHERE, got: %s", sql)
+	}
+	// GROUP BY must use the join expression (not _id)
+	if !strings.Contains(sql, "GROUP BY ref_номенклатура.наименование") {
+		t.Errorf("expected GROUP BY ref_номенклатура.наименование, got: %s", sql)
 	}
 }
