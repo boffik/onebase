@@ -13,8 +13,9 @@ import (
 	"github.com/ivantit66/onebase/internal/api"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
@@ -30,6 +31,7 @@ var runCmd = &cobra.Command{
 }
 
 func init() {
+	runCmd.Flags().String("id", "", "run a base from the ibases registry by ID")
 	runCmd.Flags().String("project", ".", "path to project directory")
 	runCmd.Flags().String("db", "", "database URL (overrides DATABASE_URL env)")
 	runCmd.Flags().Int("port", 8080, "HTTP server port")
@@ -37,10 +39,32 @@ func init() {
 }
 
 func runServer(cmd *cobra.Command, _ []string) error {
-	dir, _ := cmd.Flags().GetString("project")
-	dsn := dsnFromFlags(cmd)
-	port, _ := cmd.Flags().GetInt("port")
-	configSource, _ := cmd.Flags().GetString("config-source")
+	baseID, _ := cmd.Flags().GetString("id")
+
+	var dir, dsn, configSource string
+	var port int
+
+	// If --id given, load settings from the ibases registry
+	if baseID != "" {
+		store, err := launcher.NewStore()
+		if err != nil {
+			return fmt.Errorf("ibases store: %w", err)
+		}
+		base, err := store.Get(baseID)
+		if err != nil {
+			return fmt.Errorf("база не найдена: %w\nИспользуйте 'onebase ibases list' для просмотра зарегистрированных баз", err)
+		}
+		dir = base.Path
+		dsn = base.DB
+		port = base.Port
+		configSource = base.ConfigSource
+		fmt.Fprintf(os.Stdout, "Запуск базы: %s\n", base.Name)
+	} else {
+		dir, _ = cmd.Flags().GetString("project")
+		dsn = dsnFromFlags(cmd)
+		port, _ = cmd.Flags().GetInt("port")
+		configSource, _ = cmd.Flags().GetString("config-source")
+	}
 
 	ctx := context.Background()
 	db, err := storage.Connect(ctx, dsn)

@@ -271,6 +271,165 @@ attachments:
 
 ---
 
+## Деплой на сервер
+
+Пользователи подключаются через **браузер** — никакого отдельного клиентского приложения нет.
+
+```
+[Браузер пользователя] ──HTTP──> [onebase :8080] ──> [PostgreSQL]
+```
+
+### Шаг 1. Подготовить сервер
+
+```bash
+# Установить PostgreSQL (Ubuntu/Debian)
+apt install postgresql postgresql-client
+
+# Создать пользователя и базу данных
+sudo -u postgres psql -c "CREATE USER onebase WITH PASSWORD 'securepass';"
+sudo -u postgres psql -c "CREATE DATABASE mydb OWNER onebase;"
+
+# Скопировать бинарник на сервер
+scp onebase user@server:/usr/local/bin/
+chmod +x /usr/local/bin/onebase
+```
+
+### Шаг 2. Задеплоить конфигурацию
+
+Конфигурация (YAML-файлы) разрабатывается локально, а на сервер загружается в PostgreSQL одной командой:
+
+```bash
+# Запустить на локальной машине (или в CI/CD):
+onebase deploy \
+  --project ./myapp \
+  --db "postgres://onebase:securepass@server-ip/mydb?sslmode=disable"
+```
+
+Команда выполняет сразу всё:
+- Создаёт базу данных если не существует
+- Инициализирует схему платформы (`_users`, `_sessions`, `_onebase_config`, ...)
+- Загружает YAML-конфигурацию в PostgreSQL
+- Применяет DDL-миграции (`CREATE TABLE IF NOT EXISTS` для всех сущностей)
+
+После этого папка с YAML-файлами на сервере **не нужна** — конфиг хранится в PostgreSQL.
+
+### Шаг 3. Запустить сервер
+
+```bash
+# На сервере — одноразовый запуск для проверки
+onebase run \
+  --config-source database \
+  --db "postgres://onebase:securepass@localhost/mydb?sslmode=disable" \
+  --port 8080
+```
+
+Открыть в браузере: `http://server-ip:8080/ui`
+
+### Шаг 4. Настроить автозапуск (systemd)
+
+```bash
+# Зарегистрировать базу в реестре (один раз)
+onebase ibases add \
+  --name "Мой склад" \
+  --db "postgres://onebase:securepass@localhost/mydb?sslmode=disable" \
+  --source database \
+  --port 8080
+
+onebase ibases list   # скопировать ID
+
+# Установить как systemd-сервис (нужен sudo)
+sudo onebase service install --id <uuid> --user onebase
+```
+
+Или без реестра:
+
+```bash
+sudo onebase service install \
+  --db "postgres://onebase:securepass@localhost/mydb?sslmode=disable" \
+  --port 8080 \
+  --name onebase-myapp \
+  --user onebase
+```
+
+Команды управления:
+```bash
+systemctl status onebase-myapp   # статус
+journalctl -u onebase-myapp -f   # логи в реальном времени
+systemctl stop onebase-myapp     # остановить
+systemctl start onebase-myapp    # запустить
+```
+
+Удалить сервис:
+```bash
+sudo onebase service uninstall --name onebase-myapp
+```
+
+### Nginx (HTTPS, обратный прокси)
+
+```nginx
+server {
+    listen 80;
+    server_name myapp.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name myapp.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/myapp.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/myapp.example.com/privkey.pem;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8080;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        client_max_body_size 100m;   # для загрузки вложений
+    }
+}
+```
+
+### Обновление конфигурации на сервере
+
+После изменения YAML-файлов локально:
+
+```bash
+# Задеплоить обновлённую конфигурацию (перезаписывает _onebase_config)
+onebase deploy \
+  --project ./myapp \
+  --db "postgres://onebase:securepass@server-ip/mydb?sslmode=disable"
+
+# Перезапустить сервис (применит новые метаданные)
+ssh user@server "systemctl restart onebase-myapp"
+```
+
+### Windows Server
+
+```powershell
+# Установить как Windows-сервис (от имени администратора)
+onebase service install `
+  --db "postgres://onebase:securepass@localhost/mydb?sslmode=disable" `
+  --port 8080 `
+  --name onebase-myapp
+
+# Управление
+sc.exe start onebase-myapp
+sc.exe stop  onebase-myapp
+```
+
+Просмотр логов: **Просмотр событий → Журналы Windows → Приложение** (источник: `onebase-myapp`).
+
+Или добавить вывод в файл — передать флаг при генерации unit-файла:
+```bash
+onebase service install --print --db ... > onebase-myapp.bat
+# Отредактировать .bat для перенаправления stdout в файл
+```
+
+---
+
 ## Бэкап и восстановление
 
 ```bash
@@ -287,17 +446,38 @@ onebase restore --db "postgres://localhost/sklad" \
 ## Команды CLI
 
 ```bash
-onebase start                                # лаунчер
-onebase dev   --project . --db <dsn>         # режим разработки (hot reload)
-onebase run   --project . --db <dsn>         # production-режим
-onebase migrate --project . --db <dsn>       # применить миграцию вручную
-onebase init  ./my-project                   # создать пустой проект
-onebase init  --template warehouse ./my-wh   # из готового шаблона
-onebase init  --list-templates               # список шаблонов
-onebase backup  --db <dsn> --out ./backups/  # создать бэкап
-onebase restore --db <dsn> --file <path>     # восстановить из бэкапа
-onebase ibases list                          # список баз в лаунчере
-onebase convert --dir ./1c-export --out .    # конвертировать из 1С XML
+# Разработка
+onebase start                                    # лаунчер (GUI)
+onebase dev   --project . --db <dsn>             # режим разработки (hot reload)
+
+# Сервер
+onebase deploy --project . --db <dsn>            # задеплоить конфиг в PostgreSQL
+onebase run   --config-source database --db <dsn> --port 8080   # запуск production
+onebase run   --id <uuid>                        # запуск базы из реестра по ID
+
+# Автозапуск
+onebase service install --id <uuid>              # установить как systemd / Windows service
+onebase service install --db <dsn> --port 8080   # без реестра
+onebase service install --print --db <dsn>       # показать unit-файл без установки
+onebase service uninstall --name <svcName>       # удалить сервис
+
+# Проект
+onebase init  ./my-project                       # создать пустой проект
+onebase init  --template warehouse ./my-wh       # из готового шаблона
+onebase init  --list-templates                   # список шаблонов
+onebase migrate --project . --db <dsn>           # применить миграцию вручную
+
+# Бэкап
+onebase backup  --db <dsn> --out ./backups/      # создать бэкап
+onebase restore --db <dsn> --file <path>         # восстановить из бэкапа
+
+# Реестр баз
+onebase ibases list                              # список зарегистрированных баз
+onebase ibases add --name X --db <dsn>           # добавить базу в реестр
+onebase ibases remove --id <uuid>                # удалить из реестра
+
+# Прочее
+onebase convert --dir ./1c-export --out .        # конвертировать из 1С XML
 ```
 
 ---
