@@ -308,7 +308,8 @@ type translator struct {
 	paramValues map[string]any
 	opts        CompileOpts
 	parts       []string
-	prevWasDot  bool // true after emitting "." — used to resolve .Ссылка → .id
+	prevWasDot  bool         // true after emitting "." — used to resolve .Ссылка → .id
+	colMap      map[string]string // lowercase field name → actual column name (for reference dims)
 }
 
 func (tr *translator) peek(offset int) tok {
@@ -409,7 +410,12 @@ func (tr *translator) translateFilterTokens(tokens []tok) string {
 			} else if agg, ok := aggFuncs[upper]; ok && i+1 < len(tokens) && tokens[i+1].kind == tLParen {
 				parts = append(parts, agg)
 			} else {
-				parts = append(parts, strings.ToLower(t.val))
+				lower := strings.ToLower(t.val)
+				if col, ok := tr.colMap[lower]; ok {
+					parts = append(parts, col)
+				} else {
+					parts = append(parts, lower)
+				}
 			}
 		case tStr:
 			parts = append(parts, "'"+strings.ReplaceAll(t.val, "'", "''")+"'")
@@ -883,6 +889,41 @@ func (tr *translator) genFirstSlice(ir *metadata.InfoRegister, args [][]tok) (st
 
 // --- main translator loop ---
 
+// buildColMap creates a mapping from lowercase field name to actual DB column name
+// for all reference-type fields across all known registers and info-registers.
+// This allows the query language to use "Номенклатура" while the DB column is "номенклатура_id".
+func buildColMap(opts CompileOpts) map[string]string {
+	m := map[string]string{}
+	addFields := func(fields []metadata.Field) {
+		for _, f := range fields {
+			name := strings.ToLower(f.Name)
+			col := metadata.ColumnName(f)
+			if col != name {
+				m[name] = col
+			}
+		}
+	}
+	for _, reg := range opts.Registers {
+		addFields(reg.Dimensions)
+		addFields(reg.Resources)
+		addFields(reg.Attributes)
+	}
+	for _, ir := range opts.InfoRegs {
+		addFields(ir.Dimensions)
+		addFields(ir.Resources)
+	}
+	for _, ar := range opts.AccountRegs {
+		for _, r := range ar.Resources {
+			name := strings.ToLower(r.Name)
+			col := strings.ToLower(r.Name)
+			if col != name {
+				m[name] = col
+			}
+		}
+	}
+	return m
+}
+
 func translate(tokens []tok, opts CompileOpts) (Result, error) {
 	if opts.Params == nil {
 		opts.Params = map[string]any{}
@@ -892,6 +933,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		params:      map[string]int{},
 		paramValues: opts.Params,
 		opts:        opts,
+		colMap:      buildColMap(opts),
 	}
 	for {
 		t := tr.peek(0)
@@ -1034,7 +1076,12 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			} else if kw, ok := sqlKW(t.val); ok {
 				tr.emit(kw)
 			} else {
-				tr.emit(strings.ToLower(t.val))
+				lower := strings.ToLower(t.val)
+				if col, ok := tr.colMap[lower]; ok {
+					tr.emit(col)
+				} else {
+					tr.emit(lower)
+				}
 			}
 			continue
 		}
