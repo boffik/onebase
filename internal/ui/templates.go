@@ -523,8 +523,76 @@ const tplForm = `
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+{{/* Top toolbar */}}
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+  {{if .Entity.Posting}}
+    {{if not .IsNew}}
+      {{if eq (index .Values "posted") "true"}}
+        <span style="color:#16a34a;font-weight:600;font-size:13px">✓ Проведён</span>
+      {{else}}
+        <span style="color:#94a3b8;font-size:13px">Не проведён</span>
+      {{end}}
+    {{end}}
+  {{end}}
+  <button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>
+  {{if .Entity.Posting}}
+    <button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>
+    {{if not .IsNew}}
+      {{if eq (index .Values "posted") "true"}}
+        <button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">Отменить проведение</button>
+      {{else}}
+        <button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>
+      {{end}}
+    {{end}}
+  {{end}}
+  {{if not .IsNew}}
+    <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">История</a>
+    {{if .PrintForms}}
+    <div style="position:relative">
+      <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">Печать ▾</button>
+      <div style="display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);min-width:160px;z-index:50;margin-top:4px">
+        {{range .PrintForms}}
+        <a href="/ui/{{lower (str $.Entity.Kind)}}/{{$.Entity.Name}}/{{$.ID}}/print/{{.Name}}" target="_blank"
+           style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">{{.Name}}</a>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+    <form method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/delete"
+          onsubmit="return confirm('{{if .IsAdmin}}Удалить запись навсегда?{{else}}Пометить запись на удаление?{{end}}')" style="margin-left:auto">
+      <button class="btn btn-danger btn-sm" type="submit">{{if .IsAdmin}}Удалить{{else}}Пометить на удаление{{end}}</button>
+    </form>
+  {{end}}
+</div>
+
+{{/* Movement links (collapsed) */}}
+{{if and (not .IsNew) .DocMovements}}
+<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">
+  {{range $regName, $rows := .DocMovements}}
+  <details style="display:inline">
+    <summary style="display:inline;cursor:pointer;font-size:12px;padding:4px 10px;background:#f0f4ff;color:#1a4a80;border-radius:4px;font-weight:600;list-style:none">
+      {{$regName}} ({{len $rows}}) ▾
+    </summary>
+    <div style="position:absolute;z-index:100;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:4px;min-width:300px;max-height:300px;overflow:auto">
+      <table class="list-tbl" style="font-size:12px;margin:0">
+        <tr><th>№</th><th>Вид</th>{{$first := index $rows 0}}{{range $k, $v := $first}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<th>{{$k}}</th>{{end}}{{end}}</tr>
+        {{range $i, $row := $rows}}
+        <tr>
+          <td>{{add $i 1}}</td>
+          <td>{{if eq (index $row "вид_движения") "Приход"}}<span style="color:#16a34a">▲</span>{{else if eq (index $row "вид_движения") "Расход"}}<span style="color:#dc2626">▼</span>{{else}}—{{end}}</td>
+          {{range $k, $v := $row}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<td>{{$v}}</td>{{end}}{{end}}
+        </tr>
+        {{end}}
+      </table>
+    </div>
+  </details>
+  {{end}}
+</div>
+{{end}}
+
 <div class="card">
-<form method="POST">
+<form id="main-form" method="POST">
 {{if .Entity.Hierarchical}}
 <div class="form-group">
   <label>Тип</label>
@@ -613,52 +681,15 @@ const tplForm = `
 </button>
 {{end}}
 
-<div style="display:flex;align-items:center;gap:8px;margin-top:20px;flex-wrap:wrap">
-  {{if .Entity.Posting}}
-    <button class="btn btn-post" type="submit" name="_action" value="post_and_close">Провести и закрыть</button>
-    {{if not .IsNew}}
-      {{if eq (index .Values "posted") "true"}}
-        <button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">Отменить проведение</button>
-      {{else}}
-        <button class="btn btn-primary" type="submit" name="_action" value="post">Провести</button>
-      {{end}}
-    {{end}}
-  {{end}}
-  <button class="btn btn-secondary" type="submit" name="_action" value="">Записать</button>
+<div style="margin-top:16px">
+  <button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" class="btn btn-cancel">Отмена</a>
-  {{if and (not .IsNew) .Entity.Posting}}
-    {{if eq (index .Values "posted") "true"}}
-      <span style="color:#16a34a;font-weight:600;font-size:13px;margin-left:8px">✓ Проведён</span>
-    {{else}}
-      <span style="color:#94a3b8;font-size:13px;margin-left:8px">Не проведён</span>
-    {{end}}
-  {{end}}
 </div>
 </form>
 {{if and (not .IsNew) .Entity.Posting}}
 {{if eq (index .Values "posted") "true"}}
 <form id="form-unpost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/unpost"></form>
 {{end}}
-{{end}}
-{{if not .IsNew}}
-<div style="margin-top:10px;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
-  <form method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/delete"
-        onsubmit="return confirm('{{if .IsAdmin}}Удалить запись навсегда?{{else}}Пометить запись на удаление?{{end}}')">
-    <button class="btn btn-danger btn-sm" type="submit">{{if .IsAdmin}}Удалить{{else}}Пометить на удаление{{end}}</button>
-  </form>
-  <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">История</a>
-  {{if .PrintForms}}
-  <div style="position:relative">
-    <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">Печать ▾</button>
-    <div style="display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);min-width:160px;z-index:50;margin-top:4px">
-      {{range .PrintForms}}
-      <a href="/ui/{{lower (str $.Entity.Kind)}}/{{$.Entity.Name}}/{{$.ID}}/print/{{.Name}}" target="_blank"
-         style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">{{.Name}}</a>
-      {{end}}
-    </div>
-  </div>
-  {{end}}
-</div>
 {{end}}
 {{if not .IsNew}}
 <div class="card" style="margin-top:16px">
@@ -761,28 +792,6 @@ function recalcTpRow(inp) {
   }
 }
 </script>
-{{if and (not .IsNew) .DocMovements}}
-<div class="card" style="margin-top:16px">
-  <h3 style="margin:0 0 12px;font-size:14px;font-weight:600;color:#374151">Движения документа</h3>
-  {{range $regName, $rows := .DocMovements}}
-  <details open style="margin-bottom:10px">
-    <summary style="font-size:13px;font-weight:600;color:#1a4a80;cursor:pointer;margin-bottom:6px">{{$regName}} ({{len $rows}})</summary>
-    <div style="overflow-x:auto">
-    <table class="list-tbl" style="font-size:12px">
-      <tr><th>№</th><th>Вид</th>{{$first := index $rows 0}}{{range $k, $v := $first}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<th>{{$k}}</th>{{end}}{{end}}</tr>
-      {{range $i, $row := $rows}}
-      <tr>
-        <td>{{add $i 1}}</td>
-        <td>{{if eq (index $row "вид_движения") "Приход"}}<span style="color:#16a34a">▲</span>{{else if eq (index $row "вид_движения") "Расход"}}<span style="color:#dc2626">▼</span>{{else}}—{{end}} {{index $row "вид_движения"}}</td>
-        {{range $k, $v := $row}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<td>{{$v}}</td>{{end}}{{end}}
-      </tr>
-      {{end}}
-    </table>
-    </div>
-  </details>
-  {{end}}
-</div>
-{{end}}
 </main></div></body></html>
 {{end}}
 `
