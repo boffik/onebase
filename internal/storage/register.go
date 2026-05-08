@@ -181,6 +181,55 @@ func (db *DB) GetMovements(ctx context.Context, regName string, reg *metadata.Re
 	return result, rows.Err()
 }
 
+// GetDocumentMovements returns all register movements for a specific document.
+// Returns a map keyed by register name, each value is a slice of movement rows.
+func (db *DB) GetDocumentMovements(ctx context.Context, recorderID uuid.UUID, registers []*metadata.Register) (map[string][]map[string]any, error) {
+	result := make(map[string][]map[string]any)
+	for _, reg := range registers {
+		table := metadata.RegisterTableName(reg.Name)
+		cols := []string{"line_number", "period", "вид_движения"}
+		allFields := append(append([]metadata.Field{}, reg.Dimensions...), append(reg.Resources, reg.Attributes...)...)
+		for _, f := range allFields {
+			cols = append(cols, metadata.ColumnName(f))
+		}
+		query := fmt.Sprintf("SELECT %s FROM %s WHERE recorder = $1 ORDER BY line_number",
+			strings.Join(cols, ", "), table)
+		rows, err := db.pool.Query(ctx, query, recorderID)
+		if err != nil {
+			continue
+		}
+		var regRows []map[string]any
+		for rows.Next() {
+			dest := make([]any, len(cols))
+			ptrs := make([]any, len(dest))
+			for i := range dest {
+				ptrs[i] = &dest[i]
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				rows.Close()
+				return result, err
+			}
+			row := make(map[string]any, len(cols))
+			row["line_number"] = dest[0]
+			if t, ok := dest[1].(time.Time); ok {
+				row["period"] = t.Format("02.01.2006")
+			} else {
+				row["period"] = dest[1]
+			}
+			row["вид_движения"] = dest[2]
+			for i, f := range allFields {
+				row[f.Name] = normalizeValue(dest[3+i])
+			}
+			regRows = append(regRows, row)
+		}
+		rows.Close()
+		if len(regRows) > 0 {
+			result[reg.Name] = regRows
+		}
+	}
+	return result, nil
+}
+
 // GetBalances returns aggregated balances grouped by dimension fields.
 func (db *DB) GetBalances(ctx context.Context, regName string, reg *metadata.Register) ([]map[string]any, error) {
 	table := metadata.RegisterTableName(regName)

@@ -110,6 +110,9 @@ func (s *Server) Mount(r chi.Router) {
 	// Query builder
 	r.Get("/ui/query-builder", s.queryBuilder)
 
+	// All functions (admin only)
+	r.Get("/ui/all-functions", s.allFunctions)
+
 	// Constants
 	r.Get("/ui/constants", s.constantsList)
 	r.Post("/ui/constants", s.constantsSave)

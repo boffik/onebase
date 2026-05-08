@@ -70,6 +70,8 @@ type Entity struct {
 	Predefined    []*PredefinedItem // nil for most entities; populated from YAML
 	Hierarchical  bool              // catalog with parent_id / is_folder tree support
 	HierarchyKind string            // "folders_and_items" (default) | "items_only"
+	ListForm      []string          // visible fields in list form (nil = all)
+	ItemForm      []string          // visible fields in item form (nil = all)
 }
 
 type Register struct {

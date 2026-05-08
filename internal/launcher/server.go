@@ -50,6 +50,7 @@ func (s *Server) ListenAndServe() error {
 	r.Post("/bases/{id}/configurator/convert", s.h.configuratorConvert)
 	r.Post("/bases/{id}/configurator/module", s.h.configuratorSaveModule)
 	r.Post("/bases/{id}/configurator/fields", s.h.configuratorSaveFields)
+	r.Post("/bases/{id}/configurator/form", s.h.configuratorSaveForm)
 	r.Post("/bases/{id}/configurator/register-fields", s.h.configuratorSaveRegisterFields)
 	r.Post("/bases/{id}/configurator/enum", s.h.configuratorSaveEnum)
 	r.Post("/bases/{id}/configurator/constant", s.h.configuratorSaveConstant)
@@ -60,6 +61,7 @@ func (s *Server) ListenAndServe() error {
 	r.Post("/bases/{id}/configurator/printform", s.h.configuratorSavePrintForm)
 	r.Post("/bases/{id}/configurator/new-printform", s.h.configuratorNewPrintForm)
 	r.Post("/bases/{id}/configurator/app", s.h.configuratorSaveApp)
+	r.Post("/bases/{id}/configurator/subsystem", s.h.configuratorSaveSubsystem)
 	r.Post("/killall", s.h.killAll)
 	r.Post("/quit", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

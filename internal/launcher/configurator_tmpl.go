@@ -176,6 +176,24 @@ pre.convert-out{background:#f5f7fa;border:1px solid #e2e6ed;padding:12px;border-
 .applied{background:#dcfce7;color:#15803d;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:12px;font-weight:500}
 .files-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .file-card p{font-size:12px;color:#666;margin-bottom:12px;line-height:1.5}
+
+/* ── Context menu ──────────────────────────────────── */
+.cfg-ctx-menu{position:fixed;background:#fff;border:1px solid #d0d7e3;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:4px 0;z-index:9999;min-width:220px;display:none}
+.cfg-ctx-item{padding:7px 14px;cursor:pointer;font-size:13px;color:#333;display:flex;align-items:center;gap:8px}
+.cfg-ctx-item:hover{background:#f0f4ff;color:#1a4a80}
+
+/* ── Query builder modal ──────────────────────────── */
+.qb-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10000;display:none}
+.qb-overlay.active{display:flex;align-items:flex-start;justify-content:center;padding:16px}
+.qb-modal{background:#fff;border-radius:10px;width:100%;max-width:1180px;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.qb-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;border-radius:10px 10px 0 0;flex-shrink:0}
+.qb-modal-hd h2{font-size:15px;margin:0}
+.qb-modal-bd{padding:14px 18px;overflow-y:auto;flex:1}
+.qb-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.qb-card h3{font-size:13px;margin:0 0 8px}
+.qb-grid{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
+.qb-fl{max-height:220px;overflow-y:auto}
+.qb-row{display:flex;gap:4px;margin-bottom:5px;align-items:center;flex-wrap:wrap}
 </style>
 {{end}}`
 
@@ -205,6 +223,80 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 {{end}}`
 
 const cfgFoot = `{{define "cfg-foot"}}
+</div>
+
+<!-- Query builder modal -->
+<div class="qb-overlay" id="qb-overlay">
+<div class="qb-modal">
+  <div class="qb-modal-hd">
+    <h2>Конструктор запроса</h2>
+    <div style="display:flex;gap:6px">
+      <button id="qb-insert" style="background:#1a4a80;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600">Вставить</button>
+      <button id="qb-close" style="background:#e8ecf2;color:#333;border:1px solid #c8d0de;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px">Закрыть</button>
+    </div>
+  </div>
+  <div class="qb-modal-bd">
+    <div class="qb-grid">
+      <!-- LEFT -->
+      <div>
+        <div class="qb-card">
+          <h3>Источник данных</h3>
+          <select id="mqb-src" onchange="mqbSetSrc(this.value)" style="width:100%;margin-bottom:6px"><option value="">— выбрать —</option></select>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="font-size:12px;color:#64748b;flex-shrink:0;width:68px">Псевдоним:</span>
+            <input id="mqb-alias" type="text" placeholder="напр. Т" oninput="mqbRebuild()" style="width:100px;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 5px">
+          </div>
+          <div id="mqb-vtp" style="display:none;margin-top:4px">
+            <label style="font-size:12px;color:#64748b">Параметры ВТ</label>
+            <input id="mqb-vtpv" type="text" style="width:100%;margin-top:2px" placeholder="&amp;НаДату" oninput="mqbGen()">
+          </div>
+        </div>
+        <div class="qb-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <h3 style="margin:0">Соединения</h3>
+            <button onclick="mqbAddJoin()" style="background:#dbeafe;color:#1d4ed8;border:none;padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer">+ JOIN</button>
+          </div>
+          <div id="mqb-joins"><p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p></div>
+        </div>
+        <div class="qb-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <h3 style="margin:0">Поля</h3>
+            <div style="display:flex;gap:3px">
+              <button onclick="mqbAll(true)" style="background:#e2e8f0;color:#475569;border:none;padding:2px 6px;font-size:11px;border-radius:3px;cursor:pointer">Все</button>
+              <button onclick="mqbAll(false)" style="background:#e2e8f0;color:#475569;border:none;padding:2px 6px;font-size:11px;border-radius:3px;cursor:pointer">Сброс</button>
+            </div>
+          </div>
+          <div class="qb-fl" id="mqb-fields"></div>
+        </div>
+        <div class="qb-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <h3 style="margin:0">Условия (ГДЕ)</h3>
+            <button onclick="mqbAddCond()" style="background:#dbeafe;color:#1d4ed8;border:none;padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer">+</button>
+          </div>
+          <div id="mqb-conds"></div>
+        </div>
+        <div class="qb-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <h3 style="margin:0">Сортировка</h3>
+            <button onclick="mqbAddOrd()" style="background:#dbeafe;color:#1d4ed8;border:none;padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer">+</button>
+          </div>
+          <div id="mqb-ords"></div>
+        </div>
+      </div>
+      <!-- RIGHT -->
+      <div>
+        <div class="qb-card">
+          <h3>DSL-фрагмент</h3>
+          <textarea id="mqb-dsl" rows="18" readonly style="width:100%;font-family:monospace;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:8px;background:#fff;resize:vertical"></textarea>
+        </div>
+        <div class="qb-card">
+          <h3>Текст запроса</h3>
+          <textarea id="mqb-qry" rows="10" readonly style="width:100%;font-family:monospace;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:8px;background:#fff;resize:vertical"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 <script>
 // ── New object form ────────────────────────────────────────────
@@ -261,6 +353,9 @@ function hlLive(name) {
   var h = ta.scrollHeight;
   if (h > pre.offsetHeight) { pre.style.minHeight = h + 'px'; }
 }
+// ── Form field reorder ──────────────────────────────────────────
+function moveUp(btn){var row=btn.closest('.form-field-row'),prev=row.previousElementSibling;if(prev&&prev.classList.contains('form-field-row'))row.parentNode.insertBefore(row,prev);}
+function moveDown(btn){var row=btn.closest('.form-field-row'),next=row.nextElementSibling;if(next&&next.classList.contains('form-field-row'))row.parentNode.insertBefore(next,row);}
 // ── Panel selection ────────────────────────────────────────────
 function selItem(el) {
   document.querySelectorAll('.cfg-item').forEach(function(e){e.classList.remove('sel')});
@@ -366,6 +461,265 @@ function repAddParam(tableId) {
     + '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();repReindex(\'' + tableId + '\')">✕</button></td>';
   tbl.appendChild(tr);
   tr.querySelector('input[type=text]').focus();
+}
+
+// ── Editor context menu ────────────────────────────────────
+(function(){
+var _cTA=null,_cM=null;
+document.addEventListener('contextmenu',function(e){
+  var ta=e.target.closest('.os-edit');
+  var pre=e.target.closest('pre.os-code');
+  if(!ta&&!pre){hideC();return;}
+  e.preventDefault();
+  if(pre&&!ta){var nm=pre.id.replace('pre-','');startEdit(nm);ta=document.getElementById('ta-'+nm);}
+  _cTA=ta;showC(e.clientX,e.clientY);
+});
+function showC(x,y){
+  if(!_cM){_cM=document.createElement('div');_cM.className='cfg-ctx-menu';
+    _cM.innerHTML='<div class="cfg-ctx-item" onclick="cfgOpenQB()">🔍 Конструктор запроса</div>';
+    document.body.appendChild(_cM);}
+  _cM.style.display='block';
+  _cM.style.left=Math.min(x,window.innerWidth-240)+'px';
+  _cM.style.top=Math.min(y,window.innerHeight-50)+'px';
+}
+function hideC(){if(_cM)_cM.style.display='none';}
+document.addEventListener('click',hideC);
+window.cfgOpenQB=function(){
+  hideC();
+  if(!_cTA)return;
+  openQBModal(_cTA);
+};
+})();
+
+// ── Inline query builder ──────────────────────────────────
+var _mqbTA=null,_mqbSchema=null,_mqbSrcMap={};
+var _mqbCurFields=[],_mqbSel={},_mqbJoins=[];
+(function(){
+_mqbSchema={{.QBSchema}};
+_mqbSchema.forEach(function(s){_mqbSrcMap[s.id]=s;});
+// populate select
+var sel=document.getElementById('mqb-src');
+var groups={};
+_mqbSchema.forEach(function(s){if(!groups[s.group])groups[s.group]=[];groups[s.group].push(s);});
+Object.keys(groups).forEach(function(g){
+  var og=document.createElement('optgroup');og.label=g;
+  groups[g].forEach(function(s){var o=document.createElement('option');o.value=s.id;o.textContent=s.label;og.appendChild(o);});
+  sel.appendChild(og);
+});
+document.getElementById('qb-close').onclick=function(){document.getElementById('qb-overlay').classList.remove('active');};
+document.getElementById('qb-insert').onclick=function(){
+  var dsl=document.getElementById('mqb-dsl').value;
+  if(!dsl||_mqbTA===null)return;
+  var ta=_mqbTA,s=ta.selectionStart,en=ta.selectionEnd;
+  ta.value=ta.value.substring(0,s)+dsl+ta.value.substring(en);
+  var nm=ta.id.replace('ta-',''),pre=document.getElementById('pre-'+nm);
+  if(pre)pre.innerHTML=hl(ta.value);
+  ta.selectionStart=ta.selectionEnd=s+dsl.length;
+  ta.focus();
+  document.getElementById('qb-overlay').classList.remove('active');
+};
+// close on overlay click
+document.getElementById('qb-overlay').addEventListener('click',function(e){if(e.target===this)this.classList.remove('active');});
+})();
+
+function openQBModal(ta){
+  _mqbTA=ta;
+  // reset state
+  _mqbSel={};_mqbJoins=[];_mqbCurFields=[];
+  document.getElementById('mqb-src').value='';
+  document.getElementById('mqb-alias').value='';
+  document.getElementById('mqb-vtp').style.display='none';
+  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+  document.getElementById('mqb-conds').innerHTML='';
+  document.getElementById('mqb-ords').innerHTML='';
+  document.getElementById('mqb-fields').innerHTML='';
+  document.getElementById('mqb-dsl').value='';
+  document.getElementById('mqb-qry').value='';
+  document.getElementById('qb-overlay').classList.add('active');
+}
+
+function mqbSetSrc(id){
+  var src=_mqbSrcMap[id];_mqbSel={};_mqbJoins=[];
+  document.getElementById('mqb-conds').innerHTML='';
+  document.getElementById('mqb-ords').innerHTML='';
+  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+  document.getElementById('mqb-alias').value='';
+  var vtp=document.getElementById('mqb-vtp');
+  if(src&&src.vtParam){vtp.style.display='';document.getElementById('mqb-vtpv').value=src.vtParam;}
+  else{vtp.style.display='none';}
+  mqbRebuild();
+}
+
+function mqbRebuild(){
+  var srcId=document.getElementById('mqb-src').value;
+  var mainSrc=_mqbSrcMap[srcId];
+  var mainAlias=document.getElementById('mqb-alias').value.trim();
+  var all=[];
+  if(mainSrc){
+    mainSrc.fields.forEach(function(f){
+      var n=mainAlias?mainAlias+'.'+f.name:f.name;
+      all.push({name:n,label:n,type:f.type});
+    });
+    if(mainAlias)all.push({name:mainAlias+'.Ссылка',label:mainAlias+'.Ссылка (id)',type:'ref'});
+  }
+  _mqbJoins.forEach(function(j){
+    var src=_mqbSrcMap[j.srcSel.value],alias=j.aliasInp.value.trim();
+    if(!src||!alias)return;
+    src.fields.forEach(function(f){all.push({name:alias+'.'+f.name,label:alias+'.'+f.name,type:f.type});});
+    all.push({name:alias+'.Ссылка',label:alias+'.Ссылка (id)',type:'ref'});
+  });
+  var ns={};all.forEach(function(f){ns[f.name]=true;});
+  var nw={};Object.keys(_mqbSel).forEach(function(k){if(ns[k])nw[k]=_mqbSel[k];});
+  if(!Object.keys(nw).length&&mainSrc){
+    all.forEach(function(f){if(!f.name.endsWith('.Ссылка')&&f.name!=='Ссылка')nw[f.name]={alias:'',agg:''};});
+  }
+  _mqbSel=nw;_mqbCurFields=all;mqbRenderFields();mqbGen();
+}
+
+function mqbRenderFields(){
+  var div=document.getElementById('mqb-fields');div.innerHTML='';
+  if(!_mqbCurFields.length){div.innerHTML='<p style="font-size:12px;color:#94a3b8">Выберите источник</p>';return;}
+  var lastP=null;
+  _mqbCurFields.forEach(function(f){
+    var di=f.name.indexOf('.'),pf=di>=0?f.name.substring(0,di):'';
+    if(pf&&pf!==lastP){lastP=pf;
+      var sep=document.createElement('div');sep.style.cssText='font-size:11px;font-weight:600;color:#64748b;margin:4px 0 2px;border-top:1px solid #f1f5f9;padding-top:4px';
+      sep.textContent=pf;div.appendChild(sep);
+    }
+    var row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:5px;margin-bottom:2px;font-size:12px';
+    var chk=document.createElement('input');chk.type='checkbox';chk.checked=!!_mqbSel[f.name];chk.dataset.field=f.name;
+    chk.onchange=function(){if(chk.checked)_mqbSel[f.name]={alias:'',agg:''};else delete _mqbSel[f.name];mqbGen();};
+    var lbl=document.createElement('label');lbl.textContent=di>=0?f.name.substring(di+1):f.name;lbl.title=f.name;
+    lbl.style.cssText='flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';lbl.onclick=function(){chk.click();};
+    var agg=document.createElement('select');agg.style.cssText='font-size:11px;padding:1px 2px;border:1px solid #e2e8f0;border-radius:3px;width:82px';
+    ['','СУММА','КОЛИЧЕСТВО','МИНИМУМ','МАКСИМУМ','СРЕДНЕЕ'].forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a||'—';agg.appendChild(o);});
+    if(_mqbSel[f.name])agg.value=_mqbSel[f.name].agg||'';
+    agg.onchange=function(){if(_mqbSel[f.name])_mqbSel[f.name].agg=agg.value;mqbGen();};
+    var al=document.createElement('input');al.type='text';al.placeholder='КАК';al.style.cssText='font-size:11px;width:60px;padding:1px 3px;border:1px solid #e2e8f0;border-radius:3px';
+    if(_mqbSel[f.name])al.value=_mqbSel[f.name].alias||'';
+    al.oninput=function(){if(_mqbSel[f.name])_mqbSel[f.name].alias=al.value.trim();mqbGen();};
+    row.appendChild(chk);row.appendChild(lbl);row.appendChild(agg);row.appendChild(al);div.appendChild(row);
+  });
+}
+
+function mqbAll(v){
+  _mqbCurFields.forEach(function(f){
+    if(f.name.endsWith('.Ссылка')||f.name==='Ссылка')return;
+    if(v)_mqbSel[f.name]={alias:'',agg:''};else delete _mqbSel[f.name];
+  });mqbRenderFields();mqbGen();
+}
+
+function mqbAddJoin(){
+  var mainA=document.getElementById('mqb-alias');
+  if(!mainA.value.trim()){var ms=_mqbSrcMap[document.getElementById('mqb-src').value];
+    if(ms){var p=ms.label.split('.');mainA.value=p.length>=2?p[1].replace(/\(.*$/,''):p[0];}}
+  var hint=document.getElementById('mqb-joins-hint');if(hint)hint.remove();
+  var jid=Date.now(),div=document.createElement('div');
+  div.style.cssText='border:1px solid #e2e8f0;border-radius:5px;padding:6px;margin-bottom:6px;background:#fff';
+  var r1=document.createElement('div');r1.style.cssText='display:flex;gap:4px;align-items:center;margin-bottom:4px;flex-wrap:wrap';
+  var ts=document.createElement('select');ts.style.cssText='width:110px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  [['ЛЕВОЕ','⬅ ЛЕВОЕ'],['ВНУТРЕННЕЕ','✕ ВНУТРЕННЕЕ'],['ПРАВОЕ','➡ ПРАВОЕ'],['ПОЛНОЕ','⟺ ПОЛНОЕ']].forEach(function(x){var o=document.createElement('option');o.value=x[0];o.textContent=x[1];ts.appendChild(o);});
+  var ss=document.createElement('select');ss.style.cssText='flex:1;min-width:120px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  var o0=document.createElement('option');o0.value='';o0.textContent='— источник —';ss.appendChild(o0);
+  var jg={};_mqbSchema.forEach(function(s){if(!jg[s.group])jg[s.group]=[];jg[s.group].push(s);});
+  Object.keys(jg).forEach(function(g){var og=document.createElement('optgroup');og.label=g;jg[g].forEach(function(s){var o=document.createElement('option');o.value=s.id;o.textContent=s.label;og.appendChild(o);});ss.appendChild(og);});
+  var ai=document.createElement('input');ai.type='text';ai.placeholder='Псевдоним';ai.style.cssText='width:80px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  var del=document.createElement('button');del.type='button';del.textContent='×';
+  del.style.cssText='background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;line-height:1;padding:0 2px';
+  del.onclick=function(){div.remove();_mqbJoins=_mqbJoins.filter(function(j){return j.id!==jid;});
+    if(!_mqbJoins.length)document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+    mqbRebuild();};
+  r1.appendChild(ts);r1.appendChild(ss);r1.appendChild(ai);r1.appendChild(del);
+  var r2=document.createElement('div');r2.style.cssText='display:flex;gap:4px;align-items:center';
+  var onL=document.createElement('span');onL.textContent='ПО:';onL.style.cssText='font-size:12px;font-weight:600;color:#475569;width:24px';
+  var onI=document.createElement('input');onI.type='text';onI.placeholder='Пс1.Поле = Пс2.Ссылка';
+  onI.style.cssText='flex:1;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 4px';
+  r2.appendChild(onL);r2.appendChild(onI);div.appendChild(r1);div.appendChild(r2);
+  document.getElementById('mqb-joins').appendChild(div);
+  var jd={id:jid,el:div,typeSel:ts,srcSel:ss,aliasInp:ai,onInp:onI};_mqbJoins.push(jd);
+  ss.onchange=function(){var src=_mqbSrcMap[ss.value];if(src&&!ai.value.trim()){var p=src.label.split('.');ai.value=p.length>=2?p[1].replace(/\(.*$/,''):p[0];}mqbRebuild();};
+  ts.onchange=function(){mqbGen();};ai.oninput=function(){mqbRebuild();};onI.oninput=function(){mqbGen();};
+  mqbRebuild();
+}
+
+function mqbAddCond(){
+  var div=document.createElement('div');div.style.cssText='display:flex;gap:3px;margin-bottom:4px;align-items:center;flex-wrap:wrap';
+  var fs=document.createElement('select');fs.style.cssText='flex:1;min-width:80px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  _mqbCurFields.forEach(function(f){var o=document.createElement('option');o.value=f.name;o.textContent=f.name;fs.appendChild(o);});
+  var ops=document.createElement('select');ops.style.cssText='width:90px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  ['=','<>','>','<','>=','<=','ЕСТЬ ПУСТО','НЕ ЕСТЬ ПУСТО','ПОДОБНО','В'].forEach(function(op){var o=document.createElement('option');o.value=op;o.textContent=op;ops.appendChild(o);});
+  var vi=document.createElement('input');vi.type='text';vi.placeholder='&Параметр';vi.style.cssText='flex:1;min-width:60px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 4px';
+  ops.onchange=function(){var nv=ops.value==='ЕСТЬ ПУСТО'||ops.value==='НЕ ЕСТЬ ПУСТО';vi.style.display=nv?'none':'';mqbGen();};
+  fs.onchange=vi.oninput=function(){mqbGen();};
+  var del=document.createElement('button');del.type='button';del.textContent='×';del.style.cssText='background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;line-height:1';
+  del.onclick=function(){div.remove();mqbGen();};
+  div.appendChild(fs);div.appendChild(ops);div.appendChild(vi);div.appendChild(del);
+  document.getElementById('mqb-conds').appendChild(div);mqbGen();
+}
+
+function mqbAddOrd(){
+  var div=document.createElement('div');div.style.cssText='display:flex;gap:3px;margin-bottom:4px;align-items:center';
+  var fs=document.createElement('select');fs.style.cssText='flex:1;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  _mqbCurFields.forEach(function(f){var o=document.createElement('option');o.value=f.name;o.textContent=f.name;fs.appendChild(o);});
+  var ds=document.createElement('select');ds.style.cssText='width:70px;font-size:12px;border:1px solid #e2e8f0;border-radius:3px;padding:1px 3px';
+  [['ВОЗР','↑ ВОЗР'],['УБЫВ','↓ УБЫВ']].forEach(function(x){var o=document.createElement('option');o.value=x[0];o.textContent=x[1];ds.appendChild(o);});
+  var del=document.createElement('button');del.type='button';del.textContent='×';del.style.cssText='background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;line-height:1';
+  del.onclick=function(){div.remove();mqbGen();};
+  fs.onchange=ds.onchange=function(){mqbGen();};
+  div.appendChild(fs);div.appendChild(ds);div.appendChild(del);
+  document.getElementById('mqb-ords').appendChild(div);mqbGen();
+}
+
+function mqbGen(){
+  var srcId=document.getElementById('mqb-src').value,src=_mqbSrcMap[srcId];
+  if(!src){document.getElementById('mqb-qry').value='';document.getElementById('mqb-dsl').value='';return;}
+  var mainAlias=document.getElementById('mqb-alias').value.trim();
+  var activeJ=_mqbJoins.filter(function(j){return!!j.srcSel.value&&!!j.aliasInp.value.trim();});
+  var hasJ=activeJ.length>0,selP=[],hasAgg=false,grpF=[];
+  _mqbCurFields.forEach(function(f){
+    var info=_mqbSel[f.name];if(!info)return;var expr=f.name;
+    if(info.agg){expr=info.agg+'('+f.name+')';hasAgg=true;}else{grpF.push(f.name);}
+    if(info.alias)expr+=' КАК '+info.alias;selP.push('  '+expr);
+  });
+  if(!selP.length)selP=['  *'];
+  var from=src.label;
+  if(src.vtParam){var vv=document.getElementById('mqb-vtpv').value.trim()||src.vtParam;from=from.replace(/\(.*?\)/,'('+vv+')');}
+  if(mainAlias||hasJ)from+=' КАК '+(mainAlias||'Т');
+  activeJ.forEach(function(j){
+    var jSrc=_mqbSrcMap[j.srcSel.value],jA=j.aliasInp.value.trim(),jL=jSrc.label;
+    var onC=j.onInp.value.trim();
+    from+='\n  '+j.typeSel.value+' СОЕДИНЕНИЕ '+jL+' КАК '+jA;
+    from+='\n  ПО '+(onC||'/* условие */');
+  });
+  var wP=[],params={};
+  document.getElementById('mqb-conds').querySelectorAll('div').forEach(function(row){
+    var sels=row.querySelectorAll('select'),inp=row.querySelector('input[type=text]');
+    if(!sels[0])return;var field=sels[0].value,op=sels[1]?sels[1].value:'=',val=(inp&&inp.style.display!=='none')?inp.value.trim():'';
+    if(op==='ЕСТЬ ПУСТО'||op==='НЕ ЕСТЬ ПУСТО'){wP.push(field+' '+op);}
+    else if(val){var m=val.match(/&[А-Яа-яёЁA-Za-z_]\w*/g);if(m)m.forEach(function(p){params[p]=true;});
+      wP.push(op==='В'?field+' В ('+val+')':field+' '+op+' '+val);}
+  });
+  activeJ.forEach(function(j){var m=j.onInp.value.match(/&[А-Яа-яёЁA-Za-z_]\w*/g);if(m)m.forEach(function(p){params[p]=true;});});
+  var oP=[];
+  document.getElementById('mqb-ords').querySelectorAll('div').forEach(function(row){
+    var sels=row.querySelectorAll('select');if(!sels[0])return;var f=sels[0].value,d=sels[1]?sels[1].value:'ВОЗР';
+    oP.push(d==='УБЫВ'?f+' УБЫВ':f);
+  });
+  var q='ВЫБРАТЬ\n'+selP.join(',\n')+'\nИЗ '+from;
+  if(wP.length)q+='\nГДЕ '+wP.join('\n  И ');
+  if(hasAgg&&grpF.length)q+='\nСГРУППИРОВАТЬ ПО '+grpF.join(', ');
+  if(oP.length)q+='\nУПОРЯДОЧИТЬ ПО '+oP.join(', ');
+  document.getElementById('mqb-qry').value=q;
+  var pL=Object.keys(params);
+  var qL=q.split('\n'),strLit='"'+qL[0];
+  for(var i=1;i<qL.length;i++)strLit+='\n|'+qL[i];strLit+='"';
+  var dsl='Запрос = Новый Запрос;\nЗапрос.Текст =\n  '+strLit+';\n';
+  pL.forEach(function(p){dsl+='Запрос.УстановитьПараметр("'+p.slice(1)+'", '+p+');\n';});
+  dsl+='Результат = Запрос.Выполнить();\n\nДля Каждого Строка Из Результат Цикл\n';
+  var ff=_mqbCurFields.find(function(f){return!!_mqbSel[f.name]&&!f.name.endsWith('.Ссылка')&&f.name!=='Ссылка';});
+  if(ff){var fn=(_mqbSel[ff.name]&&_mqbSel[ff.name].alias)||ff.name.replace(/.*\./,'');dsl+='  Сообщить(Строка.'+fn+');\n';}
+  dsl+='КонецЦикла;';
+  document.getElementById('mqb-dsl').value=dsl;
 }
 </script>
 </body></html>
@@ -489,6 +843,18 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-item" data-id="pf-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🖨</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}</span>
   </div>
+  {{end}}
+
+  {{if .Subsystems}}
+  <div class="cfg-group cfg-group-hd">
+    <span>Подсистемы</span>
+    <span class="cfg-add-btn" onclick="cfgNewObj('subsystem')" title="Добавить подсистему">+</span>
+  </div>
+  {{range .Subsystems}}
+  <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">
+    <span class="ic">🗂</span>{{.Title}}
+  </div>
+  {{end}}
   {{end}}
 
   <div id="cfg-new-form" class="cfg-new-form" style="display:none">
@@ -802,6 +1168,90 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
 
+  {{/* Subsystems */}}
+  {{range $sub := .Subsystems}}
+  <div class="cfg-panel" id="sub-{{$sub.Name}}">
+    <div class="panel-title">🗂 {{$sub.Title}}</div>
+    <div class="panel-kind">Подсистема</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/subsystem">
+      <input type="hidden" name="subsystem_name" value="{{$sub.Name}}">
+      <div class="fg" style="margin-top:12px">
+        <label>Заголовок</label>
+        <input type="text" name="title" value="{{$sub.Title}}" placeholder="Название подсистемы">
+      </div>
+      <div class="fg" style="margin-top:8px">
+        <label>Иконка</label>
+        <input type="text" name="icon" value="{{$sub.Icon}}" placeholder="shopping-cart">
+      </div>
+      <div class="fg" style="margin-top:8px">
+        <label>Порядок</label>
+        <input type="number" name="order" value="{{$sub.Order}}" style="width:100px">
+      </div>
+
+      <div class="section-hd" style="margin-top:14px">Состав подсистемы</div>
+      {{if $.Catalogs}}
+      <div style="margin-top:6px"><span style="font-size:11px;font-weight:700;color:#555">Справочники</span></div>
+      {{range $e := $.Catalogs}}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+        <input type="checkbox" name="catalogs" value="{{$e.Name}}" {{range $sub.Contents.Catalogs}}{{if eq . $e.Name}}checked{{end}}{{end}}>
+        {{$e.Name}}
+      </label>
+      {{end}}
+      {{end}}
+      {{if $.Docs}}
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Документы</span></div>
+      {{range $e := $.Docs}}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+        <input type="checkbox" name="documents" value="{{$e.Name}}" {{range $sub.Contents.Documents}}{{if eq . $e.Name}}checked{{end}}{{end}}>
+        {{$e.Name}}
+      </label>
+      {{end}}
+      {{end}}
+      {{if $.Registers}}
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Регистры накопления</span></div>
+      {{range $r := $.Registers}}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+        <input type="checkbox" name="registers" value="{{$r.Name}}" {{range $sub.Contents.Registers}}{{if eq . $r.Name}}checked{{end}}{{end}}>
+        {{$r.Name}}
+      </label>
+      {{end}}
+      {{end}}
+      {{if $.InfoRegisters}}
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Регистры сведений</span></div>
+      {{range $r := $.InfoRegisters}}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+        <input type="checkbox" name="inforegs" value="{{$r.Name}}" {{range $sub.Contents.InfoRegs}}{{if eq . $r.Name}}checked{{end}}{{end}}>
+        {{$r.Name}}
+      </label>
+      {{end}}
+      {{end}}
+      {{if $.Reports}}
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Отчёты</span></div>
+      {{range $r := $.Reports}}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+        <input type="checkbox" name="reports" value="{{$r.Name}}" {{range $sub.Contents.Reports}}{{if eq . $r.Name}}checked{{end}}{{end}}>
+        {{if $r.Title}}{{$r.Title}}{{else}}{{$r.Name}}{{end}}
+      </label>
+      {{end}}
+      {{end}}
+      {{if $.Processors}}
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Обработки</span></div>
+      {{range $p := $.Processors}}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+        <input type="checkbox" name="processors" value="{{$p.Name}}" {{range $sub.Contents.Processors}}{{if eq . $p.Name}}checked{{end}}{{end}}>
+        {{if $p.Title}}{{$p.Title}}{{else}}{{$p.Name}}{{end}}
+      </label>
+      {{end}}
+      {{end}}
+
+      <div class="module-save-row" style="margin-top:14px">
+        <button class="btn-save" type="submit">Сохранить</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity $sub.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+      </div>
+    </form>
+  </div>
+  {{end}}
+
 </div>{{/* cfg-right */}}
 </div>{{/* cfg-split */}}
 {{end}}
@@ -962,14 +1412,68 @@ const cfgTabTree = `{{define "tab-tree"}}
 
 {{/* Forms section */}}
 <div class="section-hd" style="margin-top:18px">Формы</div>
-<div style="background:#f8f9fc;border:1px solid #e8ecf4;border-radius:5px;padding:12px;font-size:12px;color:#64748b">
-  <div style="display:flex;gap:12px;margin-bottom:8px">
-    <span style="font-weight:600;color:#334">📋 Форма списка</span>
-    <span style="font-weight:600;color:#334">📄 Форма элемента</span>
-  </div>
-  <div>Поля: {{range $i, $f := $e.Fields}}{{if $i}}, {{end}}<span style="color:#1a4a80">{{$f.Name}}</span>{{end}}{{if $e.TableParts}}; табл. части: {{range $j, $tp := $e.TableParts}}{{if $j}}, {{end}}<span style="color:#7c3aed">{{$tp.Name}}</span>{{end}}{{end}}</div>
-  <div style="margin-top:6px;color:#94a3b8;font-style:italic">Настройка форм — в разработке. Сейчас поля отображаются автоматически в порядке объявления.</div>
+<form method="POST" action="/bases/{{$baseID}}/configurator/form">
+<input type="hidden" name="entity" value="{{$e.Name}}">
+
+<div class="module-tabs" style="margin-top:8px">
+  <div class="module-tab active" onclick="modTab(this,'fl-{{$e.Name}}')">📋 Форма списка</div>
+  <div class="module-tab" onclick="modTab(this,'fe-{{$e.Name}}')">📄 Форма элемента</div>
 </div>
+
+{{/* List form fields */}}
+<div class="module-pane active" id="fl-{{$e.Name}}" style="padding:10px 0">
+<p style="font-size:11px;color:#64748b;margin-bottom:8px">Выберите поля, отображаемые в списке. Порядок строк = порядок колонок.</p>
+<div id="fl-sort-{{$e.Name}}">
+{{range $i, $f := $e.Fields}}
+<div class="form-field-row" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+  <input type="hidden" name="lf.{{$i}}.name" value="{{$f.Name}}">
+  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex:1">
+    <input type="checkbox" name="lf.{{$i}}.vis" value="1" {{if not $f.FormListHidden}}checked{{end}}>
+    <span style="color:#1a4a80">{{$f.Name}}</span>
+    <span class="ft {{fieldTypeClass $f.Type}}" style="font-size:11px">{{fieldTypeLabel $f.Type $f.RefEntity}}</span>
+  </label>
+  <button type="button" onclick="moveUp(this)" style="background:none;border:1px solid #e2e8f0;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:11px">↑</button>
+  <button type="button" onclick="moveDown(this)" style="background:none;border:1px solid #e2e8f0;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:11px">↓</button>
+</div>
+{{end}}
+</div>
+</div>
+
+{{/* Element form fields */}}
+<div class="module-pane" id="fe-{{$e.Name}}" style="padding:10px 0">
+<p style="font-size:11px;color:#64748b;margin-bottom:8px">Выберите поля, отображаемые в форме элемента.</p>
+<div id="fe-sort-{{$e.Name}}">
+{{range $i, $f := $e.Fields}}
+<div class="form-field-row" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+  <input type="hidden" name="ef.{{$i}}.name" value="{{$f.Name}}">
+  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex:1">
+    <input type="checkbox" name="ef.{{$i}}.vis" value="1" {{if not $f.FormItemHidden}}checked{{end}}>
+    <span style="color:#1a4a80">{{$f.Name}}</span>
+    <span class="ft {{fieldTypeClass $f.Type}}" style="font-size:11px">{{fieldTypeLabel $f.Type $f.RefEntity}}</span>
+  </label>
+</div>
+{{end}}
+{{range $j, $tp := $e.TableParts}}
+<div style="font-size:11px;font-weight:600;color:#7c3aed;margin:8px 0 2px;padding-left:2px">📋 {{$tp.Name}} (табличная часть)</div>
+{{range $i, $f := $tp.Fields}}
+<div class="form-field-row" style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 16px;font-size:12px">
+  <input type="hidden" name="ef.tp{{$j}}.{{$i}}.name" value="tp.{{$tp.Name}}.{{$f.Name}}">
+  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex:1">
+    <input type="checkbox" name="ef.tp{{$j}}.{{$i}}.vis" value="1" checked>
+    <span style="color:#1a4a80">{{$f.Name}}</span>
+    <span class="ft {{fieldTypeClass $f.Type}}" style="font-size:11px">{{fieldTypeLabel $f.Type $f.RefEntity}}</span>
+  </label>
+</div>
+{{end}}
+{{end}}
+</div>
+</div>
+
+<div class="module-save-row">
+  <button class="btn-save" type="submit">Сохранить формы</button>
+  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+</div>
+</form>
 {{end}}`
 
 // ── Register detail (editable) ────────────────────────────────────────────────

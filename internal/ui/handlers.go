@@ -346,6 +346,12 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	editUser := auth.UserFromContext(r.Context())
 	editIsAdmin := editUser == nil || editUser.IsAdmin
 
+	// Load document movements for posted documents
+	var docMovements map[string][]map[string]any
+	if entity.Kind == metadata.KindDocument && vals["posted"] == "true" {
+		docMovements, _ = s.store.GetDocumentMovements(r.Context(), id, s.reg.Registers())
+	}
+
 	s.render(w, r, "page-form", map[string]any{
 		"Entity":        entity,
 		"IsNew":         false,
@@ -358,6 +364,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"IsAdmin":       editIsAdmin,
 		"PrintForms":    s.reg.GetPrintForms(entity.Name),
 		"FolderOptions": folderOptsEdit,
+		"DocMovements":  docMovements,
 	})
 }
 
@@ -1383,9 +1390,37 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 		data["Subsystems"] = subs
 		data["CurrentSubsystem"] = sub
 	}
+	if _, ok := data["IsAdmin"]; !ok {
+		data["IsAdmin"] = s.isAdmin(r)
+	}
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+func (s *Server) allFunctions(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var catalogs, documents []*metadata.Entity
+	for _, e := range s.reg.Entities() {
+		if e.Kind == metadata.KindCatalog {
+			catalogs = append(catalogs, e)
+		} else {
+			documents = append(documents, e)
+		}
+	}
+	s.render(w, r, "page-all-functions", map[string]any{
+		"Catalogs":      catalogs,
+		"Documents":     documents,
+		"Registers":     s.reg.Registers(),
+		"InfoRegisters": s.reg.InfoRegisters(),
+		"Enums":         s.reg.Enums(),
+		"Reports":       s.reg.Reports(),
+		"Processors":    s.reg.Processors(),
+		"Constants":     s.reg.Constants(),
+	})
 }
 
 // filterOutFolders removes rows where is_folder=true (hierarchical catalog groups).

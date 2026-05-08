@@ -38,6 +38,8 @@ type rawEntity struct {
 	Predefined    []rawPredefined `yaml:"predefined"`
 	Hierarchical  bool            `yaml:"hierarchical"`
 	HierarchyKind string          `yaml:"hierarchy_kind"`
+	ListForm      []string        `yaml:"list_form"`
+	ItemForm      []string        `yaml:"item_form"`
 }
 
 func LoadFile(path string, kind Kind) (*Entity, error) {
@@ -59,6 +61,8 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 			e.HierarchyKind = "folders_and_items"
 		}
 	}
+	e.ListForm = raw.ListForm
+	e.ItemForm = raw.ItemForm
 	if raw.Numerator != nil {
 		n := &Numerator{
 			Prefix: raw.Numerator.Prefix,

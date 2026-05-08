@@ -14,6 +14,7 @@ import (
 var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"lower": strings.ToLower,
 	"str":   func(v any) string { return fmt.Sprintf("%v", v) },
+	"add":   func(a, b int) int { return a + b },
 	"isRef":  func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
 	"fmtDate": func(v any) string {
@@ -130,7 +131,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return template.JS(b)
 	},
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -219,6 +220,7 @@ const tplNav = `
       <a href="/ui/admin/scheduled">Регламентные задания</a>
       <a href="/ui/delete-marked">Удалить помеченные</a>
       <a href="/ui/admin/cleanup">Очистка регистров</a>
+      {{if .IsAdmin}}<a href="/ui/all-functions">Все функции</a>{{end}}
       <a href="/ui/query-builder">Конструктор запросов</a>
       <form method="POST" action="/logout"><button type="submit">Выйти</button></form>
     </div>
@@ -759,6 +761,28 @@ function recalcTpRow(inp) {
   }
 }
 </script>
+{{if and (not .IsNew) .DocMovements}}
+<div class="card" style="margin-top:16px">
+  <h3 style="margin:0 0 12px;font-size:14px;font-weight:600;color:#374151">Движения документа</h3>
+  {{range $regName, $rows := .DocMovements}}
+  <details open style="margin-bottom:10px">
+    <summary style="font-size:13px;font-weight:600;color:#1a4a80;cursor:pointer;margin-bottom:6px">{{$regName}} ({{len $rows}})</summary>
+    <div style="overflow-x:auto">
+    <table class="list-tbl" style="font-size:12px">
+      <tr><th>№</th><th>Вид</th>{{$first := index $rows 0}}{{range $k, $v := $first}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<th>{{$k}}</th>{{end}}{{end}}</tr>
+      {{range $i, $row := $rows}}
+      <tr>
+        <td>{{add $i 1}}</td>
+        <td>{{if eq (index $row "вид_движения") "Приход"}}<span style="color:#16a34a">▲</span>{{else if eq (index $row "вид_движения") "Расход"}}<span style="color:#dc2626">▼</span>{{else}}—{{end}} {{index $row "вид_движения"}}</td>
+        {{range $k, $v := $row}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<td>{{$v}}</td>{{end}}{{end}}
+      </tr>
+      {{end}}
+    </table>
+    </div>
+  </details>
+  {{end}}
+</div>
+{{end}}
 </main></div></body></html>
 {{end}}
 `

@@ -2,7 +2,9 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,10 +51,12 @@ type saveRegister struct {
 // ── view types ────────────────────────────────────────────────────────────────
 
 type cfgField struct {
-	Name      string
-	Type      string
-	RefEntity string
-	EnumName  string
+	Name           string
+	Type           string
+	RefEntity      string
+	EnumName       string
+	FormListHidden bool
+	FormItemHidden bool
 }
 
 type cfgEnum struct {
@@ -130,6 +134,14 @@ type cfgInfoRegister struct {
 	Resources  []cfgField
 }
 
+type cfgSubsystem struct {
+	Name     string
+	Title    string
+	Icon     string
+	Order    int
+	Contents metadata.SubsystemContents
+}
+
 type configuratorData struct {
 	Base       *Base
 	AppName    string
@@ -146,9 +158,12 @@ type configuratorData struct {
 	Modules    []cfgModule
 	Processors []cfgProcessor
 	PrintForms []cfgPrintForm
+	Subsystems []cfgSubsystem
 	Error     string
 	// all entity names for reference picker
 	AllEntityNames []string
+	// query builder schema (JSON for inline query builder)
+	QBSchema template.JS
 	// converter
 	ConvertSrcDir  string
 	ConvertResult  string
@@ -316,6 +331,29 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 			}
 			ev.TableParts = append(ev.TableParts, tpv)
 		}
+		// Mark fields hidden based on form config
+		if len(e.ListForm) > 0 {
+			lfSet := make(map[string]bool, len(e.ListForm))
+			for _, n := range e.ListForm {
+				lfSet[n] = true
+			}
+			for i := range ev.Fields {
+				if !lfSet[ev.Fields[i].Name] {
+					ev.Fields[i].FormListHidden = true
+				}
+			}
+		}
+		if len(e.ItemForm) > 0 {
+			ifSet := make(map[string]bool, len(e.ItemForm))
+			for _, n := range e.ItemForm {
+				ifSet[n] = true
+			}
+			for i := range ev.Fields {
+				if !ifSet[ev.Fields[i].Name] {
+					ev.Fields[i].FormItemHidden = true
+				}
+			}
+		}
 		data.Entities = append(data.Entities, ev)
 	}
 
@@ -417,7 +455,133 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	}
 	sort.Slice(data.Processors, func(i, j int) bool { return data.Processors[i].Name < data.Processors[j].Name })
 
+	// Subsystems
+	for _, sub := range proj.Subsystems {
+		data.Subsystems = append(data.Subsystems, cfgSubsystem{
+			Name:     sub.Name,
+			Title:    sub.Title,
+			Icon:     sub.Icon,
+			Order:    sub.Order,
+			Contents: sub.Contents,
+		})
+	}
+
+	// Generate query builder schema
+	data.QBSchema = buildQBSchema(data)
+
 	return data
+}
+
+// ── query builder schema ────────────────────────────────────────────────────
+
+type cfgQBField struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	Type  string `json:"type"`
+}
+
+type cfgQBSource struct {
+	ID      string        `json:"id"`
+	Label   string        `json:"label"`
+	Group   string        `json:"group"`
+	VTParam string        `json:"vtParam,omitempty"`
+	Fields  []cfgQBField  `json:"fields"`
+}
+
+func cfgQBFieldType(t string) string {
+	switch t {
+	case "number":
+		return "number"
+	case "date":
+		return "date"
+	case "bool", "boolean":
+		return "bool"
+	case "reference":
+		return "ref"
+	default:
+		return "string"
+	}
+}
+
+func buildQBSchema(d *configuratorData) template.JS {
+	var sources []cfgQBSource
+
+	for _, e := range d.Catalogs {
+		src := cfgQBSource{ID: "catalog:" + e.Name, Label: "Справочник." + e.Name, Group: "Справочники"}
+		for _, f := range e.Fields {
+			src.Fields = append(src.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		sources = append(sources, src)
+	}
+
+	for _, e := range d.Docs {
+		src := cfgQBSource{ID: "document:" + e.Name, Label: "Документ." + e.Name, Group: "Документы"}
+		for _, f := range e.Fields {
+			src.Fields = append(src.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		sources = append(sources, src)
+	}
+
+	for _, reg := range d.Registers {
+		raw := cfgQBSource{ID: "register:" + reg.Name, Label: "РегистрНакопления." + reg.Name, Group: "Регистры накопления"}
+		raw.Fields = append(raw.Fields, cfgQBField{Name: "период", Label: "Период", Type: "date"})
+		raw.Fields = append(raw.Fields, cfgQBField{Name: "вид_движения", Label: "ВидДвижения", Type: "string"})
+		for _, f := range reg.Dimensions {
+			raw.Fields = append(raw.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		for _, f := range reg.Resources {
+			raw.Fields = append(raw.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		sources = append(sources, raw)
+
+		bal := cfgQBSource{ID: "vt_balances:" + reg.Name, Label: "РегистрНакопления." + reg.Name + ".Остатки(&НаДату)", Group: "Виртуальные таблицы", VTParam: "&НаДату"}
+		for _, f := range reg.Dimensions {
+			bal.Fields = append(bal.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		for _, f := range reg.Resources {
+			bal.Fields = append(bal.Fields, cfgQBField{Name: f.Name + "Остаток", Label: f.Name + "Остаток", Type: "res"})
+		}
+		sources = append(sources, bal)
+
+		trn := cfgQBSource{ID: "vt_turnovers:" + reg.Name, Label: "РегистрНакопления." + reg.Name + ".Обороты(&Начало, &Конец)", Group: "Виртуальные таблицы", VTParam: "&Начало, &Конец"}
+		for _, f := range reg.Dimensions {
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		for _, f := range reg.Resources {
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Приход", Label: f.Name + "Приход", Type: "res"})
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Расход", Label: f.Name + "Расход", Type: "res"})
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Оборот", Label: f.Name + "Оборот", Type: "res"})
+		}
+		sources = append(sources, trn)
+	}
+
+	for _, ir := range d.InfoRegisters {
+		raw := cfgQBSource{ID: "inforeg:" + ir.Name, Label: "РегистрСведений." + ir.Name, Group: "Регистры сведений"}
+		if ir.Periodic {
+			raw.Fields = append(raw.Fields, cfgQBField{Name: "period", Label: "Период", Type: "date"})
+		}
+		for _, f := range ir.Dimensions {
+			raw.Fields = append(raw.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		for _, f := range ir.Resources {
+			raw.Fields = append(raw.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+		}
+		sources = append(sources, raw)
+
+		if ir.Periodic {
+			sl := cfgQBSource{ID: "vt_slice:" + ir.Name, Label: "РегистрСведений." + ir.Name + ".СрезПоследних(&НаДату)", Group: "Виртуальные таблицы", VTParam: "&НаДату"}
+			for _, f := range ir.Dimensions {
+				sl.Fields = append(sl.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+			}
+			for _, f := range ir.Resources {
+				sl.Fields = append(sl.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
+			}
+			sources = append(sources, sl)
+		}
+	}
+
+	b, _ := json.Marshal(sources)
+	return template.JS(b)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -711,6 +875,143 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
 	`, targetPath, out)
 	return err
+}
+
+func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	entityName := r.FormValue("entity")
+	dir := b.Path
+	if b.ConfigSource == "database" {
+		dir, err = workspacePath(b.ID)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+
+	// Find entity YAML file
+	entityDir := ""
+	for _, sub := range []string{"catalogs", "documents"} {
+		p := filepath.Join(dir, sub, nameToFilename(entityName)+".yaml")
+		if _, e := os.Stat(p); e == nil {
+			entityDir = sub
+			break
+		}
+	}
+	if entityDir == "" {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = "Файл сущности не найден: " + entityName
+		renderCfg(w, data)
+		return
+	}
+
+	filePath := filepath.Join(dir, entityDir, nameToFilename(entityName)+".yaml")
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = "Ошибка чтения: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+
+	// Parse as generic map, update list_form and item_form
+	var doc map[string]any
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = "Ошибка YAML: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+
+	// Build list_form from lf.N.name + lf.N.vis
+	var listForm []string
+	for i := 0; ; i++ {
+		name := r.FormValue(fmt.Sprintf("lf.%d.name", i))
+		if name == "" {
+			break
+		}
+		vis := r.FormValue(fmt.Sprintf("lf.%d.vis", i))
+		if vis == "1" {
+			listForm = append(listForm, name)
+		}
+	}
+	if len(listForm) > 0 {
+		doc["list_form"] = listForm
+	} else {
+		delete(doc, "list_form")
+	}
+
+	// Build item_form from ef.N.name + ef.N.vis
+	var itemForm []string
+	for i := 0; ; i++ {
+		name := r.FormValue(fmt.Sprintf("ef.%d.name", i))
+		if name == "" {
+			// Try table part fields
+			name = r.FormValue(fmt.Sprintf("ef.tp0.%d.name", i))
+		}
+		if name == "" {
+			break
+		}
+		vis := r.FormValue(fmt.Sprintf("ef.%d.vis", i))
+		if vis == "" {
+			vis = r.FormValue(fmt.Sprintf("ef.tp0.%d.vis", i))
+		}
+		if vis == "1" {
+			itemForm = append(itemForm, name)
+		}
+	}
+	// Also check table part fields with any index
+	for tpJ := 0; ; tpJ++ {
+		foundAny := false
+		for fi := 0; ; fi++ {
+			name := r.FormValue(fmt.Sprintf("ef.tp%d.%d.name", tpJ, fi))
+			if name == "" {
+				break
+			}
+			foundAny = true
+			vis := r.FormValue(fmt.Sprintf("ef.tp%d.%d.vis", tpJ, fi))
+			if vis == "1" {
+				itemForm = append(itemForm, name)
+			}
+		}
+		if !foundAny {
+			break
+		}
+	}
+	if len(itemForm) > 0 {
+		doc["item_form"] = itemForm
+	} else {
+		delete(doc, "item_form")
+	}
+
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = "Ошибка сериализации: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if err := os.WriteFile(filePath, out, 0o644); err != nil {
+		data.Error = "Ошибка сохранения: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+
+	fresh := h.loadCfgData(r.Context(), b, "tree")
+	fresh.FieldsSaved = true
+	fresh.FieldsSavedEntity = entityName
+	renderCfg(w, fresh)
 }
 
 func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request) {
@@ -1023,6 +1324,8 @@ func newObjectContent(kind, name string) (subdir, content string) {
 		return "inforegs", "name: " + name + "\nperiodic: false\ndimensions:\n  - name: Ключ\n    type: string\nresources:\n  - name: Значение\n    type: string\n"
 	case "enum":
 		return "enums", "name: " + name + "\nvalues:\n  - Значение1\n  - Значение2\n"
+	case "subsystem":
+		return "subsystems", "name: " + name + "\ntitle: " + name + "\norder: 10\ncontents:\n  catalogs: []\n  documents: []\n  registers: []\n"
 	}
 	return "", ""
 }
@@ -1600,6 +1903,93 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 		data.FieldsSavedEntity = name
 	}
 	renderCfg(w, data)
+}
+
+// ── Subsystem save ──────────────────────────────────────────────────────────
+
+func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	subName := r.FormValue("subsystem_name")
+	title := r.FormValue("title")
+	icon := r.FormValue("icon")
+	orderStr := r.FormValue("order")
+	var order int
+	if orderStr != "" {
+		fmt.Sscanf(orderStr, "%d", &order)
+	}
+
+	if title == "" {
+		title = subName
+	}
+
+	dir := b.Path
+	if b.ConfigSource == "database" {
+		dir, err = workspacePath(b.ID)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+
+	subDir := filepath.Join(dir, "subsystems")
+	os.MkdirAll(subDir, 0o755)
+
+	type yamlSubsystem struct {
+		Name     string `yaml:"name"`
+		Title    string `yaml:"title"`
+		Icon     string `yaml:"icon"`
+		Order    int    `yaml:"order"`
+		Contents struct {
+			Catalogs   []string `yaml:"catalogs"`
+			Documents  []string `yaml:"documents"`
+			Registers  []string `yaml:"registers"`
+			InfoRegs   []string `yaml:"inforegs"`
+			Reports    []string `yaml:"reports"`
+			Processors []string `yaml:"processors"`
+			Journals   []string `yaml:"journals"`
+		} `yaml:"contents"`
+	}
+
+	ys := yamlSubsystem{
+		Name:  subName,
+		Title: title,
+		Icon:  icon,
+		Order: order,
+	}
+	ys.Contents.Catalogs = r.Form["catalogs"]
+	ys.Contents.Documents = r.Form["documents"]
+	ys.Contents.Registers = r.Form["registers"]
+	ys.Contents.InfoRegs = r.Form["inforegs"]
+	ys.Contents.Reports = r.Form["reports"]
+	ys.Contents.Processors = r.Form["processors"]
+
+	out, _ := yaml.Marshal(&ys)
+	targetFile := filepath.Join(subDir, nameToFilename(subName)+".yaml")
+
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if err := os.WriteFile(targetFile, out, 0o644); err != nil {
+		data.Error = "Ошибка сохранения: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+	data.FieldsSaved = true
+	data.FieldsSavedEntity = subName
+	renderCfg(w, data)
+
+	// reload tree to reflect changes
+	fresh := h.loadCfgData(r.Context(), b, "tree")
+	fresh.FieldsSaved = true
+	fresh.FieldsSavedEntity = subName
+	renderCfg(w, fresh)
 }
 
 // ── App config save ───────────────────────────────────────────────────────────
