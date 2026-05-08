@@ -106,7 +106,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 .tp-hd{padding:6px 10px;font-size:12px;font-weight:600;color:#334;background:#f0f3f8}
 
 /* ── Module editor ───────────────────────────────────── */
-.code-wrap{position:relative;margin-top:8px;border-radius:6px;overflow:hidden}
+.code-wrap{position:relative;margin-top:8px;border-radius:6px;border:1px solid #334}
 .edit-hint{font-size:11px;color:#94a3b8;margin-left:6px}
 .module-tabs{display:flex;gap:0;margin-top:16px;border-bottom:1px solid #d8dde8}
 .module-tab{padding:6px 14px;cursor:pointer;font-size:12px;color:#666;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -122,9 +122,8 @@ pre.os-code{
   overflow:auto;white-space:pre;min-height:100px;tab-size:2;margin:0;cursor:text
 }
 .os-edit{
-  /* overlay mode: transparent text over highlighted pre */
   position:absolute;inset:0;width:100%;height:100%;
-  color:transparent;caret-color:#cdd6f4;
+  color:#cdd6f4;caret-color:#cdd6f4;
   background:transparent;
   font-family:'Cascadia Code','Fira Code','Consolas','Courier New',monospace;
   font-size:12px;line-height:1.6;padding:14px 16px;
@@ -356,6 +355,14 @@ function hlLive(name) {
 // ── Form field reorder ──────────────────────────────────────────
 function moveUp(btn){var row=btn.closest('.form-field-row'),prev=row.previousElementSibling;if(prev&&prev.classList.contains('form-field-row'))row.parentNode.insertBefore(row,prev);}
 function moveDown(btn){var row=btn.closest('.form-field-row'),next=row.nextElementSibling;if(next&&next.classList.contains('form-field-row'))row.parentNode.insertBefore(next,row);}
+// ── Form tabs (outside module-editor-wrap) ────────────────────
+function formTab(el,showId,hideId){
+  var tabs=el.parentNode;
+  tabs.querySelectorAll('.module-tab').forEach(function(t){t.classList.remove('active')});
+  el.classList.add('active');
+  document.getElementById(showId).classList.add('active');
+  document.getElementById(hideId).classList.remove('active');
+}
 // ── Panel selection ────────────────────────────────────────────
 function selItem(el) {
   document.querySelectorAll('.cfg-item').forEach(function(e){e.classList.remove('sel')});
@@ -1416,8 +1423,8 @@ const cfgTabTree = `{{define "tab-tree"}}
 <input type="hidden" name="entity" value="{{$e.Name}}">
 
 <div class="module-tabs" style="margin-top:8px">
-  <div class="module-tab active" onclick="modTab(this,'fl-{{$e.Name}}')">📋 Форма списка</div>
-  <div class="module-tab" onclick="modTab(this,'fe-{{$e.Name}}')">📄 Форма элемента</div>
+  <div class="module-tab active" onclick="formTab(this,'fl-{{$e.Name}}','fe-{{$e.Name}}')">📋 Форма списка</div>
+  <div class="module-tab" onclick="formTab(this,'fe-{{$e.Name}}','fl-{{$e.Name}}')">📄 Форма элемента</div>
 </div>
 
 {{/* List form fields */}}
