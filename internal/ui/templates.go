@@ -540,6 +540,7 @@ const tplForm = `
     <button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
+        <button class="btn btn-primary btn-sm" form="form-repost" type="submit">Перепровести</button>
         <button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">Отменить проведение</button>
       {{else}}
         <button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>
@@ -689,6 +690,7 @@ const tplForm = `
 {{if and (not .IsNew) .Entity.Posting}}
 {{if eq (index .Values "posted") "true"}}
 <form id="form-unpost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/unpost"></form>
+<form id="form-repost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/post"></form>
 {{end}}
 {{end}}
 {{if not .IsNew}}

@@ -227,7 +227,11 @@ const cfgFoot = `{{define "cfg-foot"}}
 <div class="qb-modal">
   <div class="qb-modal-hd">
     <h2>Конструктор запроса</h2>
-    <div style="display:flex;gap:6px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="qb-mode" style="font-size:12px;border:1px solid #c8d0de;border-radius:4px;padding:4px 6px;background:#fff">
+        <option value="dsl">Полный код</option>
+        <option value="query">Только запрос</option>
+      </select>
       <button id="qb-insert" style="background:#1a4a80;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600">Вставить</button>
       <button id="qb-close" style="background:#e8ecf2;color:#333;border:1px solid #c8d0de;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px">Закрыть</button>
     </div>
@@ -504,13 +508,14 @@ Object.keys(groups).forEach(function(g){
 });
 document.getElementById('qb-close').onclick=function(){document.getElementById('qb-overlay').classList.remove('active');};
 document.getElementById('qb-insert').onclick=function(){
-  var dsl=document.getElementById('mqb-dsl').value;
-  if(!dsl||_mqbTA===null)return;
+  var mode=document.getElementById('qb-mode').value;
+  var txt=mode==='query'?document.getElementById('mqb-qry').value:document.getElementById('mqb-dsl').value;
+  if(!txt||_mqbTA===null)return;
   var ta=_mqbTA,s=ta.selectionStart,en=ta.selectionEnd;
-  ta.value=ta.value.substring(0,s)+dsl+ta.value.substring(en);
+  ta.value=ta.value.substring(0,s)+txt+ta.value.substring(en);
   var nm=ta.id.replace('ta-',''),pre=document.getElementById('pre-'+nm);
   if(pre)pre.innerHTML=hl(ta.value);
-  ta.selectionStart=ta.selectionEnd=s+dsl.length;
+  ta.selectionStart=ta.selectionEnd=s+txt.length;
   ta.focus();
   document.getElementById('qb-overlay').classList.remove('active');
 };
@@ -531,7 +536,27 @@ function openQBModal(ta){
   document.getElementById('mqb-fields').innerHTML='';
   document.getElementById('mqb-dsl').value='';
   document.getElementById('mqb-qry').value='';
+  // parse selected text
+  var sel=ta.value.substring(ta.selectionStart,ta.selectionEnd).trim();
+  if(sel){
+    var q=qbExtractQuery(sel);
+    if(q){document.getElementById('mqb-qry').value=q;qbParseToFields(q);}
+  }
   document.getElementById('qb-overlay').classList.add('active');
+}
+function qbExtractQuery(text){
+  var m=text.match(/Текст\s*=\s*\n?\s*"([\s\S]*?)"/i);
+  if(m)return m[1].replace(/\n\s*\|/g,'\n').trim();
+  if(text.match(/^\s*ВЫБРАТЬ\b/i))return text;
+  m=text.match(/(ВЫБРАТЬ[\s\S]*)/i);
+  return m?m[1].trim():null;
+}
+function qbParseToFields(q){
+  var srcM=q.match(/ИЗ\s+([^\s\n]+)(?:\s+КАК\s+(\S+))?/i);
+  if(!srcM)return;
+  var srcLabel=srcM[1],found=null;
+  _mqbSchema.forEach(function(s){if(s.label===srcLabel||s.label.indexOf(srcLabel)>=0)found=s;});
+  if(found){document.getElementById('mqb-src').value=found.id;mqbSetSrc(found.id);if(srcM[2])document.getElementById('mqb-alias').value=srcM[2];}
 }
 
 function mqbSetSrc(id){
