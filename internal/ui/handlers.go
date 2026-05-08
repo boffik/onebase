@@ -1100,7 +1100,11 @@ func parseTablePartRows(r *http.Request, entity *metadata.Entity) map[string][]m
 					raw := fmt.Sprintf("%v", row[f.Name])
 					switch f.Type {
 					case metadata.FieldTypeNumber:
-						converted[f.Name] = raw
+						if n, err := strconv.ParseFloat(raw, 64); err == nil {
+							converted[f.Name] = n
+						} else {
+							converted[f.Name] = raw
+						}
 					case metadata.FieldTypeBool:
 						converted[f.Name] = raw == "true"
 					default:
@@ -1470,6 +1474,12 @@ func formToFields(r *http.Request, entity *metadata.Entity) map[string]any {
 			}
 		case metadata.FieldTypeBool:
 			fields[f.Name] = val == "true"
+		case metadata.FieldTypeNumber:
+			if n, err := strconv.ParseFloat(val, 64); err == nil {
+				fields[f.Name] = n
+			} else {
+				fields[f.Name] = val
+			}
 		default:
 			fields[f.Name] = val
 		}

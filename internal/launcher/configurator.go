@@ -177,6 +177,21 @@ type configuratorData struct {
 	// platform version
 	PlatformVer    string
 	BackupMessage  string
+	BackupFiles    []backupFile
+	BackupSettings backupSettings
+}
+
+type backupFile struct {
+	Name string
+	Size string
+	Date string
+}
+
+type backupSettings struct {
+	Enabled   bool
+	Schedule  string
+	KeepLast  int
+	Directory string
 }
 
 // ── handlers ──────────────────────────────────────────────────────────────────
@@ -469,6 +484,54 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 
 	// Generate query builder schema
 	data.QBSchema = buildQBSchema(data)
+
+	// Backup files
+	backupDir := h.backupDir(b)
+	if files, err := filepath.Glob(filepath.Join(backupDir, "backup_*.sql.gz")); err == nil {
+		for _, f := range files {
+			info, _ := os.Stat(f)
+			if info == nil {
+				continue
+			}
+			data.BackupFiles = append(data.BackupFiles, backupFile{
+				Name: filepath.Base(f),
+				Size: fmt.Sprintf("%.1f KB", float64(info.Size())/1024),
+				Date: info.ModTime().Format("2006-01-02 15:04"),
+			})
+		}
+		for i, j := 0, len(data.BackupFiles)-1; i < j; i, j = i+1, j-1 {
+			data.BackupFiles[i], data.BackupFiles[j] = data.BackupFiles[j], data.BackupFiles[i]
+		}
+	}
+
+	// Backup settings from app.yaml
+	{
+		cfgPath := ""
+		if b.ConfigSource == "database" {
+			// read from DB config
+		} else {
+			cfgPath = filepath.Join(b.Path, "config", "app.yaml")
+		}
+		if cfgPath != "" {
+			if raw, err := os.ReadFile(cfgPath); err == nil {
+				var tmp struct {
+					Backup struct {
+						Enabled   bool   `yaml:"enabled"`
+						Schedule  string `yaml:"schedule"`
+						KeepLast  int    `yaml:"keep_last"`
+						Directory string `yaml:"directory"`
+					} `yaml:"backup"`
+				}
+				yaml.Unmarshal(raw, &tmp)
+				data.BackupSettings = backupSettings{
+					Enabled:   tmp.Backup.Enabled,
+					Schedule:  tmp.Backup.Schedule,
+					KeepLast:  tmp.Backup.KeepLast,
+					Directory: tmp.Backup.Directory,
+				}
+			}
+		}
+	}
 
 	return data
 }

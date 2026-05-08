@@ -97,7 +97,7 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 		KeepLast:  keepLast,
 		Directory: strings.TrimSpace(r.FormValue("backup_dir")),
 	}
-	out, _ := yaml.Marshal(appCfgWithBackup{Name: b.Name, Version: b.Version, Backup: cfg})
+	out, _ := yaml.Marshal(appCfgWithBackup{Name: b.Name, Backup: cfg})
 	var saveErr error
 	if b.ConfigSource == "database" {
 		db, cerr := storage.Connect(r.Context(), b.DB)
