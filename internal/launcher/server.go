@@ -62,6 +62,10 @@ func (s *Server) ListenAndServe() error {
 	r.Post("/bases/{id}/configurator/new-printform", s.h.configuratorNewPrintForm)
 	r.Post("/bases/{id}/configurator/app", s.h.configuratorSaveApp)
 	r.Post("/bases/{id}/configurator/subsystem", s.h.configuratorSaveSubsystem)
+	r.Post("/bases/{id}/configurator/backup/create", s.h.backupCreate)
+	r.Get("/bases/{id}/configurator/backup/{file}/download", s.h.backupDownload)
+	r.Post("/bases/{id}/configurator/backup/{file}/delete", s.h.backupDelete)
+	r.Post("/bases/{id}/configurator/backup/settings", s.h.backupSettings)
 	r.Post("/killall", s.h.killAll)
 	r.Post("/quit", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

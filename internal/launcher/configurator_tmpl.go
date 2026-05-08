@@ -73,6 +73,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 
 .cfg-left{width:220px;flex-shrink:0;background:#fff;border-right:1px solid #d8dde8;overflow-y:auto;padding:6px 0}
 .cfg-group{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px}
+.cfg-tree details summary{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.cfg-tree details summary::-webkit-details-marker{display:none}
+.cfg-tree details summary::before{content:'▾ ';font-size:10px}
+.cfg-tree details[open] summary::before{content:'▾ '}
+.cfg-sub{padding:2px 12px 2px 36px;font-size:11px;color:#6b7280;cursor:pointer;border-left:2px solid transparent}
+.cfg-sub:hover{background:#f0f4ff;color:#1a4a80}
+.cfg-sub-label{font-size:10px;color:#94a3b8;padding:2px 12px 2px 36px;border-left:2px solid transparent}
 .cfg-group:first-child{margin-top:0}
 .cfg-item{padding:6px 12px 6px 20px;cursor:pointer;font-size:13px;color:#333;display:flex;align-items:center;gap:6px;border-left:2px solid transparent}
 .cfg-item:hover{background:#f0f4ff;color:#1a4a80}
@@ -328,6 +335,44 @@ function cfgToggleRef(sel, refId) {
   var r = document.getElementById(refId);
   if (r) r.style.display = sel.value === 'reference' ? '' : 'none';
 }
+var _cfgNewFieldIdx = 0;
+function cfgAddField(tblId, prefix, entityName) {
+  _cfgNewFieldIdx++;
+  var tbl = document.getElementById(tblId);
+  if (!tbl) return;
+  var refId = 'cfr-'+entityName+'-nf'+_cfgNewFieldIdx;
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td><input name="'+prefix+'.'+_cfgNewFieldIdx+'.name" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="ИмяПоля"></td>'
+    +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.type" onchange="cfgToggleRef(this,\''+refId+'\')">'
+    +'<option value="string">строка</option><option value="number">число</option><option value="date">дата</option><option value="bool">булево</option><option value="reference">ссылка →</option>'
+    +'</select></td>'
+    +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.ref" id="'+refId+'" style="display:none">'
+    +'<option value="">— выбрать —</option>'
+    +{{range $i, $ := $.AllEntityNames}}{{if $i}}+{{end}}'<option value="{{.}}">{{.}}</option>'{{end}}
+    +'</select></td>';
+  tbl.appendChild(tr);
+  tr.querySelector('input').focus();
+}
+var _cfgNewTpIdx = 0;
+function cfgAddTP(btn, entityName) {
+  _cfgNewTpIdx++;
+  var tpName = prompt('Имя табличной части:');
+  if (!tpName) return;
+  var wrapper = document.createElement('details');
+  wrapper.open = true;
+  var prefix = 'new_tp.'+_cfgNewTpIdx;
+  var tblId = 'ft-'+entityName+'-ntp'+_cfgNewTpIdx;
+  wrapper.innerHTML = '<summary class="section-hd" style="cursor:pointer">📋 '+tpName+' (0)</summary>'
+    +'<input type="hidden" name="new_tp_name" value="'+tpName+'">'
+    +'<input type="hidden" name="'+prefix+'.idx" value="'+_cfgNewTpIdx+'">'
+    +'<div class="tp-block"><table class="fields-tbl" id="'+tblId+'">'
+    +'<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>'
+    +'</table>'
+    +'<button type="button" onclick="cfgAddField(\''+tblId+'\',\'new_tp.'+_cfgNewTpIdx+'.field\',\''+entityName+'\')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить поле</button>'
+    +'</div>';
+  btn.parentNode.insertBefore(wrapper, btn);
+  cfgAddField(tblId, 'new_tp.'+_cfgNewTpIdx+'.field', entityName);
+}
 // ── Click-to-edit module ───────────────────────────────────────
 function startEdit(name) {
   var pre = document.getElementById('pre-'+name);
@@ -369,8 +414,10 @@ function cfgSelectPanel(id) {
   if (el) selItem(el);
 }
 (function(){
-  var first = document.querySelector('.cfg-item');
-  if (first) selItem(first);
+  var saved='{{.FieldsSavedEntity}}'?'{{.FieldsSavedEntity}}':'{{.ModuleSavedEntity}}';
+  var el=null;
+  if(saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
+  if(el)selItem(el);else{var f=document.querySelector('.cfg-item');if(f)selItem(f);}
 })();
 
 // ── Module tabs ────────────────────────────────────────────────
@@ -768,114 +815,108 @@ const cfgTabTree = `{{define "tab-tree"}}
     <span class="ic">⚙</span>{{if .AppName}}{{.AppName}}{{else}}Без названия{{end}}
   </div>
 
-  <div class="cfg-group cfg-group-hd">
-    <span>Справочники</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('catalog')" title="Добавить справочник">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Справочники</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="Добавить справочник">+</span></summary>
   {{range .Catalogs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📄</span>{{.Name}}
   </div>
   {{end}}
+  </details>
 
-  <div class="cfg-group cfg-group-hd">
-    <span>Документы</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('document')" title="Добавить документ">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Документы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="Добавить документ">+</span></summary>
   {{range .Docs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📃</span>{{.Name}}{{if .Posting}}<span class="bp">✓</span>{{end}}
   </div>
   {{end}}
+  </details>
 
-  <div class="cfg-group cfg-group-hd">
-    <span>Регистры</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('register')" title="Добавить регистр">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Регистры</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('register')" title="Добавить регистр">+</span></summary>
   {{range .Registers}}
   <div class="cfg-item" data-id="r-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📊</span>{{.Name}}
   </div>
   {{end}}
+  </details>
 
-  <div class="cfg-group cfg-group-hd">
-    <span>Регистры сведений</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('inforeg')" title="Добавить регистр сведений">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Регистры сведений</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('inforeg')" title="Добавить регистр сведений">+</span></summary>
   {{range .InfoRegisters}}
   <div class="cfg-item" data-id="ir-{{.Name}}" onclick="selItem(this)">
     <span class="ic">{{if .Periodic}}⏱{{else}}📋{{end}}</span>{{.Name}}
   </div>
   {{end}}
+  </details>
 
   {{if .Enums}}
-  <div class="cfg-group cfg-group-hd">
-    <span>Перечисления</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('enum')" title="Добавить перечисление">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Перечисления</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="Добавить перечисление">+</span></summary>
   {{range .Enums}}
   <div class="cfg-item" data-id="en-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🔢</span>{{.Name}}
   </div>
   {{end}}
+  </details>
   {{end}}
 
   {{if .Constants}}
-  <div class="cfg-group">Константы</div>
+  <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
   </div>
   {{end}}
+  </details>
   {{end}}
 
   {{if .Reports}}
-  <div class="cfg-group">Отчёты</div>
+  <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📈</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
   </div>
   {{end}}
+  </details>
   {{end}}
 
   {{if .Modules}}
-  <div class="cfg-group">Общие модули</div>
+  <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
   {{range .Modules}}
   <div class="cfg-item" data-id="mod-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📦</span>{{.Name}}
   </div>
   {{end}}
+  </details>
   {{end}}
 
   {{if .Processors}}
-  <div class="cfg-group">Обработки</div>
+  <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
   {{range .Processors}}
   <div class="cfg-item" data-id="proc-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
   </div>
   {{end}}
+  </details>
   {{end}}
 
-  <div class="cfg-group cfg-group-hd">
-    <span>Печатные формы</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('printform')" title="Добавить печатную форму">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Печатные формы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="Добавить печатную форму">+</span></summary>
   {{range .PrintForms}}
   <div class="cfg-item" data-id="pf-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🖨</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}</span>
   </div>
   {{end}}
+  </details>
+
+  <div class="cfg-item" data-id="panel-backup" onclick="selItem(this)">
+    <span class="ic">💾</span>Бэкапы
+  </div>
 
   {{if .Subsystems}}
-  <div class="cfg-group cfg-group-hd">
-    <span>Подсистемы</span>
-    <span class="cfg-add-btn" onclick="cfgNewObj('subsystem')" title="Добавить подсистему">+</span>
-  </div>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Подсистемы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="Добавить подсистему">+</span></summary>
   {{range .Subsystems}}
   <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🗂</span>{{.Title}}
   </div>
   {{end}}
+  </details>
   {{end}}
 
   <div id="cfg-new-form" class="cfg-new-form" style="display:none">
@@ -1273,6 +1314,57 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
 
+  <div class="cfg-panel" id="panel-backup">
+    <h2 style="margin:0 0 4px;font-size:18px">💾 Бэкапы</h2>
+    <p style="font-size:12px;color:#64748b;margin:0 0 16px">Резервное копирование и восстановление базы данных</p>
+    {{if .BackupMessage}}<div class="success-box">{{.BackupMessage}}</div>{{end}}
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px">
+      <button class="btn-save" type="submit">Создать бэкап сейчас</button>
+    </form>
+    <h3 style="font-size:13px;margin:0 0 8px;color:#374151">Файлы бэкапов</h3>
+    <table class="fields-tbl">
+    <tr><th>Файл</th><th>Размер</th><th>Дата</th><th></th></tr>
+    {{range .BackupFiles}}
+    <tr>
+      <td style="font-size:12px">{{.Name}}</td>
+      <td style="font-size:12px;color:#64748b">{{.Size}}</td>
+      <td style="font-size:12px;color:#64748b">{{.Date}}</td>
+      <td style="white-space:nowrap">
+        <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
+        <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
+          <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="4" style="color:#94a3b8;font-size:12px;padding:8px">Нет бэкапов</td></tr>
+    {{end}}
+    </table>
+    <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Настройки автобэкапа</summary>
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/settings">
+      <div style="margin-bottom:8px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" name="backup_enabled" {{if .BackupSettings.Enabled}}checked{{end}}>
+          Включить автобэкап
+        </label>
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Расписание (cron)</label>
+        <input type="text" name="backup_schedule" value="{{.BackupSettings.Schedule}}" placeholder="0 2 * * *" style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Хранить последних</label>
+        <input type="number" name="backup_keep" value="{{.BackupSettings.KeepLast}}" placeholder="7" min="1" max="100" style="width:80px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Директория (пусто = по умолчанию)</label>
+        <input type="text" name="backup_dir" value="{{.BackupSettings.Directory}}" placeholder="" style="width:100%;max-width:400px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+      </div>
+      <button class="btn-save" type="submit">Сохранить настройки</button>
+    </form>
+    </details>
+  </div>
+
 </div>{{/* cfg-right */}}
 </div>{{/* cfg-split */}}
 {{end}}
@@ -1300,8 +1392,8 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{end}}
 
 {{if $e.Fields}}
-<div class="section-hd">Реквизиты</div>
-<table class="fields-tbl">
+<details open><summary class="section-hd" style="cursor:pointer">Реквизиты ({{len $e.Fields}})</summary>
+<table class="fields-tbl" id="ft-{{$e.Name}}">
 <tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
 {{range $i, $f := $e.Fields}}
 <input type="hidden" name="field.{{$i}}.name" value="{{$f.Name}}">
@@ -1325,12 +1417,14 @@ const cfgTabTree = `{{define "tab-tree"}}
 </tr>
 {{end}}
 </table>
+<button type="button" onclick="cfgAddField('ft-{{$e.Name}}','new_field',{{$e.Name}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить поле</button>
+</details>
 {{end}}
 
 {{range $j, $tp := $e.TableParts}}
-<div class="section-hd">📋 {{$tp.Name}} (табличная часть)</div>
+<details open><summary class="section-hd" style="cursor:pointer">📋 {{$tp.Name}} ({{len $tp.Fields}})</summary>
 <div class="tp-block">
-<table class="fields-tbl">
+<table class="fields-tbl" id="ft-{{$e.Name}}-tp{{$j}}">
 <tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
 {{range $i, $f := $tp.Fields}}
 <input type="hidden" name="tp.{{$tp.Name}}.field.{{$i}}.name" value="{{$f.Name}}">
@@ -1354,8 +1448,12 @@ const cfgTabTree = `{{define "tab-tree"}}
 </tr>
 {{end}}
 </table>
+<button type="button" onclick="cfgAddField('ft-{{$e.Name}}-tp{{$j}}','new_tp.{{$tp.Name}}.field',{{$e.Name}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить поле</button>
 </div>
+</details>
 {{end}}
+
+<button type="button" onclick="cfgAddTP(this,'{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить табличную часть</button>
 
 <div class="module-save-row" style="margin-bottom:14px">
   <button class="btn-save" type="submit">Сохранить типы полей</button>
@@ -1364,7 +1462,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 </form>
 
 {{/* Module section */}}
-<div class="section-hd">Модули</div>
+<details open><summary class="section-hd" style="cursor:pointer">Модули</summary>
 <div class="module-editor-wrap">
   <div class="module-tabs">
     <div class="module-tab active" onclick="modTab(this,'mp-obj-{{$e.Name}}')">📝 Модуль объекта</div>
@@ -1417,6 +1515,8 @@ const cfgTabTree = `{{define "tab-tree"}}
     <div class="module-empty" style="padding:12px 0">Модуль менеджера — в разработке.</div>
   </div>
 </div>
+
+</details>
 
 {{/* Linked print forms */}}
 {{if $e.LinkedPrintForms}}

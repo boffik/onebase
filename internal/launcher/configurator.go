@@ -175,7 +175,8 @@ type configuratorData struct {
 	FieldsSaved       bool
 	FieldsSavedEntity string
 	// platform version
-	PlatformVer string
+	PlatformVer    string
+	BackupMessage  string
 }
 
 // ── handlers ──────────────────────────────────────────────────────────────────
@@ -1054,6 +1055,25 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		}
 		fields = append(fields, saveField{Name: name, Type: typ})
 	}
+	// new fields added via "+ Добавить поле"
+	for i := 1; i <= 500; i++ {
+		name := strings.TrimSpace(r.FormValue(fmt.Sprintf("new_field.%d.name", i)))
+		if name == "" {
+			continue
+		}
+		typ := r.FormValue(fmt.Sprintf("new_field.%d.type", i))
+		ref := r.FormValue(fmt.Sprintf("new_field.%d.ref", i))
+		if typ == "reference" {
+			if ref == "" {
+				data := h.loadCfgData(r.Context(), b, "tree")
+				data.Error = fmt.Sprintf("Поле «%s»: выберите объект для ссылки", name)
+				renderCfg(w, data)
+				return
+			}
+			typ = "reference:" + ref
+		}
+		fields = append(fields, saveField{Name: name, Type: typ})
+	}
 
 	tpFields := make(map[string][]saveField)
 	for _, tpName := range tpNames {
@@ -1077,6 +1097,40 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			f = append(f, saveField{Name: name, Type: typ})
 		}
 		tpFields[tpName] = f
+	}
+	// new table parts added via "+ Добавить табличную часть"
+	for _, tpIdx := range r.Form["new_tp_name"] {
+		tpName := strings.TrimSpace(tpIdx)
+		if tpName == "" {
+			continue
+		}
+		tpFields[tpName] = nil
+	}
+	for ntp := 1; ntp <= 100; ntp++ {
+		tpKey := strings.TrimSpace(r.FormValue(fmt.Sprintf("new_tp.%d.idx", ntp)))
+		if tpKey == "" {
+			continue
+		}
+		var f []saveField
+		for i := 1; i <= 500; i++ {
+			name := strings.TrimSpace(r.FormValue(fmt.Sprintf("new_tp.%d.field.%d.name", ntp, i)))
+			if name == "" {
+				continue
+			}
+			typ := r.FormValue(fmt.Sprintf("new_tp.%d.field.%d.type", ntp, i))
+			ref := r.FormValue(fmt.Sprintf("new_tp.%d.field.%d.ref", ntp, i))
+			if typ == "reference" {
+				if ref == "" {
+					data := h.loadCfgData(r.Context(), b, "tree")
+					data.Error = fmt.Sprintf("Поле «%s.%s»: выберите объект для ссылки", tpKey, name)
+					renderCfg(w, data)
+					return
+				}
+				typ = "reference:" + ref
+			}
+			f = append(f, saveField{Name: name, Type: typ})
+		}
+		tpFields[tpKey] = f
 	}
 
 	var saveErr error
