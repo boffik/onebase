@@ -106,7 +106,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 .tp-hd{padding:6px 10px;font-size:12px;font-weight:600;color:#334;background:#f0f3f8}
 
 /* ── Module editor ───────────────────────────────────── */
-.code-wrap{position:relative;margin-top:8px;border-radius:6px;border:1px solid #334}
+.code-wrap{margin-top:8px}
 .edit-hint{font-size:11px;color:#94a3b8;margin-left:6px}
 .module-tabs{display:flex;gap:0;margin-top:16px;border-bottom:1px solid #d8dde8}
 .module-tab{padding:6px 14px;cursor:pointer;font-size:12px;color:#666;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -119,18 +119,16 @@ pre.os-code{
   background:#1e1e2e;color:#cdd6f4;
   font-family:'Cascadia Code','Fira Code','Consolas','Courier New',monospace;
   font-size:12px;line-height:1.6;padding:14px 16px;border-radius:6px;
-  overflow:auto;white-space:pre;min-height:100px;tab-size:2;margin:0;cursor:text
+  overflow:auto;white-space:pre;min-height:100px;tab-size:2;margin:0;cursor:pointer
 }
 .os-edit{
-  position:absolute;inset:0;width:100%;height:100%;
-  color:transparent;caret-color:#cdd6f4;
-  background:transparent;
+  width:100%;min-height:200px;
+  background:#1e1e2e;color:#cdd6f4;
   font-family:'Cascadia Code','Fira Code','Consolas','Courier New',monospace;
-  font-size:12px;line-height:1.6;padding:14px 16px;
-  border:none;resize:none;outline:none;tab-size:2;
-  white-space:pre;overflow:auto;z-index:1
+  font-size:12px;line-height:1.6;padding:14px 16px;border-radius:6px;
+  border:2px solid #3070d8;resize:vertical;outline:none;tab-size:2;
+  white-space:pre;display:none
 }
-.os-edit:focus{box-shadow:inset 0 0 0 2px #3070d840}
 .module-save-row{margin-top:8px;display:flex;align-items:center;gap:10px}
 .btn-save{background:#1a4a80;color:#fff;border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-size:12px}
 .btn-save:hover{background:#15396a}
@@ -330,9 +328,9 @@ function cfgToggleRef(sel, refId) {
 function startEdit(name) {
   var pre = document.getElementById('pre-'+name);
   var ta  = document.getElementById('ta-'+name);
-  if (ta.style.display === 'block') return; // already editing
+  if (ta.style.display !== 'none' && ta.style.display !== '') return;
   ta.value = pre.textContent;
-  pre.style.pointerEvents = 'none';
+  pre.style.display = 'none';
   ta.style.display = 'block';
   ta.focus();
 }
@@ -340,25 +338,8 @@ function endEdit(name) {
   var pre = document.getElementById('pre-'+name);
   var ta  = document.getElementById('ta-'+name);
   pre.innerHTML = hl(ta.value);
-  pre.style.pointerEvents = '';
+  pre.style.display = '';
   ta.style.display = 'none';
-}
-function hlLive(name) {
-  var pre = document.getElementById('pre-'+name);
-  var ta  = document.getElementById('ta-'+name);
-  pre.innerHTML = hl(ta.value);
-  // sync sizes: pre must be at least as tall as textarea needs
-  var h = ta.scrollHeight;
-  if (h > pre.offsetHeight) { pre.style.minHeight = h + 'px'; }
-  // sync scroll position
-  pre.scrollTop = ta.scrollTop;
-  pre.scrollLeft = ta.scrollLeft;
-}
-function syncScroll(name) {
-  var pre = document.getElementById('pre-'+name);
-  var ta  = document.getElementById('ta-'+name);
-  pre.scrollTop = ta.scrollTop;
-  pre.scrollLeft = ta.scrollLeft;
 }
 // ── Form field reorder ──────────────────────────────────────────
 function moveUp(btn){var row=btn.closest('.form-field-row'),prev=row.previousElementSibling;if(prev&&prev.classList.contains('form-field-row'))row.parentNode.insertBefore(row,prev);}
@@ -1078,7 +1059,7 @@ const cfgTabTree = `{{define "tab-tree"}}
              onclick="startEdit('rep-{{.Name}}')">{{if .Query}}{{.Query}}{{else}}ВЫБРАТЬ&#10;  *&#10;ИЗ РегистрНакопления.ИмяРегистра{{end}}</pre>
         <textarea class="os-edit" id="ta-rep-{{.Name}}" name="query"
                   style="display:none"
-                  oninput="hlLive('rep-{{.Name}}')" onscroll="syncScroll('rep-{{.Name}}')">{{.Query}}</textarea>
+                  onblur="endEdit('rep-{{.Name}}')">{{.Query}}</textarea>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">Сохранить</button>
@@ -1102,7 +1083,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           <pre class="os-code" id="pre-mod-{{$mn}}" onclick="startEdit('mod-{{$mn}}')">{{if .Source}}{{.Source}}{{else}}Функция ИмяФункции(Параметр)&#10;    Возврат Параметр&#10;КонецФункции{{end}}</pre>
           <textarea class="os-edit" id="ta-mod-{{$mn}}" name="source"
                     style="display:none"
-                    oninput="hlLive('mod-{{$mn}}')" onscroll="syncScroll('mod-{{$mn}}')">{{.Source}}</textarea>
+                    onblur="endEdit('mod-{{$mn}}')">{{.Source}}</textarea>
         </div>
       </div>
       <div class="module-save-row">
@@ -1151,7 +1132,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <pre class="os-code" id="pre-proc-{{$pn}}" onclick="startEdit('proc-{{$pn}}')">{{if .Source}}{{.Source}}{{else}}Процедура Выполнить()&#10;    Сообщить("Привет!")&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-proc-{{$pn}}" name="source"
                   style="display:none"
-                  oninput="hlLive('proc-{{$pn}}')" onscroll="syncScroll('proc-{{$pn}}')">{{.Source}}</textarea>
+                  onblur="endEdit('proc-{{$pn}}')">{{.Source}}</textarea>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">Сохранить</button>
@@ -1173,7 +1154,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <pre class="os-code" id="pre-pf-{{.Name}}" onclick="startEdit('pf-{{.Name}}')">{{.Source}}</pre>
         <textarea class="os-edit" id="ta-pf-{{.Name}}" name="source"
                   style="display:none"
-                  oninput="hlLive('pf-{{.Name}}')" onscroll="syncScroll('pf-{{.Name}}')">{{.Source}}</textarea>
+                  onblur="endEdit('pf-{{.Name}}')">{{.Source}}</textarea>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">Сохранить</button>
@@ -1375,7 +1356,7 @@ const cfgTabTree = `{{define "tab-tree"}}
              onclick="startEdit('{{$e.Name}}')">{{if $e.Source}}{{$e.Source}}{{else}}// Кликните для редактирования&#10;Процедура ПриЗаписи()&#10;&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-{{$e.Name}}" name="source"
                   style="display:none"
-                  oninput="hlLive('{{$e.Name}}')" onscroll="syncScroll('{{$e.Name}}')">{{$e.Source}}</textarea>
+                  onblur="endEdit('{{$e.Name}}')">{{$e.Source}}</textarea>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">Сохранить</button>
@@ -1396,7 +1377,7 @@ const cfgTabTree = `{{define "tab-tree"}}
              onclick="startEdit('post-{{$e.Name}}')">{{if $e.PostingSource}}{{$e.PostingSource}}{{else}}Процедура ОбработкаПроведения()&#10;  // Движения.ИмяРегистра.Очистить()&#10;  // Дв = Движения.ИмяРегистра.Добавить()&#10;  // Дв.ВидДвижения = "Приход"&#10;  // Дв.Номенклатура = Строка.Номенклатура&#10;  // Дв.Количество = Строка.Количество&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-post-{{$e.Name}}" name="source"
                   style="display:none"
-                  oninput="hlLive('post-{{$e.Name}}')" onscroll="syncScroll('post-{{$e.Name}}')">{{$e.PostingSource}}</textarea>
+                  onblur="endEdit('post-{{$e.Name}}')">{{$e.PostingSource}}</textarea>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">Сохранить</button>
