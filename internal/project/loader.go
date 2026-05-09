@@ -12,6 +12,7 @@ import (
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
@@ -120,6 +121,9 @@ func Load(dir string) (*Project, error) {
 		return nil, err
 	}
 	if err := p.loadDSL(); err != nil {
+		return nil, err
+	}
+	if err := p.loadFormModules(); err != nil {
 		return nil, err
 	}
 	if err := p.loadPrintForms(); err != nil {
@@ -378,6 +382,20 @@ func (p *Project) loadDSL() error {
 		} else {
 			p.Programs[entityName] = prog
 		}
+	}
+	return nil
+}
+
+func (p *Project) loadFormModules() error {
+	srcDir := filepath.Join(p.Dir, "src")
+	formLoader := loader.NewFormLoader()
+
+	for _, ent := range p.Entities {
+		forms, err := formLoader.LoadEntityForms(srcDir, ent.Name)
+		if err != nil {
+			return fmt.Errorf("load form modules for %s: %w", ent.Name, err)
+		}
+		ent.Forms = forms
 	}
 	return nil
 }

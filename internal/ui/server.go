@@ -137,6 +137,17 @@ func (s *Server) Mount(r chi.Router) {
 
 	// About
 	r.Get("/ui/about", s.about)
+
+	// Debugger / Console of Code
+	r.Get("/ui/debug/console", s.debugConsole)
+	r.Post("/debug/evaluate", s.debugEvaluate)
+	r.Post("/debug/start", s.debugStart)
+	r.Post("/debug/stop", s.debugStop)
+	r.Get("/debug/status", s.debugStatus)
+	r.Post("/debug/breakpoint", s.debugSetBreakpoint)
+	r.Delete("/debug/breakpoint/{file}/{line}", s.debugRemoveBreakpoint)
+	r.Post("/debug/continue", s.debugContinue)
+	r.Post("/debug/step", s.debugStep)
 }
 
 type navSection struct {

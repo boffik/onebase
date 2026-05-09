@@ -72,6 +72,7 @@ type Entity struct {
 	HierarchyKind string            // "folders_and_items" (default) | "items_only"
 	ListForm      []string          // visible fields in list form (nil = all)
 	ItemForm      []string          // visible fields in item form (nil = all)
+	Forms         []*FormModule     // form modules (object form, list form, custom forms)
 }
 
 type Register struct {

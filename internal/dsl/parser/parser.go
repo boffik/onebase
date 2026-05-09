@@ -295,6 +295,11 @@ func (p *Parser) parseExprOrAssign() (ast.Stmt, error) {
 	return &ast.ExprStmt{X: left}, nil
 }
 
+// ParseExpr parses a standalone expression. Exported for the debugger console.
+func (p *Parser) ParseExpr() (ast.Expr, error) {
+	return p.parseExpr()
+}
+
 // parseExpr parses a full expression (conditions, right-hand of assignments).
 // Precedence (low → high): OR → AND → NOT → comparison → additive → term → primary
 func (p *Parser) parseExpr() (ast.Expr, error) {

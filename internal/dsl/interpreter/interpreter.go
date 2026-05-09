@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/dsl/token"
 )
 
@@ -18,12 +20,30 @@ type dslReturn struct{ val any }
 // userError — пользовательская ошибка через Error(), перехватывается Попыткой
 type userError struct{ Msg string }
 
+// DebugHook is the interface the interpreter calls for debugging.
+// When nil on the Interpreter, there is zero overhead.
+// Implemented by debugger.ActiveSession.
+type DebugHook interface {
+	HookCheckBreakpoint(file string, line int) bool
+	HookShouldStep(stackDepth int) bool
+	HookOnPause(file string, line int, vars map[string]any, evalFn func(string) (any, error))
+	HookPushFrame(procedure string, line int)
+	HookPopFrame()
+}
 
 type Interpreter struct {
 	LookupProc func(name string) *ast.ProcedureDecl
+	DebugHook  DebugHook // nil = no debugging
 }
 
 func New() *Interpreter { return &Interpreter{} }
+
+// EvalExpr evaluates a parsed AST expression and returns the result.
+// Public for the debugger console and debug handlers.
+func (i *Interpreter) EvalExpr(expr ast.Expr, this This) any {
+	e := newEnv(this)
+	return i.evalExpr(expr, e)
+}
 
 // RunWithResult executes a function procedure and captures its return value.
 func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *any, extraVars ...map[string]any) (err error) {
@@ -82,8 +102,49 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 
 func (i *Interpreter) execBlock(stmts []ast.Stmt, e *env) {
 	for _, s := range stmts {
+		if i.DebugHook != nil {
+			i.beforeStmt(s, e)
+		}
 		i.execStmt(s, e)
 	}
+}
+
+func (i *Interpreter) beforeStmt(s ast.Stmt, e *env) {
+	loc := getLocation(s)
+	if loc == nil {
+		return
+	}
+
+	hitBP := i.DebugHook.HookCheckBreakpoint(loc.File, loc.Line)
+	shouldStep := i.DebugHook.HookShouldStep(stackDepth(e))
+	if !hitBP && !shouldStep {
+		return
+	}
+
+	vars := e.GetAllVariables()
+	evalFn := func(expr string) (any, error) {
+		return i.evaluateExprString(expr, e)
+	}
+	i.DebugHook.HookOnPause(loc.File, loc.Line, vars, evalFn)
+}
+
+func stackDepth(e *env) int {
+	d := 0
+	for e != nil {
+		d++
+		e = e.parent
+	}
+	return d
+}
+
+func (i *Interpreter) evaluateExprString(expr string, e *env) (any, error) {
+	l := lexer.New(expr, "<console>")
+	p := parser.New(l)
+	parsed, err := p.ParseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return i.evalExpr(parsed, e), nil
 }
 
 func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
@@ -355,6 +416,10 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 }
 
 func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args []any) (retVal any) {
+	if i.DebugHook != nil {
+		i.DebugHook.HookPushFrame(proc.Name.Literal, 0)
+		defer i.DebugHook.HookPopFrame()
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			switch s := r.(type) {
