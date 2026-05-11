@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -17,9 +18,9 @@ import (
 // It writes the file to outDir and returns the full path of the created file.
 // Requires pg_dump in PATH.
 func Dump(ctx context.Context, connStr, outDir string) (string, error) {
-	pgDump, err := exec.LookPath("pg_dump")
+	pgDump, err := findPgTool("pg_dump")
 	if err != nil {
-		return "", fmt.Errorf("pg_dump не найден; установите postgresql-client")
+		return "", err
 	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -69,9 +70,9 @@ func Dump(ctx context.Context, connStr, outDir string) (string, error) {
 // Restore restores a gzipped plain-SQL backup created by Dump into the database.
 // Requires psql in PATH.
 func Restore(ctx context.Context, connStr, filePath string) error {
-	psql, err := exec.LookPath("psql")
+	psql, err := findPgTool("psql")
 	if err != nil {
-		return fmt.Errorf("psql не найден; установите postgresql-client")
+		return err
 	}
 
 	f, err := os.Open(filePath)
@@ -126,4 +127,34 @@ func sanitize(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// findPgTool locates a PostgreSQL tool (pg_dump, psql) by first checking PATH,
+// then searching common Windows install directories.
+func findPgTool(name string) (string, error) {
+	// Try PATH first
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	if runtime.GOOS == "windows" {
+		// Search standard PostgreSQL install dirs on Windows
+		pgDirs := []string{
+			`C:\Program Files\PostgreSQL`,
+			`C:\Program Files (x86)\PostgreSQL`,
+		}
+		for _, base := range pgDirs {
+			entries, err := os.ReadDir(base)
+			if err != nil {
+				continue
+			}
+			// Iterate version dirs in reverse (newest first)
+			for i := len(entries) - 1; i >= 0; i-- {
+				binPath := filepath.Join(base, entries[i].Name(), "bin", name+".exe")
+				if _, err := os.Stat(binPath); err == nil {
+					return binPath, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("%s не найден; установите PostgreSQL и добавьте в PATH", name)
 }

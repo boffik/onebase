@@ -37,6 +37,8 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	r.Get("/auth/bootstrap", authH.Bootstrap)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
+	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
+
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authRepo.Middleware)
@@ -55,13 +57,15 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		r.Delete("/documents/{entity}/{id}", h.deleteObject(metadata.KindDocument))
 
 		// Web UI
-		uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
 		uiSrv.Mount(r)
 
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/ui", http.StatusFound)
 		})
 	})
+
+	// Debug API — outside auth so configurator (different port) can reach it
+	uiSrv.MountDebug(r)
 
 	addr := fmt.Sprintf(":%d", port)
 	return &Server{handler: r, srv: &http.Server{Addr: addr, Handler: r}}

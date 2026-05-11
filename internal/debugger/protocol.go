@@ -1,6 +1,7 @@
 package debugger
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -13,6 +14,10 @@ const (
 	StatePaused
 	StateStopped
 )
+
+func (s DebugState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
 
 func (s DebugState) String() string {
 	switch s {
@@ -44,6 +49,10 @@ type Breakpoint struct {
 	Condition string    `json:"condition,omitempty"`
 	HitCount  int       `json:"hit_count"`
 	CreatedAt time.Time `json:"created_at"`
+
+	// Diagnostic fields (not part of the breakpoint data)
+	MapLen   int `json:"map_len"`
+	EntryLen int `json:"entry_len"`
 }
 
 // StackFrame represents a frame in the call stack
@@ -79,6 +88,13 @@ type StatusSnapshot struct {
 	Stack       []StackFrame    `json:"stack,omitempty"`
 	Breakpoints []Breakpoint    `json:"breakpoints,omitempty"`
 	Error       string          `json:"error,omitempty"`
+
+	// Diagnostics — filled when debug is enabled
+	DiagLastFile string   `json:"diag_last_file,omitempty"`
+	DiagLastLine int      `json:"diag_last_line,omitempty"`
+	DiagBPKeys   []string `json:"diag_bp_keys"`
+	DiagBPCount  int      `json:"diag_bp_count"`
+	DiagMessages []string `json:"diag_messages,omitempty"`
 }
 
 // VarEntry represents a single variable in the debug view

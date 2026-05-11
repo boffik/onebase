@@ -46,7 +46,7 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 			return "ft-str"
 		}
 	},
-}).Parse(cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgFoot))
+}).Parse(cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgFoot))
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -198,6 +198,86 @@ pre.convert-out{background:#f5f7fa;border:1px solid #e2e6ed;padding:12px;border-
 .qb-grid{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
 .qb-fl{max-height:220px;overflow-y:auto}
 .qb-row{display:flex;gap:4px;margin-bottom:5px;align-items:center;flex-wrap:wrap}
+
+/* ── Monaco editor ─────────────────────────────────── */
+.monaco-target{width:100%;height:300px;border-radius:6px;overflow:hidden}
+.code-wrap{position:relative}
+
+/* ── Debug panel ─────────────────────────────────── */
+.run-enterprise-btn{width:28px;height:28px;border-radius:50%;background:#f5c518;border:2px solid #d4a800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:background .2s,transform .1s;flex-shrink:0}
+.run-enterprise-btn:hover{background:#ffe44d;transform:scale(1.08)}
+.run-enterprise-btn:active{transform:scale(0.95)}
+.run-enterprise-btn svg{width:14px;height:14px;margin-left:2px}
+.dbg-topbar-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;transition:background .2s}
+.dbg-topbar-btn:hover{background:rgba(255,255,255,.22)}
+.dbg-topbar-btn.dbg-on{background:#16a34a;border-color:#22c55e}
+.dbg-topbar-btn.dbg-paused{background:#d97706;border-color:#f59e0b}
+
+.cfg-menu-wrap{position:relative}
+.cfg-menu-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px}
+.cfg-menu-btn:hover{background:rgba(255,255,255,.25)}
+.cfg-menu-dropdown{display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #d0d7e3;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:200px;z-index:1000;overflow:hidden;margin-top:2px}
+.cfg-menu-dropdown.open{display:block}
+.cfg-menu-dropdown a{display:block;padding:8px 14px;color:#333;text-decoration:none;font-size:12px;border-bottom:1px solid #f0f2f5}
+.cfg-menu-dropdown a:last-child{border-bottom:none}
+.cfg-menu-dropdown a:hover{background:#f0f4ff;color:#1a4a80}
+
+.dbg-panel{width:320px;flex-shrink:0;background:#fff;border-left:1px solid #d8dde8;display:flex;flex-direction:column;overflow:hidden}
+.dbg-status{padding:8px 12px;font-size:12px;font-weight:600;border-bottom:1px solid #eef0f5;display:flex;align-items:center;gap:6px}
+.dbg-status .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dbg-status .dot.running{background:#16a34a}
+.dbg-status .dot.paused{background:#d97706}
+.dbg-status .dot.stopped{background:#9ca3af}
+.dbg-status .dot.disabled{background:#d1d5db}
+
+.dbg-controls{padding:6px 10px;display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #eef0f5}
+.dbg-controls button{background:#f1f5f9;border:1px solid #d0d7e3;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;color:#334}
+.dbg-controls button:hover{background:#e2e8f0}
+
+.dbg-tabs{display:flex;border-bottom:1px solid #eef0f5;flex-shrink:0}
+.dbg-tab{flex:1;padding:6px 4px;text-align:center;font-size:11px;cursor:pointer;color:#888;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none}
+.dbg-tab:hover{color:#1a4a80;background:#f8fafc}
+.dbg-tab.active{color:#1a4a80;border-bottom-color:#1a4a80;font-weight:600}
+
+.dbg-content{flex:1;overflow-y:auto;padding:8px 10px;font-size:12px;color:#334}
+.dbg-var-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f7f8fb}
+.dbg-var-row:last-child{border-bottom:none}
+.dbg-var-name{color:#1a4a80;font-weight:500;font-family:'Cascadia Code','Fira Code',monospace;font-size:11px}
+.dbg-var-val{color:#334;font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dbg-var-type{color:#94a3b8;font-size:10px;margin-left:4px}
+.dbg-stack-row{padding:4px 0;border-bottom:1px solid #f7f8fb;font-size:11px}
+.dbg-stack-row .proc{color:#1a4a80;font-weight:600}
+.dbg-stack-row .loc{color:#64748b;font-size:10px}
+.dbg-bp-row{display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #f7f8fb;font-size:11px}
+.dbg-bp-row .bp-file{color:#1a4a80;font-weight:500}
+.dbg-bp-row .bp-line{color:#64748b}
+
+.dbg-console-input{display:flex;gap:4px;padding:6px 10px;border-top:1px solid #eef0f5;flex-shrink:0}
+.dbg-console-input input{flex:1;padding:4px 8px;border:1px solid #d0d7e3;border-radius:4px;font-size:12px;font-family:'Cascadia Code','Fira Code',monospace}
+.dbg-console-input input:focus{border-color:#1a4a80;outline:none}
+.dbg-console-input button{background:#1a4a80;color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer}
+.dbg-console-out{flex:1;overflow-y:auto;padding:6px 10px;font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;line-height:1.5}
+.dbg-console-line{padding:1px 0}
+.dbg-console-line.dbg-err{color:#ef4444}
+.dbg-console-line.dbg-ok{color:#a3e635}
+.dbg-empty{color:#94a3b8;font-style:italic;padding:10px 0;text-align:center;font-size:12px}
+
+/* ── Debug Monaco decorations ────────────────────── */
+.dbg-bp-glyph{background:#ef4444;border-radius:50%;margin-left:3px;width:12px!important;height:12px!important}
+.dbg-current-line-bg{background:rgba(217,119,6,.2)!important;border-left:3px solid #d97706}
+.dbg-current-line-glyph{background:#d97706;border-radius:50%;margin-left:3px;width:12px!important;height:12px!important}
+
+/* ── Admin modal overlay ────────────────────── */
+.cfg-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:none;align-items:center;justify-content:center;padding:24px}
+.cfg-modal-overlay.active{display:flex}
+.cfg-modal-box{background:#fff;border-radius:10px;width:100%;max-width:900px;max-height:calc(100vh - 48px);display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+.cfg-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #e2e8f0;background:#f8fafc;border-radius:10px 10px 0 0;flex-shrink:0}
+.cfg-modal-hd h3{margin:0;font-size:14px;color:#1e293b}
+.cfg-modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;padding:0 4px;line-height:1}
+.cfg-modal-close:hover{color:#1e293b}
+.cfg-modal-body{flex:1;overflow:hidden;position:relative}
+.cfg-modal-body iframe{width:100%;height:100%;border:none}
+.cfg-modal-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px}
 </style>
 {{end}}`
 
@@ -207,26 +287,100 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js" crossorigin="anonymous" onerror="window._monacoLoadErr='loader.js failed'"></script>
 <title>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
 {{template "css" .}}
 </head>
 <body>
 <div class="topbar">
+  <div class="cfg-menu-wrap">
+    <button class="cfg-menu-btn" onclick="cfgMenuToggle()">Меню &#9662;</button>
+    <div class="cfg-menu-dropdown" id="cfg-menu">
+      <a href="#" onclick="cfgMenuOpen('/ui/about');return false">О программе</a>
+      <a href="#" onclick="cfgMenuOpen('/ui/admin/users');return false">Пользователи</a>
+      <a href="#" onclick="cfgMenuOpen('/ui/admin/sessions');return false">Активные пользователи</a>
+      <a href="#" onclick="cfgMenuOpen('/ui/admin/audit');return false">Журнал регистрации</a>
+    </div>
+  </div>
   <a href="/?sel={{.Base.ID}}">← Лаунчер</a>
   <h1>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</h1>
   <span style="font-size:11px;color:#7aa8d8">{{.Base.DB}} · :{{.Base.Port}} · платформа {{.PlatformVer}}</span>
+  <button onclick="launchEnterprise()" title="Запустить предприятие" class="run-enterprise-btn"><svg viewBox="0 0 24 24" fill="#333"><polygon points="6,3 20,12 6,21"/></svg></button>
+  <button id="dbg-toggle" class="dbg-topbar-btn" onclick="dbgToggle()">&#128027; Отладка: ВЫКЛ</button>
+  <span id="monaco-status" style="font-size:9px;color:#94a3b8">Monaco:...</span>
 </div>
 <div class="tabs">
   <a class="tab {{if eq .Tab "tree"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=tree">🌳 Дерево</a>
   <a class="tab {{if eq .Tab "convert"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=convert">🔄 Конвертер 1С</a>
   <a class="tab {{if eq .Tab "files"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=files">📁 Файлы</a>
+  <a class="tab {{if eq .Tab "backup"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=backup">💾 Бэкапы</a>
 </div>
 <div class="cfg-body">
 {{if .Error}}<div class="err-box">{{.Error}}</div>{{end}}
 {{if .FieldsSaved}}<div class="success-box">✓ Типы полей для «{{.FieldsSavedEntity}}» сохранены. Перезапустите базу, чтобы изменения вступили в силу.</div>{{end}}
+<div id="dbg-wrapper" style="display:flex;flex:1;overflow:hidden">
 {{end}}`
 
 const cfgFoot = `{{define "cfg-foot"}}
+<!-- debug panel (right sidebar) -->
+<div class="dbg-panel" id="dbg-panel" style="display:none">
+  <div class="dbg-status" id="dbg-status"><span class="dot disabled"></span> Отладка: ВЫКЛ</div>
+  <div class="dbg-controls" id="dbg-controls" style="display:none">
+    <button onclick="dbgContinue()">&#9654; Продолжить</button>
+    <button onclick="dbgStep('into')">&#11015; Шаг с заходом</button>
+    <button onclick="dbgStep('over')">&#10145; Шаг с обходом</button>
+    <button onclick="dbgStep('out')">&#11014; Шаг с выходом</button>
+    <button onclick="dbgStop()">&#9209; Стоп</button>
+  </div>
+  <div class="dbg-tabs">
+    <button class="dbg-tab active" onclick="dbgTab('vars')">Переменные</button>
+    <button class="dbg-tab" onclick="dbgTab('watch')">Табло v4</button>
+    <button class="dbg-tab" onclick="dbgTab('bp')">Точки ост.</button>
+    <button class="dbg-tab" onclick="dbgTab('stack')">Стек</button>
+    <button class="dbg-tab" onclick="dbgTab('console')">Консоль</button>
+  </div>
+  <div id="dbg-vars" class="dbg-content"><div class="dbg-empty">Включите отладку для просмотра переменных</div></div>
+  <div id="dbg-watch" class="dbg-content" style="display:none;flex-direction:column;padding:0">
+    <div style="padding:6px 10px;border-bottom:1px solid #eef0f5;display:flex;gap:4px;flex-shrink:0">
+      <input id="dbg-watch-add" type="text" placeholder="Выражение..." onkeydown="if(event.key==='Enter')dbgWatchAdd()" style="flex:1;min-width:0;padding:3px 8px;border:1px solid #d0d7e3;border-radius:4px;font-size:12px;font-family:'Cascadia Code','Fira Code',monospace">
+      <button onclick="dbgWatchAdd()" style="background:#1a4a80;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer">+</button>
+    </div>
+    <div id="dbg-watch-debug" style="padding:2px 10px;font-size:9px;color:#f97316;background:#fffbeb;flex-shrink:0"></div>
+    <div id="dbg-watch-list" style="flex:1;overflow-y:auto;padding:4px 10px;min-height:40px"></div>
+  </div>
+  <div id="dbg-bp" class="dbg-content" style="display:none">
+    <div style="padding:6px 0;border-bottom:1px solid #eef;display:flex;gap:4px;flex-shrink:0">
+      <input id="dbg-bp-file" type="text" placeholder="Файл (post-...)" style="flex:2;min-width:0;padding:3px 6px;border:1px solid #d0d7e3;border-radius:4px;font-size:11px">
+      <input id="dbg-bp-line" type="number" placeholder="Стр" style="width:50px;padding:3px 6px;border:1px solid #d0d7e3;border-radius:4px;font-size:11px">
+      <button onclick="dbgManualBP()" style="background:#1a4a80;color:#fff;border:none;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer">+</button>
+    </div>
+    <div id="dbg-bp-list"><div class="dbg-empty">Нет точек останова</div></div>
+  </div>
+  <div id="dbg-stack" class="dbg-content" style="display:none"><div class="dbg-empty">Стек вызовов пуст</div></div>
+  <div id="dbg-console" class="dbg-content" style="display:none;flex-direction:column;padding:0">
+    <div id="dbg-diag" style="background:#1e1e2e;color:#a5b4fc;padding:6px 10px;font-size:10px;font-family:'Cascadia Code','Fira Code',monospace;border-bottom:1px solid #333;max-height:120px;overflow-y:auto"></div>
+    <div id="dbg-console-out" class="dbg-console-out" style="background:#1e1e2e;color:#cdd6f4"></div>
+    <div class="dbg-console-input">
+      <input id="dbg-expr" type="text" placeholder="Выражение DSL..." onkeydown="if(event.key==='Enter')dbgEval()">
+      <button onclick="dbgEval()">Выполнить</button>
+    </div>
+  </div>
+</div>
+</div>{{/* dbg-wrapper */}}
+</div>{{/* cfg-body */}}
+
+<!-- Admin modal -->
+<div class="cfg-modal-overlay" id="cfg-modal" onclick="if(event.target===this)cfgModalClose()">
+  <div class="cfg-modal-box">
+    <div class="cfg-modal-hd">
+      <h3 id="cfg-modal-title">—</h3>
+      <button class="cfg-modal-close" onclick="cfgModalClose()">&times;</button>
+    </div>
+    <div class="cfg-modal-body">
+      <div class="cfg-modal-loading" id="cfg-modal-loading">Загрузка...</div>
+      <iframe id="cfg-modal-iframe" onload="document.getElementById('cfg-modal-loading').style.display='none'"></iframe>
+    </div>
+  </div>
 </div>
 
 <!-- Query builder modal -->
@@ -373,22 +527,90 @@ function cfgAddTP(btn, entityName) {
   btn.parentNode.insertBefore(wrapper, btn);
   cfgAddField(tblId, 'new_tp.'+_cfgNewTpIdx+'.field', entityName);
 }
-// ── Click-to-edit module ───────────────────────────────────────
+// ── Click-to-edit module (Monaco with textarea fallback) ─────────
+var monacoEditors = {};
+window._monacoReady = false;
+window.onerror = function(msg, url, ln, col, err) {
+  var d = document.getElementById('dbg-diag');
+  if (d) d.innerHTML = '<div style="color:#ef4444;font-size:10px;background:#1e1e2e;padding:4px">JS ERROR: ' + msg + ' (line ' + ln + ')</div>' + d.innerHTML;
+  return false;
+};
+
 function startEdit(name) {
   var pre = document.getElementById('pre-'+name);
   var ta  = document.getElementById('ta-'+name);
-  if (ta.style.display !== 'none' && ta.style.display !== '') return;
-  ta.value = pre.textContent;
-  pre.style.display = 'none';
-  ta.style.display = 'block';
-  ta.focus();
+  if (!pre || !ta) return;
+  if (window._monacoReady && typeof monaco !== 'undefined') {
+    // Monaco path: create editor inside the code-wrap container
+    var wrap = pre.parentNode;
+    if (!wrap || wrap.querySelector('.monaco-target')) return; // already active
+    var lang = 'onebase-dsl';
+    if (name.indexOf('rep-') === 0) lang = 'onebase-query';
+    if (name.indexOf('pf-') === 0) lang = 'yaml';
+    ta.value = pre.textContent;
+    pre.style.display = 'none';
+    var div = document.createElement('div');
+    div.className = 'monaco-target';
+    div._editorId = name;
+    wrap.appendChild(div);
+    var langId = (lang === 'yaml') ? 'yaml' : 'onebase-dsl';
+    var editor = monaco.editor.create(div, {
+      value: ta.value,
+      language: langId,
+      theme: 'onebase-dark',
+      minimap: { enabled: false },
+      fontSize: 12,
+      lineNumbers: 'on',
+      scrollBeyondLastLine: false,
+      wordWrap: 'on',
+      tabSize: 2,
+      glyphMargin: true,
+      automaticLayout: true
+    });
+    editor._fileId = name;
+    monacoEditors[name] = editor;
+    // Gutter click for breakpoint toggle — setTimeout decouples from Monaco internals
+    editor.onMouseDown(function(e) {
+      try {
+        var tgt = e.target;
+        var isGutter = tgt && (tgt.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
+          || tgt.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
+          || tgt.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS);
+        if (!isGutter) return;
+        var line = tgt.position ? tgt.position.lineNumber : (tgt.range ? tgt.range.startLineNumber : 0);
+        if (line) {
+          var n = name, l = line;
+          setTimeout(function(){ dbgToggleBreakpoint(n, l); }, 0);
+        }
+      } catch(err) { /* ignore Monaco internal errors */ }
+    });
+  } else {
+    // Fallback: original textarea pattern
+    if (ta.style.display !== 'none' && ta.style.display !== '') return;
+    ta.value = pre.textContent;
+    pre.style.display = 'none';
+    ta.style.display = 'block';
+    ta.focus();
+  }
 }
+
 function endEdit(name) {
   var pre = document.getElementById('pre-'+name);
   var ta  = document.getElementById('ta-'+name);
-  pre.innerHTML = hl(ta.value);
-  pre.style.display = '';
-  ta.style.display = 'none';
+  // Sync Monaco content back to textarea if present
+  if (monacoEditors[name]) {
+    ta.value = monacoEditors[name].getValue();
+    monacoEditors[name].dispose();
+    delete monacoEditors[name];
+    var wrap = pre.parentNode;
+    var mDiv = wrap.querySelector('.monaco-target');
+    if (mDiv) mDiv.remove();
+  }
+  if (pre && ta) {
+    pre.innerHTML = hl(ta.value);
+    pre.style.display = '';
+    ta.style.display = 'none';
+  }
 }
 // ── Form field reorder ──────────────────────────────────────────
 function moveUp(btn){var row=btn.closest('.form-field-row'),prev=row.previousElementSibling;if(prev&&prev.classList.contains('form-field-row'))row.parentNode.insertBefore(row,prev);}
@@ -429,6 +651,9 @@ function modTab(el, panelId) {
   document.getElementById(panelId).classList.add('active');
 }
 
+// ── HTML escape (shared) ────────────────────────────────────────
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
 // ── Syntax highlight ───────────────────────────────────────────
 (function(){
 var KW=['Процедура','КонецПроцедуры','Функция','КонецФункции',
@@ -443,8 +668,6 @@ var KW=['Процедура','КонецПроцедуры','Функция','К
   'And','Or','Not','Var'];
 var FN=['Error','Ошибка','Сообщить','Формат','ФорматСтроки','СтрЗаменить'];
 var SP=['this','Движения','Параметры'];
-
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function hl(code){
   var r='',i=0,n=code.length;
@@ -479,6 +702,119 @@ document.querySelectorAll('pre.os-code').forEach(function(el){
 });
 })();
 
+// ── Monaco Editor initialization ────────────────────────────────
+(function(){
+if (typeof require === 'undefined') { window._monacoReady = false; document.getElementById('monaco-status').textContent='Monaco:FAIL(no require)'; return; }
+require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs' }});
+require(['vs/editor/editor.main'], function() {
+  // Register OneBase DSL language
+  monaco.languages.register({ id: 'onebase-dsl' });
+  monaco.languages.setMonarchTokensProvider('onebase-dsl', {
+    keywords: [
+      'Процедура','КонецПроцедуры','Функция','КонецФункции',
+      'Если','Тогда','ИначеЕсли','Иначе','КонецЕсли',
+      'Для','Каждого','Из','Цикл','КонецЦикла','Пока','КонецПока',
+      'Возврат','Прервать','Продолжить','Истина','Ложь','Неопределено','Новый',
+      'И','ИЛИ','НЕ','Не','Перем',
+      'Procedure','EndProcedure','Function','EndFunction',
+      'If','Then','ElseIf','Else','EndIf',
+      'For','Each','In','Do','EndDo','While','EndWhile',
+      'Return','Break','Continue','True','False','Undefined','New',
+      'And','Or','Not','Var'
+    ],
+    builtins: [
+      'Error','Ошибка','Сообщить','Формат','ФорматСтроки','СтрЗаменить',
+      'Запрос','Результат','Выполнить','УстановитьПараметр','Текст',
+      'ВЫБРАТЬ','ИЗ','ГДЕ','УПОРЯДОЧИТЬ','ПО','СГРУППИРОВАТЬ',
+      'ЛЕВОЕ','ПРАВОЕ','ВНУТРЕННЕЕ','ПОЛНОЕ','СОЕДИНЕНИЕ',
+      'КАК','ВОЗР','УБЫВ','СУММА','КОЛИЧЕСТВО','МИНИМУМ','МАКСИМУМ','СРЕДНЕЕ'
+    ],
+    special: ['this','Движения','Параметры'],
+    tokenizer: {
+      root: [
+        [/#.*$/, 'comment'],
+        ["\/\/.*$", 'comment'],
+        [/"/, 'string', '@string'],
+        [/\d+(\.\d+)?/, 'number'],
+        [/[a-zA-Z_А-яЁё][a-zA-Z0-9_А-яЁё]*/, {
+          cases: {
+            '@keywords': 'keyword',
+            '@builtins': 'type',
+            '@special': 'variable.predefined',
+            '@default': 'identifier'
+          }
+        }]
+      ],
+      string: [
+        [/[^"]+/, 'string'],
+        [/"/, 'string', '@pop']
+      ]
+    }
+  });
+  // Auto-completion
+  monaco.languages.registerCompletionItemProvider('onebase-dsl', {
+    provideCompletionItems: function(model, position) {
+      var word = model.getWordUntilPosition(position);
+      var range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
+      var kwSuggestions = [
+        'Процедура','КонецПроцедуры','Функция','КонецФункции',
+        'Если','Тогда','ИначеЕсли','Иначе','КонецЕсли',
+        'Для','Каждого','Из','Цикл','КонецЦикла','Пока','КонецПока',
+        'Возврат','Новый','Истина','Ложь','Неопределено',
+        'Procedure','EndProcedure','Function','EndFunction'
+      ].map(function(k) {
+        return { label: k, kind: monaco.languages.CompletionItemKind.Keyword, insertText: k, range: range };
+      });
+      return { suggestions: kwSuggestions };
+    }
+  });
+  // Dark theme matching existing #1e1e2e style
+  monaco.editor.defineTheme('onebase-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'keyword', foreground: 'c792ea', fontStyle: 'bold' },
+      { token: 'type', foreground: '82aaff' },
+      { token: 'variable.predefined', foreground: 'ff5370', fontStyle: 'bold' },
+      { token: 'string', foreground: 'c3e88d' },
+      { token: 'number', foreground: 'f78c6c' },
+      { token: 'comment', foreground: '546e7a', fontStyle: 'italic' }
+    ],
+    colors: {
+      'editor.background': '#1e1e2e',
+      'editor.foreground': '#cdd6f4',
+      'editor.lineHighlightBackground': '#2a2a3e',
+      'editorLineNumber.foreground': '#6c7086',
+      'editorLineNumber.activeForeground': '#cdd6f4',
+      'editor.selectionBackground': '#45475a',
+      'editorCursor.foreground': '#f5e0dc'
+    }
+  });
+  window._monacoReady = true;
+
+  // Auto-open Monaco for visible code blocks
+  document.querySelectorAll('pre.os-code').forEach(function(pre) {
+    var name = pre.id.replace('pre-','');
+    if (name) startEdit(name);
+  });
+  var ms = document.getElementById('monaco-status');
+  if (ms) { ms.textContent = 'Monaco:OK(' + Object.keys(monacoEditors).length + ' ed)'; ms.style.color = '#16a34a'; }
+});
+})();
+
+// ── Form submit: sync Monaco -> textarea ─────────────────────────
+document.querySelectorAll('form').forEach(function(form) {
+  form.addEventListener('submit', function() {
+    form.querySelectorAll('.code-wrap').forEach(function(wrap) {
+      var editorDiv = wrap.querySelector('.monaco-target');
+      if (editorDiv && editorDiv._editorId && monacoEditors[editorDiv._editorId]) {
+        var ta = wrap.querySelector('textarea.os-edit');
+        if (ta) ta.value = monacoEditors[editorDiv._editorId].getValue();
+      }
+    });
+  });
+});
+
 // ── Report params ──────────────────────────────────────────────
 function repReindex(tableId) {
   var tbl = document.getElementById(tableId);
@@ -512,14 +848,22 @@ function repAddParam(tableId) {
 
 // ── Editor context menu ────────────────────────────────────
 (function(){
-var _cTA=null,_cM=null;
+var _cTA=null,_cMonacoName=null,_cM=null;
 document.addEventListener('contextmenu',function(e){
   var ta=e.target.closest('.os-edit');
   var pre=e.target.closest('pre.os-code');
-  if(!ta&&!pre){hideC();return;}
+  var mon=e.target.closest('.monaco-target');
+  if(!ta&&!pre&&!mon){hideC();return;}
   e.preventDefault();
-  if(pre&&!ta){var nm=pre.id.replace('pre-','');startEdit(nm);ta=document.getElementById('ta-'+nm);}
-  _cTA=ta;showC(e.clientX,e.clientY);
+  _cMonacoName=null;
+  if(mon){
+    _cMonacoName=mon._editorId||null;
+    _cTA=null;
+  } else {
+    if(pre&&!ta){var nm=pre.id.replace('pre-','');startEdit(nm);ta=document.getElementById('ta-'+nm);}
+    _cTA=ta;
+  }
+  showC(e.clientX,e.clientY);
 });
 function showC(x,y){
   if(!_cM){_cM=document.createElement('div');_cM.className='cfg-ctx-menu';
@@ -533,13 +877,16 @@ function hideC(){if(_cM)_cM.style.display='none';}
 document.addEventListener('click',hideC);
 window.cfgOpenQB=function(){
   hideC();
-  if(!_cTA)return;
-  openQBModal(_cTA);
+  if(_cMonacoName && monacoEditors[_cMonacoName]){
+    openQBModalMonaco(_cMonacoName);
+  } else if(_cTA){
+    openQBModal(_cTA);
+  }
 };
 })();
 
 // ── Inline query builder ──────────────────────────────────
-var _mqbTA=null,_mqbSchema=null,_mqbSrcMap={};
+var _mqbTA=null,_mqbMonacoId=null,_mqbSchema=null,_mqbSrcMap={};
 var _mqbCurFields=[],_mqbSel={},_mqbJoins=[];
 (function(){
 _mqbSchema={{.QBSchema}};
@@ -557,13 +904,21 @@ document.getElementById('qb-close').onclick=function(){document.getElementById('
 document.getElementById('qb-insert').onclick=function(){
   var mode=document.getElementById('qb-mode').value;
   var txt=mode==='query'?document.getElementById('mqb-qry').value:document.getElementById('mqb-dsl').value;
-  if(!txt||_mqbTA===null)return;
-  var ta=_mqbTA,s=ta.selectionStart,en=ta.selectionEnd;
-  ta.value=ta.value.substring(0,s)+txt+ta.value.substring(en);
-  var nm=ta.id.replace('ta-',''),pre=document.getElementById('pre-'+nm);
-  if(pre)pre.innerHTML=hl(ta.value);
-  ta.selectionStart=ta.selectionEnd=s+txt.length;
-  ta.focus();
+  if(!txt)return;
+  if(_mqbMonacoId && monacoEditors[_mqbMonacoId]){
+    var editor=monacoEditors[_mqbMonacoId];
+    var sel=editor.getSelection();
+    editor.executeEdits('qb',[{range:sel,text:txt}]);
+    _mqbMonacoId=null;
+  } else if(_mqbTA){
+    var ta=_mqbTA,s=ta.selectionStart,en=ta.selectionEnd;
+    ta.value=ta.value.substring(0,s)+txt+ta.value.substring(en);
+    var nm=ta.id.replace('ta-',''),pre=document.getElementById('pre-'+nm);
+    if(pre)pre.innerHTML=hl(ta.value);
+    ta.selectionStart=ta.selectionEnd=s+txt.length;
+    ta.focus();
+  }
+  _mqbTA=null;
   document.getElementById('qb-overlay').classList.remove('active');
 };
 // close on overlay click
@@ -585,6 +940,28 @@ function openQBModal(ta){
   document.getElementById('mqb-qry').value='';
   // parse selected text
   var sel=ta.value.substring(ta.selectionStart,ta.selectionEnd).trim();
+  if(sel){
+    var q=qbExtractQuery(sel);
+    if(q){document.getElementById('mqb-qry').value=q;qbParseToFields(q);}
+  }
+  document.getElementById('qb-overlay').classList.add('active');
+}
+function openQBModalMonaco(editorId){
+  var editor = monacoEditors[editorId];
+  if (!editor) return;
+  _mqbTA = null;
+  _mqbMonacoId = editorId;
+  _mqbSel={};_mqbJoins=[];_mqbCurFields=[];
+  document.getElementById('mqb-src').value='';
+  document.getElementById('mqb-alias').value='';
+  document.getElementById('mqb-vtp').style.display='none';
+  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+  document.getElementById('mqb-conds').innerHTML='';
+  document.getElementById('mqb-ords').innerHTML='';
+  document.getElementById('mqb-fields').innerHTML='';
+  document.getElementById('mqb-dsl').value='';
+  document.getElementById('mqb-qry').value='';
+  var sel = editor.getModel().getValueInRange(editor.getSelection()).trim();
   if(sel){
     var q=qbExtractQuery(sel);
     if(q){document.getElementById('mqb-qry').value=q;qbParseToFields(q);}
@@ -789,6 +1166,620 @@ function mqbGen(){
   dsl+='КонецЦикла;';
   document.getElementById('mqb-dsl').value=dsl;
 }
+
+// ── Debug panel ──────────────────────────────────────────────────
+var _dbgBase = '{{.Base.ID}}'; // base ID for debug proxy
+var _basePort = {{.Base.Port}};
+var _dbgEnabled = false;
+var _dbgPollTimer = null;
+var _dbgPollCount = 0;
+var _dbgBreakpoints = {}; // { editorId: { line: true } }
+var _dbgCurrentLineDecos = {}; // { editorId: decorationIds }
+
+// ── Configurator menu ─────────────────────────────────────────────
+var _cfgModalTitles = {
+  '/ui/about': 'О программе',
+  '/ui/admin/users': 'Пользователи',
+  '/ui/admin/sessions': 'Активные пользователи',
+  '/ui/admin/audit': 'Журнал регистрации'
+};
+
+function cfgMenuToggle() {
+  var m = document.getElementById('cfg-menu');
+  m.classList.toggle('open');
+}
+function cfgMenuOpen(path) {
+  document.getElementById('cfg-menu').classList.remove('open');
+  var title = _cfgModalTitles[path] || path;
+  document.getElementById('cfg-modal-title').textContent = title;
+  var loading = document.getElementById('cfg-modal-loading');
+  loading.style.display = 'flex';
+  // Ensure base is running, then open in iframe
+  fetch('/bases/' + _dbgBase + '/start', {method:'POST'}).catch(function(){}).then(function(){
+    var iframe = document.getElementById('cfg-modal-iframe');
+    iframe.src = 'http://localhost:' + _basePort + path;
+    document.getElementById('cfg-modal').classList.add('active');
+  });
+}
+function cfgModalClose() {
+  var modal = document.getElementById('cfg-modal');
+  modal.classList.remove('active');
+  var iframe = document.getElementById('cfg-modal-iframe');
+  iframe.src = 'about:blank';
+}
+// close menu on outside click
+document.addEventListener('click', function(e) {
+  var wrap = e.target.closest('.cfg-menu-wrap');
+  if (!wrap) {
+    var m = document.getElementById('cfg-menu');
+    if (m) m.classList.remove('open');
+  }
+});
+
+function launchEnterprise() {
+  var btn = document.querySelector('.run-enterprise-btn');
+  btn.style.background = '#a3a3a3';
+  // Start the base first (safe to call if already running)
+  fetch('/bases/' + _dbgBase + '/start', {method:'POST'}).then(function(){
+    setTimeout(function(){ window.open('http://localhost:' + _basePort + '/ui', '_blank'); btn.style.background = ''; }, 1500);
+  }).catch(function(){
+    // Already running or error — just open
+    window.open('http://localhost:' + _basePort + '/ui', '_blank'); btn.style.background = '';
+  });
+}
+
+function dbgToggle() {
+  var btn = document.getElementById('dbg-toggle');
+  var panel = document.getElementById('dbg-panel');
+  if (!_dbgEnabled) {
+    fetch('/bases/' + _dbgBase + '/debug/enable', {method:'POST'})
+      .then(function(r){
+        if (!r.ok) return r.json().then(function(d){ throw new Error(d.error || ('HTTP ' + r.status)); });
+        return r.json();
+      })
+      .then(function(d){
+        if (d.status !== 'enabled') { throw new Error(d.error || 'Unexpected response'); }
+        _dbgEnabled = true;
+        btn.innerHTML = '&#128027; Отладка: ВКЛ';
+        btn.className = 'dbg-topbar-btn dbg-on';
+        panel.style.display = 'flex';
+        dbgUpdateStatus('running', 'init');
+        var diagEl = document.getElementById('dbg-diag');
+        if (diagEl) diagEl.innerHTML = '<div style="color:#22c55e;font-size:10px">Enable OK: dbg=' + (d.dbg_ptr||'?') + ' sess=' + (d.sess_ptr||'?') + '</div>';
+        dbgStartPoll();
+      })
+      .catch(function(e){ alert('Ошибка включения отладки: ' + e.message); });
+  } else {
+    fetch('/bases/' + _dbgBase + '/debug/disable', {method:'POST'})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        _dbgEnabled = false;
+        btn.innerHTML = '&#128027; Отладка: ВЫКЛ';
+        btn.className = 'dbg-topbar-btn';
+        panel.style.display = 'none';
+        dbgStopPoll();
+        dbgClearLineHighlight();
+        dbgUpdateStatus('disabled', 'off');
+      })
+      .catch(function(e){ console.error('dbg disable error', e); });
+  }
+}
+
+function dbgStartPoll() {
+  dbgStopPoll();
+  _dbgPollTimer = setInterval(dbgPoll, 500);
+}
+function dbgStopPoll() {
+  if (_dbgPollTimer) { clearInterval(_dbgPollTimer); _dbgPollTimer = null; }
+}
+
+function dbgPoll() {
+  fetch('/bases/' + _dbgBase + '/debug/status?_=' + Date.now())
+    .then(function(r){return r.json()})
+    .then(function(snap){
+      _dbgPollCount++;
+      if (snap.state === 'disabled') {
+        dbgUpdateStatus('disabled', snap.state);
+        return;
+      }
+      var st = snap.state; // "running" | "paused" | "stopped"
+
+      // show/hide controls
+      var ctrl = document.getElementById('dbg-controls');
+      ctrl.style.display = (st === 'paused' || st === 'running') ? 'flex' : 'none';
+
+      // if paused with location, highlight current line in Monaco — BEFORE dbgUpdateStatus
+      if (st === 'paused' && snap.location) {
+        var locFile = snap.location.file;
+        var locLine = snap.location.line;
+        dbgShowLocation(locFile, locLine);
+        dbgWatchEvalAll();
+      } else if (st === 'stopped' || st === 'disabled') {
+        dbgClearLineHighlight();
+      }
+
+      // NOW update status (reads _dbgHighlightLog set by dbgShowLocation)
+      dbgUpdateStatus(st, snap.state);
+      // update button color
+      var btn = document.getElementById('dbg-toggle');
+      if (st === 'paused') btn.className = 'dbg-topbar-btn dbg-paused';
+      else if (st === 'running') btn.className = 'dbg-topbar-btn dbg-on';
+
+      // variables
+      if (snap.variables && snap.variables.length) {
+        var h = '';
+        snap.variables.forEach(function(v){
+          h += '<div class="dbg-var-row"><span class="dbg-var-name">' + esc(v.name) + '</span>'
+            + '<span><span class="dbg-var-val">' + esc(v.value) + '</span><span class="dbg-var-type">' + esc(v.type) + '</span></span></div>';
+        });
+        document.getElementById('dbg-vars').innerHTML = h;
+      } else if (st !== 'paused') {
+        document.getElementById('dbg-vars').innerHTML = '<div class="dbg-empty">Нет переменных</div>';
+      }
+
+      // stack
+      if (snap.stack && snap.stack.length) {
+        var h = '';
+        snap.stack.forEach(function(f){
+          h += '<div class="dbg-stack-row"><span class="proc">' + esc(f.procedure) + '</span> '
+            + '<span class="loc">' + esc(f.module) + ':' + f.line + '</span></div>';
+        });
+        document.getElementById('dbg-stack').innerHTML = h;
+      }
+
+      // breakpoints — always render from local state
+      dbgRenderBPList();
+
+      // diagnostics — always show in console tab when debug is enabled
+      var diagEl = document.getElementById('dbg-diag');
+      if (diagEl && snap.state !== 'disabled') {
+        var dh = '';
+        dh += '<div style="margin-bottom:4px;color:#60a5fa;font-size:10px">Poll: state=' + esc(String(snap.state)) + ' dbg=' + (snap.dbg_ptr||'?') + '</div>';
+        if (snap.location) {
+          dh += '<div style="margin-bottom:4px;color:#f472b6;font-size:10px">Location: ' + esc(snap.location.file) + ':' + snap.location.line + '</div>';
+        }
+        dh += '<div style="margin-bottom:4px;color:#fbbf24;font-size:10px">BP count: ' + (snap.diag_bp_count||0) + ' keys: ' + (snap.diag_bp_keys ? snap.diag_bp_keys.map(esc).join(', ') : 'none') + '</div>';
+        if (snap.diag_last_file) {
+          dh += '<div style="margin-bottom:4px;color:#16a34a;font-size:10px">Last check: ' + esc(snap.diag_last_file) + ':' + snap.diag_last_line + '</div>';
+        } else {
+          dh += '<div style="margin-bottom:4px;color:#9ca3af;font-size:10px">No statement checked yet</div>';
+        }
+        if (snap.diag_messages && snap.diag_messages.length) {
+          var msgs = snap.diag_messages.slice(-12);
+          msgs.forEach(function(m){ dh += '<div class="dbg-console-line">' + esc(m) + '</div>'; });
+        }
+        diagEl.innerHTML = dh;
+      } else if (diagEl && snap.state === 'disabled') {
+        diagEl.innerHTML = '<div style="color:#9ca3af;font-size:10px">Debug disabled</div>';
+      }
+    })
+    .catch(function(e){
+      var diagEl = document.getElementById('dbg-diag');
+      if (diagEl) { diagEl.innerHTML = '<div style="color:#ef4444;font-size:10px">Poll error: ' + esc(e.message) + '</div>' + diagEl.innerHTML; }
+    });
+}
+
+var _dbgHighlightLog = '';
+function dbgUpdateStatus(st, rawState) {
+  var el = document.getElementById('dbg-status');
+  var labels = {disabled:'Отладка: ВЫКЛ', running:'Отладка: выполнение...', paused:'Отладка: пауза', stopped:'Отладка: останов'};
+  var dot = '<span class="dot ' + st + '"></span> ' + (labels[st]||st);
+  if (_dbgHighlightLog) {
+    el.innerHTML = dot + ' <span style="font-size:9px;color:#f97316">' + _dbgHighlightLog + '</span>';
+  } else {
+    el.innerHTML = dot;
+  }
+}
+
+function dbgContinue() {
+  dbgClearLineHighlight();
+  fetch('/bases/' + _dbgBase + '/debug/continue', {method:'POST'}).then(function(){
+    setTimeout(dbgPoll, 100);
+    setTimeout(dbgPoll, 500);
+  }).catch(function(e){console.error(e);});
+}
+function dbgStep(mode) {
+  dbgClearLineHighlight();
+  fetch('/bases/' + _dbgBase + '/debug/step', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})}).then(function(){
+    // Poll repeatedly until we see "paused" or timeout (2s)
+    var tries = 0;
+    function pollUntilPaused() {
+      if (tries > 12) { dbgWatchDebug('step timeout'); return; }
+      tries++;
+      setTimeout(function(){
+        fetch('/bases/' + _dbgBase + '/debug/status?_=' + Date.now())
+          .then(function(r){return r.json()})
+          .then(function(snap){
+            dbgWatchDebug('step poll #' + tries + ' state=' + snap.state + ' loc=' + (snap.location ? snap.location.file + ':' + snap.location.line : 'none'));
+            if (snap.state === 'paused' && snap.location) {
+              dbgPoll(); // run full poll to update everything
+            } else {
+              pollUntilPaused();
+            }
+          })
+          .catch(function(e){ dbgWatchDebug('step poll err: ' + e.message); pollUntilPaused(); });
+      }, 200);
+    }
+    pollUntilPaused();
+  }).catch(function(e){console.error(e);});
+}
+function dbgStop() {
+  fetch('/bases/' + _dbgBase + '/debug/stop', {method:'POST'})
+    .then(function(){
+      var btn = document.getElementById('dbg-toggle');
+      _dbgEnabled = false;
+      btn.innerHTML = '&#128027; Отладка: ВЫКЛ';
+      btn.className = 'dbg-topbar-btn';
+      dbgStopPoll();
+      dbgClearLineHighlight();
+      dbgUpdateStatus('disabled', 'stop');
+    }).catch(function(e){console.error(e);});
+}
+
+function dbgEval() {
+  var inp = document.getElementById('dbg-expr');
+  var expr = inp.value.trim();
+  if (!expr) return;
+  var out = document.getElementById('dbg-console-out');
+  out.innerHTML += '<div class="dbg-console-line">&gt; ' + esc(expr) + '</div>';
+  inp.value = '';
+  fetch('/bases/' + _dbgBase + '/debug/evaluate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expr:expr})})
+    .then(function(r){return r.json()})
+    .then(function(res){
+      if (res.is_error) {
+        out.innerHTML += '<div class="dbg-console-line dbg-err">' + esc(res.error) + '</div>';
+      } else {
+        var val = res.value !== null && res.value !== undefined ? String(res.value) : 'Неопределено';
+        out.innerHTML += '<div class="dbg-console-line dbg-ok">= ' + esc(val) + ' (' + esc(res.type||'') + ')</div>';
+      }
+      out.scrollTop = out.scrollHeight;
+    })
+    .catch(function(e){
+      out.innerHTML += '<div class="dbg-console-line dbg-err">Ошибка: ' + esc(e.message) + '</div>';
+      out.scrollTop = out.scrollHeight;
+    });
+}
+
+function dbgTab(name) {
+  var tabs = ['vars','watch','bp','stack','console'];
+  tabs.forEach(function(t){
+    var el = document.getElementById('dbg-' + t);
+    if (t === name) {
+      el.style.display = 'flex';
+      el.style.flexDirection = 'column';
+    } else {
+      el.style.display = 'none';
+    }
+  });
+  document.querySelectorAll('.dbg-tab').forEach(function(btn, i){
+    btn.classList.toggle('active', tabs[i] === name);
+  });
+}
+
+// ── Watch (Табло v3) ──────────────────────────────────────────
+var _dbgWatchList = []; // [{name: 'Перем', id: 'w0'}]
+var _dbgWatchId = 0;
+
+function dbgWatchDebug(msg) {
+  var d = document.getElementById('dbg-watch-debug');
+  if (d) d.textContent = msg;
+}
+
+function dbgWatchAdd() {
+  var inp = document.getElementById('dbg-watch-add');
+  if (!inp) { dbgWatchDebug('ERROR: input not found'); return; }
+  var name = inp.value.trim();
+  if (!name) return;
+  inp.value = '';
+  _dbgWatchId++;
+  var wid = 'w' + _dbgWatchId;
+  _dbgWatchList.push({name: name, id: wid});
+  dbgWatchDebug('added "' + name + '" id=' + wid + ' total=' + _dbgWatchList.length);
+  dbgWatchRender();
+}
+
+function dbgWatchRemove(id) {
+  _dbgWatchList = _dbgWatchList.filter(function(w){ return w.id !== id; });
+  dbgWatchRender();
+}
+
+function dbgWatchRender() {
+  var el = document.getElementById('dbg-watch-list');
+  if (!el) { dbgWatchDebug('ERROR: list element not found'); return; }
+  if (!_dbgWatchList.length) {
+    el.innerHTML = '<div style="color:#94a3b8;padding:8px 0;text-align:center;font-size:12px">Добавьте выражение</div>';
+    dbgWatchDebug('empty list');
+    return;
+  }
+  var h = '';
+  _dbgWatchList.forEach(function(w){
+    h += '<div class="dbg-var-row">'
+      + '<span class="dbg-var-name">' + esc(w.name) + '</span>'
+      + ' <span style="color:#ef4444;cursor:pointer;font-size:9px" onclick="dbgWatchRemove(\'' + w.id + '\')">&#10005;</span>'
+      + ' <span class="dbg-var-val" id="wv-' + w.id + '">...</span>'
+      + ' <span class="dbg-var-type" id="wt-' + w.id + '"></span>'
+      + '</div>';
+  });
+  el.innerHTML = h;
+  // diagnostic: show first item in debug line to confirm rendering
+  var first = _dbgWatchList[0];
+  dbgWatchDebug('rendered ' + _dbgWatchList.length + ' items | el.h=' + el.offsetHeight + 'px html=' + (h.length > 80 ? h.substring(0,80)+'...' : h));
+}
+
+function dbgWatchEvalAll() {
+  if (!_dbgWatchList.length) return;
+  _dbgWatchList.forEach(function(w){
+    var valEl = document.getElementById('wv-' + w.id);
+    var typEl = document.getElementById('wt-' + w.id);
+    if (!valEl) return;
+    if (!_dbgEnabled) { valEl.textContent = '(отладка выкл)'; return; }
+    fetch('/bases/' + _dbgBase + '/debug/evaluate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expr:w.name})})
+      .then(function(r){return r.json()})
+      .then(function(res){
+        var v = document.getElementById('wv-' + w.id);
+        var t = document.getElementById('wt-' + w.id);
+        if (!v) return;
+        if (res.is_error) {
+          v.textContent = String(res.error).substring(0, 50);
+          v.style.color = '#ef4444';
+        } else {
+          v.textContent = res.value !== null && res.value !== undefined ? String(res.value) : 'Неопределено';
+          v.style.color = '';
+        }
+        if (t) t.textContent = res.type || '';
+      })
+      .catch(function(e){
+        var v = document.getElementById('wv-' + w.id);
+        if (v) v.textContent = 'err';
+      });
+  });
+}
+
+function dbgHighlightLine(file, line) {
+  dbgClearLineHighlight();
+  var ed = dbgFindEditor(file);
+  if (ed) dbgApplyHighlight(ed, line);
+}
+
+function dbgClearLineHighlight() {
+  Object.keys(_dbgCurrentLineDecos).forEach(function(id){
+    var ed = monacoEditors[id];
+    if (ed) ed.deltaDecorations(_dbgCurrentLineDecos[id], []);
+  });
+  _dbgCurrentLineDecos = {};
+}
+
+function dbgShowLocation(file, line) {
+  dbgClearLineHighlight();
+  var edKeys = Object.keys(monacoEditors);
+  var ed = dbgFindEditor(file);
+  if (ed) {
+    dbgApplyHighlight(ed, line);
+    _dbgHighlightLog = file + ':' + line + ' OK ed=' + ed._fileId;
+    return;
+  }
+  _dbgHighlightLog = 'NO_ED "' + file + '" keys=[' + edKeys.join(',') + ']';
+  // 2. Editor not created — activate the module pane and create editor
+  var modId = dbgResolveModulePane(file);
+  if (modId) {
+    var pane = document.getElementById(modId);
+    if (pane && !pane.classList.contains('active')) {
+      var wrap = pane.closest('.module-editor-wrap');
+      if (wrap) {
+        wrap.querySelectorAll('.module-tab').forEach(function(t){t.classList.remove('active')});
+        wrap.querySelectorAll('.module-pane').forEach(function(p){p.classList.remove('active')});
+      }
+      pane.classList.add('active');
+      if (wrap) {
+        wrap.querySelectorAll('.module-tab').forEach(function(t){
+          if (t.getAttribute('onclick') && t.getAttribute('onclick').indexOf(modId) !== -1) {
+            t.classList.add('active');
+          }
+        });
+      }
+    }
+    var pre = pane ? pane.querySelector('pre.os-code') : null;
+    if (pre) {
+      var editorName = pre.id.replace('pre-', '');
+      startEdit(editorName);
+      setTimeout(function(){
+        var ed2 = monacoEditors[editorName];
+        if (ed2) {
+          dbgApplyHighlight(ed2, line);
+          _dbgHighlightLog = 'LATE ' + editorName + ':' + line;
+        } else {
+          _dbgHighlightLog = 'NO_ED2 ' + editorName;
+        }
+      }, 300);
+    } else {
+      _dbgHighlightLog += ' noPre modId=' + modId;
+    }
+  }
+}
+
+function dbgApplyHighlight(ed, line) {
+  var deco = ed.deltaDecorations([], [{
+    range: new monaco.Range(line, 1, line, 1),
+    options: {
+      isWholeLine: true,
+      className: 'dbg-current-line-bg',
+      glyphMarginClassName: 'dbg-current-line-glyph',
+      overviewRuler: { color: '#d97706', position: monaco.editor.OverviewRulerLane.Full }
+    }
+  }]);
+  _dbgCurrentLineDecos[ed._fileId] = deco;
+  ed.revealLineInCenter(line);
+}
+
+// dbgResolveModulePane maps a normalized file ID like "post-ПоступлениеТоваров"
+// to the DOM pane ID like "mp-post-ПоступлениеТоваров"
+// Uses case-insensitive DOM lookup since normalizeFilePath lowercases.
+function dbgResolveModulePane(file) {
+  var prefixes = ['post-', 'mod-', 'proc-', 'rep-', 'pf-'];
+  var candidate = null;
+  for (var i = 0; i < prefixes.length; i++) {
+    if (file.toLowerCase().indexOf(prefixes[i]) === 0) {
+      candidate = 'mp-' + file;
+      break;
+    }
+  }
+  if (!candidate) candidate = 'mp-obj-' + file;
+  // Try exact match first, then case-insensitive search
+  if (document.getElementById(candidate)) return candidate;
+  var allPanes = document.querySelectorAll('[id^="mp-"]');
+  var cLow = candidate.toLowerCase();
+  for (var j = 0; j < allPanes.length; j++) {
+    if (allPanes[j].id.toLowerCase() === cLow) return allPanes[j].id;
+  }
+  return candidate;
+}
+
+function dbgFindEditor(file) {
+  // file from server is normalizeFilePath'd (lowercased + capitalizeFirst)
+  // Monaco editor ids preserve original casing, so we need case-insensitive lookup
+  var fileLow = file.toLowerCase();
+  var keys = Object.keys(monacoEditors);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase() === fileLow) return monacoEditors[keys[i]];
+  }
+  // Fallback: try prefixed variants
+  var prefixes = ['post-', 'mod-', 'proc-', 'rep-', 'pf-'];
+  for (var p = 0; p < prefixes.length; p++) {
+    var candidate = prefixes[p] + fileLow;
+    for (var j = 0; j < keys.length; j++) {
+      if (keys[j].toLowerCase() === candidate) return monacoEditors[keys[j]];
+    }
+  }
+  return null;
+}
+
+function dbgFindTabId(file) {
+  // Same candidate logic but searches tab data-file-id attributes
+  var candidates = [file, 'post-' + file, 'mod-' + file, 'proc-' + file, 'rep-' + file];
+  for (var i = 0; i < candidates.length; i++) {
+    var tab = document.querySelector('[data-file-id="' + candidates[i] + '"]');
+    if (tab) return candidates[i];
+  }
+  // Try matching by suffix (server may send full path, tabs have short IDs)
+  var tabs = document.querySelectorAll('[data-file-id]');
+  for (var t = 0; t < tabs.length; t++) {
+    var tid = tabs[t].getAttribute('data-file-id');
+    if (file.indexOf(tid) !== -1 || tid.indexOf(file) !== -1) return tid;
+  }
+  return null;
+}
+
+function dbgToggleBreakpoint(editorId, line) {
+  var diagEl = document.getElementById('dbg-diag');
+  if(diagEl) diagEl.innerHTML += '<div style="color:#fbbf24;font-size:10px">BP click: ' + esc(editorId) + ':' + line + ' hasEd=' + !!monacoEditors[editorId] + ' enabled=' + _dbgEnabled + '</div>';
+  if (!monacoEditors[editorId]) return;
+  var ed = monacoEditors[editorId];
+  if (!_dbgBreakpoints[editorId]) _dbgBreakpoints[editorId] = {};
+  var has = _dbgBreakpoints[editorId][line];
+  if (has) {
+    delete _dbgBreakpoints[editorId][line];
+  } else {
+    _dbgBreakpoints[editorId][line] = true;
+  }
+  try { dbgRenderBreakpoints(editorId); } catch(e) { console.error('renderBP', e); }
+  try { dbgRenderBPList(); } catch(e) { console.error('renderBPList', e); }
+  // sync with server
+  var diagEl = document.getElementById('dbg-diag');
+  if (_dbgEnabled) {
+    if(diagEl) diagEl.innerHTML += '<div style="color:#60a5fa;font-size:10px">BP send: ' + esc(editorId) + ':' + line + '</div>';
+    fetch('/bases/' + _dbgBase + '/debug/breakpoint', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file: editorId, line: line, action: 'toggle'})
+    }).then(function(r){
+      if (!r.ok) { if(diagEl) diagEl.innerHTML += '<div style="color:#ef4444;font-size:10px">BP error: HTTP ' + r.status + '</div>'; return r.text(); }
+      return r.json();
+    }).then(function(d){
+      if(d && d.id) {
+        if(diagEl) diagEl.innerHTML += '<div style="color:#16a34a;font-size:10px">BP OK: ' + esc(d.file) + ':' + d.line + ' count=' + (d.bp_count||0) + '</div>';
+      }
+      else if(d && d.status) { if(diagEl) diagEl.innerHTML += '<div style="color:#fbbf24;font-size:10px">BP: ' + d.status + '</div>'; }
+      else if(d && d.error) { if(diagEl) diagEl.innerHTML += '<div style="color:#ef4444;font-size:10px">BP error: ' + d.error + '</div>'; }
+    }).catch(function(e){
+      if(diagEl) diagEl.innerHTML += '<div style="color:#ef4444;font-size:10px">BP fetch error: ' + e.message + '</div>';
+    });
+  } else {
+    if(diagEl) diagEl.innerHTML += '<div style="color:#fbbf24;font-size:10px">BP saved locally (debug not enabled)</div>';
+  }
+}
+
+function dbgManualBP() {
+  var fileInp = document.getElementById('dbg-bp-file');
+  var lineInp = document.getElementById('dbg-bp-line');
+  if (!fileInp || !lineInp) return;
+  var file = fileInp.value.trim();
+  var line = parseInt(lineInp.value);
+  if (!file || !line) { dbgWatchDebug('Укажите файл и строку'); return; }
+  // Save locally
+  if (!_dbgBreakpoints[file]) _dbgBreakpoints[file] = {};
+  _dbgBreakpoints[file][line] = true;
+  // Also set in Monaco if available
+  if (monacoEditors[file]) dbgRenderBreakpoints(file);
+  dbgRenderBPList();
+  // Send to server
+  var diagEl = document.getElementById('dbg-diag');
+  if (_dbgEnabled) {
+    if(diagEl) diagEl.innerHTML += '<div style="color:#60a5fa;font-size:10px">Manual BP: ' + esc(file) + ':' + line + '</div>';
+    fetch('/bases/' + _dbgBase + '/debug/breakpoint', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file: file, line: line, action: 'set'})
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if(d && d.id) {
+        if(diagEl) diagEl.innerHTML += '<div style="color:#16a34a;font-size:10px">BP OK: ' + esc(d.file) + ':' + d.line + ' count=' + (d.bp_count||0) + '</div>';
+      } else if(d && d.error) {
+        if(diagEl) diagEl.innerHTML += '<div style="color:#ef4444;font-size:10px">BP err: ' + d.error + '</div>';
+      }
+    }).catch(function(e){
+      if(diagEl) diagEl.innerHTML += '<div style="color:#ef4444;font-size:10px">BP fetch err: ' + e.message + '</div>';
+    });
+  } else {
+    dbgWatchDebug('BP saved locally (debug not enabled)');
+  }
+  fileInp.value = '';
+  lineInp.value = '';
+}
+
+function dbgRenderBPList() {
+  var el = document.getElementById('dbg-bp-list');
+  if (!el) return;
+  var keys = Object.keys(_dbgBreakpoints);
+  var h = '';
+  keys.forEach(function(file){
+    var lines = Object.keys(_dbgBreakpoints[file]);
+    lines.forEach(function(ln){
+      h += '<div class="dbg-bp-row"><span style="color:#ef4444">&#9679;</span>'
+        + '<span class="bp-file">' + esc(file) + '</span>'
+        + '<span class="bp-line">:' + ln + '</span></div>';
+    });
+  });
+  if (!h) h = '<div class="dbg-empty">Нет точек останова</div>';
+  el.innerHTML = h;
+}
+
+function dbgRenderBreakpoints(editorId) {
+  var ed = monacoEditors[editorId];
+  if (!ed) return;
+  var bps = _dbgBreakpoints[editorId] || {};
+  var decos = [];
+  Object.keys(bps).forEach(function(ln){
+    decos.push({
+      range: new monaco.Range(parseInt(ln), 1, parseInt(ln), 1),
+      options: {
+        isWholeLine: false,
+        glyphMarginClassName: 'dbg-bp-glyph',
+        glyphMarginHoverMessage: {value: 'Точка останова: строка ' + ln},
+        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+      }
+    });
+  });
+  ed._dbgBpDecos = ed.deltaDecorations(ed._dbgBpDecos || [], decos);
+}
 </script>
 </body></html>
 {{end}}`
@@ -800,6 +1791,7 @@ const cfgMain = `{{define "cfg-main"}}
 {{if eq .Tab "tree"}}{{template "tab-tree" .}}{{end}}
 {{if eq .Tab "convert"}}{{template "tab-convert" .}}{{end}}
 {{if eq .Tab "files"}}{{template "tab-files" .}}{{end}}
+{{if eq .Tab "backup"}}{{template "tab-backup" .}}{{end}}
 {{template "cfg-foot" .}}
 {{end}}`
 
@@ -904,10 +1896,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-
-  <div class="cfg-item" data-id="panel-backup" onclick="selItem(this)">
-    <span class="ic">💾</span>Бэкапы
-  </div>
 
   {{if .Subsystems}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Подсистемы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="Добавить подсистему">+</span></summary>
@@ -1314,57 +2302,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
 
-  <div class="cfg-panel" id="panel-backup">
-    <h2 style="margin:0 0 4px;font-size:18px">💾 Бэкапы</h2>
-    <p style="font-size:12px;color:#64748b;margin:0 0 16px">Резервное копирование и восстановление базы данных</p>
-    {{if .BackupMessage}}<div class="success-box">{{.BackupMessage}}</div>{{end}}
-    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px">
-      <button class="btn-save" type="submit">Создать бэкап сейчас</button>
-    </form>
-    <h3 style="font-size:13px;margin:0 0 8px;color:#374151">Файлы бэкапов</h3>
-    <table class="fields-tbl">
-    <tr><th>Файл</th><th>Размер</th><th>Дата</th><th></th></tr>
-    {{range .BackupFiles}}
-    <tr>
-      <td style="font-size:12px">{{.Name}}</td>
-      <td style="font-size:12px;color:#64748b">{{.Size}}</td>
-      <td style="font-size:12px;color:#64748b">{{.Date}}</td>
-      <td style="white-space:nowrap">
-        <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
-        <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
-          <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">Удалить</button>
-        </form>
-      </td>
-    </tr>
-    {{else}}
-    <tr><td colspan="4" style="color:#94a3b8;font-size:12px;padding:8px">Нет бэкапов</td></tr>
-    {{end}}
-    </table>
-    <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Настройки автобэкапа</summary>
-    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/settings">
-      <div style="margin-bottom:8px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" name="backup_enabled" {{if .BackupSettings.Enabled}}checked{{end}}>
-          Включить автобэкап
-        </label>
-      </div>
-      <div style="margin-bottom:8px">
-        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Расписание (cron)</label>
-        <input type="text" name="backup_schedule" value="{{.BackupSettings.Schedule}}" placeholder="0 2 * * *" style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
-      </div>
-      <div style="margin-bottom:8px">
-        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Хранить последних</label>
-        <input type="number" name="backup_keep" value="{{.BackupSettings.KeepLast}}" placeholder="7" min="1" max="100" style="width:80px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
-      </div>
-      <div style="margin-bottom:8px">
-        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Директория (пусто = по умолчанию)</label>
-        <input type="text" name="backup_dir" value="{{.BackupSettings.Directory}}" placeholder="" style="width:100%;max-width:400px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
-      </div>
-      <button class="btn-save" type="submit">Сохранить настройки</button>
-    </form>
-    </details>
-  </div>
-
 </div>{{/* cfg-right */}}
 </div>{{/* cfg-split */}}
 {{end}}
@@ -1761,5 +2698,58 @@ const cfgTabFiles = `{{define "tab-files"}}
     {{end}}
   </div>
 </div>
+</div>
+{{end}}`
+
+const cfgTabBackup = `{{define "tab-backup"}}
+<div class="pad">
+  <h2 style="margin:0 0 4px;font-size:18px">💾 Бэкапы</h2>
+  <p style="font-size:12px;color:#64748b;margin:0 0 16px">Резервное копирование и восстановление базы данных</p>
+  {{if .BackupMessage}}<div class="success-box">{{.BackupMessage}}</div>{{end}}
+  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px">
+    <button class="btn-save" type="submit">Создать бэкап сейчас</button>
+  </form>
+  <h3 style="font-size:13px;margin:0 0 8px;color:#374151">Файлы бэкапов</h3>
+  <table class="fields-tbl">
+  <tr><th>Файл</th><th>Размер</th><th>Дата</th><th></th></tr>
+  {{range .BackupFiles}}
+  <tr>
+    <td style="font-size:12px">{{.Name}}</td>
+    <td style="font-size:12px;color:#64748b">{{.Size}}</td>
+    <td style="font-size:12px;color:#64748b">{{.Date}}</td>
+    <td style="white-space:nowrap">
+      <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
+      <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
+        <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">Удалить</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4" style="color:#94a3b8;font-size:12px;padding:8px">Нет бэкапов</td></tr>
+  {{end}}
+  </table>
+  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Настройки автобэкапа</summary>
+  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/settings">
+    <div style="margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" name="backup_enabled" {{if .BackupSettings.Enabled}}checked{{end}}>
+        Включить автобэкап
+      </label>
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Расписание (cron)</label>
+      <input type="text" name="backup_schedule" value="{{.BackupSettings.Schedule}}" placeholder="0 2 * * *" style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Хранить последних</label>
+      <input type="number" name="backup_keep" value="{{.BackupSettings.KeepLast}}" placeholder="7" min="1" max="100" style="width:80px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Директория (пусто = по умолчанию)</label>
+      <input type="text" name="backup_dir" value="{{.BackupSettings.Directory}}" placeholder="" style="width:100%;max-width:400px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+    </div>
+    <button class="btn-save" type="submit">Сохранить настройки</button>
+  </form>
+  </details>
 </div>
 {{end}}`

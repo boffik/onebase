@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -176,6 +177,7 @@ type configuratorData struct {
 	FieldsSavedEntity string
 	// platform version
 	PlatformVer    string
+	UIServerURL    string
 	BackupMessage  string
 	BackupFiles    []backupFile
 	BackupSettings backupSettings
@@ -285,7 +287,7 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 // ── data loading ──────────────────────────────────────────────────────────────
 
 func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configuratorData {
-	data := &configuratorData{Base: b, Tab: tab, PlatformVer: version.String()}
+	data := &configuratorData{Base: b, Tab: tab, PlatformVer: version.String(), UIServerURL: fmt.Sprintf("http://localhost:%d", b.Port)}
 
 	var proj *project.Project
 	var err error
@@ -2160,4 +2162,46 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 		data.FieldsSavedEntity = "__app__"
 	}
 	renderCfg(w, data)
+}
+
+// ── debug proxy ──────────────────────────────────────────────────────────────
+
+// debugProxy forwards debug API requests from the configurator (launcher server)
+// to the UI server, avoiding CORS issues in the webview.
+func (h *handler) debugProxy(w http.ResponseWriter, r *http.Request) {
+	baseID := chi.URLParam(r, "id")
+	action := chi.URLParam(r, "action")
+
+	b, err := h.store.Get(baseID)
+	if err != nil {
+		http.Error(w, "base not found", 404)
+		return
+	}
+
+	uiURL := fmt.Sprintf("http://localhost:%d/debug/global/%s", b.Port, action)
+
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, uiURL, r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	// Forward Content-Type from original request
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": "UI server unreachable: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }

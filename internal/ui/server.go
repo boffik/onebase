@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/debugger"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -33,6 +34,7 @@ type Server struct {
 	sched            *scheduler.Scheduler
 	mailer           *mailer.Mailer
 	maxFileSizeBytes int64
+	globalDebug      *debugger.GlobalDebugController
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -40,8 +42,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if maxBytes <= 0 {
 		maxBytes = 50 * 1024 * 1024
 	}
-	return &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes}
+	return &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController()}
 }
+
+// GlobalDebug returns the global debug controller for the server.
+func (s *Server) GlobalDebug() *debugger.GlobalDebugController { return s.globalDebug }
 
 func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui", s.index)
@@ -138,18 +143,25 @@ func (s *Server) Mount(r chi.Router) {
 	// About
 	r.Get("/ui/about", s.about)
 
-	// Debugger / Console of Code
-	r.Get("/ui/debug/console", s.debugConsole)
-	r.Post("/debug/evaluate", s.debugEvaluate)
-	r.Post("/debug/start", s.debugStart)
-	r.Post("/debug/stop", s.debugStop)
-	r.Get("/debug/status", s.debugStatus)
-	r.Post("/debug/breakpoint", s.debugSetBreakpoint)
-	r.Delete("/debug/breakpoint/{file}/{line}", s.debugRemoveBreakpoint)
-	r.Post("/debug/continue", s.debugContinue)
-	r.Post("/debug/step", s.debugStep)
 }
 
+
+// MountDebug registers debug API routes WITHOUT auth middleware.
+// Must be called outside the auth-protected group so the configurator
+// (running on a different port) can reach the endpoints cross-origin.
+func (s *Server) MountDebug(r chi.Router) {
+	r.Route("/debug/global", func(r chi.Router) {
+		r.Use(corsMiddleware)
+		r.Post("/enable", s.debugGlobalEnable)
+		r.Post("/disable", s.debugGlobalDisable)
+		r.Get("/status", s.debugGlobalStatus)
+		r.Post("/breakpoint", s.debugGlobalBreakpoint)
+		r.Post("/continue", s.debugGlobalContinue)
+		r.Post("/step", s.debugGlobalStep)
+		r.Post("/stop", s.debugGlobalStop)
+		r.Post("/evaluate", s.debugGlobalEvaluate)
+	})
+}
 type navSection struct {
 	Kind     string
 	Entities []*metadata.Entity

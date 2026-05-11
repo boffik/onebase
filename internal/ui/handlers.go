@@ -1581,7 +1581,7 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 		tpRows[tp.Name] = rows
 	}
 
-	refs := s.buildPrintRefs(r.Context(), row, entity)
+	refs := s.buildPrintRefs(r.Context(), row, entity, tpRows)
 
 	constants, _ := s.store.ListConstants(r.Context())
 
@@ -1601,32 +1601,49 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(html))
 }
 
-// buildPrintRefs returns a map of UUID → {fields...} for all reference fields in the entity.
-func (s *Server) buildPrintRefs(ctx context.Context, row map[string]any, entity *metadata.Entity) map[string]map[string]any {
+// buildPrintRefs returns a map of UUID → {fields...} for all reference fields in the entity and table parts.
+func (s *Server) buildPrintRefs(ctx context.Context, row map[string]any, entity *metadata.Entity, tpRows map[string][]map[string]any) map[string]map[string]any {
 	refs := make(map[string]map[string]any)
+	resolveRef := func(refEntityName, idStr string) {
+		if idStr == "" {
+			return
+		}
+		if _, dup := refs[idStr]; dup {
+			return
+		}
+		refEntity := s.reg.GetEntity(refEntityName)
+		if refEntity == nil {
+			return
+		}
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return
+		}
+		refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
+		if err != nil {
+			return
+		}
+		refs[idStr] = refRow
+	}
 	for _, f := range entity.Fields {
 		if f.RefEntity == "" {
 			continue
 		}
-		refEntity := s.reg.GetEntity(f.RefEntity)
-		if refEntity == nil {
-			continue
-		}
 		idStr, _ := row[f.Name].(string)
-		if idStr == "" {
-			continue
-		}
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			continue
-		}
-		refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
-		if err != nil {
-			continue
-		}
-		refs[idStr] = refRow
+		resolveRef(f.RefEntity, idStr)
 	}
-	// also resolve refs in table part rows
+	for _, tp := range entity.TableParts {
+		rows := tpRows[tp.Name]
+		for _, f := range tp.Fields {
+			if f.RefEntity == "" {
+				continue
+			}
+			for _, r := range rows {
+				idStr, _ := r[f.Name].(string)
+				resolveRef(f.RefEntity, idStr)
+			}
+		}
+	}
 	return refs
 }
 
@@ -2124,7 +2141,7 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 		tpRows[tp.Name] = rows
 	}
 
-	refs := s.buildPrintRefs(r.Context(), row, entity)
+	refs := s.buildPrintRefs(r.Context(), row, entity, tpRows)
 	constants, _ := s.store.ListConstants(r.Context())
 
 	ctx := &printform.RenderContext{

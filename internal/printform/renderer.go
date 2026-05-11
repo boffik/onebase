@@ -345,7 +345,7 @@ hr{border:none;border-top:1px solid #000;margin:10px 0}
 <div class="pf-noprint">
   <button class="pf-print-btn" onclick="window.print()">Печать</button>
   &nbsp;
-` + pdfBtn + `  <a href="javascript:history.back()" style="font-family:sans-serif;font-size:13px;color:#666">← Назад</a>
+` + pdfBtn + `  <a href="javascript:window.close()" style="font-family:sans-serif;font-size:13px;color:#666">← Закрыть</a>
 </div>
 <div class="pf-title">` + template.HTMLEscapeString(title) + `</div>
 <div class="pf-header">` + headerHTML + `</div>

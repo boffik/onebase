@@ -107,7 +107,7 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 	}
 
 	for i, row := range rows {
-		vidDvizh := fmt.Sprintf("%v", row["ВидДвижения"])
+		vidDvizh := fmt.Sprintf("%v", ciGet(row, "ВидДвижения"))
 		if vidDvizh == "" || vidDvizh == "<nil>" {
 			vidDvizh = "Приход"
 		}
@@ -124,7 +124,8 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 		for _, f := range allFields {
 			cols = append(cols, metadata.ColumnName(f))
 			phs = append(phs, fmt.Sprintf("$%d", idx))
-			args = append(args, row[f.Name])
+			args = append(args, ciGet(row, f.Name))
+
 			idx++
 		}
 
@@ -283,4 +284,18 @@ func (db *DB) GetBalances(ctx context.Context, regName string, reg *metadata.Reg
 		result = append(result, row)
 	}
 	return result, rows.Err()
+}
+
+// ciGet does a case-insensitive map lookup (DSL stores keys in lowercase).
+func ciGet(m map[string]any, key string) any {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	low := strings.ToLower(key)
+	for k, v := range m {
+		if strings.ToLower(k) == low {
+			return v
+		}
+	}
+	return nil
 }

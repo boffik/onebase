@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,12 +57,12 @@ func (rm *RegisterMovements) Set(name string, v any) {}
 
 // CallMethod implements interpreter.MethodCallable.
 func (rm *RegisterMovements) CallMethod(method string, args []any) any {
-	switch method {
-	case "Добавить", "Add":
+	switch strings.ToLower(method) {
+	case "добавить", "add":
 		row := make(map[string]any)
 		rm.collector.pending[rm.name] = append(rm.collector.pending[rm.name], row)
 		return &interpreter.MapThis{M: row}
-	case "Очистить", "Clear":
+	case "очистить", "clear":
 		rm.collector.pending[rm.name] = nil
 		return nil
 	}

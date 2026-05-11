@@ -682,9 +682,29 @@ examples/
 # Обычная (без CGo, без нативного окна)
 CGO_ENABLED=0 go build -o onebase ./cmd/onebase
 
-# GUI с нативным окном WebView2 (Windows, требует CGo и MSVC)
+# GUI с нативным окном WebView2 (Windows, требует CGo + GCC)
 go build -tags webview -ldflags="-s -w -H windowsgui" -o onebase-gui.exe ./cmd/onebase
 ```
+
+### Установка GCC для Windows (для onebase-gui.exe)
+
+Нативное окно WebView2 требует CGO, которому нужен C-компилятор (GCC):
+
+```powershell
+# 1. Установить MSYS2
+winget install -e --id MSYS2.MSYS2
+
+# 2. В терминале MSYS2 (Пуск → MSYS2 → MSYS2 UCRT64):
+pacman -S mingw-w64-ucrt-x86_64-gcc
+
+# 3. Добавить в PATH (PowerShell):
+setx PATH "$env:PATH;C:\msys64\ucrt64\bin"
+
+# 4. Перезапустить терминал и проверить:
+gcc --version
+```
+
+После этого `build.bat` соберёт оба exe (onebase.exe + onebase-gui.exe).
 
 ### Тесты
 

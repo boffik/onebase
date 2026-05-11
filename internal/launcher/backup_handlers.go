@@ -30,7 +30,7 @@ func (h *handler) backupCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := h.backupDir(b)
 	outPath, dumpErr := backup.Dump(r.Context(), b.DB, dir)
-	data := h.loadCfgData(r.Context(), b, "tree")
+	data := h.loadCfgData(r.Context(), b, "backup")
 	if dumpErr != nil {
 		data.Error = "Ошибка бэкапа: " + dumpErr.Error()
 	} else {
@@ -66,7 +66,7 @@ func (h *handler) backupDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	file := chi.URLParam(r, "file")
 	os.Remove(filepath.Join(h.backupDir(b), file))
-	data := h.loadCfgData(r.Context(), b, "tree")
+	data := h.loadCfgData(r.Context(), b, "backup")
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = "panel-backup"
 	renderCfg(w, data)
@@ -116,7 +116,7 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 		os.MkdirAll(dir, 0o755)
 		saveErr = os.WriteFile(filepath.Join(dir, "app.yaml"), out, 0o644)
 	}
-	data := h.loadCfgData(r.Context(), b, "tree")
+	data := h.loadCfgData(r.Context(), b, "backup")
 	if saveErr != nil {
 		data.Error = fmt.Sprintf("Ошибка сохранения: %s", saveErr.Error())
 	} else {

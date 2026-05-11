@@ -16,8 +16,26 @@ type MethodCallable interface {
 // MapThis wraps map[string]any as a This (used for tablepart rows and register movement records).
 type MapThis struct{ M map[string]any }
 
-func (m *MapThis) Get(name string) any { return m.M[name] }
-func (m *MapThis) Set(name string, v any) { m.M[name] = v }
+func (m *MapThis) Get(name string) any {
+	low := strings.ToLower(name)
+	for k, v := range m.M {
+		if strings.ToLower(k) == low {
+			return v
+		}
+	}
+	return nil
+}
+
+func (m *MapThis) Set(name string, v any) {
+	low := strings.ToLower(name)
+	for k := range m.M {
+		if strings.ToLower(k) == low {
+			m.M[k] = v
+			return
+		}
+	}
+	m.M[low] = v
+}
 
 type env struct {
 	vars   map[string]any

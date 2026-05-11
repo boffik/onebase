@@ -2,8 +2,12 @@ package debugger
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -38,15 +42,22 @@ type ActiveSession struct {
 	callStack  []StackFrame
 	vars       map[string]any
 
+	// Diagnostics — last check info
+	diagLastFile string
+	diagLastLine int
+	diagMessages []string
+
 	// Stepping
 	stepMode  StepMode
 	stepDepth int
+	lastDepth int // interpreter's actual stack depth from last HookShouldStep call
 
 	// Channels: interpreter goroutine uses pauseChan/resumeChan,
 	// HTTP handlers signal via methods.
-	pauseChan  chan struct{} // closed by interpreter when it pauses
-	resumeChan chan struct{} // closed by HTTP handler to resume
+	pauseChan  chan struct{} // signaled when interpreter pauses
+	resumeChan chan struct{} // signaled by HTTP handler to resume
 	doneChan   chan struct{} // closed when session ends
+	stopOnce   sync.Once    // ensures doneChan is closed only once
 
 	// Expression evaluation during pause
 	evalReq chan evalRequest
@@ -122,6 +133,8 @@ func (s *ActiveSession) SetBreakpoint(file string, line int, condition string) *
 		CreatedAt: time.Now(),
 	}
 	s.breakpoints[file][line] = bp
+	bp.MapLen = len(s.breakpoints)       // diagnostic: map length after store
+	bp.EntryLen = len(s.breakpoints[file]) // diagnostic: entries for this file
 	return bp
 }
 
@@ -153,21 +166,71 @@ func (s *ActiveSession) ToggleBreakpoint(file string, line int) *Breakpoint {
 	return nil
 }
 
-// CheckBreakpoint returns the breakpoint if there's an enabled one at file:line
+// CheckBreakpoint returns the breakpoint if there's an enabled one at file:line.
+// The file parameter is normalized before lookup to match the editor ID format
+// used by the configurator (e.g., "post-ПоступлениеТоваров").
 func (s *ActiveSession) CheckBreakpoint(file string, line int) *Breakpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	locMap, ok := s.breakpoints[file]
-	if !ok {
-		return nil
+	normalized := normalizeFilePath(file)
+	s.diagLastFile = file
+	s.diagLastLine = line
+	s.diagMessages = append(s.diagMessages, fmt.Sprintf("check raw=%q line=%d norm=%q", file, line, normalized))
+	// Keep last 50 messages
+	if len(s.diagMessages) > 50 {
+		s.diagMessages = s.diagMessages[len(s.diagMessages)-50:]
 	}
-	bp, ok := locMap[line]
-	if !ok || !bp.Enabled {
-		return nil
+	for key, locMap := range s.breakpoints {
+		keyNorm := normalizeFilePath(key)
+		match := strings.EqualFold(keyNorm, normalized)
+		s.diagMessages = append(s.diagMessages, fmt.Sprintf("  bp key=%q keyNorm=%q match=%v", key, keyNorm, match))
+		if match {
+			for bpLine, bp := range locMap {
+				s.diagMessages = append(s.diagMessages, fmt.Sprintf("  line cmp: bpLine=%d curLine=%d", bpLine, line))
+				if bpLine == line && bp.Enabled {
+					bp.HitCount++
+					return bp
+				}
+			}
+		}
 	}
-	bp.HitCount++
-	return bp
+	return nil
+}
+
+// normalizeFilePath converts a file path or editor ID to a canonical form
+// for case-insensitive breakpoint matching.
+// Preserves original casing of the entity name so UI can match editor IDs.
+func normalizeFilePath(file string) string {
+	base := filepath.Base(file)
+	baseLow := strings.ToLower(base)
+
+	if strings.HasSuffix(baseLow, ".posting.os") {
+		name := base[:len(base)-len(".posting.os")]
+		return "post-" + capitalizeFirst(name)
+	}
+	if strings.HasSuffix(baseLow, ".module.os") {
+		name := base[:len(base)-len(".module.os")]
+		return "mod-" + capitalizeFirst(name)
+	}
+	if strings.HasSuffix(baseLow, ".proc.os") {
+		name := base[:len(base)-len(".proc.os")]
+		return "proc-" + capitalizeFirst(name)
+	}
+	if strings.HasSuffix(baseLow, ".os") {
+		name := base[:len(base)-len(".os")]
+		return capitalizeFirst(name)
+	}
+	// Already an editor ID like "post-ПоступлениеТоваров" — keep as-is
+	return file
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[size:]
 }
 
 // GetBreakpoints returns all breakpoints
@@ -286,16 +349,12 @@ func (s *ActiveSession) Continue() {
 	s.mu.Lock()
 	s.State = StateRunning
 	s.stepMode = StepNone
+	ch := s.resumeChan
 	s.mu.Unlock()
 
 	select {
-	case s.resumeChan <- struct{}{}:
+	case ch <- struct{}{}:
 	default:
-		// Resume channel was closed, recreate it
-		s.mu.Lock()
-		s.resumeChan = make(chan struct{})
-		s.mu.Unlock()
-		s.resumeChan <- struct{}{}
 	}
 }
 
@@ -304,45 +363,45 @@ func (s *ActiveSession) Step(mode StepMode) {
 	s.mu.Lock()
 	s.State = StateRunning
 	s.stepMode = mode
-	s.stepDepth = len(s.callStack)
+	s.stepDepth = s.lastDepth // use interpreter's actual depth from last pause
+	ch := s.resumeChan
 	s.mu.Unlock()
 
 	select {
-	case s.resumeChan <- struct{}{}:
+	case ch <- struct{}{}:
 	default:
-		s.mu.Lock()
-		s.resumeChan = make(chan struct{})
-		s.mu.Unlock()
-		s.resumeChan <- struct{}{}
 	}
 }
 
-// Stop terminates the session
+// Stop terminates the session. Safe to call multiple times.
 func (s *ActiveSession) Stop() {
 	s.mu.Lock()
 	s.State = StateStopped
 	s.mu.Unlock()
 
-	close(s.doneChan)
+	s.stopOnce.Do(func() { close(s.doneChan) })
 }
 
-// ShouldStep checks if execution should pause for stepping at the current position
-func (s *ActiveSession) ShouldStep() bool {
+// ShouldStep checks if execution should pause for stepping at the current position.
+// currentDepth is the interpreter's actual call stack depth (from env parent chain).
+func (s *ActiveSession) ShouldStep(currentDepth int) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Always store the interpreter's depth so Step() can use it for stepDepth
+	s.lastDepth = currentDepth
+	mode := s.stepMode
+	sd := s.stepDepth
+	s.mu.Unlock()
 
-	if s.stepMode == StepNone {
+	if mode == StepNone {
 		return false
 	}
-
-	depth := len(s.callStack)
-	switch s.stepMode {
+	switch mode {
 	case StepOver:
-		return depth <= s.stepDepth
+		return currentDepth <= sd
 	case StepInto:
 		return true
 	case StepOut:
-		return depth < s.stepDepth
+		return currentDepth < sd
 	}
 	return false
 }
@@ -355,10 +414,18 @@ func (s *ActiveSession) Snapshot() StatusSnapshot {
 	defer s.mu.Unlock()
 
 	snap := StatusSnapshot{
-		State:       s.State,
-		Location:    s.currentLoc,
-		Stack:       make([]StackFrame, len(s.callStack)),
-		Breakpoints: make([]Breakpoint, 0),
+		State:        s.State,
+		Location:     s.currentLoc,
+		Stack:        make([]StackFrame, len(s.callStack)),
+		Breakpoints:  make([]Breakpoint, 0),
+		DiagLastFile: s.diagLastFile,
+		DiagLastLine: s.diagLastLine,
+		DiagMessages: s.diagMessages,
+	}
+	// Collect breakpoint keys for diagnostics
+	for key, locMap := range s.breakpoints {
+		snap.DiagBPKeys = append(snap.DiagBPKeys, key)
+		snap.DiagBPCount += len(locMap)
 	}
 	copy(snap.Stack, s.callStack)
 
@@ -415,12 +482,12 @@ func (s *ActiveSession) HookCheckBreakpoint(file string, line int) bool {
 	return s.CheckBreakpoint(file, line) != nil
 }
 
-func (s *ActiveSession) HookShouldStep(stackDepth int) bool {
-	return s.ShouldStep()
+func (s *ActiveSession) HookShouldStep(depth int) bool {
+	return s.ShouldStep(depth)
 }
 
 func (s *ActiveSession) HookOnPause(file string, line int, vars map[string]any, evalFn func(string) (any, error)) {
-	loc := Location{File: file, Line: line}
+	loc := Location{File: normalizeFilePath(file), Line: line}
 	stack := s.GetCallStack()
 	s.Pause(loc, vars, stack, evalFn)
 }
@@ -431,4 +498,84 @@ func (s *ActiveSession) HookPushFrame(procedure string, line int) {
 
 func (s *ActiveSession) HookPopFrame() {
 	s.PopFrame()
+}
+
+// ── GlobalDebugController ─────────────────────────────────────────
+
+// GlobalDebugController manages a single global debug session used for
+// debugging DSL modules across the entire application.
+type GlobalDebugController struct {
+	mu      sync.Mutex
+	enabled bool
+	session *ActiveSession
+}
+
+// NewGlobalDebugController creates a new global debug controller (disabled by default).
+func NewGlobalDebugController() *GlobalDebugController {
+	return &GlobalDebugController{}
+}
+
+// Enable creates a new ActiveSession with ID "global" and ModulePath "*",
+// then marks the controller as enabled. If there was an existing session
+// it is stopped first.
+func (g *GlobalDebugController) Enable() *ActiveSession {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.session != nil {
+		g.session.Stop()
+	}
+
+	s := &ActiveSession{
+		ID:          "global",
+		ModulePath:  "*",
+		State:       StateRunning,
+		breakpoints: make(map[string]map[int]*Breakpoint),
+		vars:        make(map[string]any),
+		pauseChan:   make(chan struct{}, 1),
+		resumeChan:  make(chan struct{}),
+		doneChan:    make(chan struct{}),
+		evalReq:     make(chan evalRequest),
+	}
+	g.session = s
+	g.enabled = true
+	return s
+}
+
+// Disable stops the current session (if any), clears it, and marks the controller as disabled.
+func (g *GlobalDebugController) Disable() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.session != nil {
+		g.session.Stop()
+		g.session = nil
+	}
+	g.enabled = false
+}
+
+// Session returns the current active session, or nil if disabled.
+func (g *GlobalDebugController) Session() *ActiveSession {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.session
+}
+
+// IsEnabled returns whether the global debug controller is enabled.
+func (g *GlobalDebugController) IsEnabled() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.enabled
+}
+
+// SetSession sets the session directly (used when wiring up from ui.Server).
+func (g *GlobalDebugController) SetSession(sess *ActiveSession) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.session != nil {
+		g.session.Stop()
+	}
+	g.session = sess
+	g.enabled = sess != nil
 }

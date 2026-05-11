@@ -158,7 +158,7 @@ func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string
 			col := metadata.ColumnName(r)
 			extraCols = append(extraCols, col)
 			argIdx++
-			extraArgs = append(extraArgs, row[r.Name])
+			extraArgs = append(extraArgs, ciGet(row, r.Name))
 		}
 
 		colList := "period, регистратор, регистратор_тип, счётдт, счёткт"
