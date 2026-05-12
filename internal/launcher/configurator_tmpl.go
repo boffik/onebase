@@ -264,6 +264,8 @@ pre.convert-out{background:#f5f7fa;border:1px solid #e2e6ed;padding:12px;border-
 .dbg-console-line.dbg-err{color:#ef4444}
 .dbg-console-line.dbg-ok{color:#a3e635}
 .dbg-empty{color:#94a3b8;font-style:italic;padding:10px 0;text-align:center;font-size:12px}
+.dbg-val-clickable{cursor:pointer}
+.dbg-val-clickable:hover{text-decoration:underline;color:#1a4a80}
 
 /* ── Debug Monaco decorations ────────────────────── */
 .dbg-bp-glyph{background:#ef4444;border-radius:50%;margin-left:3px;width:12px!important;height:12px!important}
@@ -338,7 +340,7 @@ const cfgFoot = `{{define "cfg-foot"}}
   </div>
   <div class="dbg-tabs">
     <button class="dbg-tab active" onclick="dbgTab('vars')">Переменные</button>
-    <button class="dbg-tab" onclick="dbgTab('watch')">Табло v4</button>
+    <button class="dbg-tab" onclick="dbgTab('watch')">Табло v5</button>
     <button class="dbg-tab" onclick="dbgTab('bp')">Точки ост.</button>
     <button class="dbg-tab" onclick="dbgTab('stack')">Стек</button>
     <button class="dbg-tab" onclick="dbgTab('console')">Консоль</button>
@@ -372,6 +374,22 @@ const cfgFoot = `{{define "cfg-foot"}}
 </div>
 </div>{{/* dbg-wrapper */}}
 </div>{{/* cfg-body */}}
+
+<!-- Debug value inspector modal -->
+<div class="cfg-modal-overlay" id="dbg-val-modal" onclick="if(event.target===this)dbgValModalClose()">
+  <div class="cfg-modal-box" style="max-width:780px">
+    <div class="cfg-modal-hd">
+      <h3 id="dbg-val-modal-title">Значение</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="dbgValModalCopy()" style="background:#1a4a80;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer">Копировать</button>
+        <button class="cfg-modal-close" onclick="dbgValModalClose()">&times;</button>
+      </div>
+    </div>
+    <div class="cfg-modal-body" style="padding:0">
+      <textarea id="dbg-val-modal-text" readonly spellcheck="false" style="display:block;width:100%;height:62vh;border:none;resize:none;padding:12px 16px;font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.5;color:#1e293b;box-sizing:border-box;outline:none;white-space:pre-wrap;word-break:break-word"></textarea>
+    </div>
+  </div>
+</div>
 
 <!-- Admin modal -->
 <div class="cfg-modal-overlay" id="cfg-modal" onclick="if(event.target===this)cfgModalClose()">
@@ -1333,6 +1351,8 @@ var _dbgPollTimer = null;
 var _dbgPollCount = 0;
 var _dbgBreakpoints = {}; // { editorId: { line: true } }
 var _lastVarsKey = '';
+var _lastStackHtml = '';
+var _lastDiagHtml = '';
 var _dbgCurrentLineDecos = {}; // { editorId: decorationIds }
 
 // ── Configurator admin panels ────────────────────────────────────
@@ -1498,7 +1518,7 @@ function dbgPoll() {
           var h = '';
           snap.variables.forEach(function(v){
             h += '<div class="dbg-var-row"><span class="dbg-var-name">' + esc(v.name) + '</span>'
-              + '<span class="dbg-var-val">' + esc(v.value) + '</span><span class="dbg-var-type">' + esc(v.type) + '</span></div>';
+              + '<span class="dbg-var-val dbg-val-clickable" title="Открыть значение" onclick="dbgInspectValue(\'' + esc(v.name).replace(/'/g,"\\'") + '\')">' + esc(v.value) + '</span><span class="dbg-var-type">' + esc(v.type) + '</span></div>';
           });
           document.getElementById('dbg-vars').innerHTML = h;
         }
@@ -1509,14 +1529,14 @@ function dbgPoll() {
         }
       }
 
-      // stack
+      // stack — only update DOM if changed
       if (snap.stack && snap.stack.length) {
         var h = '';
         snap.stack.forEach(function(f){
           h += '<div class="dbg-stack-row"><span class="proc">' + esc(f.procedure) + '</span> '
             + '<span class="loc">' + esc(f.module) + ':' + f.line + '</span></div>';
         });
-        document.getElementById('dbg-stack').innerHTML = h;
+        if (h !== _lastStackHtml) { _lastStackHtml = h; document.getElementById('dbg-stack').innerHTML = h; }
       }
 
       // breakpoints — always render from local state
@@ -1530,9 +1550,9 @@ function dbgPoll() {
           var msgs = snap.diag_messages.slice(-12);
           msgs.forEach(function(m){ dh += '<div class="dbg-console-line">' + esc(m) + '</div>'; });
         }
-        diagEl.innerHTML = dh;
+        if (dh !== _lastDiagHtml) { _lastDiagHtml = dh; diagEl.innerHTML = dh; }
       } else if (diagEl && snap.state === 'disabled') {
-        diagEl.innerHTML = '<div style="color:#9ca3af;font-size:10px">Debug disabled</div>';
+        if (_lastDiagHtml !== '__disabled__') { _lastDiagHtml = '__disabled__'; diagEl.innerHTML = '<div style="color:#9ca3af;font-size:10px">Debug disabled</div>'; }
       }
     })
     .catch(function(e){
@@ -1543,6 +1563,7 @@ function dbgPoll() {
 
 var _dbgHighlightLog = '';
 var _dbgPauseReason = '';
+var _lastStatusHtml = '';
 function dbgUpdateStatus(st, rawState) {
   var el = document.getElementById('dbg-status');
   var labels = {disabled:'Отладка: ВЫКЛ', running:'Отладка: выполнение...', paused:'Отладка: пауза', stopped:'Отладка: останов'};
@@ -1550,11 +1571,11 @@ function dbgUpdateStatus(st, rawState) {
   if (_dbgPauseReason && st === 'paused') {
     dot += ' <span style="font-size:10px;color:#94a3b8">(' + (_dbgPauseReason === 'breakpoint' ? 'точка останова' : 'шаг') + ')</span>';
   }
-  if (_dbgHighlightLog) {
-    el.innerHTML = dot + ' <span style="font-size:9px;color:#f97316">' + _dbgHighlightLog + '</span>';
-  } else {
-    el.innerHTML = dot;
-  }
+  var html = _dbgHighlightLog ? (dot + ' <span style="font-size:9px;color:#f97316;user-select:text">' + _dbgHighlightLog + '</span>') : dot;
+  // Avoid rewriting innerHTML on every poll — it clears any text the user is selecting.
+  if (html === _lastStatusHtml) return;
+  _lastStatusHtml = html;
+  el.innerHTML = html;
 }
 
 function dbgContinue() {
@@ -1668,6 +1689,7 @@ function dbgWatchAdd() {
   _dbgWatchList.push({name: name, id: wid});
   dbgWatchDebug('added "' + name + '" id=' + wid + ' total=' + _dbgWatchList.length);
   dbgWatchRender();
+  dbgWatchEvalAll();
 }
 
 function dbgWatchRemove(id) {
@@ -1688,43 +1710,99 @@ function dbgWatchRender() {
     h += '<div class="dbg-var-row">'
       + '<span class="dbg-var-name">' + esc(w.name) + '</span>'
       + ' <span style="color:#ef4444;cursor:pointer;font-size:9px" onclick="dbgWatchRemove(\'' + w.id + '\')">&#10005;</span>'
-      + ' <span class="dbg-var-val" id="wv-' + w.id + '">...</span>'
+      + ' <span class="dbg-var-val dbg-val-clickable" title="Открыть значение" onclick="dbgWatchOpen(\'' + w.id + '\')" id="wv-' + w.id + '">...</span>'
       + ' <span class="dbg-var-type" id="wt-' + w.id + '"></span>'
       + '</div>';
   });
   el.innerHTML = h;
-  // diagnostic: show first item in debug line to confirm rendering
-  var first = _dbgWatchList[0];
-  dbgWatchDebug('rendered ' + _dbgWatchList.length + ' items | el.h=' + el.offsetHeight + 'px html=' + (h.length > 80 ? h.substring(0,80)+'...' : h));
+  dbgWatchDebug('rendered ' + _dbgWatchList.length + ' items');
 }
 
+function dbgValToStr(v) {
+  if (v === null || v === undefined) return 'Неопределено';
+  if (typeof v === 'object') { try { return JSON.stringify(v, null, 2); } catch(e) { return String(v); } }
+  return String(v);
+}
+
+var _dbgWatchGen = 0;
 function dbgWatchEvalAll() {
   if (!_dbgWatchList.length) return;
+  _dbgWatchGen++;
+  var gen = _dbgWatchGen;
   _dbgWatchList.forEach(function(w){
     var valEl = document.getElementById('wv-' + w.id);
-    var typEl = document.getElementById('wt-' + w.id);
     if (!valEl) return;
     if (!_dbgEnabled) { valEl.textContent = '(отладка выкл)'; return; }
     fetch('/bases/' + _dbgBase + '/debug/evaluate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expr:w.name})})
       .then(function(r){return r.json()})
       .then(function(res){
+        if (gen !== _dbgWatchGen) return; // a newer evaluation round started — drop stale result
         var v = document.getElementById('wv-' + w.id);
         var t = document.getElementById('wt-' + w.id);
         if (!v) return;
         if (res.is_error) {
-          v.textContent = String(res.error).substring(0, 50);
-          v.style.color = '#ef4444';
-        } else {
-          v.textContent = res.value !== null && res.value !== undefined ? String(res.value) : 'Неопределено';
-          v.style.color = '';
+          // Usually a transient "interpreter not paused" window between steps —
+          // keep the last good value, just dim it instead of flickering to an error.
+          v.style.opacity = '0.4';
+          return;
         }
-        if (t) t.textContent = res.type || '';
+        var txt = dbgValToStr(res.value);
+        w._full = txt;
+        w._type = res.type || '';
+        var disp = txt.length > 300 ? txt.substring(0, 300) + '…' : txt;
+        if (v.textContent !== disp) v.textContent = disp;
+        v.style.opacity = '';
+        v.style.color = '';
+        v.title = (txt.length > 60) ? 'Открыть значение полностью' : 'Открыть значение';
+        var tp = res.type || '';
+        if (t && t.textContent !== tp) t.textContent = tp;
       })
       .catch(function(e){
+        if (gen !== _dbgWatchGen) return;
         var v = document.getElementById('wv-' + w.id);
-        if (v) v.textContent = 'err';
+        if (v) v.style.opacity = '0.4';
       });
   });
+}
+
+function dbgWatchOpen(id) {
+  var w = null;
+  for (var i = 0; i < _dbgWatchList.length; i++) { if (_dbgWatchList[i].id === id) { w = _dbgWatchList[i]; break; } }
+  if (!w) return;
+  if (w._full !== undefined) dbgShowBigValue(w.name, w._type || '', w._full);
+  else dbgInspectValue(w.name);
+}
+
+// Inspect a variable/expression: re-evaluate it (full, untruncated) and show in a modal.
+function dbgInspectValue(expr) {
+  if (!_dbgEnabled) { dbgShowBigValue(expr, '', '(отладка выключена)'); return; }
+  fetch('/bases/' + _dbgBase + '/debug/evaluate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expr:expr})})
+    .then(function(r){return r.json()})
+    .then(function(res){
+      if (res.is_error) { dbgShowBigValue(expr, 'Ошибка', String(res.error)); return; }
+      dbgShowBigValue(expr, res.type || '', dbgValToStr(res.value));
+    })
+    .catch(function(e){ dbgShowBigValue(expr, 'Ошибка', String(e.message)); });
+}
+
+function dbgShowBigValue(name, type, value) {
+  var t = document.getElementById('dbg-val-modal-title');
+  if (t) t.textContent = String(name) + (type ? '  ·  ' + type : '');
+  var ta = document.getElementById('dbg-val-modal-text');
+  if (ta) { ta.value = (value === null || value === undefined) ? '' : String(value); ta.scrollTop = 0; }
+  var m = document.getElementById('dbg-val-modal');
+  if (m) m.classList.add('active');
+}
+function dbgValModalClose() {
+  var m = document.getElementById('dbg-val-modal');
+  if (m) m.classList.remove('active');
+}
+function dbgValModalCopy() {
+  var ta = document.getElementById('dbg-val-modal-text');
+  if (!ta) return;
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch(e){}
+  if (navigator.clipboard) { try { navigator.clipboard.writeText(ta.value); } catch(e){} }
 }
 
 function dbgHighlightLine(file, line) {

@@ -51,7 +51,8 @@ type ActiveSession struct {
 	// Stepping
 	stepMode  StepMode
 	stepDepth int
-	lastDepth int // interpreter's actual stack depth from last HookShouldStep call
+	stepFile  string // normalized file the step was initiated from; stepping stays within it
+	lastDepth int    // interpreter's actual stack depth from last HookShouldStep call
 
 	// Channels: interpreter goroutine uses pauseChan/resumeChan,
 	// HTTP handlers signal via methods.
@@ -359,6 +360,7 @@ func (s *ActiveSession) Continue() {
 	s.mu.Lock()
 	s.State = StateRunning
 	s.stepMode = StepNone
+	s.stepFile = ""
 	ch := s.resumeChan
 	s.mu.Unlock()
 
@@ -374,6 +376,13 @@ func (s *ActiveSession) Step(mode StepMode) {
 	s.State = StateRunning
 	s.stepMode = mode
 	s.stepDepth = s.lastDepth // use interpreter's actual depth from last pause
+	// Restrict stepping to the module we paused in, so background work
+	// (scheduled jobs, posting handlers in other modules) can't hijack the cursor.
+	if s.currentLoc != nil {
+		s.stepFile = normalizeFilePath(s.currentLoc.File)
+	} else {
+		s.stepFile = ""
+	}
 	ch := s.resumeChan
 	s.mu.Unlock()
 
@@ -394,15 +403,25 @@ func (s *ActiveSession) Stop() {
 
 // ShouldStep checks if execution should pause for stepping at the current position.
 // currentDepth is the interpreter's actual call stack depth (from env parent chain).
-func (s *ActiveSession) ShouldStep(currentDepth int) bool {
+// file is the source file of the statement about to execute; stepping is confined to
+// the module the user paused in (s.stepFile) so unrelated code running on the same
+// global debug session (scheduled jobs, posting in other modules) is ignored.
+func (s *ActiveSession) ShouldStep(file string, currentDepth int) bool {
+	normFile := normalizeFilePath(file)
+
 	s.mu.Lock()
-	// Always store the interpreter's depth so Step() can use it for stepDepth
-	s.lastDepth = currentDepth
 	mode := s.stepMode
 	sd := s.stepDepth
+	sf := s.stepFile
+	inScope := sf == "" || strings.EqualFold(normFile, sf)
+	if inScope {
+		// Only track depth for code inside our step scope, otherwise a
+		// background goroutine's depth would corrupt the next Step().
+		s.lastDepth = currentDepth
+	}
 	s.mu.Unlock()
 
-	if mode == StepNone {
+	if mode == StepNone || !inScope {
 		return false
 	}
 	var result bool
@@ -415,7 +434,7 @@ func (s *ActiveSession) ShouldStep(currentDepth int) bool {
 		result = currentDepth < sd
 	}
 	s.mu.Lock()
-	s.diagMessages = append(s.diagMessages, fmt.Sprintf("step mode=%s depth=%d stepDepth=%d result=%v", mode, currentDepth, sd, result))
+	s.diagMessages = append(s.diagMessages, fmt.Sprintf("step mode=%d file=%s depth=%d stepDepth=%d result=%v", mode, normFile, currentDepth, sd, result))
 	if len(s.diagMessages) > 50 {
 		s.diagMessages = s.diagMessages[len(s.diagMessages)-50:]
 	}
@@ -500,8 +519,8 @@ func (s *ActiveSession) HookCheckBreakpoint(file string, line int) bool {
 	return s.CheckBreakpoint(file, line) != nil
 }
 
-func (s *ActiveSession) HookShouldStep(depth int) bool {
-	return s.ShouldStep(depth)
+func (s *ActiveSession) HookShouldStep(file string, depth int) bool {
+	return s.ShouldStep(file, depth)
 }
 
 func (s *ActiveSession) HookOnPause(file string, line int, vars map[string]any, evalFn func(string) (any, error), reason string) {
