@@ -2132,7 +2132,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </details>
 
   <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
-  <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
@@ -2140,7 +2139,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
   <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
@@ -2150,7 +2148,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </details>
 
   <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
-  <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
   {{range .Modules}}
   <div class="cfg-item" data-id="mod-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📦</span>{{.Name}}
@@ -2158,7 +2155,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
   <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
   {{range .Processors}}
   <div class="cfg-item" data-id="proc-{{.Name}}" onclick="selItem(this)">
