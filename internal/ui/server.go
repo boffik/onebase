@@ -125,6 +125,7 @@ func (s *Server) Mount(r chi.Router) {
 	// Print forms
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}", s.printDocument)
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}/pdf", s.printDocumentPDF)
+	r.Get("/ui/{kind}/{entity}/{id}/print-dsl/{pfName}", s.printDocumentDSLPF)
 
 	// Attachments
 	r.Get("/ui/{kind}/{entity}/{id}/attachments", s.attachmentsList)

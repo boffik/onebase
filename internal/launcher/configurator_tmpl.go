@@ -291,6 +291,7 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js" crossorigin="anonymous" onerror="window._monacoLoadErr='loader.js failed'"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
 <title>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
 {{template "css" .}}
 </head>
@@ -465,7 +466,7 @@ const cfgFoot = `{{define "cfg-foot"}}
 </div>
 <script>
 // ── New object form ────────────────────────────────────────────
-var _cfgNewTitles = {catalog:'Новый справочник', document:'Новый документ', register:'Новый регистр', inforeg:'Новый регистр сведений', enum:'Новое перечисление'};
+var _cfgNewTitles = {catalog:'Новый справочник', document:'Новый документ', register:'Новый регистр', inforeg:'Новый регистр сведений', enum:'Новое перечисление', subsystem:'Новая подсистема'};
 function cfgNewObj(kind) {
   if (kind === 'printform') { cfgNewPrintFormShow(); return; }
   var f = document.getElementById('cfg-new-form');
@@ -648,7 +649,7 @@ function cfgSelectPanel(id) {
 (function(){
   var saved='{{.FieldsSavedEntity}}'?'{{.FieldsSavedEntity}}':'{{.ModuleSavedEntity}}';
   var el=null;
-  if(saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
+  if(saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
   if(el)selItem(el);else{var f=document.querySelector('.cfg-item');if(f)selItem(f);}
 })();
 
@@ -660,6 +661,149 @@ function modTab(el, panelId) {
   el.classList.add('active');
   document.getElementById(panelId).classList.add('active');
 }
+
+// ── Layout Editor ─────────────────────────────────────────────────
+var _led={};
+function initLayoutEditor(n){
+  var ta=document.getElementById('yaml-src-'+n);
+  if(!ta||!window.jsyaml)return;
+  try{var d=jsyaml.parse(ta.value);}catch(e){return;}
+  _led[n]={data:d,sel:null};
+  renderLayoutEditor(n);
+}
+function renderLayoutEditor(n){
+  var s=_led[n];if(!s)return;
+  var d=s.data,areas=d.areas||{},h='<div style="font-family:Arial,sans-serif;font-size:12px">';
+  var aNames=Object.keys(areas);
+  for(var ai=0;ai<aNames.length;ai++){
+    var an=aNames[ai],ar=areas[an];
+    h+='<div style="margin-bottom:16px">';
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
+    h+='<span style="font-weight:bold;color:#4a9">'+esc(an)+'</span>';
+    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer" onclick="addLayoutRow(\''+n+"','"+esc(an)+"')\">+ строка</button>";
+    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #fcc;border-radius:3px;cursor:pointer;color:#c33" onclick="delLayoutArea(\''+n+"','"+esc(an)+"')\">✕</button>";
+    h+='</div>';
+    h+='<table style="border-collapse:collapse;border:1px solid #999">';
+    var rows=ar.rows||[];
+    for(var ri=0;ri<rows.length;ri++){
+      h+='<tr>';
+      var cells=rows[ri].cells||[];
+      for(var ci=0;ci<cells.length;ci++){
+        var c=cells[ci];
+        var st='border:1px solid #999;padding:4px 8px;min-width:40px;cursor:pointer;';
+        if(c.bold)st+='font-weight:bold;';
+        if(c.italic)st+='font-style:italic;';
+        if(c.backColor)st+='background-color:'+c.backColor+';';
+        if(c.textColor)st+='color:'+c.textColor+';';
+        if(c.align)st+='text-align:'+c.align+';';
+        var at='';
+        if(c.colspan&&c.colspan>1)at+=' colspan="'+c.colspan+'"';
+        var isSel=s.sel&&s.sel.area===an&&s.sel.row===ri&&s.sel.col===ci;
+        if(isSel)st+='outline:2px solid #1a73e8;';
+        var txt=c.text||'';
+        if(c.parameter)txt='<span style="color:#888">['+esc(c.parameter)+']</span>';
+        if(!txt)txt='&nbsp;';
+        h+='<td style="'+st+'"'+at+' onclick="selectCell(\''+n+"','"+esc(an)+"',"+ri+','+ci+')">'+txt+'</td>';
+      }
+      h+='<td style="border:none;padding:2px"><button type="button" style="font-size:10px;color:#c33;border:none;cursor:pointer" onclick="delLayoutRow(\''+n+"','"+esc(an)+"',"+ri+')\">✕</button></td>';
+      h+='</tr>';
+    }
+    h+='</table></div>';
+  }
+  h+='</div>';
+  document.getElementById('veditor-'+n).innerHTML=h;
+  syncProps(n);
+}
+function selectCell(n,a,r,c){
+  var s=_led[n];if(!s)return;
+  s.sel={area:a,row:r,col:c};
+  renderLayoutEditor(n);
+}
+function syncProps(n){
+  var s=_led[n];if(!s)return;
+  var pp=document.getElementById('vprops-'+n);
+  if(!s.sel){pp.style.display='none';return;}
+  pp.style.display='block';
+  var d=s.data,ar=(d.areas||{})[s.sel.area];
+  if(!ar||!ar.rows||!ar.rows[s.sel.row]){pp.style.display='none';return;}
+  var c=ar.rows[s.sel.row].cells[s.sel.col]||{};
+  document.getElementById('vp-text-'+n).value=c.text||'';
+  document.getElementById('vp-param-'+n).value=c.parameter||'';
+  document.getElementById('vp-bold-'+n).checked=!!c.bold;
+  document.getElementById('vp-italic-'+n).checked=!!c.italic;
+  document.getElementById('vp-align-'+n).value=c.align||'';
+  document.getElementById('vp-bg-'+n).value=c.backColor||'#ffffff';
+  document.getElementById('vp-colspan-'+n).value=c.colspan||1;
+  document.getElementById('vp-fg-'+n).value=c.textColor||'#000000';
+}
+function updateCellProp(n,prop,val){
+  var s=_led[n];if(!s||!s.sel)return;
+  var d=s.data,ar=(d.areas||{})[s.sel.area];
+  if(!ar||!ar.rows||!ar.rows[s.sel.row])return;
+  var ci=s.sel.col;
+  if(!ar.rows[s.sel.row].cells[ci])ar.rows[s.sel.row].cells[ci]={};
+  var c=ar.rows[s.sel.row].cells[ci];
+  if(val===''||val===0||(typeof val==='number'&&isNaN(val))){delete c[prop];}
+  else{c[prop]=val;}
+  renderLayoutEditor(n);
+}
+function toggleLayoutYaml(n){
+  var v=document.getElementById('yaml-view-'+n);
+  v.style.display=v.style.display==='none'?'block':'none';
+}
+function applyYaml(n){
+  var ta=document.getElementById('ta-mkt-'+n);
+  if(!ta)return;
+  try{var d=jsyaml.parse(ta.value);}catch(e){return;}
+  if(_led[n])_led[n].data=d;
+  renderLayoutEditor(n);
+}
+function saveLayoutEditor(n){
+  var s=_led[n];if(!s)return;
+  var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
+  document.getElementById('yaml-src-'+n).value=y;
+  return true;
+}
+function addLayoutArea(n){
+  var name=prompt('Имя новой области:');
+  if(!name)return;
+  var s=_led[n];if(!s)return;
+  if(!s.data.areas)s.data.areas={};
+  s.data.areas[name]={rows:[{cells:[{text:'Ячейка'}]}]};
+  renderLayoutEditor(n);
+}
+function delLayoutArea(n,a){
+  if(!confirm('Удалить область '+a+'?'))return;
+  var s=_led[n];if(!s)return;
+  delete s.data.areas[a];
+  s.sel=null;
+  renderLayoutEditor(n);
+}
+function addLayoutRow(n,a){
+  var s=_led[n];if(!s)return;
+  var ar=(s.data.areas||{})[a];if(!ar)return;
+  if(!ar.rows)ar.rows=[];
+  var maxCols=1;
+  for(var i=0;i<ar.rows.length;i++){if(ar.rows[i].cells.length>maxCols)maxCols=ar.rows[i].cells.length;}
+  var cells=[];for(var j=0;j<maxCols;j++)cells.push({});
+  ar.rows.push({cells:cells});
+  renderLayoutEditor(n);
+}
+function delLayoutRow(n,a,ri){
+  var s=_led[n];if(!s)return;
+  var ar=(s.data.areas||{})[a];if(!ar||!ar.rows)return;
+  ar.rows.splice(ri,1);
+  s.sel=null;
+  renderLayoutEditor(n);
+}
+// Init layout editors on load
+(function(){
+  var tas=document.querySelectorAll('[id^="yaml-src-"]');
+  for(var i=0;i<tas.length;i++){
+    var n=tas[i].id.replace('yaml-src-','');
+    setTimeout(function(nn){return function(){initLayoutEditor(nn);};}(n),100);
+  }
+})();
 
 // ── HTML escape (shared) ────────────────────────────────────────
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -1898,7 +2042,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  {{if .Enums}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Перечисления</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="Добавить перечисление">+</span></summary>
   {{range .Enums}}
   <div class="cfg-item" data-id="en-{{.Name}}" onclick="selItem(this)">
@@ -1906,9 +2049,8 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Constants}}
+  <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
   <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
@@ -1916,9 +2058,8 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Reports}}
+  <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
   <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
@@ -1926,9 +2067,8 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Modules}}
+  <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
   <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
   {{range .Modules}}
   <div class="cfg-item" data-id="mod-{{.Name}}" onclick="selItem(this)">
@@ -1936,9 +2076,8 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Processors}}
+  <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
   <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
   {{range .Processors}}
   <div class="cfg-item" data-id="proc-{{.Name}}" onclick="selItem(this)">
@@ -1946,7 +2085,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Печатные формы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="Добавить печатную форму">+</span></summary>
   {{range .PrintForms}}
@@ -1954,9 +2092,18 @@ const cfgTabTree = `{{define "tab-tree"}}
     <span class="ic">🖨</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}</span>
   </div>
   {{end}}
+  {{range .DSLPrintForms}}
+  <div class="cfg-item" data-id="dpf-{{.Name}}" onclick="selItem(this)">
+    <span class="ic">📋</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}} (DSL)</span>
+  </div>
+  {{if .HasLayout}}
+  <div class="cfg-item cfg-sub" data-id="mkt-{{.Name}}" onclick="selItem(this)" style="padding-left:32px">
+    <span class="ic" style="font-size:12px">&#x1F4D0;</span>Макет {{.Name}}
+  </div>
+  {{end}}
+  {{end}}
   </details>
 
-  {{if .Subsystems}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Подсистемы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="Добавить подсистему">+</span></summary>
   {{range .Subsystems}}
   <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">
@@ -1964,7 +2111,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
   <div id="cfg-new-form" class="cfg-new-form" style="display:none">
     <div id="cfg-new-title" style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px"></div>
@@ -2282,6 +2428,74 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
     </form>
   </div>
+  {{end}}
+
+  {{/* DSL Print forms (.os) */}}
+  {{range .DSLPrintForms}}
+  <div class="cfg-panel" id="dpf-{{.Name}}">
+    <div class="panel-title">📋 {{.Name}}</div>
+    <div class="panel-kind">DSL печатная форма · документ: {{.Document}}</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/printform">
+      <input type="hidden" name="printform_filename" value="{{.FileName}}">
+      <input type="hidden" name="printform_dsl" value="1">
+      {{if .HasLayout}}<div class="section-hd" style="color:#4a9">Макет привязан (<code>{{.Name}}.layout.yaml</code>)</div>{{end}}
+      <div class="section-hd">Код формы (.os) <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="code-wrap">
+        <pre class="os-code" id="pre-dpf-{{.Name}}" onclick="startEdit('dpf-{{.Name}}')">{{.Source}}</pre>
+        <textarea class="os-edit" id="ta-dpf-{{.Name}}" name="source"
+                  style="display:none"
+                  onblur="endEdit('dpf-{{.Name}}')">{{.Source}}</textarea>
+      </div>
+      <div class="module-save-row">
+        <button class="btn-save" type="submit">Сохранить</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+      </div>
+    </form>
+  </div>
+  {{end}}
+
+  {  {{/* Layout panels */}}
+  {{range .DSLPrintForms}}
+  {{if .HasLayout}}
+  <div class="cfg-panel" id="mkt-{{.Name}}">
+    <div class="panel-title">&#x1F4D0; Макет: {{.Name}}</div>
+    <div class="panel-kind">Визуальный редактор шаблона</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/layout" onsubmit="return saveLayoutEditor('{{.Name}}')">
+      <input type="hidden" name="layout_name" value="{{.Name}}">
+      <textarea id="yaml-src-{{.Name}}" name="source" style="display:none">{{.LayoutYAML}}</textarea>
+      <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap">
+        <button type="button" class="btn-save" onclick="addLayoutArea('{{.Name}}')" style="font-size:12px;padding:4px 10px">+ Область</button>
+        <button type="button" class="btn-save" onclick="toggleLayoutYaml('{{.Name}}')" style="font-size:12px;padding:4px 10px">YAML</button>
+      </div>
+      <div id="yaml-view-{{.Name}}" style="display:none">
+        <div class="code-wrap">
+          <pre class="os-code" id="pre-mkt-{{.Name}}" onclick="startEdit('mkt-{{.Name}}')">{{.LayoutYAML}}</pre>
+          <textarea class="os-edit" id="ta-mkt-{{.Name}}" style="display:none"
+                    onblur="endEdit('mkt-{{.Name}}');applyYaml('{{.Name}}')">{{.LayoutYAML}}</textarea>
+        </div>
+      </div>
+      <div id="veditor-{{.Name}}"></div>
+      <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
+        <div style="font-weight:bold;margin-bottom:6px;font-size:12px">Свойства ячейки</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+          <div><label>Текст</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
+          <div><label>Параметр</label><br><input id="vp-param-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','parameter',this.value)"></div>
+          <div><label><input type="checkbox" id="vp-bold-{{.Name}}" onchange="updateCellProp('{{.Name}}','bold',this.checked)"> Жирный</label></div>
+          <div><label><input type="checkbox" id="vp-italic-{{.Name}}" onchange="updateCellProp('{{.Name}}','italic',this.checked)"> Курсив</label></div>
+          <div><label>Выравнивание</label><br><select id="vp-align-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','align',this.value)">
+            <option value="">По умолчанию</option><option value="left">Лево</option><option value="center">Центр</option><option value="right">Право</option>
+          </select></div>
+          <div><label>Фон</label><br><input type="color" id="vp-bg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','backColor',this.value)"></div>
+          <div><label>Объединить (colspan)</label><br><input type="number" id="vp-colspan-{{.Name}}" min="1" max="10" style="width:60px;padding:3px" oninput="updateCellProp('{{.Name}}','colspan',parseInt(this.value)||0)"></div>
+          <div><label>Цвет текста</label><br><input type="color" id="vp-fg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','textColor',this.value)"></div>
+        </div>
+      </div>
+      <div class="module-save-row">
+        <button class="btn-save" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </div>
+  {{end}}
   {{end}}
 
   {{/* Subsystems */}}
@@ -2772,8 +2986,15 @@ const cfgTabBackup = `{{define "tab-backup"}}
   <h2 style="margin:0 0 4px;font-size:18px">💾 Бэкапы</h2>
   <p style="font-size:12px;color:#64748b;margin:0 0 16px">Резервное копирование и восстановление базы данных</p>
   {{if .BackupMessage}}<div class="success-box">{{.BackupMessage}}</div>{{end}}
+  <div style="font-size:12px;color:#64748b;margin-bottom:12px;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+    Папка бэкапов: <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px">{{.BackupDir}}</code>
+  </div>
   <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px">
     <button class="btn-save" type="submit">Создать бэкап сейчас</button>
+  </form>
+  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/upload" enctype="multipart/form-data" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+    <input type="file" name="backup_file" accept=".sql.gz,.sql" required style="font-size:12px">
+    <button class="btn-save" type="submit">Загрузить файл бэкапа</button>
   </form>
   <h3 style="font-size:13px;margin:0 0 8px;color:#374151">Файлы бэкапов</h3>
   <table class="fields-tbl">
@@ -2785,6 +3006,9 @@ const cfgTabBackup = `{{define "tab-backup"}}
     <td style="font-size:12px;color:#64748b">{{.Date}}</td>
     <td style="white-space:nowrap">
       <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
+      <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/restore" style="display:inline" onsubmit="return confirm('Восстановить {{.Name}}? Текущие данные будут заменены!')">
+        <button type="submit" style="font-size:11px;color:#16a34a;background:none;border:none;cursor:pointer;padding:0 4px">Восстановить</button>
+      </form>
       <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
         <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">Удалить</button>
       </form>
@@ -2816,6 +3040,16 @@ const cfgTabBackup = `{{define "tab-backup"}}
     </div>
     <button class="btn-save" type="submit">Сохранить настройки</button>
   </form>
+  </details>
+  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Перенос конфигурации</summary>
+  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Экспортируйте конфигурацию в ZIP для переноса на другой сервер или импортируйте из архива.</p>
+  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+    <a href="/bases/{{.Base.ID}}/configurator/config/export-zip" class="btn-save" style="text-decoration:none;display:inline-block">Экспорт в ZIP</a>
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/config/import-zip" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px">
+      <input type="file" name="config_zip" accept=".zip" required style="font-size:12px">
+      <button class="btn-save" type="submit">Импорт из ZIP</button>
+    </form>
+  </div>
   </details>
 </div>
 {{end}}`

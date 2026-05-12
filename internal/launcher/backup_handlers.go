@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -123,6 +124,71 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
 		data.BackupMessage = "Настройки бэкапа сохранены"
+	}
+	renderCfg(w, data)
+}
+
+func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	dir := h.backupDir(b)
+	os.MkdirAll(dir, 0o755)
+
+	file, header, err := r.FormFile("backup_file")
+	if err != nil {
+		data := h.loadCfgData(r.Context(), b, "backup")
+		data.Error = "Upload error: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+	defer file.Close()
+
+	name := header.Filename
+	outPath := filepath.Join(dir, name)
+	f, err := os.Create(outPath)
+	if err != nil {
+		data := h.loadCfgData(r.Context(), b, "backup")
+		data.Error = "Save error: " + err.Error()
+		renderCfg(w, data)
+		return
+	}
+	defer f.Close()
+	io.Copy(f, file)
+
+	data := h.loadCfgData(r.Context(), b, "backup")
+	data.FieldsSaved = true
+	data.FieldsSavedEntity = "panel-backup"
+	data.BackupMessage = "File uploaded: " + name
+	renderCfg(w, data)
+}
+
+func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	file := chi.URLParam(r, "file")
+	dir := h.backupDir(b)
+	fp := filepath.Join(dir, file)
+	if _, err := os.Stat(fp); err != nil {
+		data := h.loadCfgData(r.Context(), b, "backup")
+		data.Error = "File not found: " + file
+		renderCfg(w, data)
+		return
+	}
+
+	restoreErr := backup.Restore(r.Context(), b.DB, fp)
+	data := h.loadCfgData(r.Context(), b, "backup")
+	if restoreErr != nil {
+		data.Error = "Restore error: " + restoreErr.Error()
+	} else {
+		data.FieldsSaved = true
+		data.FieldsSavedEntity = "panel-backup"
+		data.BackupMessage = "Database restored from: " + file
 	}
 	renderCfg(w, data)
 }

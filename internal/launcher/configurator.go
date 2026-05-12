@@ -128,6 +128,16 @@ type cfgPrintForm struct {
 	FileName string
 }
 
+type cfgDSLPrintForm struct {
+	Name          string
+	Document      string
+	Source        string
+	FileName      string
+	HasLayout     bool
+	LayoutYAML    string
+	LayoutPreview template.HTML
+}
+
 type cfgInfoRegister struct {
 	Name       string
 	Periodic   bool
@@ -158,7 +168,8 @@ type configuratorData struct {
 	Reports   []cfgReport
 	Modules    []cfgModule
 	Processors []cfgProcessor
-	PrintForms []cfgPrintForm
+	PrintForms    []cfgPrintForm
+	DSLPrintForms []cfgDSLPrintForm
 	Subsystems []cfgSubsystem
 	Error     string
 	// all entity names for reference picker
@@ -179,6 +190,7 @@ type configuratorData struct {
 	PlatformVer    string
 	UIServerURL    string
 	BackupMessage  string
+	BackupDir      string
 	BackupFiles    []backupFile
 	BackupSettings backupSettings
 	// session token for passing to UI server (bootstrap auth)
@@ -394,6 +406,25 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 		pfByDoc[strings.ToLower(pf.Document)] = append(pfByDoc[strings.ToLower(pf.Document)], cpf)
 	}
 
+		// load DSL print forms (.os)
+		for _, df := range proj.DSLPrintForms {
+			cpf := cfgDSLPrintForm{
+				Name:     df.Name,
+				Document: df.Document,
+				Source:   df.Source,
+				FileName: df.Name + ".os",
+			}
+			if df.Layout != nil {
+				cpf.HasLayout = true
+				cpf.LayoutPreview = template.HTML(df.Layout.PreviewHTML())
+				if df.LayoutPath != "" {
+					if raw, err := os.ReadFile(df.LayoutPath); err == nil {
+						cpf.LayoutYAML = string(raw)
+					}
+				}
+			}
+			data.DSLPrintForms = append(data.DSLPrintForms, cpf)
+		}
 	for _, e := range data.Entities {
 		data.AllEntityNames = append(data.AllEntityNames, e.Name)
 		e.LinkedPrintForms = pfByDoc[strings.ToLower(e.Name)]
@@ -1960,7 +1991,10 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 	}
 	yaml.Unmarshal([]byte(source), &hdr) //nolint
 	pfName := hdr.Name
-	if pfName == "" {
+	isDSL := r.FormValue("printform_dsl") == "1"
+	if isDSL {
+		pfName = strings.TrimSuffix(filename, ".os")
+	} else if pfName == "" {
 		pfName = strings.TrimSuffix(filename, ".yaml")
 	}
 
@@ -2028,6 +2062,76 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 	}
 	renderCfg(w, data)
 }
+
+func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	r.ParseForm()
+	layoutName := strings.TrimSpace(r.FormValue("layout_name"))
+	source := r.FormValue("source")
+
+	if layoutName == "" {
+		http.Error(w, "layout name required", 400)
+		return
+	}
+
+	filename := layoutName + ".layout.yaml"
+
+	var saveErr error
+	if b.ConfigSource == "database" {
+		db, cerr := storage.Connect(r.Context(), b.DB)
+		if cerr != nil {
+			saveErr = cerr
+		} else {
+			defer db.Close()
+			_, saveErr = db.Pool().Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "printforms/"+filename, []byte(source))
+		}
+	} else {
+		pfDir := filepath.Join(b.Path, "printforms")
+		layoutPath := ""
+		filepath.Walk(pfDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			if strings.EqualFold(filepath.Base(path), filename) {
+				layoutPath = path
+			}
+			return nil
+		})
+		if layoutPath == "" {
+			filepath.Walk(pfDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil || info.IsDir() {
+					return nil
+				}
+				if strings.EqualFold(filepath.Base(path), layoutName+".os") {
+					layoutPath = filepath.Join(filepath.Dir(path), filename)
+				}
+				return nil
+			})
+		}
+		if layoutPath == "" {
+			layoutPath = filepath.Join(pfDir, filename)
+		}
+		saveErr = os.WriteFile(layoutPath, []byte(source), 0o644)
+	}
+
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if saveErr != nil {
+		data.Error = "Ошибка сохранения макета: " + saveErr.Error()
+	} else {
+		data.FieldsSaved = true
+		data.FieldsSavedEntity = layoutName
+	}
+	renderCfg(w, data)
+}
+
 
 // ── Subsystem save ──────────────────────────────────────────────────────────
 

@@ -61,6 +61,7 @@ func TestIntegration_FileMode(t *testing.T) {
 
 	reg := runtime.NewRegistry()
 	reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	interp := interpreter.New()
 	sched := scheduler.New(db, reg, interp)
 	srv := api.New(reg, db, interp, authRepo, 8080, ui.Config{}, sched)
@@ -110,6 +111,7 @@ func TestIntegration_DatabaseMode(t *testing.T) {
 
 	reg := runtime.NewRegistry()
 	reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	interp := interpreter.New()
 	sched := scheduler.New(db, reg, interp)
 	srv := api.New(reg, db, interp, authRepo, 8080, ui.Config{}, sched)

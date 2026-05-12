@@ -14,7 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/excel"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
@@ -363,6 +366,8 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"ID":            id.String(),
 		"IsAdmin":       editIsAdmin,
 		"PrintForms":    s.reg.GetPrintForms(entity.Name),
+		"DSLPrintForms": s.reg.GetDSLPrintForms(entity.Name),
+		"HasPrintProc":  s.reg.GetProcedure(entity.Name, "Печать") != nil || s.reg.GetProcedure(entity.Name, "Print") != nil,
 		"FolderOptions": folderOptsEdit,
 		"DocMovements":  docMovements,
 	})
@@ -2164,6 +2169,117 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 	w.Write(pdfBytes)
+}
+
+// printDocumentDSLPF renders a DSL (.os) print form for a document/catalog record.
+func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
+	entity := s.getEntity(w, r)
+	if entity == nil {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+	pfName := chi.URLParam(r, "pfName")
+	if dec, err2 := url.PathUnescape(pfName); err2 == nil {
+		pfName = dec
+	}
+
+	// 1. Find DSL print form in registry
+	dslForm := s.reg.GetDSLPrintForm(entity.Name, pfName)
+
+	// 2. Also check entity module for a "Печать" procedure
+	var procDecl *ast.ProcedureDecl
+	var source string
+
+	if dslForm != nil {
+		source = dslForm.Source
+	} else {
+		// Try module procedure: entity module → "Печать"
+		procDecl = s.reg.GetProcedure(entity.Name, "Печать")
+		if procDecl == nil {
+			procDecl = s.reg.GetProcedure(entity.Name, "Print")
+		}
+		if procDecl == nil {
+			http.Error(w, "DSL print form not found: "+pfName, 404)
+			return
+		}
+	}
+
+	// 3. Parse .os source if needed (for standalone print form files)
+	if procDecl == nil && source != "" {
+		l := lexer.New(source, "printforms/"+pfName+".os")
+		p := parser.New(l)
+		prog, parseErr := p.ParseProgram()
+		if parseErr != nil {
+			http.Error(w, "parse error: "+parseErr.Error(), 500)
+			return
+		}
+		for _, proc := range prog.Procedures {
+			lower := strings.ToLower(proc.Name.Literal)
+			if lower == "сформировать" || lower == "сформироватьпечатнуюформу" || lower == "form" {
+				procDecl = proc
+				break
+			}
+		}
+		if procDecl == nil {
+			http.Error(w, "Функция Сформировать() не найдена в "+pfName+".os", 404)
+			return
+		}
+	}
+
+	// 4. Load record data
+	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
+	if err != nil {
+		http.Error(w, err.Error(), 404)
+		return
+	}
+
+	tpRows := make(map[string][]map[string]any)
+	for _, tp := range entity.TableParts {
+		rows, _ := s.store.GetTablePartRows(r.Context(), entity.Name, tp.Name, id, tp)
+		tpRows[tp.Name] = rows
+	}
+
+	// 5. Build DSL environment
+	mc := runtime.NewMovementsCollector(entity.Name, id)
+	dslVars := s.buildDSLVars(r.Context(), mc)
+
+	// Embed table parts into document row for Документ.Товары access
+	for tpName, rows := range tpRows {
+		row[tpName] = rows
+	}
+
+	// Convert row + table parts into a DSL object
+	docData := &interpreter.MapThis{M: row}
+	dslVars["Документ"] = docData
+	dslVars["Document"] = docData
+
+	// Pass макет layout as DSL variable (if available)
+	if dslForm != nil && dslForm.Layout != nil {
+		dslVars["Макет"] = interpreter.NewMaket(dslForm.Layout)
+	}
+
+	// 6. Execute the DSL function
+	var result any
+	err = s.interp.RunWithResult(procDecl, docData, &result, dslVars)
+	if err != nil {
+		http.Error(w, "DSL error: "+err.Error(), 500)
+		return
+	}
+
+	// 7. Render result
+	sd, ok := result.(*interpreter.SpreadsheetDocument)
+	if !ok {
+		http.Error(w, "Процедура должна возвращать ТабличныйДокумент", 500)
+		return
+	}
+
+	html := sd.HTMLString()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(html))
 }
 
 // listExcel exports an entity list (with current filters) as XLSX.
