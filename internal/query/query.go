@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // CompileOpts holds options for query compilation including register metadata
@@ -16,6 +17,15 @@ type CompileOpts struct {
 	Registers   []*metadata.Register
 	InfoRegs    []*metadata.InfoRegister
 	AccountRegs []*metadata.AccountRegister
+	// Dialect selects the SQL flavour. nil = PgDialect (default).
+	Dialect storage.Dialect
+}
+
+func dialectOrDefault(d storage.Dialect) storage.Dialect {
+	if d == nil {
+		return storage.PgDialect{}
+	}
+	return d
 }
 
 // Result holds compiled PostgreSQL SQL and positional arguments.
@@ -382,7 +392,18 @@ func (tr *translator) addParam(name string) string {
 	if tr.params[name] == 0 {
 		return "NULL"
 	}
-	return fmt.Sprintf("$%d%s", tr.params[name], pgCast(tr.paramValues[name]))
+	d := dialectOrDefault(tr.opts.Dialect)
+	return d.Placeholder(tr.params[name]) + castSuffix(d, tr.paramValues[name])
+}
+
+// castSuffix returns the explicit cast suffix for v on the active dialect.
+// PG benefits from "::text"/"::numeric" hints; SQLite ignores types so we
+// return "".
+func castSuffix(d storage.Dialect, v any) string {
+	if d.Name() != "postgres" {
+		return ""
+	}
+	return pgCast(v)
 }
 
 // parseVTArgs collects argument groups from a virtual-table call.
@@ -801,9 +822,14 @@ func (tr *translator) genBalancesAndTurnovers(reg *metadata.Register, args [][]t
 	return sb.String(), alias, nil
 }
 
-func (tr *translator) genLastSlice(ir *metadata.InfoRegister, args [][]tok) (string, string, error) {
+// genInfoSlice generates SrezPoslednih/SrezPervyh SQL.
+// direction: "DESC" → СрезПоследних (last); "ASC" → СрезПервых (first).
+// For non-periodic info registers, DISTINCT semantics are unnecessary —
+// we just SELECT FROM the table with WHERE filter.
+func (tr *translator) genInfoSlice(ir *metadata.InfoRegister, args [][]tok, direction string, aliasPrefix string) (string, string, error) {
+	d := dialectOrDefault(tr.opts.Dialect)
 	tableName := metadata.InfoRegTableName(ir.Name)
-	alias := "срезпоследних_" + strings.ToLower(ir.Name)
+	alias := aliasPrefix + strings.ToLower(ir.Name)
 	dims := dimCols(ir.Dimensions)
 
 	var resCols []string
@@ -811,26 +837,15 @@ func (tr *translator) genLastSlice(ir *metadata.InfoRegister, args [][]tok) (str
 		resCols = append(resCols, strings.ToLower(r.Name))
 	}
 
-	var sb strings.Builder
-	if ir.Periodic && len(dims) > 0 {
-		sb.WriteString("SELECT DISTINCT ON (")
-		sb.WriteString(strings.Join(dims, ", "))
-		sb.WriteString(") period, ")
-		sb.WriteString(strings.Join(append(dims, resCols...), ", "))
-	} else {
-		var allCols []string
-		allCols = append(allCols, dims...)
-		allCols = append(allCols, resCols...)
-		sb.WriteString("SELECT ")
-		sb.WriteString(strings.Join(allCols, ", "))
+	periodOp := "<="
+	if direction == "ASC" {
+		periodOp = ">="
 	}
-	sb.WriteString(" FROM ")
-	sb.WriteString(tableName)
 
 	var conds []string
 	if ir.Periodic && len(args) > 0 && len(args[0]) > 0 {
 		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
-			conds = append(conds, "period <= "+s)
+			conds = append(conds, "period "+periodOp+" "+s)
 		}
 	}
 	filterIdx := 1
@@ -842,71 +857,38 @@ func (tr *translator) genLastSlice(ir *metadata.InfoRegister, args [][]tok) (str
 			conds = append(conds, s)
 		}
 	}
-	if len(conds) > 0 {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(strings.Join(conds, " AND "))
-	}
+	where := strings.Join(conds, " AND ")
+
 	if ir.Periodic && len(dims) > 0 {
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(strings.Join(dims, ", "))
-		sb.WriteString(", period DESC")
+		// SELECT (per dim) the row with latest/earliest period — uses
+		// d.LatestPerKey, which gives DISTINCT ON for PG and ROW_NUMBER()
+		// OVER (PARTITION BY) for SQLite.
+		selectCols := append([]string{"period"}, append(append([]string{}, dims...), resCols...)...)
+		return d.LatestPerKey(selectCols, dims, []string{"period " + direction}, tableName, "", where), alias, nil
 	}
 
+	// Non-periodic or no dimensions — plain SELECT.
+	var sb strings.Builder
+	var allCols []string
+	allCols = append(allCols, dims...)
+	allCols = append(allCols, resCols...)
+	sb.WriteString("SELECT ")
+	sb.WriteString(strings.Join(allCols, ", "))
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+	if where != "" {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(where)
+	}
 	return sb.String(), alias, nil
 }
 
+func (tr *translator) genLastSlice(ir *metadata.InfoRegister, args [][]tok) (string, string, error) {
+	return tr.genInfoSlice(ir, args, "DESC", "срезпоследних_")
+}
+
 func (tr *translator) genFirstSlice(ir *metadata.InfoRegister, args [][]tok) (string, string, error) {
-	tableName := metadata.InfoRegTableName(ir.Name)
-	alias := "срезпервых_" + strings.ToLower(ir.Name)
-	dims := dimCols(ir.Dimensions)
-
-	var resCols []string
-	for _, r := range ir.Resources {
-		resCols = append(resCols, strings.ToLower(r.Name))
-	}
-
-	var sb strings.Builder
-	if ir.Periodic && len(dims) > 0 {
-		sb.WriteString("SELECT DISTINCT ON (")
-		sb.WriteString(strings.Join(dims, ", "))
-		sb.WriteString(") period, ")
-		sb.WriteString(strings.Join(append(dims, resCols...), ", "))
-	} else {
-		var allCols []string
-		allCols = append(allCols, dims...)
-		allCols = append(allCols, resCols...)
-		sb.WriteString("SELECT ")
-		sb.WriteString(strings.Join(allCols, ", "))
-	}
-	sb.WriteString(" FROM ")
-	sb.WriteString(tableName)
-
-	var conds []string
-	if ir.Periodic && len(args) > 0 && len(args[0]) > 0 {
-		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
-			conds = append(conds, "period >= "+s)
-		}
-	}
-	filterIdx := 1
-	if !ir.Periodic {
-		filterIdx = 0
-	}
-	if len(args) > filterIdx && len(args[filterIdx]) > 0 {
-		if s := tr.translateFilterTokens(args[filterIdx]); s != "" {
-			conds = append(conds, s)
-		}
-	}
-	if len(conds) > 0 {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(strings.Join(conds, " AND "))
-	}
-	if ir.Periodic && len(dims) > 0 {
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(strings.Join(dims, ", "))
-		sb.WriteString(", period ASC")
-	}
-
-	return sb.String(), alias, nil
+	return tr.genInfoSlice(ir, args, "ASC", "срезпервых_")
 }
 
 // --- reference dimension auto-join ---
