@@ -66,6 +66,22 @@ func (h *handler) loadBackupDirSetting(b *Base) string {
 	return tmp.Backup.Directory
 }
 
+// dumpForBase chooses the right backup mechanism based on b.DBType.
+func dumpForBase(ctx context.Context, b *Base, dir string) (string, error) {
+	if b.DBType == "sqlite" {
+		return backup.DumpSQLite(ctx, b.DBPath, dir)
+	}
+	return backup.Dump(ctx, b.DB, dir)
+}
+
+// restoreForBase chooses the right restore mechanism based on b.DBType.
+func restoreForBase(ctx context.Context, b *Base, fp string) error {
+	if b.DBType == "sqlite" {
+		return backup.RestoreSQLite(ctx, b.DBPath, fp)
+	}
+	return backup.Restore(ctx, b.DB, fp)
+}
+
 func (h *handler) backupCreate(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -73,7 +89,7 @@ func (h *handler) backupCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := h.backupDir(b)
-	outPath, dumpErr := backup.Dump(r.Context(), b.DB, dir)
+	outPath, dumpErr := dumpForBase(r.Context(), b, dir)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if dumpErr != nil {
 		data.Error = "Ошибка бэкапа: " + dumpErr.Error()
@@ -230,7 +246,7 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 		waitPortFree(b.Port, 3*time.Second)
 	}
 
-	restoreErr := backup.Restore(r.Context(), b.DB, fp)
+	restoreErr := restoreForBase(r.Context(), b, fp)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if restoreErr != nil {
 		data.Error = "Ошибка восстановления: " + restoreErr.Error()
@@ -265,7 +281,7 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	dumpPath, dumpErr := backup.Dump(r.Context(), b.DB, tmpDir)
+	dumpPath, dumpErr := dumpForBase(r.Context(), b, tmpDir)
 	if dumpErr != nil {
 		http.Error(w, "Dump error: "+dumpErr.Error(), 500)
 		return
@@ -417,7 +433,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	// Restore database
 	var restoreErr error
 	if dumpFile != "" {
-		restoreErr = backup.Restore(r.Context(), b.DB, dumpFile)
+		restoreErr = restoreForBase(r.Context(), b, dumpFile)
 	} else {
 		restoreErr = fmt.Errorf("файл database.sql.gz не найден в архиве")
 	}
