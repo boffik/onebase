@@ -13,6 +13,7 @@ import (
 type DB struct {
 	pool     *pgxpool.Pool
 	filesDir string
+	dialect  Dialect
 }
 
 func Connect(ctx context.Context, dsn string) (*DB, error) {
@@ -24,8 +25,12 @@ func Connect(ctx context.Context, dsn string) (*DB, error) {
 		return nil, fmt.Errorf("storage: ping: %w", err)
 	}
 	filesDir := defaultFilesDir(dsn)
-	return &DB{pool: pool, filesDir: filesDir}, nil
+	return &DB{pool: pool, filesDir: filesDir, dialect: PgDialect{}}, nil
 }
+
+// Dialect returns the SQL dialect for this connection. Use it to build SQL
+// that runs identically on PostgreSQL and SQLite.
+func (db *DB) Dialect() Dialect { return db.dialect }
 
 func defaultFilesDir(dsn string) string {
 	cfg, err := pgxpool.ParseConfig(dsn)
