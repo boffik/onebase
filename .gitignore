@@ -2,6 +2,14 @@
 onebase
 onebase.exe
 onebase-gui.exe
+onebase-linux-arm64
+
+# Temp files
+__*.py
+__*.go
+exit
+GIT_WORKFLOW.md
+Plans/
 
 # OS
 .DS_Store
