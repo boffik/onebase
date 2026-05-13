@@ -236,7 +236,7 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 	renderCfg(w, data)
 }
 
-// backupFullExport creates a single .dt file containing both database dump and configuration.
+// backupFullExport creates a single .obz file containing both database dump and configuration.
 func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -248,7 +248,7 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 	zw := zip.NewWriter(&buf)
 
 	// Database dump
-	tmpDir, err := os.MkdirTemp("", "onebase-dump-*")
+	tmpDir, err := os.MkdirTemp("", "onebase-obz-dump-*")
 	if err != nil {
 		http.Error(w, "Temp dir error: "+err.Error(), 500)
 		return
@@ -317,13 +317,13 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 
 	zw.Close()
 
-	name := b.Name + "_" + time.Now().Format("2006-01-02_15-04") + ".dt"
+	name := b.Name + "_" + time.Now().Format("2006-01-02_15-04") + ".obz"
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", "attachment; filename="+name)
 	w.Write(buf.Bytes())
 }
 
-// backupFullImport restores both database and configuration from a .dt file.
+// backupFullImport restores both database and configuration from a .obz file.
 func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -331,7 +331,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("dt_file")
+	file, _, err := r.FormFile("obz_file")
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Ошибка загрузки файла: " + err.Error()
@@ -351,12 +351,12 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	reader, err := zip.NewReader(bytes.NewReader(dtData), int64(len(dtData)))
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Неверный формат файла .dt: " + err.Error()
+		data.Error = "Неверный формат файла .obz: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
 
-	tmpDir, err := os.MkdirTemp("", "onebase-dt-import-*")
+	tmpDir, err := os.MkdirTemp("", "onebase-obz-import-*")
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Temp dir error: " + err.Error()

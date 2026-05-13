@@ -3157,12 +3157,12 @@ const cfgTabBackup = `{{define "tab-backup"}}
   </form>
   </details>
   <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Полная выгрузка (база + конфигурация)</summary>
-  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Выгрузка базы данных и конфигурации в один файл (.dt). Позволяет полностью перенести базу на другой сервер.</p>
+  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Выгрузка базы данных и конфигурации в один файл (.obz). Позволяет полностью перенести базу на другой сервер.</p>
   <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
-    <a href="/bases/{{.Base.ID}}/configurator/backup/full-export" class="btn-save" style="text-decoration:none;display:inline-block">Выгрузить всё в .dt</a>
-    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="return confirm('Восстановить из .dt файла? Все текущие данные будут заменены!')">
-      <input type="file" name="dt_file" accept=".dt" required style="font-size:12px">
-      <button class="btn-save" type="submit" style="background:#dc2626">Загрузить из .dt</button>
+    <a href="/bases/{{.Base.ID}}/configurator/backup/full-export" class="btn-save" style="text-decoration:none;display:inline-block">Выгрузить всё в .obz</a>
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="return confirm('Восстановить из .obz файла? Все текущие данные будут заменены!')">
+      <input type="file" name="obz_file" accept=".obz" required style="font-size:12px">
+      <button class="btn-save" type="submit" style="background:#dc2626">Загрузить из .obz</button>
     </form>
   </div>
   </details>
