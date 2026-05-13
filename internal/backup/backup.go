@@ -68,11 +68,34 @@ func Dump(ctx context.Context, connStr, outDir string) (string, error) {
 }
 
 // Restore restores a gzipped plain-SQL backup created by Dump into the database.
-// Requires psql in PATH.
+// Requires psql in PATH. Drops all existing tables before restoring.
 func Restore(ctx context.Context, connStr, filePath string) error {
 	psql, err := findPgTool("psql")
 	if err != nil {
 		return err
+	}
+
+	// Drop all user tables before restoring to ensure clean state
+	dropSQL := `
+DO $$ DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+    EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+  END LOOP;
+  FOR r IN (SELECT sequencename FROM pg_sequences WHERE schemaname = 'public') LOOP
+    EXECUTE 'DROP SEQUENCE IF EXISTS public.' || quote_ident(r.sequencename) || ' CASCADE';
+  END LOOP;
+  FOR r IN (SELECT typname FROM pg_type t JOIN pg_namespace n ON t.typnamespace=n.oid WHERE n.nspname='public' AND t.typtype='e') LOOP
+    EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';
+  END LOOP;
+END $$;`
+	dropCmd := exec.CommandContext(ctx, psql, "--no-password", connStr)
+	dropCmd.Stdin = strings.NewReader(dropSQL)
+	dropCmd.Stdout = os.Stdout
+	dropCmd.Stderr = os.Stderr
+	if err := dropCmd.Run(); err != nil {
+		return fmt.Errorf("psql drop tables: %w", err)
 	}
 
 	f, err := os.Open(filePath)

@@ -332,6 +332,10 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <div id="dbg-wrapper" style="display:flex;flex:1;overflow:hidden">
 {{end}}`
 
+const cfgAdminOverlay = `
+<div id="admin-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'"></div>
+`
+
 const cfgFoot = `{{define "cfg-foot"}}
 <!-- debug panel (right sidebar) -->
 <div class="dbg-panel" id="dbg-panel" style="display:none">
@@ -795,7 +799,15 @@ function saveLayoutEditor(n){
 function addLayoutArea(n){
   var name=prompt('Имя новой области:');
   if(!name)return;
-  var s=_led[n];if(!s)return;
+  var s=_led[n];
+  if(!s){
+    // init if not yet initialized
+    var ta=document.getElementById('ta-mkt-'+n);
+    if(!ta||!window.jsyaml)return;
+    var d=null;try{d=jsyaml.parse(ta.value);}catch(e){}
+    if(!d)d={areas:{}};
+    s={data:d,sel:null};_led[n]=s;
+  }
   if(!s.data.areas)s.data.areas={};
   s.data.areas[name]={rows:[{cells:[{text:'Ячейка'}]}]};
   renderLayoutEditor(n);
@@ -1360,22 +1372,23 @@ var _dbgBreakpoints = {}; // { editorId: { line: true } }
 var _lastVarsKey = '';
 var _lastStackHtml = '';
 var _lastDiagHtml = '';
-// auto-open admin panel if redirected from another tab
-(function(){var m=window.location.search.match(/[?&]_admin=([^&]+)/);if(m){setTimeout(function(){cfgAdmin(m[1]);},300);}})();
 var _dbgCurrentLineDecos = {}; // { editorId: decorationIds }
 
 // ── Configurator admin panels ────────────────────────────────────
 function cfgAdmin(name) {
   document.getElementById('cfg-menu').classList.remove('open');
-  document.querySelectorAll('.cfg-panel').forEach(function(e){e.classList.remove('active')});
-  document.querySelectorAll('.cfg-item').forEach(function(e){e.classList.remove('sel')});
-  var panel = document.getElementById('panel-admin');
-  if(!panel){window.location.href='/bases/'+_dbgBase+'/configurator?tab=tree&_admin='+name;return;}
-  panel.classList.add('active');
-  panel.innerHTML = '<div style="padding:20px;text-align:center;color:#888">Загрузка...</div>';
+  // Use global overlay instead of panel-admin
+  var overlay = document.getElementById('admin-overlay');
+  if(!overlay)return;
+  overlay.style.display='flex';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative"><div style="padding:20px;text-align:center;color:#888">Загрузка...</div></div>';
   fetch('/bases/' + _dbgBase + '/configurator/admin/' + name)
     .then(function(r){ return r.text(); })
-    .then(function(html){ panel.innerHTML = html; });
+    .then(function(html){
+      overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative">'
+        +'<div style="position:sticky;top:0;background:#fff;padding:8px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:13px">Администрирование</span><button onclick="document.getElementById(\'admin-overlay\').style.display=\'none\'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">×</button></div>'
+        +'<div style="padding:16px">'+html+'</div></div>';
+    });
 }
 
 function cfgMenuToggle() {
@@ -2086,6 +2099,7 @@ const cfgMain = `{{define "cfg-main"}}
 {{if eq .Tab "files"}}{{template "tab-files" .}}{{end}}
 {{if eq .Tab "backup"}}{{template "tab-backup" .}}{{end}}
 {{template "cfg-foot" .}}
+<div id="admin-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'"></div>
 {{end}}`
 
 // ── Tree tab ──────────────────────────────────────────────────────────────────
