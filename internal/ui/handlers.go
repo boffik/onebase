@@ -232,10 +232,11 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	isPosting := entity.Posting && (action == "post" || action == "post_and_close")
 
 	var dslErrMsg string
+	var dslMsgs []string
 	if isPosting {
-		dslErrMsg = s.runOnPostCtx(r.Context(), obj, mc)
+		dslErrMsg, dslMsgs = s.runOnPostCtx(r.Context(), obj, mc)
 	} else {
-		dslErrMsg = s.runOnWriteCtx(r.Context(), obj, mc)
+		dslErrMsg, dslMsgs = s.runOnWriteCtx(r.Context(), obj, mc)
 	}
 	if dslErrMsg != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
@@ -248,6 +249,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			"Entity":        entity,
 			"IsNew":         true,
 			"Error":         dslErrMsg,
+			"Messages":      dslMsgs,
 			"Values":        formValues(r, entity),
 			"RefOptions":    refOptions,
 			"EnumOptions":   s.loadEnumOptions(entity),
@@ -258,6 +260,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Success path: redirect with messages via query param
 	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 		if err := s.store.Upsert(ctx, entity.Name, obj.ID, obj.Fields, entity); err != nil {
 			return err
@@ -410,9 +413,9 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 
 	var dslErr2 string
 	if isPostingAct {
-		dslErr2 = s.runOnPostCtx(r.Context(), obj, mc)
+		dslErr2, _ = s.runOnPostCtx(r.Context(), obj, mc)
 	} else {
-		dslErr2 = s.runOnWriteCtx(r.Context(), obj, mc)
+		dslErr2, _ = s.runOnWriteCtx(r.Context(), obj, mc)
 	}
 	if dslErr2 != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
@@ -498,7 +501,7 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 	mc := runtime.NewMovementsCollector(entity.Name, id)
 	setPeriodFromFields(mc, entity, obj.Fields)
 
-	if errMsg := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
+	if errMsg, _ := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
 		http.Error(w, "Проведение: "+errMsg, 422)
 		return
 	}
@@ -1167,7 +1170,8 @@ func parseListParams(r *http.Request, entity *metadata.Entity) storage.ListParam
 }
 
 func (s *Server) runOnWrite(obj *runtime.Object, mc *runtime.MovementsCollector) string {
-	return s.runOnWriteCtx(context.Background(), obj, mc)
+	errMsg, _ := s.runOnWriteCtx(context.Background(), obj, mc)
+	return errMsg
 }
 
 func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollector) map[string]any {
@@ -1206,32 +1210,49 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	return vars
 }
 
-func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) string {
-	proc := s.reg.GetProcedure(obj.Type, "OnWrite")
-	if proc == nil {
-		return ""
-	}
-	if err := s.interp.Run(proc, obj, s.buildDSLVars(ctx, mc)); err != nil {
-		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return dslErr.Msg
+func (s *Server) buildDSLVarsWithMessages(ctx context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any {
+	vars := s.buildDSLVars(ctx, mc)
+	msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
+		if len(args) > 0 && msgs != nil {
+			*msgs = append(*msgs, fmt.Sprintf("%v", args[0]))
 		}
-		return err.Error()
-	}
-	return ""
+		return nil, nil
+	})
+	vars["Сообщить"] = msgFunc
+	vars["Message"] = msgFunc
+	return vars
 }
 
-func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) string {
+func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) (string, []string) {
+	proc := s.reg.GetProcedure(obj.Type, "OnWrite")
+	if proc == nil {
+		return "", nil
+	}
+	var msgs []string
+	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
+	if err := s.interp.Run(proc, obj, vars); err != nil {
+		if dslErr, ok := err.(*interpreter.DSLError); ok {
+			return dslErr.Msg, msgs
+		}
+		return err.Error(), msgs
+	}
+	return "", msgs
+}
+
+func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) (string, []string) {
 	proc := s.reg.GetProcedure(obj.Type, "OnPost")
 	if proc == nil {
-		return ""
+		return "", nil
 	}
-	if err := s.interp.Run(proc, obj, s.buildDSLVars(ctx, mc)); err != nil {
+	var msgs []string
+	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
+	if err := s.interp.Run(proc, obj, vars); err != nil {
 		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return dslErr.Msg
+			return dslErr.Msg, msgs
 		}
-		return err.Error()
+		return err.Error(), msgs
 	}
-	return ""
+	return "", msgs
 }
 
 func (s *Server) getEntity(w http.ResponseWriter, r *http.Request) *metadata.Entity {
