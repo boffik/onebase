@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_runs_at  ON _scheduled_runs (started_at
 `
 
 func (db *DB) EnsureScheduledRunsTable(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, scheduledRunsDDL)
+	_, err := db.Exec(ctx, scheduledRunsDDL)
 	if err != nil {
 		return fmt.Errorf("scheduled runs DDL: %w", err)
 	}
@@ -44,7 +44,7 @@ func (db *DB) EnsureScheduledRunsTable(ctx context.Context) error {
 
 func (db *DB) InsertScheduledRun(ctx context.Context, jobName string, startedAt time.Time) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := db.pool.QueryRow(ctx,
+	err := db.QueryRow(ctx,
 		`INSERT INTO _scheduled_runs (job_name, started_at, status) VALUES ($1, $2, 'running') RETURNING id`,
 		jobName, startedAt,
 	).Scan(&id)
@@ -56,7 +56,7 @@ func (db *DB) InsertScheduledRun(ctx context.Context, jobName string, startedAt 
 
 func (db *DB) UpdateScheduledRun(ctx context.Context, id uuid.UUID, status, output, errText string, durationMs int64) error {
 	now := time.Now()
-	_, err := db.pool.Exec(ctx,
+	_, err := db.Exec(ctx,
 		`UPDATE _scheduled_runs SET finished_at=$1, status=$2, output=$3, error=$4, duration_ms=$5 WHERE id=$6`,
 		now, status, output, errText, durationMs, id,
 	)
@@ -75,7 +75,7 @@ func (db *DB) ScheduledRuns(ctx context.Context, jobName string, limit int) ([]S
 				 FROM _scheduled_runs ORDER BY started_at DESC LIMIT $1`
 		args = []any{limit}
 	}
-	rows, err := db.pool.Query(ctx, query, args...)
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("scheduled runs query: %w", err)
 	}

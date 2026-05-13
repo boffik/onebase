@@ -17,7 +17,7 @@ func TestCreateTableSQL_Counterparty(t *testing.T) {
 			{Name: "INN", Type: metadata.FieldTypeString},
 		},
 	}
-	sql := storage.CreateTableSQL(e)
+	sql := storage.CreateTableSQL(storage.PgDialect{}, e)
 	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS counterparty") {
 		t.Fatalf("missing table name: %s", sql)
 	}
@@ -42,7 +42,7 @@ func TestCreateTableSQL_Invoice(t *testing.T) {
 			{Name: "Counterparty", Type: "reference:Counterparty", RefEntity: "Counterparty"},
 		},
 	}
-	sql := storage.CreateTableSQL(e)
+	sql := storage.CreateTableSQL(storage.PgDialect{}, e)
 	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS invoice") {
 		t.Fatalf("missing table: %s", sql)
 	}

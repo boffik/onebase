@@ -317,7 +317,7 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 		query += fmt.Sprintf(" LIMIT %d OFFSET %d", params.Limit, params.Offset)
 	}
 
-	rows, err := db.pool.Query(ctx, query, args...)
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list %s: %w", entityName, err)
 	}
@@ -433,7 +433,7 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 		q += " WHERE " + strings.Join(whereParts, " AND ")
 	}
 	var count int
-	if err := db.pool.QueryRow(ctx, q, args...).Scan(&count); err != nil {
+	if err := db.QueryRow(ctx, q, args...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count %s: %w", entityName, err)
 	}
 	return count, nil
@@ -447,7 +447,7 @@ func (db *DB) GetTablePartRows(ctx context.Context, entityName, tpName string, p
 		cols = append(cols, metadata.ColumnName(f))
 	}
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE parent_id = $1 ORDER BY строка", strings.Join(cols, ", "), table)
-	rows, err := db.pool.Query(ctx, query, parentID)
+	rows, err := db.Query(ctx, query, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("get tablepart %s.%s: %w", entityName, tpName, err)
 	}
@@ -504,7 +504,7 @@ func (db *DB) UpsertTablePartRows(ctx context.Context, entityName, tpName string
 func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error {
 	// Check if this is a predefined record (column may not exist — ignore error)
 	var isPredefined bool
-	if err := db.pool.QueryRow(ctx,
+	if err := db.QueryRow(ctx,
 		fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = $1", metadata.TableName(entityName)),
 		id,
 	).Scan(&isPredefined); err == nil && isPredefined {
@@ -513,7 +513,7 @@ func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error
 
 	// For hierarchical catalogs, prevent deleting non-empty folders
 	var childCount int
-	if err := db.pool.QueryRow(ctx,
+	if err := db.QueryRow(ctx,
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE parent_id = $1 AND deletion_mark = FALSE", metadata.TableName(entityName)),
 		id,
 	).Scan(&childCount); err == nil && childCount > 0 {

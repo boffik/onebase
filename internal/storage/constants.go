@@ -8,7 +8,7 @@ import (
 )
 
 func (db *DB) MigrateConstants(ctx context.Context, consts []*metadata.Constant) error {
-	if _, err := db.pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS _constants (
+	if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS _constants (
 		name TEXT PRIMARY KEY,
 		value JSONB,
 		updated_at TIMESTAMPTZ DEFAULT now()
@@ -20,7 +20,7 @@ func (db *DB) MigrateConstants(ctx context.Context, consts []*metadata.Constant)
 			continue
 		}
 		raw, _ := json.Marshal(c.Default)
-		if _, err := db.pool.Exec(ctx, `
+		if _, err := db.Exec(ctx, `
 			INSERT INTO _constants (name, value, updated_at) VALUES ($1, $2, now())
 			ON CONFLICT (name) DO NOTHING
 		`, c.Name, raw); err != nil {
@@ -32,7 +32,7 @@ func (db *DB) MigrateConstants(ctx context.Context, consts []*metadata.Constant)
 
 func (db *DB) GetConstant(ctx context.Context, name string) (any, error) {
 	var raw []byte
-	if err := db.pool.QueryRow(ctx, `SELECT value FROM _constants WHERE name = $1`, name).Scan(&raw); err != nil {
+	if err := db.QueryRow(ctx, `SELECT value FROM _constants WHERE name = $1`, name).Scan(&raw); err != nil {
 		return nil, err
 	}
 	var val any
@@ -47,7 +47,7 @@ func (db *DB) SetConstant(ctx context.Context, name string, value any) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.pool.Exec(ctx, `
+	_, err = db.Exec(ctx, `
 		INSERT INTO _constants (name, value, updated_at) VALUES ($1, $2, now())
 		ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
 	`, name, raw)
@@ -55,7 +55,7 @@ func (db *DB) SetConstant(ctx context.Context, name string, value any) error {
 }
 
 func (db *DB) ListConstants(ctx context.Context) (map[string]any, error) {
-	rows, err := db.pool.Query(ctx, `SELECT name, value FROM _constants`)
+	rows, err := db.Query(ctx, `SELECT name, value FROM _constants`)
 	if err != nil {
 		return nil, err
 	}

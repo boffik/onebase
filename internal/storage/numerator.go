@@ -11,7 +11,7 @@ import (
 
 // EnsureNumeratorSchema creates the _numerators table if it does not exist.
 func (db *DB) EnsureNumeratorSchema(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS _numerators (
 			entity_name TEXT    NOT NULL,
 			period_key  TEXT    NOT NULL,
@@ -25,7 +25,7 @@ func (db *DB) EnsureNumeratorSchema(ctx context.Context) error {
 // for (entityName, periodKey). Safe under concurrent requests.
 func (db *DB) NextNumber(ctx context.Context, entityName, periodKey string) (int, error) {
 	var n int
-	err := db.pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		INSERT INTO _numerators (entity_name, period_key, last_number)
 		VALUES ($1, $2, 1)
 		ON CONFLICT (entity_name, period_key) DO UPDATE

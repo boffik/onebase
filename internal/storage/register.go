@@ -87,8 +87,8 @@ func (db *DB) DeleteOrphanMovements(ctx context.Context, registers []*metadata.R
 					"DELETE FROM %s WHERE recorder_type = $1 AND recorder NOT IN (SELECT id FROM %s)",
 					table, tbl)
 			}
-			if ct, err := db.pool.Exec(ctx, sql, recType); err == nil {
-				total += ct.RowsAffected()
+			if ct, err := db.Exec(ctx, sql, recType); err == nil {
+				total += ct.RowsAffected
 			}
 		}
 	}

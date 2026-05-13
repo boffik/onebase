@@ -58,7 +58,7 @@ type AuditFilter struct {
 
 // EnsureAuditSchema creates _audit table if it does not exist.
 func (db *DB) EnsureAuditSchema(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS _audit (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			user_id UUID,
@@ -76,9 +76,9 @@ func (db *DB) EnsureAuditSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("audit: create _audit: %w", err)
 	}
-	_, _ = db.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_record ON _audit (entity_name, record_id)`)
-	_, _ = db.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_user ON _audit (user_id, at DESC)`)
-	_, _ = db.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_at ON _audit (at DESC)`)
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_record ON _audit (entity_name, record_id)`)
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_user ON _audit (user_id, at DESC)`)
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_at ON _audit (at DESC)`)
 	return nil
 }
 
@@ -120,7 +120,7 @@ func (db *DB) Log(ctx context.Context, e *AuditEntry) error {
 
 // AuditByRecord returns all audit entries for a specific record, newest first.
 func (db *DB) AuditByRecord(ctx context.Context, entityName string, recordID uuid.UUID) ([]*AuditEntry, error) {
-	rows, err := db.pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
 		SELECT id, user_id, user_login, action, entity_kind, entity_name, record_id, field, old_value, new_value, ip, at
 		FROM _audit
 		WHERE entity_name = $1 AND record_id = $2
@@ -175,7 +175,7 @@ func (db *DB) AuditSearch(ctx context.Context, filter AuditFilter, limit, offset
 	q += fmt.Sprintf(" ORDER BY at DESC LIMIT $%d OFFSET $%d", idx, idx+1)
 	args = append(args, limit, offset)
 
-	rows, err := db.pool.Query(ctx, q, args...)
+	rows, err := db.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +295,6 @@ func scanAuditRows(rows auditRowsScanner) ([]*AuditEntry, error) {
 
 // execAudit runs a statement on the pool directly (audit inserts bypass tx).
 func (db *DB) execAudit(ctx context.Context, sql string, args ...any) error {
-	_, err := db.pool.Exec(ctx, sql, args...)
+	_, err := db.Exec(ctx, sql, args...)
 	return err
 }

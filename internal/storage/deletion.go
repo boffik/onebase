@@ -11,10 +11,11 @@ import (
 
 // EnsureDeletionMark adds deletion_mark column to all entity tables if missing.
 func (db *DB) EnsureDeletionMark(ctx context.Context, entities []*metadata.Entity) error {
+	d := db.dialect
+	typ := d.TypeBool() + " NOT NULL DEFAULT " + boolFalseLit(d)
 	for _, e := range entities {
 		table := metadata.TableName(e.Name)
-		sql := AddColumnSQL(table, "deletion_mark", "BOOLEAN NOT NULL DEFAULT FALSE")
-		if _, err := db.pool.Exec(ctx, sql); err != nil {
+		if err := db.AddColumnIfMissing(ctx, table, "deletion_mark", typ); err != nil {
 			return fmt.Errorf("ensure deletion_mark %s: %w", e.Name, err)
 		}
 	}
@@ -27,7 +28,7 @@ func (db *DB) MarkForDeletion(ctx context.Context, entityName string, id uuid.UU
 	table := metadata.TableName(entityName)
 	if mark {
 		var isPredefined bool
-		if err := db.pool.QueryRow(ctx,
+		if err := db.QueryRow(ctx,
 			fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = $1", table), id,
 		).Scan(&isPredefined); err == nil && isPredefined {
 			return fmt.Errorf("нельзя пометить предопределённый элемент %s на удаление", entityName)
@@ -53,7 +54,7 @@ func (db *DB) CheckRefs(ctx context.Context, entityName string, id uuid.UUID, al
 			}
 			col := metadata.ColumnName(f)
 			var count int
-			db.pool.QueryRow(ctx,
+			db.QueryRow(ctx,
 				fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1", metadata.TableName(e.Name), col),
 				id).Scan(&count)
 			if count > 0 {
@@ -68,7 +69,7 @@ func (db *DB) CheckRefs(ctx context.Context, entityName string, id uuid.UUID, al
 				col := metadata.ColumnName(f)
 				table := metadata.TablePartTableName(e.Name, tp.Name)
 				var count int
-				db.pool.QueryRow(ctx,
+				db.QueryRow(ctx,
 					fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1", table, col),
 					id).Scan(&count)
 				if count > 0 {
@@ -92,7 +93,7 @@ func (db *DB) ListMarked(ctx context.Context, entityName string, entity *metadat
 		cols = append(cols, metadata.ColumnName(f))
 	}
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE deletion_mark = TRUE", strings.Join(cols, ", "), table)
-	rows, err := db.pool.Query(ctx, query)
+	rows, err := db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}

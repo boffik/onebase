@@ -107,7 +107,7 @@ func (db *DB) InfoRegList(ctx context.Context, ir *metadata.InfoRegister) ([]map
 	sql := fmt.Sprintf("SELECT %s FROM %s ORDER BY %s",
 		strings.Join(selCols, ", "), table, orderBy)
 
-	rows, err := db.pool.Query(ctx, sql)
+	rows, err := db.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("info reg list %s: %w", ir.Name, err)
 	}
@@ -209,7 +209,7 @@ func dimWhere(ir *metadata.InfoRegister, dimKey map[string]any, startIdx int) (s
 }
 
 func (db *DB) infoRegScan(ctx context.Context, ir *metadata.InfoRegister, sql string, args []any) (map[string]any, error) {
-	row := db.pool.QueryRow(ctx, sql, args...)
+	row := db.QueryRow(ctx, sql, args...)
 	allCols := resourceAndDimCols(ir)
 	dest := make([]any, len(allCols))
 	ptrs := make([]any, len(dest))

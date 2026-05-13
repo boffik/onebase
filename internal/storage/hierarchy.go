@@ -19,7 +19,7 @@ func (db *DB) WouldCycle(ctx context.Context, table string, id, newParentID uuid
 		JOIN anc a ON t.id = a.parent_id WHERE a.parent_id IS NOT NULL
 	) SELECT EXISTS(SELECT 1 FROM anc WHERE id = $2)`
 	var hasCycle bool
-	err := db.pool.QueryRow(ctx, query, newParentID, id).Scan(&hasCycle)
+	err := db.QueryRow(ctx, query, newParentID, id).Scan(&hasCycle)
 	return hasCycle, err
 }
 
@@ -31,7 +31,7 @@ func (db *DB) GetAncestorIDs(ctx context.Context, table string, id uuid.UUID) ([
 		SELECT t.id, t.parent_id FROM ` + table + ` t
 		JOIN anc a ON t.id = a.parent_id WHERE a.parent_id IS NOT NULL
 	) SELECT id FROM anc`
-	rows, err := db.pool.Query(ctx, query, id)
+	rows, err := db.Query(ctx, query, id)
 	if err != nil {
 		return nil, err
 	}

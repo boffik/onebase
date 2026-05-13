@@ -26,7 +26,7 @@ type Attachment struct {
 
 // EnsureAttachmentTable creates the _attachments table if it does not exist.
 func (db *DB) EnsureAttachmentTable(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS _attachments (
 			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			owner_kind  TEXT NOT NULL,
@@ -44,7 +44,7 @@ func (db *DB) EnsureAttachmentTable(ctx context.Context) error {
 
 // ListAttachments returns all attachments for a given owner.
 func (db *DB) ListAttachments(ctx context.Context, ownerKind, ownerName string, ownerID uuid.UUID) ([]Attachment, error) {
-	rows, err := db.pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
 		SELECT id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
 		FROM _attachments
 		WHERE owner_kind=$1 AND owner_name=$2 AND owner_id=$3
@@ -91,7 +91,7 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 	}
 
 	var a Attachment
-	err = db.pool.QueryRow(ctx, `
+	err = db.QueryRow(ctx, `
 		INSERT INTO _attachments (id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_by)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
@@ -108,7 +108,7 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 // GetAttachment returns attachment metadata by ID.
 func (db *DB) GetAttachment(ctx context.Context, id uuid.UUID) (*Attachment, error) {
 	var a Attachment
-	err := db.pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
 		FROM _attachments WHERE id=$1
 	`, id).Scan(&a.ID, &a.OwnerKind, &a.OwnerName, &a.OwnerID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.UploadedAt, &a.UploadedBy)
@@ -140,6 +140,6 @@ func (db *DB) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
 	}
 	filePath := filepath.Join(db.filesDir, a.OwnerName, id.String())
 	os.Remove(filePath) // best effort
-	_, err = db.pool.Exec(ctx, `DELETE FROM _attachments WHERE id=$1`, id)
+	_, err = db.Exec(ctx, `DELETE FROM _attachments WHERE id=$1`, id)
 	return err
 }

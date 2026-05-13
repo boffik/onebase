@@ -4,6 +4,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 func TestSQLiteSmoke(t *testing.T) {
@@ -113,6 +115,67 @@ func TestSQLiteSmoke(t *testing.T) {
 	}
 	if exists {
 		t.Fatal("column 'missing' should not exist")
+	}
+}
+
+func TestSQLiteMigrateMinimal(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "migrate.db")
+
+	db, err := ConnectSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.EnsureSeqTable(ctx); err != nil {
+		t.Fatalf("EnsureSeqTable: %v", err)
+	}
+	if err := db.EnsureNumeratorSchema(ctx); err != nil {
+		t.Fatalf("EnsureNumeratorSchema: %v", err)
+	}
+
+	// Run a real migration for two simple entities (catalog + document).
+	entities := []*metadata.Entity{
+		{
+			Name: "Counterparty",
+			Kind: metadata.KindCatalog,
+			Fields: []metadata.Field{
+				{Name: "Name", Type: metadata.FieldTypeString},
+				{Name: "INN", Type: metadata.FieldTypeString},
+			},
+		},
+		{
+			Name: "Invoice",
+			Kind: metadata.KindDocument,
+			Fields: []metadata.Field{
+				{Name: "Number", Type: metadata.FieldTypeString},
+				{Name: "Date", Type: metadata.FieldTypeDate},
+				{Name: "Counterparty", Type: "reference:Counterparty", RefEntity: "Counterparty"},
+				{Name: "Amount", Type: metadata.FieldTypeNumber},
+			},
+		},
+	}
+	if err := db.Migrate(ctx, entities); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	// Verify catalog table exists and has expected columns.
+	exists, err := db.Dialect().ColumnExists(ctx, db, "counterparty", "inn")
+	if err != nil {
+		t.Fatalf("ColumnExists: %v", err)
+	}
+	if !exists {
+		t.Fatal("counterparty.inn column missing after migrate")
+	}
+	exists, _ = db.Dialect().ColumnExists(ctx, db, "invoice", "posted")
+	if !exists {
+		t.Fatal("invoice.posted column missing after migrate")
+	}
+	exists, _ = db.Dialect().ColumnExists(ctx, db, "invoice", "deletion_mark")
+	if !exists {
+		t.Fatal("invoice.deletion_mark column missing after migrate")
 	}
 }
 

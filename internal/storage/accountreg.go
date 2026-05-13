@@ -12,7 +12,7 @@ import (
 
 // EnsureAccountsTable creates the _accounts table for storing chart of accounts data.
 func (db *DB) EnsureAccountsTable(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 CREATE TABLE IF NOT EXISTS _accounts (
     plan   TEXT NOT NULL,
     code   TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS _accounts (
 func (db *DB) SyncAccounts(ctx context.Context, charts []*metadata.ChartOfAccounts) error {
 	for _, chart := range charts {
 		for _, a := range chart.Accounts {
-			_, err := db.pool.Exec(ctx,
+			_, err := db.Exec(ctx,
 				`INSERT INTO _accounts (plan, code, name, kind, parent)
 				 VALUES ($1,$2,$3,$4,$5)
 				 ON CONFLICT (plan, code) DO UPDATE SET name=EXCLUDED.name, kind=EXCLUDED.kind, parent=EXCLUDED.parent`,
@@ -44,7 +44,7 @@ func (db *DB) SyncAccounts(ctx context.Context, charts []*metadata.ChartOfAccoun
 
 // GetAccounts returns all accounts for a given plan, ordered by code.
 func (db *DB) GetAccounts(ctx context.Context, plan string) ([]map[string]any, error) {
-	rows, err := db.pool.Query(ctx,
+	rows, err := db.Query(ctx,
 		`SELECT code, name, kind, parent FROM _accounts WHERE plan=$1 ORDER BY code`,
 		plan,
 	)
@@ -79,40 +79,38 @@ func (db *DB) MigrateAccountRegisters(ctx context.Context, regs []*metadata.Acco
 }
 
 func (db *DB) migrateAccountReg(ctx context.Context, ar *metadata.AccountRegister) error {
+	d := db.dialect
 	table := metadata.AccountRegTableName(ar.Name)
 	var sb strings.Builder
 	sb.WriteString("CREATE TABLE IF NOT EXISTS ")
 	sb.WriteString(table)
-	sb.WriteString(` (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    period           TIMESTAMPTZ NOT NULL,
-    регистратор      UUID NOT NULL,
-    регистратор_тип  TEXT NOT NULL,
-    счётдт           TEXT NOT NULL,
-    счёткт           TEXT NOT NULL`)
+	sb.WriteString(" (\n    id ")
+	sb.WriteString(d.TypeUUID())
+	sb.WriteString(" PRIMARY KEY,\n    period ")
+	sb.WriteString(d.TypeTimestamp())
+	sb.WriteString(" NOT NULL,\n    регистратор ")
+	sb.WriteString(d.TypeUUID())
+	sb.WriteString(" NOT NULL,\n    регистратор_тип TEXT NOT NULL,\n    счётдт TEXT NOT NULL,\n    счёткт TEXT NOT NULL")
 	for _, r := range ar.Resources {
 		sb.WriteString(",\n    ")
 		sb.WriteString(metadata.ColumnName(r))
 		sb.WriteString(" ")
-		sb.WriteString(pgType(r))
+		sb.WriteString(fieldType(d, r))
 	}
 	sb.WriteString("\n)")
-	if _, err := db.pool.Exec(ctx, sb.String()); err != nil {
+	if _, err := db.Exec(ctx, sb.String()); err != nil {
 		return fmt.Errorf("migrate account register %s: %w", ar.Name, err)
 	}
-	// indexes
 	idx1 := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_dt ON %s (счётдт, period)", strings.ToLower(ar.Name), table)
 	idx2 := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_kt ON %s (счёткт, period)", strings.ToLower(ar.Name), table)
 	idx3 := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_reg ON %s (регистратор)", strings.ToLower(ar.Name), table)
 	for _, s := range []string{idx1, idx2, idx3} {
-		if _, err := db.pool.Exec(ctx, s); err != nil {
+		if _, err := db.Exec(ctx, s); err != nil {
 			return fmt.Errorf("migrate account register %s index: %w", ar.Name, err)
 		}
 	}
-	// add any new resource columns
 	for _, r := range ar.Resources {
-		col := metadata.ColumnName(r)
-		if _, err := db.pool.Exec(ctx, AddColumnSQL(table, col, pgType(r))); err != nil {
+		if err := db.AddColumnIfMissing(ctx, table, metadata.ColumnName(r), fieldType(d, r)); err != nil {
 			return fmt.Errorf("migrate account register %s.%s: %w", ar.Name, r.Name, err)
 		}
 	}
@@ -124,7 +122,7 @@ func (db *DB) migrateAccountReg(ctx context.Context, ar *metadata.AccountRegiste
 func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string, docID uuid.UUID, rows []map[string]any, ar *metadata.AccountRegister, period *time.Time) error {
 	table := metadata.AccountRegTableName(regName)
 	// clear existing movements for this recorder
-	if _, err := db.pool.Exec(ctx,
+	if _, err := db.Exec(ctx,
 		fmt.Sprintf("DELETE FROM %s WHERE регистратор=$1", table), docID,
 	); err != nil {
 		return fmt.Errorf("clear account movements %s: %w", regName, err)
@@ -171,7 +169,7 @@ func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string
 		}
 
 		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, colList, placeholders)
-		if _, err := db.pool.Exec(ctx, sql, args...); err != nil {
+		if _, err := db.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("insert account movement %s: %w", regName, err)
 		}
 	}
@@ -181,7 +179,7 @@ func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string
 // ClearAccountMovements removes all movements for a given document from the register.
 func (db *DB) ClearAccountMovements(ctx context.Context, regName string, docID uuid.UUID) error {
 	table := metadata.AccountRegTableName(regName)
-	_, err := db.pool.Exec(ctx,
+	_, err := db.Exec(ctx,
 		fmt.Sprintf("DELETE FROM %s WHERE регистратор=$1", table), docID,
 	)
 	return err
@@ -199,7 +197,7 @@ func (db *DB) GetAccountMovements(ctx context.Context, regName string, ar *metad
 
 	sql := fmt.Sprintf("SELECT %s FROM %s ORDER BY period DESC LIMIT 500",
 		strings.Join(cols, ", "), table)
-	rows, err := db.pool.Query(ctx, sql)
+	rows, err := db.Query(ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +249,7 @@ WHERE a.plan = $2
 GROUP BY a.code, a.name, a.kind
 ORDER BY a.code`, selectCols, table)
 
-	rows, err := db.pool.Query(ctx, query, asOf, planName)
+	rows, err := db.Query(ctx, query, asOf, planName)
 	if err != nil {
 		return nil, fmt.Errorf("account balances: %w", err)
 	}
@@ -324,7 +322,7 @@ HAVING SUM(CASE WHEN r.счётдт = a.code THEN 1 ELSE 0 END) > 0
     OR SUM(CASE WHEN r.счёткт = a.code THEN 1 ELSE 0 END) > 0
 ORDER BY a.code`, selectCols, table)
 
-	rows, err := db.pool.Query(ctx, query, from, to, planName)
+	rows, err := db.Query(ctx, query, from, to, planName)
 	if err != nil {
 		return nil, fmt.Errorf("account turnovers: %w", err)
 	}
