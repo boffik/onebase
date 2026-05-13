@@ -56,6 +56,33 @@ func TestCompile_WithParam(t *testing.T) {
 	}
 }
 
+func TestCompile_WithUUIDParam(t *testing.T) {
+	src := `ВЫБРАТЬ Номенклатура ИЗ РегистрНакопления.ТоварноеДвижение ГДЕ Номенклатура = &Ном`
+
+	r, err := query.Compile(src, query.CompileOpts{Params: map[string]any{"Ном": "4e582af9-cd26-4af0-a244-d282e02a5603"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "::uuid") {
+		t.Errorf("expected ::uuid cast for UUID param, got: %s", r.SQL)
+	}
+	if len(r.Args) != 1 || r.Args[0] != "4e582af9-cd26-4af0-a244-d282e02a5603" {
+		t.Errorf("expected UUID arg, got %v", r.Args)
+	}
+}
+
+func TestCompile_WithNonUUIDStringParam(t *testing.T) {
+	src := `ВЫБРАТЬ Номенклатура ИЗ РегистрНакопления.ТоварноеДвижение ГДЕ вид_движения = &Вид`
+
+	r, err := query.Compile(src, query.CompileOpts{Params: map[string]any{"Вид": "Приход"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "::text") {
+		t.Errorf("expected ::text cast for regular string param, got: %s", r.SQL)
+	}
+}
+
 func TestCompile_StringLiteral(t *testing.T) {
 	src := `ВЫБРАТЬ Номенклатура ИЗ РегистрНакопления.ТоварноеДвижение ГДЕ вид_движения = "Приход"`
 

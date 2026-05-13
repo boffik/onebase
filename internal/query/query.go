@@ -1190,12 +1190,34 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 	return Result{SQL: tr.build(), Args: tr.args}, nil
 }
 
+func isUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch {
+		case i == 8 || i == 13 || i == 18 || i == 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // pgCast returns a PostgreSQL explicit cast suffix for v.
 func pgCast(v any) string {
-	switch v.(type) {
+	switch v := v.(type) {
 	case time.Time:
 		return "::timestamptz"
 	case string:
+		if isUUID(v) {
+			return "::uuid"
+		}
 		return "::text"
 	case float64, float32:
 		return "::numeric"
