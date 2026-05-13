@@ -131,7 +131,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return template.JS(b)
 	},
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -150,6 +150,16 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .sys-drop a,.sys-drop button{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;width:100%;text-align:left;background:none;border:none;cursor:pointer;border-bottom:1px solid #f1f5f9}
 .sys-drop a:last-child,.sys-drop button:last-child{border-bottom:none}
 .sys-drop a:hover,.sys-drop button:hover{background:#f1f5f9}
+.sys-sub{position:relative}
+.sys-sub>.sys-submenu{display:none;position:absolute;right:100%;top:0;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:220px;padding:4px 0;z-index:200}
+.sys-sub:hover>.sys-submenu{display:block}
+.sys-submenu a{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;border-bottom:1px solid #f1f5f9}
+.sys-submenu a:last-child{border-bottom:none}
+.sys-submenu a:hover{background:#f1f5f9}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
+.tbl td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155;font-size:13px}
+.tbl tr:hover td{background:#f8fafc}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
@@ -273,7 +283,12 @@ const tplNav = `
       <a href="/ui/delete-marked">Удалить помеченные</a>
       <a href="/ui/admin/cleanup">Очистка регистров</a>
       {{if .IsAdmin}}<a href="/ui/all-functions">Все функции</a>{{end}}
-      <a href="/ui/query-builder">Конструктор запросов</a>
+      {{if .IsAdmin}}<div class="sys-sub"><a href="#" onclick="event.preventDefault()">Инструменты разработчика &#9654;</a>
+      <div class="sys-submenu">
+        <a href="/ui/dev/query-console">Консоль запросов</a>
+        <a href="/ui/dev/code-console">Консоль кода</a>
+      </div>
+    </div>{{end}}
       <form method="POST" action="/logout"><button type="submit">Выйти</button></form>
     </div>
   </div>

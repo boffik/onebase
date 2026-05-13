@@ -23,6 +23,14 @@ type qbSource struct {
 }
 
 func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
+	sources := s.buildQuerySources()
+	schemaJSON, _ := json.Marshal(sources)
+	s.render(w, r, "page-query-builder", map[string]any{
+		"Schema": template.JS(schemaJSON),
+	})
+}
+
+func (s *Server) buildQuerySources() []qbSource {
 	var sources []qbSource
 
 	// Catalogs
@@ -59,7 +67,6 @@ func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
 
 	// Accumulation registers
 	for _, reg := range s.reg.Registers() {
-		// Raw movements
 		raw := qbSource{
 			ID:    "register:" + reg.Name,
 			Label: "РегистрНакопления." + reg.Name,
@@ -75,7 +82,6 @@ func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
 		}
 		sources = append(sources, raw)
 
-		// .Остатки(&НаДату)
 		bal := qbSource{
 			ID:      "vt_balances:" + reg.Name,
 			Label:   "РегистрНакопления." + reg.Name + ".Остатки(&НаДату)",
@@ -90,7 +96,6 @@ func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
 		}
 		sources = append(sources, bal)
 
-		// .Обороты(&Начало, &Конец)
 		trn := qbSource{
 			ID:      "vt_turnovers:" + reg.Name,
 			Label:   "РегистрНакопления." + reg.Name + ".Обороты(&Начало, &Конец)",
@@ -126,7 +131,6 @@ func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
 		}
 		sources = append(sources, raw)
 
-		// .СрезПоследних(&НаДату)
 		sl := qbSource{
 			ID:      "vt_slice:" + ir.Name,
 			Label:   "РегистрСведений." + ir.Name + ".СрезПоследних(&НаДату)",
@@ -144,7 +148,6 @@ func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
 
 	// Account registers
 	for _, ar := range s.reg.AccountRegisters() {
-		// .Остатки(&НаДату)
 		bal := qbSource{
 			ID:      "vt_acct_bal:" + ar.Name,
 			Label:   "РегистрБухгалтерии." + ar.Name + ".Остатки(&НаДату)",
@@ -175,11 +178,7 @@ func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {
 		sources = append(sources, trn)
 	}
 
-	schemaJSON, _ := json.Marshal(sources)
-
-	s.render(w, r, "page-query-builder", map[string]any{
-		"Schema": template.JS(schemaJSON),
-	})
+	return sources
 }
 
 func fieldTypeName(t metadata.FieldType) string {
