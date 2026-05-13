@@ -43,14 +43,17 @@ type xmlType struct {
 
 // v8.3 MDClasses XML structures (sibling .xml files, MetaDataObject root)
 type xmlV8Root struct {
-	Catalog          *xmlV8Obj     `xml:"Catalog"`
-	Document         *xmlV8Obj     `xml:"Document"`
-	AccReg           *xmlV8Obj     `xml:"AccumulationRegister"`
-	InfoReg          *xmlV8Obj     `xml:"InformationRegister"`
-	AcctReg          *xmlV8Obj     `xml:"AccountingRegister"`
-	Enum             *xmlV8Enum    `xml:"Enumeration"`
-	Constant         *xmlV8Const   `xml:"Constant"`
-	ChartOfAccounts  *xmlV8Obj     `xml:"ChartOfAccounts"`
+	Catalog          *xmlV8Obj      `xml:"Catalog"`
+	Document         *xmlV8Obj      `xml:"Document"`
+	Task             *xmlV8Obj      `xml:"Task"`
+	DataProcessor    *xmlV8Obj      `xml:"DataProcessor"`
+	BusinessProcess  *xmlV8Obj      `xml:"BusinessProcess"`
+	AccReg           *xmlV8Obj      `xml:"AccumulationRegister"`
+	InfoReg          *xmlV8Obj      `xml:"InformationRegister"`
+	AcctReg          *xmlV8Obj      `xml:"AccountingRegister"`
+	Enum             *xmlV8Enum     `xml:"Enumeration"`
+	Constant         *xmlV8Const    `xml:"Constant"`
+	ChartOfAccounts  *xmlV8Obj      `xml:"ChartOfAccounts"`
 	ScheduledJob     *xmlV8SchedJob `xml:"ScheduledJob"`
 }
 
@@ -229,12 +232,34 @@ func ParseDir(dir string) (*ConfigDump, error) {
 		case "ConfigDumpInfo.xml", "config.xml":
 			// служебный файл
 
+		case "Tasks", "DataProcessors", "BusinessProcesses",
+			"ExchangePlans", "ChartsOfCharacteristicTypes",
+			"ChartsOfCalculationTypes", "FilterCriteria",
+			"SettingsStorages", "FunctionalOptions",
+			"FunctionalOptionsParameters", "DefinedTypes",
+			"CommandGroups", "Roles", "CommonTemplates",
+			"CommonForms", "CommonCommands", "CommonModules",
+			"CommonAttributes", "EventSubscriptions",
+			"SequenceRegisters", "Recalculations",
+			"CalculationRegisters", "ExternalDataSources":
+			// конвертируем как справочники (каталоги)
+			cats, err := parseCatalogs(subDir)
+			if err != nil {
+				return nil, err
+			}
+			dump.Catalogs = append(dump.Catalogs, cats...)
+
 		default:
-			// пропускаем неизвестные разделы
-			objects, _ := os.ReadDir(subDir)
-			for _, obj := range objects {
-				if obj.IsDir() {
-					dump.SkippedDirs = append(dump.SkippedDirs, SkippedItem{Kind: kind, Name: obj.Name()})
+			// пробуем конвертировать неизвестные разделы как справочники
+			cats, err := parseCatalogs(subDir)
+			if err == nil && len(cats) > 0 {
+				dump.Catalogs = append(dump.Catalogs, cats...)
+			} else {
+				objects, _ := os.ReadDir(subDir)
+				for _, obj := range objects {
+					if obj.IsDir() {
+						dump.SkippedDirs = append(dump.SkippedDirs, SkippedItem{Kind: kind, Name: obj.Name()})
+					}
 				}
 			}
 		}
@@ -255,12 +280,18 @@ func parseCatalogs(dir string) ([]*CatalogMeta, error) {
 		}
 		name := e.Name()
 
-		if v8, _ := parseV83File(filepath.Join(dir, name+".xml")); v8 != nil && v8.Catalog != nil {
-			result = append(result, &CatalogMeta{
-				Name:       orDefault(v8.Catalog.Props.Name, name),
-				Attributes: convertV83Attrs(v8.Catalog.ChildObjects.Attributes),
-			})
-			continue
+		if v8, _ := parseV83File(filepath.Join(dir, name+".xml")); v8 != nil {
+			obj := v8.Catalog
+			if obj == nil { obj = v8.Task }
+			if obj == nil { obj = v8.DataProcessor }
+			if obj == nil { obj = v8.BusinessProcess }
+			if obj != nil {
+				result = append(result, &CatalogMeta{
+					Name:       orDefault(obj.Props.Name, name),
+					Attributes: convertV83Attrs(obj.ChildObjects.Attributes),
+				})
+				continue
+			}
 		}
 
 		metaFile := filepath.Join(dir, name, "Ext", "Metadata.xml")
