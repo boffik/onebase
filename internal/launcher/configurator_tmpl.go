@@ -600,6 +600,17 @@ function startEdit(name) {
     });
     editor._fileId = name;
     monacoEditors[name] = editor;
+    // Регистрируем пункт «Конструктор запроса» в стандартном меню Monaco
+    // (наш document-level contextmenu не получает события — Monaco перехватывает их сам).
+    try {
+      editor.addAction({
+        id: 'onebase-query-builder',
+        label: 'Конструктор запроса',
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.5,
+        run: function(ed) { openQBModalMonaco(ed._fileId || name); }
+      });
+    } catch (e) { /* Monaco may not be fully ready in some edge cases */ }
     // Gutter click for breakpoint toggle — setTimeout decouples from Monaco internals
     editor.onMouseDown(function(e) {
       try {
@@ -1040,23 +1051,18 @@ function repAddParam(tableId) {
   tr.querySelector('input[type=text]').focus();
 }
 
-// ── Editor context menu ────────────────────────────────────
+// ── Editor context menu (только для textarea/pre — Monaco использует editor.addAction) ──
 (function(){
-var _cTA=null,_cMonacoName=null,_cM=null;
+var _cTA=null,_cM=null;
 document.addEventListener('contextmenu',function(e){
+  // Monaco сам перехватывает contextmenu и показывает своё меню; не вмешиваемся.
+  if(e.target.closest('.monaco-target')){hideC();return;}
   var ta=e.target.closest('.os-edit');
   var pre=e.target.closest('pre.os-code');
-  var mon=e.target.closest('.monaco-target');
-  if(!ta&&!pre&&!mon){hideC();return;}
+  if(!ta&&!pre){hideC();return;}
   e.preventDefault();
-  _cMonacoName=null;
-  if(mon){
-    _cMonacoName=mon._editorId||null;
-    _cTA=null;
-  } else {
-    if(pre&&!ta){var nm=pre.id.replace('pre-','');startEdit(nm);ta=document.getElementById('ta-'+nm);}
-    _cTA=ta;
-  }
+  if(pre&&!ta){var nm=pre.id.replace('pre-','');startEdit(nm);ta=document.getElementById('ta-'+nm);}
+  _cTA=ta;
   showC(e.clientX,e.clientY);
 });
 function showC(x,y){
@@ -1069,14 +1075,7 @@ function showC(x,y){
 }
 function hideC(){if(_cM)_cM.style.display='none';}
 document.addEventListener('click',hideC);
-window.cfgOpenQB=function(){
-  hideC();
-  if(_cMonacoName && monacoEditors[_cMonacoName]){
-    openQBModalMonaco(_cMonacoName);
-  } else if(_cTA){
-    openQBModal(_cTA);
-  }
-};
+window.cfgOpenQB=function(){ hideC(); if(_cTA) openQBModal(_cTA); };
 })();
 
 // ── Inline query builder ──────────────────────────────────
