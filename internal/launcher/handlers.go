@@ -234,9 +234,11 @@ func (h *handler) start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !h.runner.IsRunning(b.ID) {
-		if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
-			writeJSON(w, 500, map[string]any{"error": "Не удалось создать БД: " + err.Error()})
-			return
+		if b.DBType != "sqlite" {
+			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
+				writeJSON(w, 500, map[string]any{"error": "Не удалось создать БД: " + err.Error()})
+				return
+			}
 		}
 		if err := h.runner.Start(b); err != nil {
 			writeJSON(w, 500, map[string]any{"error": err.Error()})
@@ -310,7 +312,7 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := storage.Connect(r.Context(), b.DB)
+	db, err := OpenDB(r.Context(), b)
 	if err != nil {
 		render(w, "page-config-result", map[string]any{
 			"Title": "onebase — Конфигуратор", "Message": "",
@@ -357,7 +359,7 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 		srcDir, _ = workspacePath(b.ID)
 	}
 
-	db, err := storage.Connect(r.Context(), b.DB)
+	db, err := OpenDB(r.Context(), b)
 	if err != nil {
 		render(w, "page-config-result", map[string]any{
 			"Title": "onebase — Загрузка конфигурации", "Message": "",
@@ -386,10 +388,12 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) initDatabaseBase(ctx context.Context, b *Base, scaffold bool) error {
-	if err := storage.EnsureDatabase(ctx, b.DB); err != nil {
-		return fmt.Errorf("создание БД: %w", err)
+	if b.DBType != "sqlite" {
+		if err := storage.EnsureDatabase(ctx, b.DB); err != nil {
+			return fmt.Errorf("создание БД: %w", err)
+		}
 	}
-	db, err := storage.Connect(ctx, b.DB)
+	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("подключение к БД: %w", err)
 	}

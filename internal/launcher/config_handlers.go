@@ -1,4 +1,4 @@
-package launcher
+﻿package launcher
 
 import (
 	"archive/zip"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // configExportZip exports the full configuration as a ZIP archive.
@@ -27,7 +26,7 @@ func (h *handler) configExportZip(w http.ResponseWriter, r *http.Request) {
 	zw := zip.NewWriter(&buf)
 
 	if b.ConfigSource == "database" {
-		db, cerr := storage.Connect(r.Context(), b.DB)
+		db, cerr := OpenDB(r.Context(), b)
 		if cerr != nil {
 			http.Error(w, cerr.Error(), 500)
 			return
@@ -143,7 +142,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Import into database
-	db, cerr := storage.Connect(r.Context(), b.DB)
+	db, cerr := OpenDB(r.Context(), b)
 	if cerr != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "DB error: " + cerr.Error()

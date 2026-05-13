@@ -1,4 +1,4 @@
-package launcher
+﻿package launcher
 
 import (
 	"archive/zip"
@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/backup"
 	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,7 +33,7 @@ func (h *handler) backupDir(b *Base) string {
 
 func (h *handler) loadBackupDirSetting(b *Base) string {
 	if b.ConfigSource == "database" {
-		db, err := storage.Connect(context.Background(), b.DB)
+		db, err := OpenDB(context.Background(), b)
 		if err != nil {
 			return ""
 		}
@@ -92,11 +91,11 @@ func (h *handler) backupCreate(w http.ResponseWriter, r *http.Request) {
 	outPath, dumpErr := dumpForBase(r.Context(), b, dir)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if dumpErr != nil {
-		data.Error = "Ошибка бэкапа: " + dumpErr.Error()
+		data.Error = "РћС€РёР±РєР° Р±СЌРєР°РїР°: " + dumpErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		data.BackupMessage = "Бэкап создан: " + filepath.Base(outPath)
+		data.BackupMessage = "Р‘СЌРєР°Рї СЃРѕР·РґР°РЅ: " + filepath.Base(outPath)
 	}
 	renderCfg(w, data)
 }
@@ -160,7 +159,7 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 	out, _ := yaml.Marshal(appCfgWithBackup{Name: b.Name, Backup: cfg})
 	var saveErr error
 	if b.ConfigSource == "database" {
-		db, cerr := storage.Connect(r.Context(), b.DB)
+		db, cerr := OpenDB(r.Context(), b)
 		if cerr != nil {
 			saveErr = cerr
 		} else {
@@ -178,11 +177,11 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if saveErr != nil {
-		data.Error = fmt.Sprintf("Ошибка сохранения: %s", saveErr.Error())
+		data.Error = fmt.Sprintf("РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: %s", saveErr.Error())
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		data.BackupMessage = "Настройки бэкапа сохранены"
+		data.BackupMessage = "РќР°СЃС‚СЂРѕР№РєРё Р±СЌРєР°РїР° СЃРѕС…СЂР°РЅРµРЅС‹"
 	}
 	renderCfg(w, data)
 }
@@ -199,7 +198,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("backup_file")
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка загрузки: " + err.Error()
+		data.Error = "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -210,7 +209,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Create(outPath)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка сохранения: " + err.Error()
+		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -220,7 +219,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	data := h.loadCfgData(r.Context(), b, "backup")
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = "panel-backup"
-	data.BackupMessage = "Файл загружен: " + name
+	data.BackupMessage = "Р¤Р°Р№Р» Р·Р°РіСЂСѓР¶РµРЅ: " + name
 	renderCfg(w, data)
 }
 
@@ -235,7 +234,7 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 	fp := filepath.Join(dir, file)
 	if _, err := os.Stat(fp); err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Файл не найден: " + file
+		data.Error = "Р¤Р°Р№Р» РЅРµ РЅР°Р№РґРµРЅ: " + file
 		renderCfg(w, data)
 		return
 	}
@@ -249,13 +248,13 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 	restoreErr := restoreForBase(r.Context(), b, fp)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if restoreErr != nil {
-		data.Error = "Ошибка восстановления: " + restoreErr.Error()
+		data.Error = "РћС€РёР±РєР° РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ: " + restoreErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		msg := "База данных восстановлена из: " + file
+		msg := "Р‘Р°Р·Р° РґР°РЅРЅС‹С… РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅР° РёР·: " + file
 		if wasRunning {
-			msg += ". База остановлена — запустите её заново для применения изменений."
+			msg += ". Р‘Р°Р·Р° РѕСЃС‚Р°РЅРѕРІР»РµРЅР° вЂ” Р·Р°РїСѓСЃС‚РёС‚Рµ РµС‘ Р·Р°РЅРѕРІРѕ РґР»СЏ РїСЂРёРјРµРЅРµРЅРёСЏ РёР·РјРµРЅРµРЅРёР№."
 		}
 		data.BackupMessage = msg
 	}
@@ -297,7 +296,7 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 
 	// Configuration
 	if b.ConfigSource == "database" {
-		db, cerr := storage.Connect(r.Context(), b.DB)
+		db, cerr := OpenDB(r.Context(), b)
 		if cerr == nil {
 			defer db.Close()
 			rows, qerr := db.Pool().Query(r.Context(), `SELECT path, content FROM _onebase_config ORDER BY path`)
@@ -360,7 +359,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	file, _, err := r.FormFile("obz_file")
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка загрузки файла: " + err.Error()
+		data.Error = "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё С„Р°Р№Р»Р°: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -369,7 +368,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	dtData, err := io.ReadAll(file)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка чтения файла: " + err.Error()
+		data.Error = "РћС€РёР±РєР° С‡С‚РµРЅРёСЏ С„Р°Р№Р»Р°: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -377,7 +376,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	reader, err := zip.NewReader(bytes.NewReader(dtData), int64(len(dtData)))
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Неверный формат файла .obz: " + err.Error()
+		data.Error = "РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р° .obz: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -422,8 +421,8 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Запущенный процесс держит старую конфигурацию в памяти и сессию к БД —
-	// иначе после restore миграция и новые .os-файлы не будут видны до перезапуска.
+	// Р—Р°РїСѓС‰РµРЅРЅС‹Р№ РїСЂРѕС†РµСЃСЃ РґРµСЂР¶РёС‚ СЃС‚Р°СЂСѓСЋ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ РІ РїР°РјСЏС‚Рё Рё СЃРµСЃСЃРёСЋ Рє Р‘Р” вЂ”
+	// РёРЅР°С‡Рµ РїРѕСЃР»Рµ restore РјРёРіСЂР°С†РёСЏ Рё РЅРѕРІС‹Рµ .os-С„Р°Р№Р»С‹ РЅРµ Р±СѓРґСѓС‚ РІРёРґРЅС‹ РґРѕ РїРµСЂРµР·Р°РїСѓСЃРєР°.
 	wasRunning := h.runner.IsRunning(b.ID)
 	if wasRunning {
 		h.runner.Stop(b.ID)
@@ -435,14 +434,14 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if dumpFile != "" {
 		restoreErr = restoreForBase(r.Context(), b, dumpFile)
 	} else {
-		restoreErr = fmt.Errorf("файл database.sql.gz не найден в архиве")
+		restoreErr = fmt.Errorf("С„Р°Р№Р» database.sql.gz РЅРµ РЅР°Р№РґРµРЅ РІ Р°СЂС…РёРІРµ")
 	}
 
 	// Import configuration
 	var configErr error
 	if configDir != "" {
 		if b.ConfigSource == "database" {
-			db, cerr := storage.Connect(r.Context(), b.DB)
+			db, cerr := OpenDB(r.Context(), b)
 			if cerr != nil {
 				configErr = cerr
 			} else {
@@ -474,15 +473,15 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if restoreErr != nil {
-		data.Error = "Ошибка восстановления БД: " + restoreErr.Error()
+		data.Error = "РћС€РёР±РєР° РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ Р‘Р”: " + restoreErr.Error()
 	} else if configErr != nil {
-		data.Error = "Ошибка импорта конфигурации: " + configErr.Error()
+		data.Error = "РћС€РёР±РєР° РёРјРїРѕСЂС‚Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё: " + configErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		msg := "Полное восстановление выполнено: база данных + конфигурация"
+		msg := "РџРѕР»РЅРѕРµ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РІС‹РїРѕР»РЅРµРЅРѕ: Р±Р°Р·Р° РґР°РЅРЅС‹С… + РєРѕРЅС„РёРіСѓСЂР°С†РёСЏ"
 		if wasRunning {
-			msg += ". База остановлена — запустите её заново для применения изменений."
+			msg += ". Р‘Р°Р·Р° РѕСЃС‚Р°РЅРѕРІР»РµРЅР° вЂ” Р·Р°РїСѓСЃС‚РёС‚Рµ РµС‘ Р·Р°РЅРѕРІРѕ РґР»СЏ РїСЂРёРјРµРЅРµРЅРёСЏ РёР·РјРµРЅРµРЅРёР№."
 		}
 		data.BackupMessage = msg
 	}
