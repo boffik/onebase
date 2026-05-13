@@ -114,52 +114,61 @@ func (dc *DebugController) RemoveSession(id string) {
 
 // ── Breakpoint management ────────────────────────────────────────
 
-// SetBreakpoint creates or updates a breakpoint
+// SetBreakpoint creates or updates a breakpoint. The file key is normalized
+// so all operations (set/remove/check) hit the same map entry regardless of
+// whether the caller passes "X.posting.os" or the editor id "post-X".
 func (s *ActiveSession) SetBreakpoint(file string, line int, condition string) *Breakpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.breakpoints[file] == nil {
-		s.breakpoints[file] = make(map[int]*Breakpoint)
+	key := normalizeFilePath(file)
+	if s.breakpoints[key] == nil {
+		s.breakpoints[key] = make(map[int]*Breakpoint)
 	}
-	if bp, ok := s.breakpoints[file][line]; ok {
+	if bp, ok := s.breakpoints[key][line]; ok {
 		bp.Condition = condition
+		bp.Enabled = true
 		return bp
 	}
 	bp := &Breakpoint{
 		ID:        fmt.Sprintf("bp-%d-%s", line, s.ID),
-		File:      file,
+		File:      key,
 		Line:      line,
 		Enabled:   true,
 		Condition: condition,
 		CreatedAt: time.Now(),
 	}
-	s.breakpoints[file][line] = bp
-	bp.MapLen = len(s.breakpoints)       // diagnostic: map length after store
-	bp.EntryLen = len(s.breakpoints[file]) // diagnostic: entries for this file
+	s.breakpoints[key][line] = bp
+	bp.MapLen = len(s.breakpoints)
+	bp.EntryLen = len(s.breakpoints[key])
 	return bp
 }
 
-// RemoveBreakpoint deletes a breakpoint
+// RemoveBreakpoint deletes a breakpoint by normalized file key.
 func (s *ActiveSession) RemoveBreakpoint(file string, line int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if locMap, ok := s.breakpoints[file]; ok {
+	key := normalizeFilePath(file)
+	if locMap, ok := s.breakpoints[key]; ok {
 		if _, ok := locMap[line]; ok {
 			delete(locMap, line)
+			if len(locMap) == 0 {
+				delete(s.breakpoints, key)
+			}
 			return true
 		}
 	}
 	return false
 }
 
-// ToggleBreakpoint enables or disables a breakpoint at file:line
+// ToggleBreakpoint enables or disables a breakpoint at file:line.
 func (s *ActiveSession) ToggleBreakpoint(file string, line int) *Breakpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if locMap, ok := s.breakpoints[file]; ok {
+	key := normalizeFilePath(file)
+	if locMap, ok := s.breakpoints[key]; ok {
 		if bp, ok := locMap[line]; ok {
 			bp.Enabled = !bp.Enabled
 			return bp
@@ -169,43 +178,39 @@ func (s *ActiveSession) ToggleBreakpoint(file string, line int) *Breakpoint {
 }
 
 // CheckBreakpoint returns the breakpoint if there's an enabled one at file:line.
-// The file parameter is normalized before lookup to match the editor ID format
-// used by the configurator (e.g., "post-ПоступлениеТоваров").
+// Keys in the breakpoints map are already normalized (see SetBreakpoint), so a
+// direct map lookup is enough. Exact line match only — no fuzzy ±1, which used
+// to cause stops on the line above the breakpoint.
 func (s *ActiveSession) CheckBreakpoint(file string, line int) *Breakpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	normalized := normalizeFilePath(file)
+	key := normalizeFilePath(file)
 	s.diagLastFile = file
 	s.diagLastLine = line
-	s.diagMessages = append(s.diagMessages, fmt.Sprintf("check raw=%q line=%d norm=%q", file, line, normalized))
-	// Keep last 50 messages
+	s.diagMessages = append(s.diagMessages, fmt.Sprintf("check raw=%q line=%d norm=%q", file, line, key))
 	if len(s.diagMessages) > 50 {
 		s.diagMessages = s.diagMessages[len(s.diagMessages)-50:]
 	}
-	for key, locMap := range s.breakpoints {
-		keyNorm := normalizeFilePath(key)
-		match := strings.EqualFold(keyNorm, normalized)
-		s.diagMessages = append(s.diagMessages, fmt.Sprintf("  bp key=%q keyNorm=%q match=%v", key, keyNorm, match))
-		if match {
-			for bpLine, bp := range locMap {
-				if !bp.Enabled {
-					continue
-				}
-				if bpLine == line {
-					bp.HitCount++
-					return bp
-				}
-				// Fuzzy match: +/-1 to handle AST line offset
-				if (bpLine == line-1 || bpLine == line+1) && bp.Enabled {
-					s.diagMessages = append(s.diagMessages, fmt.Sprintf("  fuzzy hit: bpLine=%d curLine=%d", bpLine, line))
-					bp.HitCount++
-					return bp
-				}
+	locMap, ok := s.breakpoints[key]
+	if !ok {
+		// Case-insensitive fallback in case some legacy ID slipped in.
+		for k, m := range s.breakpoints {
+			if strings.EqualFold(k, key) {
+				locMap = m
+				break
 			}
 		}
 	}
-	return nil
+	if locMap == nil {
+		return nil
+	}
+	bp, ok := locMap[line]
+	if !ok || !bp.Enabled {
+		return nil
+	}
+	bp.HitCount++
+	return bp
 }
 
 // normalizeFilePath converts a file path or editor ID to a canonical form
@@ -257,12 +262,12 @@ func (s *ActiveSession) GetBreakpoints() []*Breakpoint {
 	return result
 }
 
-// GetBreakpointsForFile returns breakpoints for a file
+// GetBreakpointsForFile returns breakpoints for a file (normalized lookup).
 func (s *ActiveSession) GetBreakpointsForFile(file string) []*Breakpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	locMap := s.breakpoints[file]
+	locMap := s.breakpoints[normalizeFilePath(file)]
 	result := make([]*Breakpoint, 0, len(locMap))
 	for _, bp := range locMap {
 		result = append(result, bp)
@@ -270,11 +275,11 @@ func (s *ActiveSession) GetBreakpointsForFile(file string) []*Breakpoint {
 	return result
 }
 
-// HasBreakpointsForFile checks if there are any breakpoints for a file
+// HasBreakpointsForFile checks if there are any breakpoints for a file.
 func (s *ActiveSession) HasBreakpointsForFile(file string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return len(s.breakpoints[file]) > 0
+	return len(s.breakpoints[normalizeFilePath(file)]) > 0
 }
 
 // ── Call stack ───────────────────────────────────────────────────

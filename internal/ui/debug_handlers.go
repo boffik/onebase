@@ -189,20 +189,28 @@ func (s *Server) debugGlobalEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If paused, evaluate in the paused context
+	// If a debug session is active, only evaluate when paused — otherwise the
+	// expression refers to DSL locals (e.g. Запрос.Текст) that don't exist
+	// outside the paused frame, and a standalone fallback would return nil,
+	// making the watch panel flicker every poll between paused and running.
 	sess := s.globalDebug.Session()
 	if sess != nil {
 		snap := sess.Snapshot()
-		if snap.State == debugger.StatePaused {
-			result := sess.Evaluate(req.Expr, func(expr string) (any, error) {
-				return standaloneEval(s, expr)
+		if snap.State != debugger.StatePaused {
+			writeJSON(w, 200, debugger.EvaluateResult{
+				IsError: true,
+				Error:   "interpreter is not paused",
 			})
-			writeJSON(w, 200, result)
 			return
 		}
+		result := sess.Evaluate(req.Expr, func(expr string) (any, error) {
+			return standaloneEval(s, expr)
+		})
+		writeJSON(w, 200, result)
+		return
 	}
 
-	// Standalone evaluation
+	// No debug session — fall back to standalone evaluation (e.g. "2+2").
 	val, err := standaloneEval(s, req.Expr)
 	if err != nil {
 		writeJSON(w, 200, debugger.EvaluateResult{
