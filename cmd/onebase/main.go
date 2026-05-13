@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ivantit66/onebase/internal/cli"
@@ -15,21 +13,8 @@ import (
 func main() {
 	writeStartupLog()
 
-	// When launched via double-click (no args), Explorer uses ShellExecute
-	// which can prevent WebView2 from initializing properly. Re-exec with
-	// explicit 'start' arg so the child uses CreateProcess — same as VBS does.
 	if len(os.Args) == 1 {
-		exe, err := os.Executable()
-		if err == nil {
-			cmd := exec.Command(exe, "start")
-			cmd.Stdin = nil
-			cmd.Stdout = nil
-			cmd.Stderr = nil
-			cmd.SysProcAttr = &syscall.SysProcAttr{
-				CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-			}
-			cmd.Start()
-		}
+		reexec()
 		return
 	}
 
