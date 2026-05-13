@@ -89,10 +89,10 @@ func checkBackupFileMismatch(b *Base, filename string) error {
 	isSQLiteDump := strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite")
 	targetSQLite := b.DBType == "sqlite"
 	if isPGDump && targetSQLite {
-		return fmt.Errorf("PostgreSQL backup cannot be restored into a SQLite database (%s)", filename)
+		return fmt.Errorf("Нельзя восстановить PostgreSQL-бэкап в SQLite-базу (%s). Создайте базу с типом БД PostgreSQL.", filename)
 	}
 	if isSQLiteDump && !targetSQLite {
-		return fmt.Errorf("SQLite backup cannot be restored into a PostgreSQL database (%s)", filename)
+		return fmt.Errorf("Нельзя восстановить SQLite-бэкап в PostgreSQL-базу (%s). Создайте базу с типом БД SQLite.", filename)
 	}
 	return nil
 }
