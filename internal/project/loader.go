@@ -30,6 +30,7 @@ type Project struct {
 	Constants        []*metadata.Constant
 	Reports          []*report.Report
 	PrintForms       []*printform.PrintForm
+	DSLPrintForms    []*printform.DSLPrintForm
 	Programs         map[string]*ast.Program  // entity name → parsed DSL
 	Processors       []*processor.Processor
 	Modules          map[string]*ast.Program  // module name → parsed procs
@@ -205,11 +206,12 @@ func (p *Project) loadAccountRegs() error {
 }
 
 func (p *Project) loadPrintForms() error {
-	forms, err := printform.LoadDir(filepath.Join(p.Dir, "printforms"))
+	forms, dslForms, err := printform.LoadDir(filepath.Join(p.Dir, "printforms"))
 	if err != nil {
 		return fmt.Errorf("project: load printforms: %w", err)
 	}
 	p.PrintForms = forms
+	p.DSLPrintForms = dslForms
 	return nil
 }
 

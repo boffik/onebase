@@ -10,25 +10,31 @@ import (
 )
 
 // EnsurePredefinedColumns adds _predefined_name and _is_predefined columns to
-// catalog tables that declare predefined items. Safe to call repeatedly (IF NOT EXISTS).
+// catalog tables that declare predefined items. Safe to call repeatedly.
 func (db *DB) EnsurePredefinedColumns(ctx context.Context, entities []*metadata.Entity) error {
+	d := db.dialect
 	for _, e := range entities {
 		if e.Kind != metadata.KindCatalog || len(e.Predefined) == 0 {
 			continue
 		}
 		table := metadata.TableName(e.Name)
-		if _, err := db.pool.Exec(ctx, AddColumnSQL(table, "_predefined_name", "TEXT")); err != nil {
+		if err := db.AddColumnIfMissing(ctx, table, "_predefined_name", d.TypeText()); err != nil {
 			return fmt.Errorf("ensure predefined cols %s._predefined_name: %w", e.Name, err)
 		}
-		if _, err := db.pool.Exec(ctx, AddColumnSQL(table, "_is_predefined", "BOOLEAN NOT NULL DEFAULT FALSE")); err != nil {
+		if err := db.AddColumnIfMissing(ctx, table, "_is_predefined", d.TypeBool()+" NOT NULL DEFAULT "+boolFalseLit(d)); err != nil {
 			return fmt.Errorf("ensure predefined cols %s._is_predefined: %w", e.Name, err)
 		}
-		// Unique index on _predefined_name for predefined rows (partial index)
+		// Partial unique index — both PG and SQLite support WHERE on indexes.
+		// Boolean literal differs: TRUE for PG, 1 for SQLite.
+		boolTrue := "TRUE"
+		if d.Name() == "sqlite" {
+			boolTrue = "1"
+		}
 		idxName := "idx_" + strings.ToLower(e.Name) + "_predefined"
 		idxSQL := fmt.Sprintf(
-			`CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (_predefined_name) WHERE _is_predefined = TRUE`,
-			idxName, table)
-		if _, err := db.pool.Exec(ctx, idxSQL); err != nil {
+			`CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (_predefined_name) WHERE _is_predefined = %s`,
+			idxName, table, boolTrue)
+		if _, err := db.Exec(ctx, idxSQL); err != nil {
 			return fmt.Errorf("ensure predefined index %s: %w", e.Name, err)
 		}
 	}
@@ -42,13 +48,19 @@ func (db *DB) SyncPredefined(ctx context.Context, e *metadata.Entity) error {
 	if len(e.Predefined) == 0 {
 		return nil
 	}
+	d := db.dialect
+	boolTrue := "TRUE"
+	if d.Name() == "sqlite" {
+		boolTrue = "1"
+	}
 	table := metadata.TableName(e.Name)
 	for _, item := range e.Predefined {
 		cols := []string{"id", "_predefined_name", "_is_predefined"}
-		phs := []string{"gen_random_uuid()", "$1", "TRUE"}
-		args := []any{item.Name}
-		updates := []string{"_is_predefined = TRUE"}
-		argIdx := 2
+		// id is generated in Go (gen_random_uuid is PG-only).
+		phs := []string{d.Placeholder(1), d.Placeholder(2), boolTrue}
+		args := []any{idArg(d, uuid.New()), item.Name}
+		updates := []string{"_is_predefined = " + boolTrue}
+		argIdx := 3
 
 		for _, f := range e.Fields {
 			col := metadata.ColumnName(f)
@@ -57,7 +69,7 @@ func (db *DB) SyncPredefined(ctx context.Context, e *metadata.Entity) error {
 				continue
 			}
 			cols = append(cols, col)
-			phs = append(phs, fmt.Sprintf("$%d", argIdx))
+			phs = append(phs, d.Placeholder(argIdx))
 			args = append(args, val)
 			updates = append(updates, fmt.Sprintf("%s = EXCLUDED.%s", col, col))
 			argIdx++
@@ -65,14 +77,15 @@ func (db *DB) SyncPredefined(ctx context.Context, e *metadata.Entity) error {
 
 		sql := fmt.Sprintf(
 			`INSERT INTO %s (%s) VALUES (%s)
-			 ON CONFLICT (_predefined_name) WHERE _is_predefined = TRUE
+			 ON CONFLICT (_predefined_name) WHERE _is_predefined = %s
 			 DO UPDATE SET %s`,
 			table,
 			strings.Join(cols, ", "),
 			strings.Join(phs, ", "),
+			boolTrue,
 			strings.Join(updates, ", "),
 		)
-		if _, err := db.pool.Exec(ctx, sql, args...); err != nil {
+		if _, err := db.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("sync predefined %s.%s: %w", e.Name, item.Name, err)
 		}
 	}
@@ -81,14 +94,24 @@ func (db *DB) SyncPredefined(ctx context.Context, e *metadata.Entity) error {
 
 // GetPredefinedID returns the UUID of a predefined item by its name.
 func (db *DB) GetPredefinedID(ctx context.Context, entityName, predefinedName string) (uuid.UUID, error) {
+	d := db.dialect
+	boolTrue := "TRUE"
+	if d.Name() == "sqlite" {
+		boolTrue = "1"
+	}
 	table := metadata.TableName(entityName)
-	var id uuid.UUID
-	err := db.pool.QueryRow(ctx,
-		fmt.Sprintf(`SELECT id FROM %s WHERE _predefined_name = $1 AND _is_predefined = TRUE`, table),
+	var idStr string
+	err := db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT id FROM %s WHERE _predefined_name = %s AND _is_predefined = %s`,
+			table, d.Placeholder(1), boolTrue),
 		predefinedName,
-	).Scan(&id)
+	).Scan(&idStr)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("predefined %s.%s not found: %w", entityName, predefinedName, err)
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("predefined %s.%s: bad uuid: %w", entityName, predefinedName, err)
 	}
 	return id, nil
 }

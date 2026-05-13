@@ -35,6 +35,7 @@ type Server struct {
 	mailer           *mailer.Mailer
 	maxFileSizeBytes int64
 	globalDebug      *debugger.GlobalDebugController
+	messages         *MessageStore
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -42,8 +43,15 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if maxBytes <= 0 {
 		maxBytes = 50 * 1024 * 1024
 	}
-	return &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController()}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore()}
+	if sched != nil {
+		sched.SetMessageSink(func(userID, text string) { s.messages.Push(userID, text) })
+	}
+	return s
 }
+
+// Messages returns the per-user message store (used to inject Сообщить sink).
+func (s *Server) Messages() *MessageStore { return s.messages }
 
 // GlobalDebug returns the global debug controller for the server.
 func (s *Server) GlobalDebug() *debugger.GlobalDebugController { return s.globalDebug }
@@ -125,6 +133,7 @@ func (s *Server) Mount(r chi.Router) {
 	// Print forms
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}", s.printDocument)
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}/pdf", s.printDocumentPDF)
+	r.Get("/ui/{kind}/{entity}/{id}/print-dsl/{pfName}", s.printDocumentDSLPF)
 
 	// Attachments
 	r.Get("/ui/{kind}/{entity}/{id}/attachments", s.attachmentsList)
@@ -143,6 +152,9 @@ func (s *Server) Mount(r chi.Router) {
 	// About
 	r.Get("/ui/about", s.about)
 
+	// Messages panel
+	r.Get("/ui/messages", s.messagesList)
+	r.Post("/ui/messages/clear", s.messagesClear)
 }
 
 

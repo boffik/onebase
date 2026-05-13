@@ -29,7 +29,7 @@ func connectTestDB(t *testing.T) *storage.DB {
 func TestRepo_EnsureSchema(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
-	repo := configdb.New(db.Pool())
+	repo := configdb.New(db)
 
 	if err := repo.EnsureSchema(ctx); err != nil {
 		t.Fatalf("EnsureSchema: %v", err)
@@ -43,7 +43,7 @@ func TestRepo_EnsureSchema(t *testing.T) {
 func TestRepo_IsEmpty(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
-	repo := configdb.New(db.Pool())
+	repo := configdb.New(db)
 	repo.EnsureSchema(ctx)
 	db.Pool().Exec(ctx, `DELETE FROM _onebase_config`)
 
@@ -59,7 +59,7 @@ func TestRepo_IsEmpty(t *testing.T) {
 func TestRepo_ImportExportRoundTrip(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
-	repo := configdb.New(db.Pool())
+	repo := configdb.New(db)
 	repo.EnsureSchema(ctx)
 	db.Pool().Exec(ctx, `DELETE FROM _onebase_config`)
 
@@ -109,7 +109,7 @@ func TestRepo_ImportExportRoundTrip(t *testing.T) {
 func TestRepo_ImportReplacesPrevious(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
-	repo := configdb.New(db.Pool())
+	repo := configdb.New(db)
 	repo.EnsureSchema(ctx)
 	db.Pool().Exec(ctx, `DELETE FROM _onebase_config`)
 

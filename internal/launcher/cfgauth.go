@@ -7,44 +7,37 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
-// cfgAuthPools caches pgxpool.Pool per base DSN so we don't open a new
-// connection on every configurator request.
-var cfgAuthPools sync.Map // map[string]*pgxpool.Pool
+// cfgAuthDBs caches storage.DB per base key so we don't open a new connection
+// on every configurator request. Key: base.ID (or DSN/path for legacy paths).
+var cfgAuthDBs sync.Map // map[string]*storage.DB
 
-func getAuthPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	if v, ok := cfgAuthPools.Load(dsn); ok {
-		return v.(*pgxpool.Pool), nil
+// getAuthDB opens (or returns cached) storage.DB for the given base, routing
+// by DBType (postgres/sqlite). Cache key is the base ID, which is stable.
+func getAuthDB(ctx context.Context, b *Base) (*storage.DB, error) {
+	key := b.ID
+	if v, ok := cfgAuthDBs.Load(key); ok {
+		return v.(*storage.DB), nil
 	}
-	cfg, err := pgxpool.ParseConfig(dsn)
+	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return nil, err
 	}
-	cfg.MinConns = 1
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, err
+	if actual, loaded := cfgAuthDBs.LoadOrStore(key, db); loaded {
+		db.Close()
+		return actual.(*storage.DB), nil
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, err
-	}
-	// Race: another goroutine may have stored a pool already; prefer existing.
-	if actual, loaded := cfgAuthPools.LoadOrStore(dsn, pool); loaded {
-		pool.Close()
-		return actual.(*pgxpool.Pool), nil
-	}
-	return pool, nil
+	return db, nil
 }
 
 func CloseAuthPools() {
-	cfgAuthPools.Range(func(key, value any) bool {
-		value.(*pgxpool.Pool).Close()
-		cfgAuthPools.Delete(key)
+	cfgAuthDBs.Range(func(key, value any) bool {
+		value.(*storage.DB).Close()
+		cfgAuthDBs.Delete(key)
 		return true
 	})
 }
@@ -99,7 +92,7 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	login := r.FormValue("login")
 	password := r.FormValue("password")
 
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(500)
@@ -107,7 +100,7 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo := auth.NewRepo(pool)
+	repo := auth.NewRepo(db)
 	if err := repo.EnsureSchema(r.Context()); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(500)
@@ -156,14 +149,14 @@ func (h *handler) cfgAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		pool, err := getAuthPool(r.Context(), b.DB)
+		db, err := getAuthDB(r.Context(), b)
 		if err != nil {
 			// Cannot connect to DB — let request through (base may not exist yet)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		repo := auth.NewRepo(pool)
+		repo := auth.NewRepo(db)
 		if err := repo.EnsureSchema(r.Context()); err != nil {
 			next.ServeHTTP(w, r)
 			return

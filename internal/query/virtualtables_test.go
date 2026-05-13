@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func testReg() *metadata.Register {
@@ -149,6 +150,34 @@ func TestCompile_Turnovers_Oborot(t *testing.T) {
 	}
 	if !strings.Contains(r.SQL, "SUM(CASE WHEN вид_движения = 'Приход' THEN количество ELSE -количество END) AS количествооборот") {
 		t.Errorf("missing оборот column, got:\n%s", r.SQL)
+	}
+}
+
+func TestCompile_LastSlice_Periodic_SQLite(t *testing.T) {
+	d := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	src := `ВЫБРАТЬ Валюта, Курс
+ИЗ РегистрСведений.КурсыВалют.СрезПоследних(&НаДату)`
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Params:   map[string]any{"НаДату": d},
+		InfoRegs: []*metadata.InfoRegister{testInfoReg(true)},
+		Dialect:  storage.SQLiteDialect{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+	if strings.Contains(sql, "DISTINCT ON") {
+		t.Errorf("SQLite: should NOT use DISTINCT ON, got:\n%s", sql)
+	}
+	if !strings.Contains(sql, "ROW_NUMBER() OVER (PARTITION BY валюта") {
+		t.Errorf("SQLite: missing ROW_NUMBER() OVER, got:\n%s", sql)
+	}
+	if !strings.Contains(sql, "WHERE _rn = 1") {
+		t.Errorf("SQLite: missing rn=1 filter, got:\n%s", sql)
+	}
+	if !strings.Contains(sql, "period <= ?") {
+		t.Errorf("SQLite: should use ? placeholder, got:\n%s", sql)
 	}
 }
 

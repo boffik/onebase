@@ -20,12 +20,12 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		w.Write([]byte(`<div style="padding:16px;color:#c00">Нет подключения к БД</div>`))
 		return
 	}
-	repo := auth.NewRepo(pool)
+	repo := auth.NewRepo(db)
 	repo.EnsureSchema(r.Context())
 	users, _ := repo.List(r.Context())
 
@@ -103,12 +103,12 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": "Логин и пароль обязательны"})
 		return
 	}
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
-	repo := auth.NewRepo(pool)
+	repo := auth.NewRepo(db)
 	if _, err := repo.Create(r.Context(), req.Login, req.Password, req.FullName, req.IsAdmin); err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
@@ -129,12 +129,12 @@ func (h *handler) cfgAdminUserDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
 		return
 	}
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
-	repo := auth.NewRepo(pool)
+	repo := auth.NewRepo(db)
 	if err := repo.Delete(r.Context(), req.ID); err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
@@ -148,12 +148,12 @@ func (h *handler) cfgAdminSessions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		w.Write([]byte(`<div style="padding:16px;color:#c00">Нет подключения к БД</div>`))
 		return
 	}
-	repo := auth.NewRepo(pool)
+	repo := auth.NewRepo(db)
 	repo.EnsureSchema(r.Context())
 	sessions, _ := repo.ActiveSessions(r.Context())
 
@@ -201,12 +201,12 @@ func (h *handler) cfgAdminSessionKick(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
 		return
 	}
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
-	repo := auth.NewRepo(pool)
+	repo := auth.NewRepo(db)
 	repo.KickUser(r.Context(), req.Login)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
@@ -217,12 +217,12 @@ func (h *handler) cfgAdminAudit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
-	pool, err := getAuthPool(r.Context(), b.DB)
+	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		w.Write([]byte(`<div style="padding:16px;color:#c00">Нет подключения к БД</div>`))
 		return
 	}
-	rows, err := pool.Query(r.Context(), `
+	rows, err := db.Query(r.Context(), `
 		SELECT user_login, action, entity_kind, entity_name, at
 		FROM _audit ORDER BY at DESC LIMIT 100`)
 	if err != nil {
@@ -280,7 +280,7 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 	</div>`,
 		escHTML(version.String()),
 		escHTML(b.ConfigSource),
-		escHTML(b.DB),
+		maskDSN(escHTML(b.DB)),
 		b.Port)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
@@ -289,4 +289,29 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 func escHTML(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
 	return r.Replace(s)
+}
+
+// maskDSN hides password in a connection string.
+// postgres://user:secret@host:5432/db → postgres://user:***@host:5432/db
+func maskDSN(dsn string) string {
+	// URL format: postgres://user:pass@host/db
+	if i := strings.Index(dsn, "://"); i >= 0 {
+		rest := dsn[i+3:]
+		if at := strings.Index(rest, "@"); at >= 0 {
+			userPart := rest[:at]
+			if colon := strings.LastIndex(userPart, ":"); colon >= 0 {
+				return dsn[:i+3+colon+1] + "***" + dsn[i+3+at:]
+			}
+		}
+	}
+	// DSN format: host=... password=secret ...
+	if i := strings.Index(dsn, "password="); i >= 0 {
+		end := i + len("password=")
+		rest := dsn[end:]
+		if sp := strings.IndexByte(rest, ' '); sp >= 0 {
+			return dsn[:end] + "***" + rest[sp:]
+		}
+		return dsn[:end] + "***"
+	}
+	return dsn
 }

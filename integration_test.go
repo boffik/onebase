@@ -41,7 +41,7 @@ func TestIntegration_FileMode(t *testing.T) {
 	}
 	defer db.Close()
 
-	authRepo := auth.NewRepo(db.Pool())
+	authRepo := auth.NewRepo(db)
 	if err := authRepo.EnsureSchema(ctx); err != nil {
 		t.Fatalf("auth schema: %v", err)
 	}
@@ -61,6 +61,7 @@ func TestIntegration_FileMode(t *testing.T) {
 
 	reg := runtime.NewRegistry()
 	reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	interp := interpreter.New()
 	sched := scheduler.New(db, reg, interp)
 	srv := api.New(reg, db, interp, authRepo, 8080, ui.Config{}, sched)
@@ -81,13 +82,13 @@ func TestIntegration_DatabaseMode(t *testing.T) {
 	}
 	defer db.Close()
 
-	authRepo := auth.NewRepo(db.Pool())
+	authRepo := auth.NewRepo(db)
 	if err := authRepo.EnsureSchema(ctx); err != nil {
 		t.Fatalf("auth schema: %v", err)
 	}
 
 	// Scaffold a project into configdb
-	cfgRepo := configdb.New(db.Pool())
+	cfgRepo := configdb.New(db)
 	if err := cfgRepo.EnsureSchema(ctx); err != nil {
 		t.Fatalf("configdb schema: %v", err)
 	}
@@ -110,6 +111,7 @@ func TestIntegration_DatabaseMode(t *testing.T) {
 
 	reg := runtime.NewRegistry()
 	reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	interp := interpreter.New()
 	sched := scheduler.New(db, reg, interp)
 	srv := api.New(reg, db, interp, authRepo, 8080, ui.Config{}, sched)

@@ -14,7 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/excel"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
@@ -229,10 +232,11 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	isPosting := entity.Posting && (action == "post" || action == "post_and_close")
 
 	var dslErrMsg string
+	var dslMsgs []string
 	if isPosting {
-		dslErrMsg = s.runOnPostCtx(r.Context(), obj, mc)
+		dslErrMsg, dslMsgs = s.runOnPostCtx(r.Context(), obj, mc)
 	} else {
-		dslErrMsg = s.runOnWriteCtx(r.Context(), obj, mc)
+		dslErrMsg, dslMsgs = s.runOnWriteCtx(r.Context(), obj, mc)
 	}
 	if dslErrMsg != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
@@ -245,6 +249,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			"Entity":        entity,
 			"IsNew":         true,
 			"Error":         dslErrMsg,
+			"Messages":      dslMsgs,
 			"Values":        formValues(r, entity),
 			"RefOptions":    refOptions,
 			"EnumOptions":   s.loadEnumOptions(entity),
@@ -255,6 +260,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Success path: redirect with messages via query param
 	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 		if err := s.store.Upsert(ctx, entity.Name, obj.ID, obj.Fields, entity); err != nil {
 			return err
@@ -363,6 +369,8 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"ID":            id.String(),
 		"IsAdmin":       editIsAdmin,
 		"PrintForms":    s.reg.GetPrintForms(entity.Name),
+		"DSLPrintForms": s.reg.GetDSLPrintForms(entity.Name),
+		"HasPrintProc":  s.reg.GetProcedure(entity.Name, "Печать") != nil || s.reg.GetProcedure(entity.Name, "Print") != nil,
 		"FolderOptions": folderOptsEdit,
 		"DocMovements":  docMovements,
 	})
@@ -405,9 +413,9 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 
 	var dslErr2 string
 	if isPostingAct {
-		dslErr2 = s.runOnPostCtx(r.Context(), obj, mc)
+		dslErr2, _ = s.runOnPostCtx(r.Context(), obj, mc)
 	} else {
-		dslErr2 = s.runOnWriteCtx(r.Context(), obj, mc)
+		dslErr2, _ = s.runOnWriteCtx(r.Context(), obj, mc)
 	}
 	if dslErr2 != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
@@ -493,7 +501,7 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 	mc := runtime.NewMovementsCollector(entity.Name, id)
 	setPeriodFromFields(mc, entity, obj.Fields)
 
-	if errMsg := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
+	if errMsg, _ := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
 		http.Error(w, "Проведение: "+errMsg, 422)
 		return
 	}
@@ -922,10 +930,13 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userKey := userKeyFromRequest(r)
 	var messages []string
 	msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
 		if len(args) > 0 {
-			messages = append(messages, fmt.Sprintf("%v", args[0]))
+			text := fmt.Sprintf("%v", args[0])
+			messages = append(messages, text)
+			s.messages.Push(userKey, text)
 		}
 		return nil, nil
 	})
@@ -1162,7 +1173,8 @@ func parseListParams(r *http.Request, entity *metadata.Entity) storage.ListParam
 }
 
 func (s *Server) runOnWrite(obj *runtime.Object, mc *runtime.MovementsCollector) string {
-	return s.runOnWriteCtx(context.Background(), obj, mc)
+	errMsg, _ := s.runOnWriteCtx(context.Background(), obj, mc)
+	return errMsg
 }
 
 func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollector) map[string]any {
@@ -1201,32 +1213,54 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	return vars
 }
 
-func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) string {
-	proc := s.reg.GetProcedure(obj.Type, "OnWrite")
-	if proc == nil {
-		return ""
-	}
-	if err := s.interp.Run(proc, obj, s.buildDSLVars(ctx, mc)); err != nil {
-		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return dslErr.Msg
+func (s *Server) buildDSLVarsWithMessages(ctx context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any {
+	vars := s.buildDSLVars(ctx, mc)
+	userKey := userKeyFromCtx(ctx)
+	msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
+		if len(args) > 0 {
+			text := fmt.Sprintf("%v", args[0])
+			if msgs != nil {
+				*msgs = append(*msgs, text)
+			}
+			s.messages.Push(userKey, text)
 		}
-		return err.Error()
-	}
-	return ""
+		return nil, nil
+	})
+	vars["Сообщить"] = msgFunc
+	vars["Message"] = msgFunc
+	return vars
 }
 
-func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) string {
+func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) (string, []string) {
+	proc := s.reg.GetProcedure(obj.Type, "OnWrite")
+	if proc == nil {
+		return "", nil
+	}
+	var msgs []string
+	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
+	if err := s.interp.Run(proc, obj, vars); err != nil {
+		if dslErr, ok := err.(*interpreter.DSLError); ok {
+			return dslErr.Msg, msgs
+		}
+		return err.Error(), msgs
+	}
+	return "", msgs
+}
+
+func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) (string, []string) {
 	proc := s.reg.GetProcedure(obj.Type, "OnPost")
 	if proc == nil {
-		return ""
+		return "", nil
 	}
-	if err := s.interp.Run(proc, obj, s.buildDSLVars(ctx, mc)); err != nil {
+	var msgs []string
+	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
+	if err := s.interp.Run(proc, obj, vars); err != nil {
 		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return dslErr.Msg
+			return dslErr.Msg, msgs
 		}
-		return err.Error()
+		return err.Error(), msgs
 	}
-	return ""
+	return "", msgs
 }
 
 func (s *Server) getEntity(w http.ResponseWriter, r *http.Request) *metadata.Entity {
@@ -2164,6 +2198,117 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 	w.Write(pdfBytes)
+}
+
+// printDocumentDSLPF renders a DSL (.os) print form for a document/catalog record.
+func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
+	entity := s.getEntity(w, r)
+	if entity == nil {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+	pfName := chi.URLParam(r, "pfName")
+	if dec, err2 := url.PathUnescape(pfName); err2 == nil {
+		pfName = dec
+	}
+
+	// 1. Find DSL print form in registry
+	dslForm := s.reg.GetDSLPrintForm(entity.Name, pfName)
+
+	// 2. Also check entity module for a "Печать" procedure
+	var procDecl *ast.ProcedureDecl
+	var source string
+
+	if dslForm != nil {
+		source = dslForm.Source
+	} else {
+		// Try module procedure: entity module → "Печать"
+		procDecl = s.reg.GetProcedure(entity.Name, "Печать")
+		if procDecl == nil {
+			procDecl = s.reg.GetProcedure(entity.Name, "Print")
+		}
+		if procDecl == nil {
+			http.Error(w, "DSL print form not found: "+pfName, 404)
+			return
+		}
+	}
+
+	// 3. Parse .os source if needed (for standalone print form files)
+	if procDecl == nil && source != "" {
+		l := lexer.New(source, "printforms/"+pfName+".os")
+		p := parser.New(l)
+		prog, parseErr := p.ParseProgram()
+		if parseErr != nil {
+			http.Error(w, "parse error: "+parseErr.Error(), 500)
+			return
+		}
+		for _, proc := range prog.Procedures {
+			lower := strings.ToLower(proc.Name.Literal)
+			if lower == "сформировать" || lower == "сформироватьпечатнуюформу" || lower == "form" {
+				procDecl = proc
+				break
+			}
+		}
+		if procDecl == nil {
+			http.Error(w, "Функция Сформировать() не найдена в "+pfName+".os", 404)
+			return
+		}
+	}
+
+	// 4. Load record data
+	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
+	if err != nil {
+		http.Error(w, err.Error(), 404)
+		return
+	}
+
+	tpRows := make(map[string][]map[string]any)
+	for _, tp := range entity.TableParts {
+		rows, _ := s.store.GetTablePartRows(r.Context(), entity.Name, tp.Name, id, tp)
+		tpRows[tp.Name] = rows
+	}
+
+	// 5. Build DSL environment
+	mc := runtime.NewMovementsCollector(entity.Name, id)
+	dslVars := s.buildDSLVars(r.Context(), mc)
+
+	// Embed table parts into document row for Документ.Товары access
+	for tpName, rows := range tpRows {
+		row[tpName] = rows
+	}
+
+	// Convert row + table parts into a DSL object
+	docData := &interpreter.MapThis{M: row}
+	dslVars["Документ"] = docData
+	dslVars["Document"] = docData
+
+	// Pass макет layout as DSL variable (if available)
+	if dslForm != nil && dslForm.Layout != nil {
+		dslVars["Макет"] = interpreter.NewMaket(dslForm.Layout)
+	}
+
+	// 6. Execute the DSL function
+	var result any
+	err = s.interp.RunWithResult(procDecl, docData, &result, dslVars)
+	if err != nil {
+		http.Error(w, "DSL error: "+err.Error(), 500)
+		return
+	}
+
+	// 7. Render result
+	sd, ok := result.(*interpreter.SpreadsheetDocument)
+	if !ok {
+		http.Error(w, "Процедура должна возвращать ТабличныйДокумент", 500)
+		return
+	}
+
+	html := sd.HTMLString()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(html))
 }
 
 // listExcel exports an entity list (with current filters) as XLSX.

@@ -88,11 +88,17 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 .cfg-item.sel{background:#e8eeff;color:#1a4a80;font-weight:600;border-left-color:#1a4a80}
 .cfg-item .ic{font-size:13px;flex-shrink:0}
 .cfg-item .bp{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:2px}
+.cfg-dirty{color:#e8b400;font-weight:700;margin-left:4px;font-size:14px;cursor:help}
 
 .cfg-right{flex:1;overflow-y:auto;padding:16px}
 
 .cfg-panel{display:none}
 .cfg-panel.active{display:block}
+
+/* ── Layout tabs ────────────────────────────────────── */
+.ltab{padding:6px 16px;font-size:12px;font-weight:600;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
+.ltab:hover{color:#1a4a80}
+.ltab.active{color:#1a4a80;border-bottom-color:#1a4a80}
 
 /* ── Panel content ──────────────────────────────────── */
 .panel-title{font-size:16px;font-weight:700;color:#1a3a6a;margin-bottom:4px;display:flex;align-items:center;gap:8px}
@@ -264,6 +270,8 @@ pre.convert-out{background:#f5f7fa;border:1px solid #e2e6ed;padding:12px;border-
 .dbg-console-line.dbg-err{color:#ef4444}
 .dbg-console-line.dbg-ok{color:#a3e635}
 .dbg-empty{color:#94a3b8;font-style:italic;padding:10px 0;text-align:center;font-size:12px}
+.dbg-val-clickable{cursor:pointer}
+.dbg-val-clickable:hover{text-decoration:underline;color:#1a4a80}
 
 /* ── Debug Monaco decorations ────────────────────── */
 .dbg-bp-glyph{background:#ef4444;border-radius:50%;margin-left:3px;width:12px!important;height:12px!important}
@@ -291,6 +299,7 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js" crossorigin="anonymous" onerror="window._monacoLoadErr='loader.js failed'"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
 <title>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
 {{template "css" .}}
 </head>
@@ -307,7 +316,7 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
   </div>
   <a href="/?sel={{.Base.ID}}">← Лаунчер</a>
   <h1>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</h1>
-  <span style="font-size:11px;color:#7aa8d8">{{.Base.DB}} · :{{.Base.Port}} · платформа {{.PlatformVer}}</span>
+  <span style="font-size:11px;color:#7aa8d8">{{.DSNMasked}} · :{{.Base.Port}} · платформа {{.PlatformVer}}</span>
   <button onclick="launchEnterprise()" title="Запустить предприятие" class="run-enterprise-btn"><svg viewBox="0 0 24 24" fill="#333"><polygon points="6,3 20,12 6,21"/></svg></button>
   <button id="dbg-toggle" class="dbg-topbar-btn" onclick="dbgToggle()">&#128027; Отладка: ВЫКЛ</button>
   <span id="monaco-status" style="font-size:9px;color:#94a3b8">Monaco:...</span>
@@ -324,6 +333,10 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <div id="dbg-wrapper" style="display:flex;flex:1;overflow:hidden">
 {{end}}`
 
+const cfgAdminOverlay = `
+<div id="admin-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'"></div>
+`
+
 const cfgFoot = `{{define "cfg-foot"}}
 <!-- debug panel (right sidebar) -->
 <div class="dbg-panel" id="dbg-panel" style="display:none">
@@ -337,7 +350,7 @@ const cfgFoot = `{{define "cfg-foot"}}
   </div>
   <div class="dbg-tabs">
     <button class="dbg-tab active" onclick="dbgTab('vars')">Переменные</button>
-    <button class="dbg-tab" onclick="dbgTab('watch')">Табло v4</button>
+    <button class="dbg-tab" onclick="dbgTab('watch')">Табло v5</button>
     <button class="dbg-tab" onclick="dbgTab('bp')">Точки ост.</button>
     <button class="dbg-tab" onclick="dbgTab('stack')">Стек</button>
     <button class="dbg-tab" onclick="dbgTab('console')">Консоль</button>
@@ -371,6 +384,22 @@ const cfgFoot = `{{define "cfg-foot"}}
 </div>
 </div>{{/* dbg-wrapper */}}
 </div>{{/* cfg-body */}}
+
+<!-- Debug value inspector modal -->
+<div class="cfg-modal-overlay" id="dbg-val-modal" onclick="if(event.target===this)dbgValModalClose()">
+  <div class="cfg-modal-box" style="max-width:780px">
+    <div class="cfg-modal-hd">
+      <h3 id="dbg-val-modal-title">Значение</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="dbgValModalCopy()" style="background:#1a4a80;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer">Копировать</button>
+        <button class="cfg-modal-close" onclick="dbgValModalClose()">&times;</button>
+      </div>
+    </div>
+    <div class="cfg-modal-body" style="padding:0">
+      <textarea id="dbg-val-modal-text" readonly spellcheck="false" style="display:block;width:100%;height:62vh;border:none;resize:none;padding:12px 16px;font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.5;color:#1e293b;box-sizing:border-box;outline:none;white-space:pre-wrap;word-break:break-word"></textarea>
+    </div>
+  </div>
+</div>
 
 <!-- Admin modal -->
 <div class="cfg-modal-overlay" id="cfg-modal" onclick="if(event.target===this)cfgModalClose()">
@@ -465,7 +494,7 @@ const cfgFoot = `{{define "cfg-foot"}}
 </div>
 <script>
 // ── New object form ────────────────────────────────────────────
-var _cfgNewTitles = {catalog:'Новый справочник', document:'Новый документ', register:'Новый регистр', inforeg:'Новый регистр сведений', enum:'Новое перечисление'};
+var _cfgNewTitles = {catalog:'Новый справочник', document:'Новый документ', register:'Новый регистр', inforeg:'Новый регистр сведений', enum:'Новое перечисление', subsystem:'Новая подсистема'};
 function cfgNewObj(kind) {
   if (kind === 'printform') { cfgNewPrintFormShow(); return; }
   var f = document.getElementById('cfg-new-form');
@@ -568,7 +597,8 @@ function startEdit(name) {
       wordWrap: 'on',
       tabSize: 2,
       glyphMargin: true,
-      automaticLayout: true
+      automaticLayout: true,
+      contextmenu: false // используем своё контекстное меню (см. document-level handler)
     });
     editor._fileId = name;
     monacoEditors[name] = editor;
@@ -648,7 +678,7 @@ function cfgSelectPanel(id) {
 (function(){
   var saved='{{.FieldsSavedEntity}}'?'{{.FieldsSavedEntity}}':'{{.ModuleSavedEntity}}';
   var el=null;
-  if(saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
+  if(saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
   if(el)selItem(el);else{var f=document.querySelector('.cfg-item');if(f)selItem(f);}
 })();
 
@@ -660,6 +690,162 @@ function modTab(el, panelId) {
   el.classList.add('active');
   document.getElementById(panelId).classList.add('active');
 }
+
+// ── Layout Editor ─────────────────────────────────────────────────
+var _led={};
+function initLayoutEditor(n){
+  var ta=document.getElementById('ta-mkt-'+n);
+  if(!ta||!window.jsyaml)return;
+  var d=null;
+  try{d=jsyaml.parse(ta.value);}catch(e){}
+  if(!d)d={areas:{}};
+  _led[n]={data:d,sel:null};
+  renderLayoutEditor(n);
+}
+function renderLayoutEditor(n){
+  var s=_led[n];if(!s)return;
+  // sync to YAML textarea
+  if(window.jsyaml){var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
+    var ta=document.getElementById('ta-mkt-'+n);
+    if(ta)ta.value=y;
+    var src=document.getElementById('yaml-src-'+n);
+    if(src)src.value=y;
+  }
+  var d=s.data,areas=d.areas||{},h='<div style="font-family:Arial,sans-serif;font-size:12px">';
+  var aNames=Object.keys(areas);
+  for(var ai=0;ai<aNames.length;ai++){
+    var an=aNames[ai],ar=areas[an];
+    h+='<div style="margin-bottom:16px">';
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
+    h+='<span style="font-weight:bold;color:#4a9">'+esc(an)+'</span>';
+    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer" onclick="addLayoutRow(\''+n+"','"+esc(an)+"')\">+ строка</button>";
+    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #fcc;border-radius:3px;cursor:pointer;color:#c33" onclick="delLayoutArea(\''+n+"','"+esc(an)+"')\">✕</button>";
+    h+='</div>';
+    h+='<table style="border-collapse:collapse;border:1px solid #999">';
+    var rows=ar.rows||[];
+    for(var ri=0;ri<rows.length;ri++){
+      h+='<tr>';
+      var cells=rows[ri].cells||[];
+      for(var ci=0;ci<cells.length;ci++){
+        var c=cells[ci];
+        var st='border:1px solid #999;padding:4px 8px;min-width:40px;cursor:pointer;';
+        if(c.bold)st+='font-weight:bold;';
+        if(c.italic)st+='font-style:italic;';
+        if(c.backColor)st+='background-color:'+c.backColor+';';
+        if(c.textColor)st+='color:'+c.textColor+';';
+        if(c.align)st+='text-align:'+c.align+';';
+        var at='';
+        if(c.colspan&&c.colspan>1)at+=' colspan="'+c.colspan+'"';
+        var isSel=s.sel&&s.sel.area===an&&s.sel.row===ri&&s.sel.col===ci;
+        if(isSel)st+='outline:2px solid #1a73e8;';
+        var txt=c.text||'';
+        if(c.parameter)txt='<span style="color:#888">['+esc(c.parameter)+']</span>';
+        if(!txt)txt='&nbsp;';
+        h+='<td style="'+st+'"'+at+' onclick="selectCell(\''+n+"','"+esc(an)+"',"+ri+','+ci+')">'+txt+'</td>';
+      }
+      h+='<td style="border:none;padding:2px"><button type="button" style="font-size:10px;color:#c33;border:none;cursor:pointer" onclick="delLayoutRow(\''+n+"','"+esc(an)+"',"+ri+')\">✕</button></td>';
+      h+='</tr>';
+    }
+    h+='</table></div>';
+  }
+  h+='</div>';
+  document.getElementById('veditor-'+n).innerHTML=h;
+  syncProps(n);
+}
+function selectCell(n,a,r,c){
+  var s=_led[n];if(!s)return;
+  s.sel={area:a,row:r,col:c};
+  renderLayoutEditor(n);
+}
+function syncProps(n){
+  var s=_led[n];if(!s)return;
+  var pp=document.getElementById('vprops-'+n);
+  if(!s.sel){pp.style.display='none';return;}
+  pp.style.display='block';
+  var d=s.data,ar=(d.areas||{})[s.sel.area];
+  if(!ar||!ar.rows||!ar.rows[s.sel.row]){pp.style.display='none';return;}
+  var c=ar.rows[s.sel.row].cells[s.sel.col]||{};
+  document.getElementById('vp-text-'+n).value=c.text||'';
+  document.getElementById('vp-param-'+n).value=c.parameter||'';
+  document.getElementById('vp-bold-'+n).checked=!!c.bold;
+  document.getElementById('vp-italic-'+n).checked=!!c.italic;
+  document.getElementById('vp-align-'+n).value=c.align||'';
+  document.getElementById('vp-bg-'+n).value=c.backColor||'#ffffff';
+  document.getElementById('vp-colspan-'+n).value=c.colspan||1;
+  document.getElementById('vp-fg-'+n).value=c.textColor||'#000000';
+}
+function updateCellProp(n,prop,val){
+  var s=_led[n];if(!s||!s.sel)return;
+  var d=s.data,ar=(d.areas||{})[s.sel.area];
+  if(!ar||!ar.rows||!ar.rows[s.sel.row])return;
+  var ci=s.sel.col;
+  if(!ar.rows[s.sel.row].cells[ci])ar.rows[s.sel.row].cells[ci]={};
+  var c=ar.rows[s.sel.row].cells[ci];
+  if(val===''||val===0||(typeof val==='number'&&isNaN(val))){delete c[prop];}
+  else{c[prop]=val;}
+  renderLayoutEditor(n);
+}
+function applyYaml(n){
+  var ta=document.getElementById('ta-mkt-'+n);
+  if(!ta)return;
+  try{var d=jsyaml.parse(ta.value);}catch(e){return;}
+  if(_led[n])_led[n].data=d;
+  renderLayoutEditor(n);
+}
+function saveLayoutEditor(n){
+  var s=_led[n];if(!s)return;
+  var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
+  document.getElementById('yaml-src-'+n).value=y;
+  return true;
+}
+function addLayoutArea(n){
+  var name=prompt('Имя новой области:');
+  if(!name)return;
+  var s=_led[n];
+  if(!s){
+    // init if not yet initialized
+    var ta=document.getElementById('ta-mkt-'+n);
+    if(!ta||!window.jsyaml)return;
+    var d=null;try{d=jsyaml.parse(ta.value);}catch(e){}
+    if(!d)d={areas:{}};
+    s={data:d,sel:null};_led[n]=s;
+  }
+  if(!s.data.areas)s.data.areas={};
+  s.data.areas[name]={rows:[{cells:[{text:'Ячейка'}]}]};
+  renderLayoutEditor(n);
+}
+function delLayoutArea(n,a){
+  if(!confirm('Удалить область '+a+'?'))return;
+  var s=_led[n];if(!s)return;
+  delete s.data.areas[a];
+  s.sel=null;
+  renderLayoutEditor(n);
+}
+function addLayoutRow(n,a){
+  var s=_led[n];if(!s)return;
+  var ar=(s.data.areas||{})[a];if(!ar)return;
+  if(!ar.rows)ar.rows=[];
+  var maxCols=1;
+  for(var i=0;i<ar.rows.length;i++){if(ar.rows[i].cells.length>maxCols)maxCols=ar.rows[i].cells.length;}
+  var cells=[];for(var j=0;j<maxCols;j++)cells.push({});
+  ar.rows.push({cells:cells});
+  renderLayoutEditor(n);
+}
+function delLayoutRow(n,a,ri){
+  var s=_led[n];if(!s)return;
+  var ar=(s.data.areas||{})[a];if(!ar||!ar.rows)return;
+  ar.rows.splice(ri,1);
+  s.sel=null;
+  renderLayoutEditor(n);
+}
+// Init layout editors on load
+(function(){
+  var tas=document.querySelectorAll('[id^="ta-mkt-"]');
+  for(var i=0;i<tas.length;i++){
+    var n=tas[i].id.replace('ta-mkt-','');
+    setTimeout(function(nn){return function(){initLayoutEditor(nn);};}(n),100);
+  }
+})();
 
 // ── HTML escape (shared) ────────────────────────────────────────
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -856,7 +1042,8 @@ function repAddParam(tableId) {
   tr.querySelector('input[type=text]').focus();
 }
 
-// ── Editor context menu ────────────────────────────────────
+// ── Editor context menu — наше меню для textarea, pre и Monaco ──
+// Monaco создан с contextmenu:false, поэтому его внутренний обработчик не глотает событие.
 (function(){
 var _cTA=null,_cMonacoName=null,_cM=null;
 document.addEventListener('contextmenu',function(e){
@@ -865,10 +1052,9 @@ document.addEventListener('contextmenu',function(e){
   var mon=e.target.closest('.monaco-target');
   if(!ta&&!pre&&!mon){hideC();return;}
   e.preventDefault();
-  _cMonacoName=null;
+  _cMonacoName=null; _cTA=null;
   if(mon){
     _cMonacoName=mon._editorId||null;
-    _cTA=null;
   } else {
     if(pre&&!ta){var nm=pre.id.replace('pre-','');startEdit(nm);ta=document.getElementById('ta-'+nm);}
     _cTA=ta;
@@ -887,11 +1073,8 @@ function hideC(){if(_cM)_cM.style.display='none';}
 document.addEventListener('click',hideC);
 window.cfgOpenQB=function(){
   hideC();
-  if(_cMonacoName && monacoEditors[_cMonacoName]){
-    openQBModalMonaco(_cMonacoName);
-  } else if(_cTA){
-    openQBModal(_cTA);
-  }
+  if(_cMonacoName && monacoEditors[_cMonacoName]) openQBModalMonaco(_cMonacoName);
+  else if(_cTA) openQBModal(_cTA);
 };
 })();
 
@@ -979,18 +1162,170 @@ function openQBModalMonaco(editorId){
   document.getElementById('qb-overlay').classList.add('active');
 }
 function qbExtractQuery(text){
+  // 1С-style: Запрос.Текст = "ВЫБРАТЬ ... |..."
   var m=text.match(/Текст\s*=\s*\n?\s*"([\s\S]*?)"/i);
   if(m)return m[1].replace(/\n\s*\|/g,'\n').trim();
-  if(text.match(/^\s*ВЫБРАТЬ\b/i))return text;
-  m=text.match(/(ВЫБРАТЬ[\s\S]*)/i);
-  return m?m[1].trim():null;
+  // прямой текст запроса
+  if(/\bВЫБРАТЬ\b/i.test(text)){
+    var i=text.search(/\bВЫБРАТЬ\b/i);
+    return text.substring(i).replace(/\n\s*\|/g,'\n').replace(/^"|"$/g,'').trim();
+  }
+  return null;
 }
+
+// Ищет в _mqbSchema источник по совпадению label-prefix (до '('), регистронезависимо.
+function qbFindSource(name){
+  var key=String(name||'').split('(')[0].trim().toLowerCase();
+  var found=null;
+  _mqbSchema.forEach(function(s){
+    if(s.label.split('(')[0].toLowerCase()===key)found=s;
+  });
+  return found;
+}
+
+// Разбивает строку по разделителю, игнорируя содержимое скобок.
+// \w в JS НЕ включает кириллицу — поэтому проверка границ слов сделана через qbIsWord.
+function qbIsWord(ch){return /[A-Za-zА-Яа-яЁё0-9_]/.test(ch);}
+function qbSplitTopLevel(s,sep){
+  var out=[],depth=0,buf='';
+  var sepU=sep.toUpperCase();
+  for(var i=0;i<s.length;i++){
+    var ch=s[i];
+    if(ch==='(')depth++;
+    else if(ch===')')depth--;
+    if(depth===0 && s.substring(i,i+sep.length).toUpperCase()===sepU &&
+       (i===0||!qbIsWord(s[i-1])) && (i+sep.length===s.length||!qbIsWord(s[i+sep.length]))){
+      out.push(buf); buf=''; i+=sep.length-1; continue;
+    }
+    buf+=ch;
+  }
+  if(buf.length)out.push(buf);
+  return out;
+}
+
 function qbParseToFields(q){
-  var srcM=q.match(/ИЗ\s+([^\s\n]+)(?:\s+КАК\s+(\S+))?/i);
-  if(!srcM)return;
-  var srcLabel=srcM[1],found=null;
-  _mqbSchema.forEach(function(s){if(s.label===srcLabel||s.label.indexOf(srcLabel)>=0)found=s;});
-  if(found){document.getElementById('mqb-src').value=found.id;mqbSetSrc(found.id);if(srcM[2])document.getElementById('mqb-alias').value=srcM[2];}
+  try { return qbParseToFieldsImpl(q); }
+  catch(err){ if(window.console)console.warn('[QB] parse failed:',err,'\nquery:',q); }
+}
+
+function qbParseToFieldsImpl(q){
+  q=q.replace(/\r/g,'').trim();
+
+  // Разбить запрос на секции по ключевым словам верхнего уровня.
+  var kwRe=/(^|[^\wА-Яа-яЁё])(ВЫБРАТЬ|ИЗ|ГДЕ|СГРУППИРОВАТЬ\s+ПО|УПОРЯДОЧИТЬ\s+ПО)(?=[^\wА-Яа-яЁё]|$)/gi;
+  var marks=[],mk;
+  while((mk=kwRe.exec(q))){
+    marks.push({k:mk[2].toUpperCase().replace(/\s+/g,' '),i:mk.index+mk[1].length,l:mk[2].length});
+  }
+  function section(name){
+    for(var i=0;i<marks.length;i++){
+      if(marks[i].k===name){
+        var st=marks[i].i+marks[i].l;
+        var en=(i+1<marks.length)?marks[i+1].i:q.length;
+        return q.substring(st,en).trim();
+      }
+    }
+    return '';
+  }
+  var selSec=section('ВЫБРАТЬ');
+  var fromSec=section('ИЗ');
+  var whereSec=section('ГДЕ');
+  var orderSec=section('УПОРЯДОЧИТЬ ПО');
+  if(!fromSec){if(window.console)console.warn('[QB] no ИЗ section in:',q);return;}
+
+  // FROM: <source>[(...)] [КАК <alias>] [JOIN ...]
+  var joinRe=/(^|[^\wА-Яа-яЁё])(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b/i;
+  var firstJ=fromSec.search(joinRe);
+  var mainFrom=(firstJ>=0?fromSec.substring(0,firstJ):fromSec).trim();
+  var rest=(firstJ>=0?fromSec.substring(firstJ):'').trim();
+  var mm=mainFrom.match(/^(\S+(?:\([^)]*\))?)\s*(?:КАК\s+(\S+))?/i);
+  if(!mm){if(window.console)console.warn('[QB] cannot parse FROM:',mainFrom);return;}
+  var src=qbFindSource(mm[1]);
+  if(!src){if(window.console)console.warn('[QB] unknown source:',mm[1]);return;}
+
+  // 1) Выбираем источник (mqbSetSrc сбросит alias, vt и поля без префикса)
+  document.getElementById('mqb-src').value=src.id;
+  mqbSetSrc(src.id);
+  // 2) Алиас и параметр виртуальной таблицы
+  if(mm[2])document.getElementById('mqb-alias').value=mm[2];
+  var vtm=mm[1].match(/\(([^)]*)\)/);
+  if(vtm && src.vtParam){document.getElementById('mqb-vtpv').value=vtm[1];}
+
+  // 3) JOINs — добавляем все, заполняем поля
+  if(rest){
+    var jRe=/(?:^|[^\wА-Яа-яЁё])(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\s+(\S+(?:\([^)]*\))?)\s+КАК\s+(\S+)\s+ПО\s+([\s\S]*?)(?=(?:^|[^\wА-Яа-яЁё])(?:ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b|$)/gi;
+    var jm;
+    while((jm=jRe.exec(rest))){
+      mqbAddJoin();
+      var lastJ=_mqbJoins[_mqbJoins.length-1];
+      lastJ.typeSel.value=jm[1].toUpperCase();
+      var jSrc=qbFindSource(jm[2]);
+      if(jSrc)lastJ.srcSel.value=jSrc.id;
+      lastJ.aliasInp.value=jm[3];
+      lastJ.onInp.value=jm[4].trim();
+    }
+  }
+
+  // 4) Пересобрать список полей с учётом алиаса и JOINов
+  mqbRebuild();
+
+  // 5) SELECT — заменить автозаполненный _mqbSel выделением из запроса
+  if(selSec && selSec!=='*'){
+    var newSel={};
+    qbSplitTopLevel(selSec,',').forEach(function(fld){
+      fld=fld.trim(); if(!fld||fld==='*')return;
+      var agg='',alias='',name=fld;
+      var aggM=fld.match(/^(СУММА|КОЛИЧЕСТВО|МИНИМУМ|МАКСИМУМ|СРЕДНЕЕ)\s*\(([\s\S]+)\)\s*(?:КАК\s+(\S+))?\s*$/i);
+      if(aggM){agg=aggM[1].toUpperCase();name=aggM[2].trim();if(aggM[3])alias=aggM[3];}
+      else{
+        var aliasM=fld.match(/^([\s\S]+?)\s+КАК\s+(\S+)\s*$/i);
+        if(aliasM){name=aliasM[1].trim();alias=aliasM[2];}
+      }
+      newSel[name]={alias:alias,agg:agg};
+    });
+    if(Object.keys(newSel).length){_mqbSel=newSel; mqbRenderFields();}
+  }
+
+  // 6) WHERE
+  if(whereSec){
+    qbSplitTopLevel(whereSec,'И').forEach(function(c){
+      c=c.trim(); if(!c)return;
+      mqbAddCond();
+      var rows=document.querySelectorAll('#mqb-conds > div');
+      var row=rows[rows.length-1];
+      var sels=row.querySelectorAll('select');
+      var inp=row.querySelector('input[type=text]');
+      var em=c.match(/^([\s\S]+?)\s+(НЕ\s+ЕСТЬ\s+ПУСТО|ЕСТЬ\s+ПУСТО)\s*$/i);
+      if(em){
+        sels[0].value=em[1].trim();
+        sels[1].value=em[2].toUpperCase().replace(/\s+/g,' ');
+        inp.style.display='none';
+        return;
+      }
+      var im=c.match(/^([\s\S]+?)\s+В\s*\(([\s\S]+)\)\s*$/i);
+      if(im){sels[0].value=im[1].trim();sels[1].value='В';inp.value=im[2].trim();return;}
+      var pm=c.match(/^([\s\S]+?)\s+ПОДОБНО\s+([\s\S]+)$/i);
+      if(pm){sels[0].value=pm[1].trim();sels[1].value='ПОДОБНО';inp.value=pm[2].trim();return;}
+      var om=c.match(/^([\s\S]+?)\s*(<>|>=|<=|=|>|<)\s*([\s\S]+)$/);
+      if(om){sels[0].value=om[1].trim();sels[1].value=om[2];inp.value=om[3].trim();}
+    });
+  }
+
+  // 7) ORDER BY
+  if(orderSec){
+    qbSplitTopLevel(orderSec,',').forEach(function(o){
+      o=o.trim(); if(!o)return;
+      mqbAddOrd();
+      var rows=document.querySelectorAll('#mqb-ords > div');
+      var row=rows[rows.length-1];
+      var sels=row.querySelectorAll('select');
+      var ubM=o.match(/^(.+?)\s+УБЫВ\s*$/i);
+      if(ubM){sels[0].value=ubM[1].trim();sels[1].value='УБЫВ';}
+      else{sels[0].value=o.replace(/\s+ВОЗР\s*$/i,'').trim();sels[1].value='ВОЗР';}
+    });
+  }
+
+  mqbGen();
 }
 
 function mqbSetSrc(id){
@@ -1186,19 +1521,25 @@ var _dbgPollTimer = null;
 var _dbgPollCount = 0;
 var _dbgBreakpoints = {}; // { editorId: { line: true } }
 var _lastVarsKey = '';
+var _lastStackHtml = '';
+var _lastDiagHtml = '';
 var _dbgCurrentLineDecos = {}; // { editorId: decorationIds }
 
 // ── Configurator admin panels ────────────────────────────────────
 function cfgAdmin(name) {
   document.getElementById('cfg-menu').classList.remove('open');
-  document.querySelectorAll('.cfg-panel').forEach(function(e){e.classList.remove('active')});
-  document.querySelectorAll('.cfg-item').forEach(function(e){e.classList.remove('sel')});
-  var panel = document.getElementById('panel-admin');
-  panel.classList.add('active');
-  panel.innerHTML = '<div style="padding:20px;text-align:center;color:#888">Загрузка...</div>';
+  // Use global overlay instead of panel-admin
+  var overlay = document.getElementById('admin-overlay');
+  if(!overlay)return;
+  overlay.style.display='flex';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative"><div style="padding:20px;text-align:center;color:#888">Загрузка...</div></div>';
   fetch('/bases/' + _dbgBase + '/configurator/admin/' + name)
     .then(function(r){ return r.text(); })
-    .then(function(html){ panel.innerHTML = html; });
+    .then(function(html){
+      overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative">'
+        +'<div style="position:sticky;top:0;background:#fff;padding:8px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:13px">Администрирование</span><button onclick="document.getElementById(\'admin-overlay\').style.display=\'none\'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">×</button></div>'
+        +'<div style="padding:16px">'+html+'</div></div>';
+    });
 }
 
 function cfgMenuToggle() {
@@ -1351,7 +1692,7 @@ function dbgPoll() {
           var h = '';
           snap.variables.forEach(function(v){
             h += '<div class="dbg-var-row"><span class="dbg-var-name">' + esc(v.name) + '</span>'
-              + '<span class="dbg-var-val">' + esc(v.value) + '</span><span class="dbg-var-type">' + esc(v.type) + '</span></div>';
+              + '<span class="dbg-var-val dbg-val-clickable" title="Открыть значение" onclick="dbgInspectValue(\'' + esc(v.name).replace(/'/g,"\\'") + '\')">' + esc(v.value) + '</span><span class="dbg-var-type">' + esc(v.type) + '</span></div>';
           });
           document.getElementById('dbg-vars').innerHTML = h;
         }
@@ -1362,14 +1703,14 @@ function dbgPoll() {
         }
       }
 
-      // stack
+      // stack — only update DOM if changed
       if (snap.stack && snap.stack.length) {
         var h = '';
         snap.stack.forEach(function(f){
           h += '<div class="dbg-stack-row"><span class="proc">' + esc(f.procedure) + '</span> '
             + '<span class="loc">' + esc(f.module) + ':' + f.line + '</span></div>';
         });
-        document.getElementById('dbg-stack').innerHTML = h;
+        if (h !== _lastStackHtml) { _lastStackHtml = h; document.getElementById('dbg-stack').innerHTML = h; }
       }
 
       // breakpoints — always render from local state
@@ -1383,9 +1724,9 @@ function dbgPoll() {
           var msgs = snap.diag_messages.slice(-12);
           msgs.forEach(function(m){ dh += '<div class="dbg-console-line">' + esc(m) + '</div>'; });
         }
-        diagEl.innerHTML = dh;
+        if (dh !== _lastDiagHtml) { _lastDiagHtml = dh; diagEl.innerHTML = dh; }
       } else if (diagEl && snap.state === 'disabled') {
-        diagEl.innerHTML = '<div style="color:#9ca3af;font-size:10px">Debug disabled</div>';
+        if (_lastDiagHtml !== '__disabled__') { _lastDiagHtml = '__disabled__'; diagEl.innerHTML = '<div style="color:#9ca3af;font-size:10px">Debug disabled</div>'; }
       }
     })
     .catch(function(e){
@@ -1396,6 +1737,7 @@ function dbgPoll() {
 
 var _dbgHighlightLog = '';
 var _dbgPauseReason = '';
+var _lastStatusHtml = '';
 function dbgUpdateStatus(st, rawState) {
   var el = document.getElementById('dbg-status');
   var labels = {disabled:'Отладка: ВЫКЛ', running:'Отладка: выполнение...', paused:'Отладка: пауза', stopped:'Отладка: останов'};
@@ -1403,11 +1745,11 @@ function dbgUpdateStatus(st, rawState) {
   if (_dbgPauseReason && st === 'paused') {
     dot += ' <span style="font-size:10px;color:#94a3b8">(' + (_dbgPauseReason === 'breakpoint' ? 'точка останова' : 'шаг') + ')</span>';
   }
-  if (_dbgHighlightLog) {
-    el.innerHTML = dot + ' <span style="font-size:9px;color:#f97316">' + _dbgHighlightLog + '</span>';
-  } else {
-    el.innerHTML = dot;
-  }
+  var html = _dbgHighlightLog ? (dot + ' <span style="font-size:9px;color:#f97316;user-select:text">' + _dbgHighlightLog + '</span>') : dot;
+  // Avoid rewriting innerHTML on every poll — it clears any text the user is selecting.
+  if (html === _lastStatusHtml) return;
+  _lastStatusHtml = html;
+  el.innerHTML = html;
 }
 
 function dbgContinue() {
@@ -1521,6 +1863,7 @@ function dbgWatchAdd() {
   _dbgWatchList.push({name: name, id: wid});
   dbgWatchDebug('added "' + name + '" id=' + wid + ' total=' + _dbgWatchList.length);
   dbgWatchRender();
+  dbgWatchEvalAll();
 }
 
 function dbgWatchRemove(id) {
@@ -1541,43 +1884,99 @@ function dbgWatchRender() {
     h += '<div class="dbg-var-row">'
       + '<span class="dbg-var-name">' + esc(w.name) + '</span>'
       + ' <span style="color:#ef4444;cursor:pointer;font-size:9px" onclick="dbgWatchRemove(\'' + w.id + '\')">&#10005;</span>'
-      + ' <span class="dbg-var-val" id="wv-' + w.id + '">...</span>'
+      + ' <span class="dbg-var-val dbg-val-clickable" title="Открыть значение" onclick="dbgWatchOpen(\'' + w.id + '\')" id="wv-' + w.id + '">...</span>'
       + ' <span class="dbg-var-type" id="wt-' + w.id + '"></span>'
       + '</div>';
   });
   el.innerHTML = h;
-  // diagnostic: show first item in debug line to confirm rendering
-  var first = _dbgWatchList[0];
-  dbgWatchDebug('rendered ' + _dbgWatchList.length + ' items | el.h=' + el.offsetHeight + 'px html=' + (h.length > 80 ? h.substring(0,80)+'...' : h));
+  dbgWatchDebug('rendered ' + _dbgWatchList.length + ' items');
 }
 
+function dbgValToStr(v) {
+  if (v === null || v === undefined) return 'Неопределено';
+  if (typeof v === 'object') { try { return JSON.stringify(v, null, 2); } catch(e) { return String(v); } }
+  return String(v);
+}
+
+var _dbgWatchGen = 0;
 function dbgWatchEvalAll() {
   if (!_dbgWatchList.length) return;
+  _dbgWatchGen++;
+  var gen = _dbgWatchGen;
   _dbgWatchList.forEach(function(w){
     var valEl = document.getElementById('wv-' + w.id);
-    var typEl = document.getElementById('wt-' + w.id);
     if (!valEl) return;
     if (!_dbgEnabled) { valEl.textContent = '(отладка выкл)'; return; }
     fetch('/bases/' + _dbgBase + '/debug/evaluate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expr:w.name})})
       .then(function(r){return r.json()})
       .then(function(res){
+        if (gen !== _dbgWatchGen) return; // a newer evaluation round started — drop stale result
         var v = document.getElementById('wv-' + w.id);
         var t = document.getElementById('wt-' + w.id);
         if (!v) return;
         if (res.is_error) {
-          v.textContent = String(res.error).substring(0, 50);
-          v.style.color = '#ef4444';
-        } else {
-          v.textContent = res.value !== null && res.value !== undefined ? String(res.value) : 'Неопределено';
-          v.style.color = '';
+          // Usually a transient "interpreter not paused" window between steps —
+          // keep the last good value, just dim it instead of flickering to an error.
+          v.style.opacity = '0.4';
+          return;
         }
-        if (t) t.textContent = res.type || '';
+        var txt = dbgValToStr(res.value);
+        w._full = txt;
+        w._type = res.type || '';
+        var disp = txt.length > 300 ? txt.substring(0, 300) + '…' : txt;
+        if (v.textContent !== disp) v.textContent = disp;
+        v.style.opacity = '';
+        v.style.color = '';
+        v.title = (txt.length > 60) ? 'Открыть значение полностью' : 'Открыть значение';
+        var tp = res.type || '';
+        if (t && t.textContent !== tp) t.textContent = tp;
       })
       .catch(function(e){
+        if (gen !== _dbgWatchGen) return;
         var v = document.getElementById('wv-' + w.id);
-        if (v) v.textContent = 'err';
+        if (v) v.style.opacity = '0.4';
       });
   });
+}
+
+function dbgWatchOpen(id) {
+  var w = null;
+  for (var i = 0; i < _dbgWatchList.length; i++) { if (_dbgWatchList[i].id === id) { w = _dbgWatchList[i]; break; } }
+  if (!w) return;
+  if (w._full !== undefined) dbgShowBigValue(w.name, w._type || '', w._full);
+  else dbgInspectValue(w.name);
+}
+
+// Inspect a variable/expression: re-evaluate it (full, untruncated) and show in a modal.
+function dbgInspectValue(expr) {
+  if (!_dbgEnabled) { dbgShowBigValue(expr, '', '(отладка выключена)'); return; }
+  fetch('/bases/' + _dbgBase + '/debug/evaluate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expr:expr})})
+    .then(function(r){return r.json()})
+    .then(function(res){
+      if (res.is_error) { dbgShowBigValue(expr, 'Ошибка', String(res.error)); return; }
+      dbgShowBigValue(expr, res.type || '', dbgValToStr(res.value));
+    })
+    .catch(function(e){ dbgShowBigValue(expr, 'Ошибка', String(e.message)); });
+}
+
+function dbgShowBigValue(name, type, value) {
+  var t = document.getElementById('dbg-val-modal-title');
+  if (t) t.textContent = String(name) + (type ? '  ·  ' + type : '');
+  var ta = document.getElementById('dbg-val-modal-text');
+  if (ta) { ta.value = (value === null || value === undefined) ? '' : String(value); ta.scrollTop = 0; }
+  var m = document.getElementById('dbg-val-modal');
+  if (m) m.classList.add('active');
+}
+function dbgValModalClose() {
+  var m = document.getElementById('dbg-val-modal');
+  if (m) m.classList.remove('active');
+}
+function dbgValModalCopy() {
+  var ta = document.getElementById('dbg-val-modal-text');
+  if (!ta) return;
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch(e){}
+  if (navigator.clipboard) { try { navigator.clipboard.writeText(ta.value); } catch(e){} }
 }
 
 function dbgHighlightLine(file, line) {
@@ -1851,6 +2250,7 @@ const cfgMain = `{{define "cfg-main"}}
 {{if eq .Tab "files"}}{{template "tab-files" .}}{{end}}
 {{if eq .Tab "backup"}}{{template "tab-backup" .}}{{end}}
 {{template "cfg-foot" .}}
+<div id="admin-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'"></div>
 {{end}}`
 
 // ── Tree tab ──────────────────────────────────────────────────────────────────
@@ -1861,9 +2261,9 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{/* ── Left panel ── */}}
 <div class="cfg-left" id="cfg-sidebar">
 <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Свернуть дерево">◀</button>
-  <div class="cfg-group">Конфигурация</div>
+  <div class="cfg-group">Конфигурация{{if .ConfigDirty}}<span class="cfg-dirty" title="Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились.">*</span>{{end}}</div>
   <div class="cfg-item" data-id="panel-app" onclick="selItem(this)">
-    <span class="ic">⚙</span>{{if .AppName}}{{.AppName}}{{else}}Без названия{{end}}
+    <span class="ic">⚙</span>{{if .AppName}}{{.AppName}}{{else}}Без названия{{end}}{{if .ConfigDirty}}<span class="cfg-dirty" title="Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились.">*</span>{{end}}
   </div>
 
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Справочники</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="Добавить справочник">+</span></summary>
@@ -1898,7 +2298,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  {{if .Enums}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Перечисления</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="Добавить перечисление">+</span></summary>
   {{range .Enums}}
   <div class="cfg-item" data-id="en-{{.Name}}" onclick="selItem(this)">
@@ -1906,9 +2305,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Constants}}
   <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
@@ -1916,9 +2313,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Reports}}
   <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
@@ -1926,9 +2321,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Modules}}
   <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
   {{range .Modules}}
   <div class="cfg-item" data-id="mod-{{.Name}}" onclick="selItem(this)">
@@ -1936,9 +2329,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
-  {{if .Processors}}
   <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
   {{range .Processors}}
   <div class="cfg-item" data-id="proc-{{.Name}}" onclick="selItem(this)">
@@ -1946,7 +2337,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Печатные формы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="Добавить печатную форму">+</span></summary>
   {{range .PrintForms}}
@@ -1954,9 +2344,18 @@ const cfgTabTree = `{{define "tab-tree"}}
     <span class="ic">🖨</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}</span>
   </div>
   {{end}}
+  {{range .DSLPrintForms}}
+  <div class="cfg-item" data-id="dpf-{{.Name}}" onclick="selItem(this)">
+    <span class="ic">📋</span>{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}} (DSL)</span>
+  </div>
+  {{if .HasLayout}}
+  <div class="cfg-item cfg-sub" data-id="mkt-{{.Name}}" onclick="selItem(this)" style="padding-left:32px">
+    <span class="ic" style="font-size:12px">&#x1F4D0;</span>Макет {{.Name}}
+  </div>
+  {{end}}
+  {{end}}
   </details>
 
-  {{if .Subsystems}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Подсистемы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="Добавить подсистему">+</span></summary>
   {{range .Subsystems}}
   <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">
@@ -1964,7 +2363,6 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{end}}
   </details>
-  {{end}}
 
   <div id="cfg-new-form" class="cfg-new-form" style="display:none">
     <div id="cfg-new-title" style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px"></div>
@@ -2282,6 +2680,75 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
     </form>
   </div>
+  {{end}}
+
+  {{/* DSL Print forms (.os) */}}
+  {{range .DSLPrintForms}}
+  <div class="cfg-panel" id="dpf-{{.Name}}">
+    <div class="panel-title">📋 {{.Name}}</div>
+    <div class="panel-kind">DSL печатная форма · документ: {{.Document}}</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/printform">
+      <input type="hidden" name="printform_filename" value="{{.FileName}}">
+      <input type="hidden" name="printform_dsl" value="1">
+      {{if .HasLayout}}<div class="section-hd" style="color:#4a9">Макет привязан (<code>{{.Name}}.layout.yaml</code>)</div>{{end}}
+      <div class="section-hd">Код формы (.os) <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="code-wrap">
+        <pre class="os-code" id="pre-dpf-{{.Name}}" onclick="startEdit('dpf-{{.Name}}')">{{.Source}}</pre>
+        <textarea class="os-edit" id="ta-dpf-{{.Name}}" name="source"
+                  style="display:none"
+                  onblur="endEdit('dpf-{{.Name}}')">{{.Source}}</textarea>
+      </div>
+      <div class="module-save-row">
+        <button class="btn-save" type="submit">Сохранить</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+      </div>
+    </form>
+  </div>
+  {{end}}
+
+  {{/* Layout panels */}}
+  {{range .DSLPrintForms}}
+  {{if .HasLayout}}
+  <div class="cfg-panel" id="mkt-{{.Name}}">
+    <div class="panel-title">&#x1F4D0; Макет: {{.Name}}</div>
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/layout" onsubmit="return saveLayoutEditor('{{.Name}}')">
+      <input type="hidden" name="layout_name" value="{{.Name}}">
+      <textarea id="yaml-src-{{.Name}}" name="source" style="display:none">{{.LayoutYAML}}</textarea>
+      <div style="display:flex;gap:8px;margin:4px 0 8px;flex-wrap:wrap">
+        <button type="button" class="btn-save" onclick="addLayoutArea('{{.Name}}')" style="font-size:12px;padding:4px 10px">+ Область</button>
+      </div>
+      <div style="display:flex;gap:0;border:1px solid #d1d5db;border-radius:6px;overflow:hidden">
+        <div style="flex:1;min-width:0;border-right:1px solid #d1d5db;display:flex;flex-direction:column">
+          <div style="background:#f1f5f9;padding:4px 10px;font-size:11px;font-weight:600;color:#64748b;border-bottom:1px solid #d1d5db">YAML</div>
+          <textarea id="ta-mkt-{{.Name}}" style="width:100%;min-height:300px;padding:8px;border:none;outline:none;font-family:monospace;font-size:12px;resize:vertical;tab-size:2"
+                    onblur="applyYaml('{{.Name}}')">{{.LayoutYAML}}</textarea>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="background:#f1f5f9;padding:4px 10px;font-size:11px;font-weight:600;color:#64748b;border-bottom:1px solid #d1d5db">Макет</div>
+          <div id="veditor-{{.Name}}" style="padding:8px;min-height:300px;overflow:auto"></div>
+        </div>
+      </div>
+      <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
+        <div style="font-weight:bold;margin-bottom:6px;font-size:12px">Свойства ячейки</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+          <div><label>Текст</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
+          <div><label>Параметр</label><br><input id="vp-param-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','parameter',this.value)"></div>
+          <div><label><input type="checkbox" id="vp-bold-{{.Name}}" onchange="updateCellProp('{{.Name}}','bold',this.checked)"> Жирный</label></div>
+          <div><label><input type="checkbox" id="vp-italic-{{.Name}}" onchange="updateCellProp('{{.Name}}','italic',this.checked)"> Курсив</label></div>
+          <div><label>Выравнивание</label><br><select id="vp-align-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','align',this.value)">
+            <option value="">По умолчанию</option><option value="left">Лево</option><option value="center">Центр</option><option value="right">Право</option>
+          </select></div>
+          <div><label>Фон</label><br><input type="color" id="vp-bg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','backColor',this.value)"></div>
+          <div><label>Объединить (colspan)</label><br><input type="number" id="vp-colspan-{{.Name}}" min="1" max="10" style="width:60px;padding:3px" oninput="updateCellProp('{{.Name}}','colspan',parseInt(this.value)||0)"></div>
+          <div><label>Цвет текста</label><br><input type="color" id="vp-fg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','textColor',this.value)"></div>
+        </div>
+      </div>
+      <div class="module-save-row">
+        <button class="btn-save" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </div>
+  {{end}}
   {{end}}
 
   {{/* Subsystems */}}
@@ -2772,8 +3239,15 @@ const cfgTabBackup = `{{define "tab-backup"}}
   <h2 style="margin:0 0 4px;font-size:18px">💾 Бэкапы</h2>
   <p style="font-size:12px;color:#64748b;margin:0 0 16px">Резервное копирование и восстановление базы данных</p>
   {{if .BackupMessage}}<div class="success-box">{{.BackupMessage}}</div>{{end}}
+  <div style="font-size:12px;color:#64748b;margin-bottom:12px;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+    Папка бэкапов: <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px">{{.BackupDir}}</code>
+  </div>
   <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px">
     <button class="btn-save" type="submit">Создать бэкап сейчас</button>
+  </form>
+  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/upload" enctype="multipart/form-data" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+    <input type="file" name="backup_file" accept=".sql.gz,.sql" required style="font-size:12px">
+    <button class="btn-save" type="submit">Загрузить файл бэкапа</button>
   </form>
   <h3 style="font-size:13px;margin:0 0 8px;color:#374151">Файлы бэкапов</h3>
   <table class="fields-tbl">
@@ -2785,6 +3259,9 @@ const cfgTabBackup = `{{define "tab-backup"}}
     <td style="font-size:12px;color:#64748b">{{.Date}}</td>
     <td style="white-space:nowrap">
       <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
+      <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/restore" style="display:inline" onsubmit="return confirm('Восстановить {{.Name}}? Текущие данные будут заменены!')">
+        <button type="submit" style="font-size:11px;color:#16a34a;background:none;border:none;cursor:pointer;padding:0 4px">Восстановить</button>
+      </form>
       <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
         <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">Удалить</button>
       </form>
@@ -2812,10 +3289,30 @@ const cfgTabBackup = `{{define "tab-backup"}}
     </div>
     <div style="margin-bottom:8px">
       <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Директория (пусто = по умолчанию)</label>
-      <input type="text" name="backup_dir" value="{{.BackupSettings.Directory}}" placeholder="" style="width:100%;max-width:400px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
+      <input type="text" name="backup_dir" value="{{.BackupSettings.Directory}}" placeholder="{{.BackupDir}}" style="width:100%;max-width:500px;padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:13px;background:#fff">
     </div>
     <button class="btn-save" type="submit">Сохранить настройки</button>
   </form>
+  </details>
+  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Полная выгрузка (база + конфигурация)</summary>
+  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Выгрузка базы данных и конфигурации в один файл (.obz). Позволяет полностью перенести базу на другой сервер.</p>
+  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+    <a href="/bases/{{.Base.ID}}/configurator/backup/full-export" class="btn-save" style="text-decoration:none;display:inline-block">Выгрузить всё в .obz</a>
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="return confirm('Восстановить из .obz файла? Все текущие данные будут заменены!')">
+      <input type="file" name="obz_file" accept=".obz" required style="font-size:12px">
+      <button class="btn-save" type="submit" style="background:#dc2626">Загрузить из .obz</button>
+    </form>
+  </div>
+  </details>
+  <details style="margin-top:12px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Перенос конфигурации (только метаданные)</summary>
+  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Экспортируйте конфигурацию в ZIP для переноса на другой сервер или импортируйте из архива.</p>
+  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+    <a href="/bases/{{.Base.ID}}/configurator/config/export-zip" class="btn-save" style="text-decoration:none;display:inline-block">Экспорт в ZIP</a>
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/config/import-zip" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px">
+      <input type="file" name="config_zip" accept=".zip" required style="font-size:12px">
+      <button class="btn-save" type="submit">Импорт из ZIP</button>
+    </form>
+  </div>
   </details>
 </div>
 {{end}}`

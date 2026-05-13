@@ -63,24 +63,25 @@ func (u *User) Has(kind, entity, op string) bool {
 
 // EnsureRolesSchema creates the _roles and _user_roles tables if they don't exist.
 func (r *Repo) EnsureRolesSchema(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
+	d := r.db.Dialect()
+	rolesDDL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _roles (
-			id UUID PRIMARY KEY,
+			id %s PRIMARY KEY,
 			name TEXT UNIQUE NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
-			permissions JSONB NOT NULL DEFAULT '{}',
-			updated_at TIMESTAMPTZ DEFAULT now()
-		)`)
-	if err != nil {
+			permissions %s NOT NULL DEFAULT '{}',
+			updated_at %s DEFAULT %s
+		)`, d.TypeUUID(), d.TypeJSON(), d.TypeTimestamp(), d.CurrentTimestampTZ())
+	if _, err := r.db.Exec(ctx, rolesDDL); err != nil {
 		return fmt.Errorf("auth: create _roles: %w", err)
 	}
-	_, err = r.pool.Exec(ctx, `
+	userRolesDDL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _user_roles (
-			user_id UUID REFERENCES _users(id) ON DELETE CASCADE,
-			role_id UUID REFERENCES _roles(id) ON DELETE CASCADE,
+			user_id %s REFERENCES _users(id) ON DELETE CASCADE,
+			role_id %s REFERENCES _roles(id) ON DELETE CASCADE,
 			PRIMARY KEY (user_id, role_id)
-		)`)
-	if err != nil {
+		)`, d.TypeUUID(), d.TypeUUID())
+	if _, err := r.db.Exec(ctx, userRolesDDL); err != nil {
 		return fmt.Errorf("auth: create _user_roles: %w", err)
 	}
 	return nil
@@ -88,21 +89,26 @@ func (r *Repo) EnsureRolesSchema(ctx context.Context) error {
 
 // SyncRoles upserts YAML roles into _roles table.
 func (r *Repo) SyncRoles(ctx context.Context, roles []*Role) error {
+	d := r.db.Dialect()
+	jc := d.JSONCast()
 	for _, role := range roles {
 		permJSON, err := marshalPermissions(role.Permissions)
 		if err != nil {
 			return err
 		}
-		var id string
-		err = r.pool.QueryRow(ctx,
+		q := fmt.Sprintf(
 			`INSERT INTO _roles (id, name, description, permissions, updated_at)
-			 VALUES ($1, $2, $3, $4::jsonb, now())
-			 ON CONFLICT (name) DO UPDATE SET description=$3, permissions=$4::jsonb, updated_at=now()
-			 RETURNING id`,
-			uuid.New().String(), role.Name, role.Description, permJSON,
-		).Scan(&id)
-		if err != nil {
+			 VALUES (%s, %s, %s, %s%s, %s)
+			 ON CONFLICT (name) DO UPDATE SET description=EXCLUDED.description, permissions=EXCLUDED.permissions, updated_at=%s`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), jc, d.Now(), d.Now())
+		newID := uuid.New().String()
+		if _, err := r.db.Exec(ctx, q, newID, role.Name, role.Description, permJSON); err != nil {
 			return fmt.Errorf("auth: sync role %s: %w", role.Name, err)
+		}
+		var id string
+		qSel := fmt.Sprintf(`SELECT id FROM _roles WHERE name=%s`, d.Placeholder(1))
+		if err := r.db.QueryRow(ctx, qSel, role.Name).Scan(&id); err != nil {
+			return fmt.Errorf("auth: read role id %s: %w", role.Name, err)
 		}
 		role.ID = id
 	}
@@ -111,7 +117,7 @@ func (r *Repo) SyncRoles(ctx context.Context, roles []*Role) error {
 
 // ListRoles returns all roles from the database.
 func (r *Repo) ListRoles(ctx context.Context) ([]*Role, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := r.db.Query(ctx,
 		`SELECT id, name, description, permissions FROM _roles ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -132,12 +138,14 @@ func (r *Repo) ListRoles(ctx context.Context) ([]*Role, error) {
 
 // GetRolesForUser loads all roles assigned to a user.
 func (r *Repo) GetRolesForUser(ctx context.Context, userID string) ([]*Role, error) {
-	rows, err := r.pool.Query(ctx, `
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`
 		SELECT rl.id, rl.name, rl.description, rl.permissions
 		FROM _roles rl
 		JOIN _user_roles ur ON ur.role_id = rl.id
-		WHERE ur.user_id = $1
-		ORDER BY rl.name`, userID)
+		WHERE ur.user_id = %s
+		ORDER BY rl.name`, d.Placeholder(1))
+	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -157,8 +165,9 @@ func (r *Repo) GetRolesForUser(ctx context.Context, userID string) ([]*Role, err
 
 // GetUserRoleIDs returns the set of role IDs assigned to a user.
 func (r *Repo) GetUserRoleIDs(ctx context.Context, userID string) (map[string]bool, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT role_id FROM _user_roles WHERE user_id = $1`, userID)
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`SELECT role_id FROM _user_roles WHERE user_id = %s`, d.Placeholder(1))
+	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,16 +185,20 @@ func (r *Repo) GetUserRoleIDs(ctx context.Context, userID string) (map[string]bo
 
 // AssignRole assigns a role to a user (idempotent).
 func (r *Repo) AssignRole(ctx context.Context, userID, roleID string) error {
-	_, err := r.pool.Exec(ctx,
-		`INSERT INTO _user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-		userID, roleID)
+	d := r.db.Dialect()
+	q := fmt.Sprintf(
+		`INSERT INTO _user_roles (user_id, role_id) VALUES (%s, %s) ON CONFLICT DO NOTHING`,
+		d.Placeholder(1), d.Placeholder(2))
+	_, err := r.db.Exec(ctx, q, userID, roleID)
 	return err
 }
 
 // UnassignRole removes a role from a user.
 func (r *Repo) UnassignRole(ctx context.Context, userID, roleID string) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM _user_roles WHERE user_id = $1 AND role_id = $2`, userID, roleID)
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`DELETE FROM _user_roles WHERE user_id = %s AND role_id = %s`,
+		d.Placeholder(1), d.Placeholder(2))
+	_, err := r.db.Exec(ctx, q, userID, roleID)
 	return err
 }
 

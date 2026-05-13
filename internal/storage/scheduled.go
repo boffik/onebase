@@ -19,63 +19,71 @@ type ScheduledRun struct {
 	DurationMs int64      `json:"duration_ms,omitempty"`
 }
 
-const scheduledRunsDDL = `
-CREATE TABLE IF NOT EXISTS _scheduled_runs (
-    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    job_name     TEXT NOT NULL,
-    started_at   TIMESTAMPTZ NOT NULL,
-    finished_at  TIMESTAMPTZ,
-    status       TEXT NOT NULL,
-    output       TEXT,
-    error        TEXT,
-    duration_ms  INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_scheduled_runs_job ON _scheduled_runs (job_name, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_scheduled_runs_at  ON _scheduled_runs (started_at DESC);
-`
-
 func (db *DB) EnsureScheduledRunsTable(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, scheduledRunsDDL)
-	if err != nil {
+	d := db.dialect
+	ddl := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS _scheduled_runs (
+			id           %s PRIMARY KEY,
+			job_name     TEXT NOT NULL,
+			started_at   %s NOT NULL,
+			finished_at  %s,
+			status       TEXT NOT NULL,
+			output       TEXT,
+			error        TEXT,
+			duration_ms  INTEGER
+		)`, d.TypeUUID(), d.TypeTimestamp(), d.TypeTimestamp())
+	if _, err := db.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("scheduled runs DDL: %w", err)
+	}
+	// SQLite drivers (modernc.org/sqlite) execute one statement per Exec, so
+	// index creation needs to be split out anyway.
+	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_scheduled_runs_job ON _scheduled_runs (job_name, started_at DESC)`); err != nil {
+		return fmt.Errorf("scheduled runs DDL idx job: %w", err)
+	}
+	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_scheduled_runs_at ON _scheduled_runs (started_at DESC)`); err != nil {
+		return fmt.Errorf("scheduled runs DDL idx at: %w", err)
 	}
 	return nil
 }
 
 func (db *DB) InsertScheduledRun(ctx context.Context, jobName string, startedAt time.Time) (uuid.UUID, error) {
-	var id uuid.UUID
-	err := db.pool.QueryRow(ctx,
-		`INSERT INTO _scheduled_runs (job_name, started_at, status) VALUES ($1, $2, 'running') RETURNING id`,
-		jobName, startedAt,
-	).Scan(&id)
-	if err != nil {
+	d := db.dialect
+	id := uuid.New()
+	q := fmt.Sprintf(
+		`INSERT INTO _scheduled_runs (id, job_name, started_at, status) VALUES (%s, %s, %s, 'running')`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+	if _, err := db.Exec(ctx, q, id.String(), jobName, startedAt); err != nil {
 		return uuid.Nil, fmt.Errorf("insert scheduled run: %w", err)
 	}
 	return id, nil
 }
 
 func (db *DB) UpdateScheduledRun(ctx context.Context, id uuid.UUID, status, output, errText string, durationMs int64) error {
+	d := db.dialect
 	now := time.Now()
-	_, err := db.pool.Exec(ctx,
-		`UPDATE _scheduled_runs SET finished_at=$1, status=$2, output=$3, error=$4, duration_ms=$5 WHERE id=$6`,
-		now, status, output, errText, durationMs, id,
-	)
+	q := fmt.Sprintf(
+		`UPDATE _scheduled_runs SET finished_at=%s, status=%s, output=%s, error=%s, duration_ms=%s WHERE id=%s`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4),
+		d.Placeholder(5), d.Placeholder(6))
+	_, err := db.Exec(ctx, q, now, status, output, errText, durationMs, id.String())
 	return err
 }
 
 func (db *DB) ScheduledRuns(ctx context.Context, jobName string, limit int) ([]ScheduledRun, error) {
+	d := db.dialect
 	var query string
 	var args []any
 	if jobName != "" {
-		query = `SELECT id, job_name, started_at, finished_at, status, output, error, duration_ms
-				 FROM _scheduled_runs WHERE job_name=$1 ORDER BY started_at DESC LIMIT $2`
+		query = fmt.Sprintf(`SELECT id, job_name, started_at, finished_at, status, output, error, duration_ms
+			 FROM _scheduled_runs WHERE job_name=%s ORDER BY started_at DESC LIMIT %s`,
+			d.Placeholder(1), d.Placeholder(2))
 		args = []any{jobName, limit}
 	} else {
-		query = `SELECT id, job_name, started_at, finished_at, status, output, error, duration_ms
-				 FROM _scheduled_runs ORDER BY started_at DESC LIMIT $1`
+		query = fmt.Sprintf(`SELECT id, job_name, started_at, finished_at, status, output, error, duration_ms
+			 FROM _scheduled_runs ORDER BY started_at DESC LIMIT %s`, d.Placeholder(1))
 		args = []any{limit}
 	}
-	rows, err := db.pool.Query(ctx, query, args...)
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("scheduled runs query: %w", err)
 	}

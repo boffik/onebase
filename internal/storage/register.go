@@ -19,6 +19,7 @@ type OrphanStat struct {
 
 // OrphanMovements returns stats about movements whose recorder document no longer exists.
 func (db *DB) OrphanMovements(ctx context.Context, registers []*metadata.Register, entities []*metadata.Entity) []OrphanStat {
+	d := db.dialect
 	entityTable := make(map[string]string, len(entities))
 	for _, e := range entities {
 		entityTable[strings.ToLower(e.Name)] = metadata.TableName(e.Name)
@@ -26,7 +27,7 @@ func (db *DB) OrphanMovements(ctx context.Context, registers []*metadata.Registe
 	var stats []OrphanStat
 	for _, reg := range registers {
 		table := metadata.RegisterTableName(reg.Name)
-		rows, err := db.pool.Query(ctx, fmt.Sprintf(
+		rows, err := db.Query(ctx, fmt.Sprintf(
 			"SELECT recorder_type, COUNT(*) FROM %s GROUP BY recorder_type", table))
 		if err != nil {
 			continue
@@ -41,9 +42,9 @@ func (db *DB) OrphanMovements(ctx context.Context, registers []*metadata.Registe
 			if !exists {
 				count = total
 			} else {
-				db.pool.QueryRow(ctx, fmt.Sprintf(
-					"SELECT COUNT(*) FROM %s WHERE recorder_type = $1 AND recorder NOT IN (SELECT id FROM %s)",
-					table, tbl), recType).Scan(&count)
+				db.QueryRow(ctx, fmt.Sprintf(
+					"SELECT COUNT(*) FROM %s WHERE recorder_type = %s AND recorder NOT IN (SELECT id FROM %s)",
+					table, d.Placeholder(1), tbl), recType).Scan(&count)
 			}
 			if count > 0 {
 				stats = append(stats, OrphanStat{RegisterName: reg.Name, RecorderType: recType, Count: count})
@@ -64,7 +65,7 @@ func (db *DB) DeleteOrphanMovements(ctx context.Context, registers []*metadata.R
 	var total int64
 	for _, reg := range registers {
 		table := metadata.RegisterTableName(reg.Name)
-		rows, err := db.pool.Query(ctx, fmt.Sprintf(
+		rows, err := db.Query(ctx, fmt.Sprintf(
 			"SELECT DISTINCT recorder_type FROM %s", table))
 		if err != nil {
 			continue
@@ -77,18 +78,19 @@ func (db *DB) DeleteOrphanMovements(ctx context.Context, registers []*metadata.R
 		}
 		rows.Close()
 
+		d := db.dialect
 		for _, recType := range types {
 			tbl, exists := entityTable[strings.ToLower(recType)]
 			var sql string
 			if !exists {
-				sql = fmt.Sprintf("DELETE FROM %s WHERE recorder_type = $1", table)
+				sql = fmt.Sprintf("DELETE FROM %s WHERE recorder_type = %s", table, d.Placeholder(1))
 			} else {
 				sql = fmt.Sprintf(
-					"DELETE FROM %s WHERE recorder_type = $1 AND recorder NOT IN (SELECT id FROM %s)",
-					table, tbl)
+					"DELETE FROM %s WHERE recorder_type = %s AND recorder NOT IN (SELECT id FROM %s)",
+					table, d.Placeholder(1), tbl)
 			}
-			if ct, err := db.pool.Exec(ctx, sql, recType); err == nil {
-				total += ct.RowsAffected()
+			if ct, err := db.Exec(ctx, sql, recType); err == nil {
+				total += ct.RowsAffected
 			}
 		}
 	}
@@ -97,11 +99,13 @@ func (db *DB) DeleteOrphanMovements(ctx context.Context, registers []*metadata.R
 
 // WriteMovements replaces all movements for a document in the given register.
 func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, recorderID uuid.UUID, rows []map[string]any, reg *metadata.Register, period *time.Time) error {
+	d := db.dialect
 	table := metadata.RegisterTableName(regName)
 
 	if err := db.exec(ctx,
-		fmt.Sprintf("DELETE FROM %s WHERE recorder = $1 AND recorder_type = $2", table),
-		recorderID, recorderType,
+		fmt.Sprintf("DELETE FROM %s WHERE recorder = %s AND recorder_type = %s",
+			table, d.Placeholder(1), d.Placeholder(2)),
+		idArg(d, recorderID), recorderType,
 	); err != nil {
 		return fmt.Errorf("clear movements %s: %w", regName, err)
 	}
@@ -112,20 +116,27 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 			vidDvizh = "Приход"
 		}
 		cols := []string{"id", "recorder", "recorder_type", "line_number", "period", "вид_движения"}
-		phs := []string{"$1", "$2", "$3", "$4", "$5", "$6"}
+		phs := []string{d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6)}
 		periodVal := any(time.Now())
 		if period != nil {
 			periodVal = *period
 		}
-		args := []any{uuid.New(), recorderID, recorderType, i + 1, periodVal, vidDvizh}
+		args := []any{idArg(d, uuid.New()), idArg(d, recorderID), recorderType, i + 1, periodVal, vidDvizh}
 		idx := 7
 
 		allFields := append(append([]metadata.Field{}, reg.Dimensions...), append(reg.Resources, reg.Attributes...)...)
 		for _, f := range allFields {
 			cols = append(cols, metadata.ColumnName(f))
-			phs = append(phs, fmt.Sprintf("$%d", idx))
-			args = append(args, ciGet(row, f.Name))
-
+			phs = append(phs, d.Placeholder(idx))
+			v := ciGet(row, f.Name)
+			if f.RefEntity != "" {
+				if s, ok := v.(string); ok && s != "" {
+					if id, err := uuid.Parse(s); err == nil {
+						v = idArg(d, id)
+					}
+				}
+			}
+			args = append(args, v)
 			idx++
 		}
 
@@ -146,7 +157,7 @@ func (db *DB) GetMovements(ctx context.Context, regName string, reg *metadata.Re
 		cols = append(cols, metadata.ColumnName(f))
 	}
 	query := fmt.Sprintf("SELECT %s FROM %s ORDER BY period, recorder, line_number", strings.Join(cols, ", "), table)
-	rows, err := db.pool.Query(ctx, query)
+	rows, err := db.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get movements %s: %w", regName, err)
 	}
@@ -193,9 +204,9 @@ func (db *DB) GetDocumentMovements(ctx context.Context, recorderID uuid.UUID, re
 		for _, f := range allFields {
 			cols = append(cols, metadata.ColumnName(f))
 		}
-		query := fmt.Sprintf("SELECT %s FROM %s WHERE recorder = $1 ORDER BY line_number",
-			strings.Join(cols, ", "), table)
-		rows, err := db.pool.Query(ctx, query, recorderID)
+		query := fmt.Sprintf("SELECT %s FROM %s WHERE recorder = %s ORDER BY line_number",
+			strings.Join(cols, ", "), table, db.dialect.Placeholder(1))
+		rows, err := db.Query(ctx, query, idArg(db.dialect, recorderID))
 		if err != nil {
 			continue
 		}
@@ -257,7 +268,7 @@ func (db *DB) GetBalances(ctx context.Context, regName string, reg *metadata.Reg
 	}
 	query += " ORDER BY " + strings.Join(groupBy, ", ")
 
-	rows, err := db.pool.Query(ctx, query)
+	rows, err := db.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get balances %s: %w", regName, err)
 	}

@@ -109,6 +109,7 @@ func (db *DB) JournalQuery(
 	var args []any
 	argIdx := 1
 
+	d := db.dialect
 	for _, jf := range j.Filters {
 		fv, ok := params.Filters[jf.Field]
 		if !ok {
@@ -118,20 +119,20 @@ func (db *DB) JournalQuery(
 		switch {
 		case jf.Type == "date_range":
 			if fv.From != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s >= $%d", colName, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s >= %s", colName, d.Placeholder(argIdx)))
 				args = append(args, fv.From)
 				argIdx++
 			}
 			if fv.To != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s <= $%d", colName, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s <= %s", colName, d.Placeholder(argIdx)))
 				args = append(args, fv.To)
 				argIdx++
 			}
 		case strings.HasPrefix(jf.Type, "reference:"):
 			if fv.Value != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s = $%d", colName, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s = %s", colName, d.Placeholder(argIdx)))
 				if id, err := uuid.Parse(fv.Value); err == nil {
-					args = append(args, id)
+					args = append(args, idArg(d, id))
 				} else {
 					args = append(args, fv.Value)
 				}
@@ -139,7 +140,7 @@ func (db *DB) JournalQuery(
 			}
 		default:
 			if fv.Value != "" {
-				whereParts = append(whereParts, fmt.Sprintf("LOWER(%s::text) LIKE LOWER($%d)", colName, argIdx))
+				whereParts = append(whereParts, d.LowerLike(colName)+" LIKE "+d.LowerLike(d.Placeholder(argIdx)))
 				args = append(args, "%"+fv.Value+"%")
 				argIdx++
 			}
@@ -164,18 +165,24 @@ func (db *DB) JournalQuery(
 	// Count query
 	countSQL := fmt.Sprintf("WITH j AS (%s)\nSELECT COUNT(*) FROM j%s", union, whereClause)
 	var total int
-	if err := db.q(ctx).QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
+	if err := db.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
 		return nil, 0, colRefMap, fmt.Errorf("journal count: %w", err)
 	}
 
-	// Data query
+	// Data query. NULLS LAST is PG-specific; on SQLite ORDER BY DESC already
+	// puts NULLs at the bottom, so we emit it only on PG.
+	nullsClause := ""
+	if d.Name() == "postgres" {
+		nullsClause = " NULLS LAST"
+	}
 	dataSQL := fmt.Sprintf(
-		"WITH j AS (%s)\nSELECT _doc_kind, id, %s FROM j%s ORDER BY %s DESC NULLS LAST LIMIT $%d OFFSET $%d",
+		"WITH j AS (%s)\nSELECT _doc_kind, id, %s FROM j%s ORDER BY %s DESC%s LIMIT %s OFFSET %s",
 		union,
 		strings.Join(outCols, ", "),
 		whereClause,
 		orderCol,
-		argIdx, argIdx+1,
+		nullsClause,
+		d.Placeholder(argIdx), d.Placeholder(argIdx+1),
 	)
 	dataArgs := append(args, limit, offset)
 

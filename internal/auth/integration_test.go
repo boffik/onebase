@@ -31,7 +31,7 @@ func TestRepo_CreateAndAuthenticate(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
 
-	repo := auth.NewRepo(db.Pool())
+	repo := auth.NewRepo(db)
 	if err := repo.EnsureSchema(ctx); err != nil {
 		t.Fatalf("EnsureSchema: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestRepo_Sessions(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
 
-	repo := auth.NewRepo(db.Pool())
+	repo := auth.NewRepo(db)
 	repo.EnsureSchema(ctx)
 
 	db.Pool().Exec(ctx, `DELETE FROM _sessions`)
@@ -113,7 +113,7 @@ func TestMiddleware_NoUsers_PassThrough(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
 
-	repo := auth.NewRepo(db.Pool())
+	repo := auth.NewRepo(db)
 	repo.EnsureSchema(ctx)
 	// Ensure empty _users
 	db.Pool().Exec(ctx, `DELETE FROM _sessions`)
@@ -139,7 +139,7 @@ func TestMiddleware_WithUsers_RequiresSession(t *testing.T) {
 	db := connectTestDB(t)
 	ctx := context.Background()
 
-	repo := auth.NewRepo(db.Pool())
+	repo := auth.NewRepo(db)
 	repo.EnsureSchema(ctx)
 
 	db.Pool().Exec(ctx, `DELETE FROM _sessions`)

@@ -20,7 +20,8 @@ type Registry struct {
 	enums           map[string]*metadata.Enum
 	constants       map[string]*metadata.Constant
 	reports         map[string]*report.Report
-	printForms      map[string][]*printform.PrintForm // lowercase entity name → forms
+	printForms      map[string][]*printform.PrintForm   // lowercase entity name → forms
+	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
 	procs           map[string]map[string]*ast.ProcedureDecl
 	moduleProcs     map[string]*ast.ProcedureDecl // flat: proc name → decl
 	processors      map[string]*processor.Processor
@@ -40,6 +41,7 @@ func NewRegistry() *Registry {
 		constants:       make(map[string]*metadata.Constant),
 		reports:         make(map[string]*report.Report),
 		printForms:      make(map[string][]*printform.PrintForm),
+		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
 		procs:           make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),
 		processors:      make(map[string]*processor.Processor),
@@ -110,6 +112,45 @@ func (r *Registry) GetPrintForms(entityName string) []*printform.PrintForm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.printForms[strings.ToLower(entityName)]
+}
+
+// LoadDSLPrintForms registers DSL (.os) print forms indexed by entity name.
+func (r *Registry) LoadDSLPrintForms(forms []*printform.DSLPrintForm) {
+	m := make(map[string][]*printform.DSLPrintForm)
+	for _, f := range forms {
+		key := strings.ToLower(f.Document)
+		m[key] = append(m[key], f)
+	}
+	r.mu.Lock()
+	r.dslPrintForms = m
+	r.mu.Unlock()
+}
+
+// GetDSLPrintForms returns all DSL print forms for an entity name (case-insensitive).
+func (r *Registry) GetDSLPrintForms(entityName string) []*printform.DSLPrintForm {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.dslPrintForms[strings.ToLower(entityName)]
+}
+
+// GetDSLPrintForm returns a specific DSL print form by entity and form name.
+func (r *Registry) GetDSLPrintForm(entityName, pfName string) *printform.DSLPrintForm {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, f := range r.dslPrintForms[strings.ToLower(entityName)] {
+		if strings.EqualFold(f.Name, pfName) {
+			return f
+		}
+	}
+	// Fallback: search all entities
+	for _, forms := range r.dslPrintForms {
+		for _, f := range forms {
+			if strings.EqualFold(f.Name, pfName) {
+				return f
+			}
+		}
+	}
+	return nil
 }
 
 func (r *Registry) GetReport(name string) *report.Report {

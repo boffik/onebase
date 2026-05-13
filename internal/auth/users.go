@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 type User struct {
@@ -22,33 +23,36 @@ type User struct {
 }
 
 type Repo struct {
-	pool *pgxpool.Pool
+	db *storage.DB
 }
 
-func NewRepo(pool *pgxpool.Pool) *Repo {
-	return &Repo{pool: pool}
+// NewRepo wires the auth repository to the storage layer. Internally Exec/
+// Query/QueryRow are routed to PostgreSQL or SQLite via the DB abstraction.
+func NewRepo(db *storage.DB) *Repo {
+	return &Repo{db: db}
 }
 
 func (r *Repo) EnsureSchema(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
+	d := r.db.Dialect()
+	usersDDL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _users (
-			id UUID PRIMARY KEY,
+			id %s PRIMARY KEY,
 			login TEXT UNIQUE NOT NULL,
-			password_hash BYTEA NOT NULL,
+			password_hash %s NOT NULL,
 			full_name TEXT NOT NULL DEFAULT '',
-			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		)`)
-	if err != nil {
+			is_admin %s NOT NULL DEFAULT %s,
+			created_at %s NOT NULL DEFAULT %s
+		)`, d.TypeUUID(), d.TypeBytes(), d.TypeBool(), boolFalseFor(d), d.TypeTimestamp(), d.CurrentTimestampTZ())
+	if _, err := r.db.Exec(ctx, usersDDL); err != nil {
 		return fmt.Errorf("auth: create _users: %w", err)
 	}
-	_, err = r.pool.Exec(ctx, `
+	sessionsDDL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _sessions (
 			token TEXT PRIMARY KEY,
-			user_id UUID NOT NULL REFERENCES _users(id) ON DELETE CASCADE,
-			expires_at TIMESTAMPTZ NOT NULL
-		)`)
-	if err != nil {
+			user_id %s NOT NULL REFERENCES _users(id) ON DELETE CASCADE,
+			expires_at %s NOT NULL
+		)`, d.TypeUUID(), d.TypeTimestamp())
+	if _, err := r.db.Exec(ctx, sessionsDDL); err != nil {
 		return fmt.Errorf("auth: create _sessions: %w", err)
 	}
 	if err := r.EnsureRolesSchema(ctx); err != nil {
@@ -57,14 +61,22 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	return nil
 }
 
+// boolFalseFor returns "FALSE" for PG and "0" for SQLite, used in DEFAULT clauses.
+func boolFalseFor(d storage.Dialect) string {
+	if d.Name() == "sqlite" {
+		return "0"
+	}
+	return "FALSE"
+}
+
 func (r *Repo) HasUsers(ctx context.Context) (bool, error) {
 	var count int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM _users`).Scan(&count)
+	err := r.db.QueryRow(ctx, `SELECT count(*) FROM _users`).Scan(&count)
 	return count > 0, err
 }
 
 func (r *Repo) List(ctx context.Context) ([]*User, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, login, full_name, is_admin, created_at FROM _users ORDER BY login`)
+	rows, err := r.db.Query(ctx, `SELECT id, login, full_name, is_admin, created_at FROM _users ORDER BY login`)
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +93,15 @@ func (r *Repo) List(ctx context.Context) ([]*User, error) {
 }
 
 func (r *Repo) Create(ctx context.Context, login, password, fullName string, isAdmin bool) (*User, error) {
+	d := r.db.Dialect()
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 	id := uuid.New().String()
-	_, err = r.pool.Exec(ctx,
-		`INSERT INTO _users (id, login, password_hash, full_name, is_admin) VALUES ($1, $2, $3, $4, $5)`,
-		id, login, hash, fullName, isAdmin)
+	q := fmt.Sprintf(`INSERT INTO _users (id, login, password_hash, full_name, is_admin) VALUES (%s, %s, %s, %s, %s)`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5))
+	_, err = r.db.Exec(ctx, q, id, login, hash, fullName, isAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("auth: create user: %w", err)
 	}
@@ -96,16 +109,18 @@ func (r *Repo) Create(ctx context.Context, login, password, fullName string, isA
 }
 
 func (r *Repo) Delete(ctx context.Context, id string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM _users WHERE id = $1`, id)
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`DELETE FROM _users WHERE id = %s`, d.Placeholder(1))
+	_, err := r.db.Exec(ctx, q, id)
 	return err
 }
 
 func (r *Repo) Authenticate(ctx context.Context, login, password string) (*User, error) {
+	d := r.db.Dialect()
 	u := &User{}
 	var hash []byte
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, login, password_hash, full_name, is_admin FROM _users WHERE login = $1`,
-		login).Scan(&u.ID, &u.Login, &hash, &u.FullName, &u.IsAdmin)
+	q := fmt.Sprintf(`SELECT id, login, password_hash, full_name, is_admin FROM _users WHERE login = %s`, d.Placeholder(1))
+	err := r.db.QueryRow(ctx, q, login).Scan(&u.ID, &u.Login, &hash, &u.FullName, &u.IsAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("auth: user not found")
 	}
@@ -116,25 +131,28 @@ func (r *Repo) Authenticate(ctx context.Context, login, password string) (*User,
 }
 
 func (r *Repo) CreateSession(ctx context.Context, userID string) (string, error) {
+	d := r.db.Dialect()
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	token := hex.EncodeToString(b)
 	expires := time.Now().Add(24 * time.Hour)
-	_, err := r.pool.Exec(ctx,
-		`INSERT INTO _sessions (token, user_id, expires_at) VALUES ($1, $2, $3)`,
-		token, userID, expires)
+	q := fmt.Sprintf(`INSERT INTO _sessions (token, user_id, expires_at) VALUES (%s, %s, %s)`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+	_, err := r.db.Exec(ctx, q, token, userID, expires)
 	return token, err
 }
 
 func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
+	d := r.db.Dialect()
 	u := &User{}
-	err := r.pool.QueryRow(ctx, `
+	q := fmt.Sprintf(`
 		SELECT u.id, u.login, u.full_name, u.is_admin
 		FROM _sessions s JOIN _users u ON u.id = s.user_id
-		WHERE s.token = $1 AND s.expires_at > now()
-	`, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin)
+		WHERE s.token = %s AND s.expires_at > %s
+	`, d.Placeholder(1), d.Now())
+	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +160,9 @@ func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
 }
 
 func (r *Repo) DeleteSession(ctx context.Context, token string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM _sessions WHERE token = $1`, token)
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`DELETE FROM _sessions WHERE token = %s`, d.Placeholder(1))
+	_, err := r.db.Exec(ctx, q, token)
 	return err
 }
 
@@ -156,13 +176,15 @@ type SessionInfo struct {
 
 // ActiveSessions returns all non-expired sessions with user info.
 func (r *Repo) ActiveSessions(ctx context.Context) ([]*SessionInfo, error) {
-	rows, err := r.pool.Query(ctx, `
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`
 		SELECT u.login, u.full_name, u.is_admin, s.expires_at
 		FROM _sessions s
 		JOIN _users u ON u.id = s.user_id
-		WHERE s.expires_at > now()
+		WHERE s.expires_at > %s
 		ORDER BY u.login, s.expires_at DESC
-	`)
+	`, d.Now())
+	rows, err := r.db.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +202,9 @@ func (r *Repo) ActiveSessions(ctx context.Context) ([]*SessionInfo, error) {
 
 // KickUser deletes all sessions for the given login (forces re-login).
 func (r *Repo) KickUser(ctx context.Context, login string) error {
-	_, err := r.pool.Exec(ctx, `
-		DELETE FROM _sessions WHERE user_id = (SELECT id FROM _users WHERE login = $1)
-	`, login)
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`DELETE FROM _sessions WHERE user_id = (SELECT id FROM _users WHERE login = %s)`,
+		d.Placeholder(1))
+	_, err := r.db.Exec(ctx, q, login)
 	return err
 }

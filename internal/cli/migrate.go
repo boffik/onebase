@@ -37,7 +37,7 @@ func runMigrate(cmd *cobra.Command, _ []string) error {
 
 	var proj *project.Project
 	if configSource == "database" {
-		cfgRepo := configdb.New(db.Pool())
+		cfgRepo := configdb.New(db)
 		if err := cfgRepo.EnsureSchema(ctx); err != nil {
 			return fmt.Errorf("configdb schema: %w", err)
 		}

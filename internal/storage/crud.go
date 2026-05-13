@@ -30,6 +30,7 @@ type FilterValue struct {
 
 // Upsert inserts or updates the object fields.
 func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, fields map[string]any, entity *metadata.Entity) error {
+	d := db.dialect
 	// Read old value for audit diff (best-effort, ignore errors)
 	var oldRow map[string]any
 	isNew := false
@@ -41,18 +42,18 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 
 	table := metadata.TableName(entityName)
 	cols := []string{"id"}
-	placeholders := []string{"$1"}
-	args := []any{id}
+	placeholders := []string{d.Placeholder(1)}
+	args := []any{idArg(d, id)}
 	updates := []string{}
 
 	argIdx := 2
 	for _, f := range entity.Fields {
 		col := metadata.ColumnName(f)
-		ph := fmt.Sprintf("$%d", argIdx)
+		ph := d.Placeholder(argIdx)
 		argIdx++
 		cols = append(cols, col)
 		placeholders = append(placeholders, ph)
-		args = append(args, fieldValue(f, fields))
+		args = append(args, fieldValueDialect(d, f, fields))
 		updates = append(updates, col+" = EXCLUDED."+col)
 	}
 
@@ -68,8 +69,8 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 				}
 			}
 			cols = append(cols, "parent_id")
-			placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
-			args = append(args, pID)
+			placeholders = append(placeholders, d.Placeholder(argIdx))
+			args = append(args, idArg(d, pID))
 			argIdx++
 			updates = append(updates, "parent_id = EXCLUDED.parent_id")
 		} else {
@@ -87,7 +88,7 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 			}
 		}
 		cols = append(cols, "is_folder")
-		placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
+		placeholders = append(placeholders, d.Placeholder(argIdx))
 		args = append(args, isFolder)
 		argIdx++
 		updates = append(updates, "is_folder = EXCLUDED.is_folder")
@@ -122,6 +123,7 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 // GetByID retrieves a single object by ID, returning fields as map[string]any.
 // For documents, also returns "posted" bool.
 func (db *DB) GetByID(ctx context.Context, entityName string, id uuid.UUID, entity *metadata.Entity) (map[string]any, error) {
+	d := db.dialect
 	table := metadata.TableName(entityName)
 	cols := []string{"id"}
 	for _, f := range entity.Fields {
@@ -134,8 +136,8 @@ func (db *DB) GetByID(ctx context.Context, entityName string, id uuid.UUID, enti
 	if entity.Hierarchical {
 		cols = append(cols, "is_folder", "parent_id")
 	}
-	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1", strings.Join(cols, ", "), table)
-	row := db.q(ctx).QueryRow(ctx, sql, id)
+	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = %s", strings.Join(cols, ", "), table, d.Placeholder(1))
+	row := db.QueryRow(ctx, sql, idArg(d, id))
 
 	dest := make([]any, len(cols))
 	ptrs := make([]any, len(cols))
@@ -194,6 +196,7 @@ func normalizeUUID(v any) any {
 // List returns rows for an entity with optional filtering and sorting.
 // For documents, also returns "posted" bool.
 func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Entity, params ListParams) ([]map[string]any, error) {
+	d := db.dialect
 	table := metadata.TableName(entityName)
 	cols := []string{"id"}
 	for _, f := range entity.Fields {
@@ -220,8 +223,8 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 		if params.ParentStr == "root" {
 			whereParts = append(whereParts, "parent_id IS NULL")
 		} else if pID, err := uuid.Parse(params.ParentStr); err == nil {
-			whereParts = append(whereParts, fmt.Sprintf("parent_id = $%d", argIdx))
-			args = append(args, pID)
+			whereParts = append(whereParts, fmt.Sprintf("parent_id = %s", d.Placeholder(argIdx)))
+			args = append(args, idArg(d, pID))
 			argIdx++
 		}
 	}
@@ -235,20 +238,20 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 		switch {
 		case f.Type == metadata.FieldTypeDate:
 			if fv.From != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s >= $%d", col, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s >= %s", col, d.Placeholder(argIdx)))
 				args = append(args, fv.From)
 				argIdx++
 			}
 			if fv.To != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s <= $%d", col, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s <= %s", col, d.Placeholder(argIdx)))
 				args = append(args, fv.To)
 				argIdx++
 			}
 		case f.RefEntity != "":
 			if fv.Value != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s = $%d", col, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s = %s", col, d.Placeholder(argIdx)))
 				if id, err := uuid.Parse(fv.Value); err == nil {
-					args = append(args, id)
+					args = append(args, idArg(d, id))
 				} else {
 					args = append(args, fv.Value)
 				}
@@ -256,26 +259,29 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 			}
 		default:
 			if fv.Value != "" {
-				whereParts = append(whereParts, fmt.Sprintf("LOWER(%s::text) LIKE LOWER($%d)", col, argIdx))
+				whereParts = append(whereParts, d.LowerLike(col)+" LIKE "+d.LowerLike(d.Placeholder(argIdx)))
 				args = append(args, "%"+fv.Value+"%")
 				argIdx++
 			}
 		}
 	}
 
-	// Full-text search across all string fields
+	// Full-text search across all string fields.
+	// SQLite '?' placeholders are positional with no repetition; for each
+	// field we allocate a fresh placeholder and bind the pattern again.
 	if params.Search != "" {
 		var searchParts []string
+		pattern := "%" + params.Search + "%"
 		for _, f := range entity.Fields {
 			if f.Type == metadata.FieldTypeString && f.RefEntity == "" {
 				col := metadata.ColumnName(f)
-				searchParts = append(searchParts, fmt.Sprintf("LOWER(%s::text) LIKE LOWER($%d)", col, argIdx))
+				searchParts = append(searchParts, d.LowerLike(col)+" LIKE "+d.LowerLike(d.Placeholder(argIdx)))
+				args = append(args, pattern)
+				argIdx++
 			}
 		}
 		if len(searchParts) > 0 {
 			whereParts = append(whereParts, "("+strings.Join(searchParts, " OR ")+")")
-			args = append(args, "%"+params.Search+"%")
-			argIdx++
 		}
 	}
 
@@ -317,7 +323,7 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 		query += fmt.Sprintf(" LIMIT %d OFFSET %d", params.Limit, params.Offset)
 	}
 
-	rows, err := db.pool.Query(ctx, query, args...)
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list %s: %w", entityName, err)
 	}
@@ -362,6 +368,7 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 
 // CountList returns the total number of rows matching the given params (ignoring Limit/Offset).
 func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata.Entity, params ListParams) (int, error) {
+	d := db.dialect
 	table := metadata.TableName(entityName)
 	var whereParts []string
 	var args []any
@@ -371,8 +378,8 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 		if params.ParentStr == "root" {
 			whereParts = append(whereParts, "parent_id IS NULL")
 		} else if pID, err := uuid.Parse(params.ParentStr); err == nil {
-			whereParts = append(whereParts, fmt.Sprintf("parent_id = $%d", argIdx))
-			args = append(args, pID)
+			whereParts = append(whereParts, fmt.Sprintf("parent_id = %s", d.Placeholder(argIdx)))
+			args = append(args, idArg(d, pID))
 			argIdx++
 		}
 	}
@@ -386,20 +393,20 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 		switch {
 		case f.Type == metadata.FieldTypeDate:
 			if fv.From != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s >= $%d", col, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s >= %s", col, d.Placeholder(argIdx)))
 				args = append(args, fv.From)
 				argIdx++
 			}
 			if fv.To != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s <= $%d", col, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s <= %s", col, d.Placeholder(argIdx)))
 				args = append(args, fv.To)
 				argIdx++
 			}
 		case f.RefEntity != "":
 			if fv.Value != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s = $%d", col, argIdx))
+				whereParts = append(whereParts, fmt.Sprintf("%s = %s", col, d.Placeholder(argIdx)))
 				if id, err := uuid.Parse(fv.Value); err == nil {
-					args = append(args, id)
+					args = append(args, idArg(d, id))
 				} else {
 					args = append(args, fv.Value)
 				}
@@ -407,7 +414,7 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 			}
 		default:
 			if fv.Value != "" {
-				whereParts = append(whereParts, fmt.Sprintf("LOWER(%s::text) LIKE LOWER($%d)", col, argIdx))
+				whereParts = append(whereParts, d.LowerLike(col)+" LIKE "+d.LowerLike(d.Placeholder(argIdx)))
 				args = append(args, "%"+fv.Value+"%")
 				argIdx++
 			}
@@ -416,15 +423,17 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 
 	if params.Search != "" {
 		var searchParts []string
+		pattern := "%" + params.Search + "%"
 		for _, f := range entity.Fields {
 			if f.Type == metadata.FieldTypeString && f.RefEntity == "" {
 				col := metadata.ColumnName(f)
-				searchParts = append(searchParts, fmt.Sprintf("LOWER(%s::text) LIKE LOWER($%d)", col, argIdx))
+				searchParts = append(searchParts, d.LowerLike(col)+" LIKE "+d.LowerLike(d.Placeholder(argIdx)))
+				args = append(args, pattern)
+				argIdx++
 			}
 		}
 		if len(searchParts) > 0 {
 			whereParts = append(whereParts, "("+strings.Join(searchParts, " OR ")+")")
-			args = append(args, "%"+params.Search+"%")
 		}
 	}
 
@@ -433,7 +442,7 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 		q += " WHERE " + strings.Join(whereParts, " AND ")
 	}
 	var count int
-	if err := db.pool.QueryRow(ctx, q, args...).Scan(&count); err != nil {
+	if err := db.QueryRow(ctx, q, args...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count %s: %w", entityName, err)
 	}
 	return count, nil
@@ -441,13 +450,15 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 
 // GetTablePartRows returns rows of a tablepart for a given parent id, ordered by строка.
 func (db *DB) GetTablePartRows(ctx context.Context, entityName, tpName string, parentID uuid.UUID, tp metadata.TablePart) ([]map[string]any, error) {
+	d := db.dialect
 	table := metadata.TablePartTableName(entityName, tpName)
 	cols := []string{"строка"}
 	for _, f := range tp.Fields {
 		cols = append(cols, metadata.ColumnName(f))
 	}
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE parent_id = $1 ORDER BY строка", strings.Join(cols, ", "), table)
-	rows, err := db.pool.Query(ctx, query, parentID)
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE parent_id = %s ORDER BY строка",
+		strings.Join(cols, ", "), table, d.Placeholder(1))
+	rows, err := db.Query(ctx, query, idArg(d, parentID))
 	if err != nil {
 		return nil, fmt.Errorf("get tablepart %s.%s: %w", entityName, tpName, err)
 	}
@@ -475,20 +486,23 @@ func (db *DB) GetTablePartRows(ctx context.Context, entityName, tpName string, p
 
 // UpsertTablePartRows replaces all rows for the given parent with the provided rows.
 func (db *DB) UpsertTablePartRows(ctx context.Context, entityName, tpName string, parentID uuid.UUID, rows []map[string]any, tp metadata.TablePart) error {
+	d := db.dialect
 	table := metadata.TablePartTableName(entityName, tpName)
 
-	if err := db.exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE parent_id = $1", table), parentID); err != nil {
+	if err := db.exec(ctx,
+		fmt.Sprintf("DELETE FROM %s WHERE parent_id = %s", table, d.Placeholder(1)),
+		idArg(d, parentID)); err != nil {
 		return fmt.Errorf("delete tablepart %s.%s: %w", entityName, tpName, err)
 	}
 
 	for i, row := range rows {
 		cols := []string{"id", "parent_id", "строка"}
-		placeholders := []string{"$1", "$2", "$3"}
-		args := []any{uuid.New(), parentID, i + 1}
+		placeholders := []string{d.Placeholder(1), d.Placeholder(2), d.Placeholder(3)}
+		args := []any{idArg(d, uuid.New()), idArg(d, parentID), i + 1}
 		for j, f := range tp.Fields {
 			cols = append(cols, metadata.ColumnName(f))
-			placeholders = append(placeholders, fmt.Sprintf("$%d", j+4))
-			args = append(args, fieldValue(f, row))
+			placeholders = append(placeholders, d.Placeholder(j+4))
+			args = append(args, fieldValueDialect(d, f, row))
 		}
 		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 			table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
@@ -502,26 +516,29 @@ func (db *DB) UpsertTablePartRows(ctx context.Context, entityName, tpName string
 // Delete removes an entity record by id. Tablepart rows cascade automatically.
 // Returns an error if the record is a predefined item (_is_predefined = TRUE).
 func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error {
+	d := db.dialect
+	tbl := metadata.TableName(entityName)
 	// Check if this is a predefined record (column may not exist — ignore error)
 	var isPredefined bool
-	if err := db.pool.QueryRow(ctx,
-		fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = $1", metadata.TableName(entityName)),
-		id,
+	if err := db.QueryRow(ctx,
+		fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = %s", tbl, d.Placeholder(1)),
+		idArg(d, id),
 	).Scan(&isPredefined); err == nil && isPredefined {
 		return fmt.Errorf("нельзя удалить предопределённый элемент %s", entityName)
 	}
 
 	// For hierarchical catalogs, prevent deleting non-empty folders
 	var childCount int
-	if err := db.pool.QueryRow(ctx,
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE parent_id = $1 AND deletion_mark = FALSE", metadata.TableName(entityName)),
-		id,
+	if err := db.QueryRow(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE parent_id = %s AND deletion_mark = %s",
+			tbl, d.Placeholder(1), boolFalseLit(d)),
+		idArg(d, id),
 	).Scan(&childCount); err == nil && childCount > 0 {
 		return fmt.Errorf("нельзя удалить группу: в ней есть элементы (%d шт.)", childCount)
 	}
 
 	err := db.exec(ctx,
-		fmt.Sprintf("DELETE FROM %s WHERE id = $1", metadata.TableName(entityName)), id)
+		fmt.Sprintf("DELETE FROM %s WHERE id = %s", tbl, d.Placeholder(1)), idArg(d, id))
 	if err == nil {
 		if u, ok := auditUserFromCtx(ctx); ok {
 			_ = db.Log(ctx, &AuditEntry{
@@ -538,9 +555,11 @@ func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error
 
 // SetPosted sets the posted flag on a document.
 func (db *DB) SetPosted(ctx context.Context, entityName string, id uuid.UUID, posted bool) error {
+	d := db.dialect
 	err := db.exec(ctx,
-		fmt.Sprintf("UPDATE %s SET posted = $1 WHERE id = $2", metadata.TableName(entityName)),
-		posted, id)
+		fmt.Sprintf("UPDATE %s SET posted = %s WHERE id = %s",
+			metadata.TableName(entityName), d.Placeholder(1), d.Placeholder(2)),
+		posted, idArg(d, id))
 	if err == nil {
 		if u, ok := auditUserFromCtx(ctx); ok {
 			action := "post"
@@ -561,21 +580,39 @@ func (db *DB) SetPosted(ctx context.Context, entityName string, id uuid.UUID, po
 }
 
 // fieldValue extracts the value for a field from the fields map, handling reference UUID strings.
+// Deprecated: use fieldValueDialect to get values typed for the active backend.
 func fieldValue(f metadata.Field, fields map[string]any) any {
+	return fieldValueDialect(PgDialect{}, f, fields)
+}
+
+// fieldValueDialect extracts a field value and normalizes UUIDs:
+// PG accepts uuid.UUID directly; SQLite stores them as TEXT strings.
+func fieldValueDialect(d Dialect, f metadata.Field, fields map[string]any) any {
 	v := fields[f.Name]
+	if v == nil {
+		v = fields[strings.ToLower(f.Name)]
+	}
 	if f.RefEntity != "" {
 		if v == nil {
 			return nil
 		}
 		if s, ok := v.(string); ok {
 			if s == "" {
-				return nil // empty string → NULL for UUID column
+				return nil
 			}
 			if id, err := uuid.Parse(s); err == nil {
-				return id
+				return idArg(d, id)
 			}
-			return nil // unparseable UUID → NULL
+			return nil
 		}
 	}
 	return v
+}
+
+// idArg encodes a UUID for the active backend: PG → uuid.UUID, SQLite → string.
+func idArg(d Dialect, id uuid.UUID) any {
+	if d.Name() == "sqlite" {
+		return id.String()
+	}
+	return id
 }

@@ -54,7 +54,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	defer db.Close()
 
 	fmt.Fprintln(os.Stdout, "→ Инициализация схемы платформы...")
-	authRepo := auth.NewRepo(db.Pool())
+	authRepo := auth.NewRepo(db)
 	if err := authRepo.EnsureSchema(ctx); err != nil {
 		return fmt.Errorf("auth schema: %w", err)
 	}
@@ -71,7 +71,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("accounts: %w", err)
 	}
 
-	cfgRepo := configdb.New(db.Pool())
+	cfgRepo := configdb.New(db)
 	if err := cfgRepo.EnsureSchema(ctx); err != nil {
 		return fmt.Errorf("configdb schema: %w", err)
 	}

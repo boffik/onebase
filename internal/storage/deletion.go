@@ -11,10 +11,11 @@ import (
 
 // EnsureDeletionMark adds deletion_mark column to all entity tables if missing.
 func (db *DB) EnsureDeletionMark(ctx context.Context, entities []*metadata.Entity) error {
+	d := db.dialect
+	typ := d.TypeBool() + " NOT NULL DEFAULT " + boolFalseLit(d)
 	for _, e := range entities {
 		table := metadata.TableName(e.Name)
-		sql := AddColumnSQL(table, "deletion_mark", "BOOLEAN NOT NULL DEFAULT FALSE")
-		if _, err := db.pool.Exec(ctx, sql); err != nil {
+		if err := db.AddColumnIfMissing(ctx, table, "deletion_mark", typ); err != nil {
 			return fmt.Errorf("ensure deletion_mark %s: %w", e.Name, err)
 		}
 	}
@@ -24,16 +25,21 @@ func (db *DB) EnsureDeletionMark(ctx context.Context, entities []*metadata.Entit
 // MarkForDeletion sets or clears the deletion_mark flag for a record.
 // Returns an error if the record is predefined (_is_predefined = TRUE).
 func (db *DB) MarkForDeletion(ctx context.Context, entityName string, id uuid.UUID, mark bool) error {
+	d := db.dialect
 	table := metadata.TableName(entityName)
 	if mark {
 		var isPredefined bool
-		if err := db.pool.QueryRow(ctx,
-			fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = $1", table), id,
+		if err := db.QueryRow(ctx,
+			fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = %s", table, d.Placeholder(1)),
+			idArg(d, id),
 		).Scan(&isPredefined); err == nil && isPredefined {
 			return fmt.Errorf("нельзя пометить предопределённый элемент %s на удаление", entityName)
 		}
 	}
-	return db.exec(ctx, fmt.Sprintf("UPDATE %s SET deletion_mark = $1 WHERE id = $2", table), mark, id)
+	return db.exec(ctx,
+		fmt.Sprintf("UPDATE %s SET deletion_mark = %s WHERE id = %s",
+			table, d.Placeholder(1), d.Placeholder(2)),
+		mark, idArg(d, id))
 }
 
 // RefInfo describes a referencing record.
@@ -45,6 +51,8 @@ type RefInfo struct {
 
 // CheckRefs returns all entities/fields that reference the given object.
 func (db *DB) CheckRefs(ctx context.Context, entityName string, id uuid.UUID, allEntities []*metadata.Entity) []RefInfo {
+	d := db.dialect
+	idA := idArg(d, id)
 	var refs []RefInfo
 	for _, e := range allEntities {
 		for _, f := range e.Fields {
@@ -53,9 +61,10 @@ func (db *DB) CheckRefs(ctx context.Context, entityName string, id uuid.UUID, al
 			}
 			col := metadata.ColumnName(f)
 			var count int
-			db.pool.QueryRow(ctx,
-				fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1", metadata.TableName(e.Name), col),
-				id).Scan(&count)
+			db.QueryRow(ctx,
+				fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = %s",
+					metadata.TableName(e.Name), col, d.Placeholder(1)),
+				idA).Scan(&count)
 			if count > 0 {
 				refs = append(refs, RefInfo{EntityName: e.Name, FieldName: f.Name, Count: count})
 			}
@@ -68,9 +77,9 @@ func (db *DB) CheckRefs(ctx context.Context, entityName string, id uuid.UUID, al
 				col := metadata.ColumnName(f)
 				table := metadata.TablePartTableName(e.Name, tp.Name)
 				var count int
-				db.pool.QueryRow(ctx,
-					fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1", table, col),
-					id).Scan(&count)
+				db.QueryRow(ctx,
+					fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = %s", table, col, d.Placeholder(1)),
+					idA).Scan(&count)
 				if count > 0 {
 					refs = append(refs, RefInfo{
 						EntityName: e.Name + "." + tp.Name,
@@ -91,8 +100,12 @@ func (db *DB) ListMarked(ctx context.Context, entityName string, entity *metadat
 	for _, f := range entity.Fields {
 		cols = append(cols, metadata.ColumnName(f))
 	}
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE deletion_mark = TRUE", strings.Join(cols, ", "), table)
-	rows, err := db.pool.Query(ctx, query)
+	boolTrue := "TRUE"
+	if db.dialect.Name() == "sqlite" {
+		boolTrue = "1"
+	}
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE deletion_mark = %s", strings.Join(cols, ", "), table, boolTrue)
+	rows, err := db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}

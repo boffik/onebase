@@ -18,14 +18,19 @@ import (
 )
 
 type Scheduler struct {
-	cron   *cronlib.Cron
-	jobs   []*metadata.ScheduledJob
-	db     *storage.DB
-	reg    *runtime.Registry
-	interp *interpreter.Interpreter
-	log    *slog.Logger
-	mailer *mailer.Mailer
+	cron    *cronlib.Cron
+	jobs    []*metadata.ScheduledJob
+	db      *storage.DB
+	reg     *runtime.Registry
+	interp  *interpreter.Interpreter
+	log     *slog.Logger
+	mailer  *mailer.Mailer
+	msgSink func(userID, text string)
 }
+
+// SetMessageSink hooks Сообщить() output into an external store (e.g. UI message panel).
+// userID is empty string for scheduler context (anonymous/system).
+func (s *Scheduler) SetMessageSink(f func(userID, text string)) { s.msgSink = f }
 
 func New(db *storage.DB, reg *runtime.Registry, interp *interpreter.Interpreter) *Scheduler {
 	return &Scheduler{
@@ -156,7 +161,11 @@ func (s *Scheduler) runProcessor(ctx context.Context, job *metadata.ScheduledJob
 	var messages []string
 	msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
 		if len(args) > 0 {
-			messages = append(messages, fmt.Sprintf("%v", args[0]))
+			text := fmt.Sprintf("%v", args[0])
+			messages = append(messages, text)
+			if s.msgSink != nil {
+				s.msgSink("", text)
+			}
 		}
 		return nil, nil
 	})

@@ -3,27 +3,31 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 func (db *DB) MigrateConstants(ctx context.Context, consts []*metadata.Constant) error {
-	if _, err := db.pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS _constants (
+	d := db.dialect
+	ddl := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS _constants (
 		name TEXT PRIMARY KEY,
-		value JSONB,
-		updated_at TIMESTAMPTZ DEFAULT now()
-	)`); err != nil {
+		value %s,
+		updated_at %s DEFAULT %s
+	)`, d.TypeJSON(), d.TypeTimestamp(), d.CurrentTimestampTZ())
+	if _, err := db.Exec(ctx, ddl); err != nil {
 		return err
 	}
+	insert := fmt.Sprintf(`
+		INSERT INTO _constants (name, value, updated_at) VALUES (%s, %s%s, %s)
+		ON CONFLICT (name) DO NOTHING
+	`, d.Placeholder(1), d.Placeholder(2), d.JSONCast(), d.Now())
 	for _, c := range consts {
 		if c.Default == "" {
 			continue
 		}
 		raw, _ := json.Marshal(c.Default)
-		if _, err := db.pool.Exec(ctx, `
-			INSERT INTO _constants (name, value, updated_at) VALUES ($1, $2, now())
-			ON CONFLICT (name) DO NOTHING
-		`, c.Name, raw); err != nil {
+		if _, err := db.Exec(ctx, insert, c.Name, raw); err != nil {
 			return err
 		}
 	}
@@ -31,8 +35,10 @@ func (db *DB) MigrateConstants(ctx context.Context, consts []*metadata.Constant)
 }
 
 func (db *DB) GetConstant(ctx context.Context, name string) (any, error) {
+	d := db.dialect
 	var raw []byte
-	if err := db.pool.QueryRow(ctx, `SELECT value FROM _constants WHERE name = $1`, name).Scan(&raw); err != nil {
+	q := fmt.Sprintf(`SELECT value FROM _constants WHERE name = %s`, d.Placeholder(1))
+	if err := db.QueryRow(ctx, q, name).Scan(&raw); err != nil {
 		return nil, err
 	}
 	var val any
@@ -43,19 +49,21 @@ func (db *DB) GetConstant(ctx context.Context, name string) (any, error) {
 }
 
 func (db *DB) SetConstant(ctx context.Context, name string, value any) error {
+	d := db.dialect
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	_, err = db.pool.Exec(ctx, `
-		INSERT INTO _constants (name, value, updated_at) VALUES ($1, $2, now())
-		ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-	`, name, raw)
+	q := fmt.Sprintf(`
+		INSERT INTO _constants (name, value, updated_at) VALUES (%s, %s%s, %s)
+		ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, updated_at = %s
+	`, d.Placeholder(1), d.Placeholder(2), d.JSONCast(), d.Now(), d.Now())
+	_, err = db.Exec(ctx, q, name, raw)
 	return err
 }
 
 func (db *DB) ListConstants(ctx context.Context) (map[string]any, error) {
-	rows, err := db.pool.Query(ctx, `SELECT name, value FROM _constants`)
+	rows, err := db.Query(ctx, `SELECT name, value FROM _constants`)
 	if err != nil {
 		return nil, err
 	}

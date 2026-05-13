@@ -33,7 +33,8 @@ var runCmd = &cobra.Command{
 func init() {
 	runCmd.Flags().String("id", "", "run a base from the ibases registry by ID")
 	runCmd.Flags().String("project", ".", "path to project directory")
-	runCmd.Flags().String("db", "", "database URL (overrides DATABASE_URL env)")
+	runCmd.Flags().String("db", "", "PostgreSQL DSN (overrides DATABASE_URL env)")
+	runCmd.Flags().String("sqlite", "", "path to SQLite database file (alternative to --db)")
 	runCmd.Flags().Int("port", 8080, "HTTP server port")
 	runCmd.Flags().String("config-source", "file", "configuration source: file or database")
 }
@@ -41,7 +42,7 @@ func init() {
 func runServer(cmd *cobra.Command, _ []string) error {
 	baseID, _ := cmd.Flags().GetString("id")
 
-	var dir, dsn, configSource string
+	var dir, dsn, configSource, sqlitePath, dbType string
 	var port int
 
 	// If --id given, load settings from the ibases registry
@@ -58,29 +59,46 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		dsn = base.DB
 		port = base.Port
 		configSource = base.ConfigSource
+		dbType = base.DBType
+		sqlitePath = base.DBPath
 		fmt.Fprintf(os.Stdout, "Запуск базы: %s\n", base.Name)
 	} else {
 		dir, _ = cmd.Flags().GetString("project")
 		dsn = dsnFromFlags(cmd)
+		sqlitePath, _ = cmd.Flags().GetString("sqlite")
 		port, _ = cmd.Flags().GetInt("port")
 		configSource, _ = cmd.Flags().GetString("config-source")
+		if sqlitePath != "" {
+			dbType = "sqlite"
+		}
 	}
 
 	ctx := context.Background()
-	db, err := storage.Connect(ctx, dsn)
+	var (
+		db  *storage.DB
+		err error
+	)
+	if dbType == "sqlite" {
+		if sqlitePath == "" {
+			return fmt.Errorf("--sqlite path is required for sqlite databases")
+		}
+		db, err = storage.ConnectSQLite(ctx, sqlitePath)
+	} else {
+		db, err = storage.Connect(ctx, dsn)
+	}
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	authRepo := auth.NewRepo(db.Pool())
+	authRepo := auth.NewRepo(db)
 	if err := authRepo.EnsureSchema(ctx); err != nil {
 		return fmt.Errorf("auth schema: %w", err)
 	}
 
 	var proj *project.Project
 	if configSource == "database" {
-		cfgRepo := configdb.New(db.Pool())
+		cfgRepo := configdb.New(db)
 		if err := cfgRepo.EnsureSchema(ctx); err != nil {
 			return fmt.Errorf("configdb schema: %w", err)
 		}
@@ -129,6 +147,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 
 	reg := runtime.NewRegistry()
 	reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	reg.LoadModules(proj.Modules)
 	reg.LoadProcessors(proj.Processors)
 	reg.LoadSubsystems(proj.Subsystems)

@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // TxDB is the minimal storage interface needed for DSL transactions.
+// Satisfied by *storage.DB.
 type TxDB interface {
-	BeginTx(ctx context.Context) (pgx.Tx, context.Context, error)
+	BeginTx(ctx context.Context) (storage.Tx, context.Context, error)
 }
 
 // TxState is a mutable context holder for DSL transaction management.
@@ -17,7 +18,7 @@ type TxDB interface {
 // current context — it carries the active transaction if one is open.
 type TxState struct {
 	ctxStack []context.Context // [0]=base, [N]=current (possibly with tx)
-	txs      []pgx.Tx          // active transaction per nesting level
+	txs      []storage.Tx      // active transaction per nesting level
 	saves    []string          // savepoint names for nested transactions
 }
 

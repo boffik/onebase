@@ -201,7 +201,59 @@ details[open] summary::before{content:"▼ "}
 .breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b;margin-bottom:12px;max-width:900px;flex-wrap:wrap}
 .breadcrumb a{color:#3b82f6;text-decoration:none}.breadcrumb a:hover{text-decoration:underline}
 .breadcrumb span{color:#94a3b8;padding:0 2px}
-</style></head><body>
+/* Чтобы контент не накрывало панелью сообщений */
+body{padding-bottom:32px}
+/* Панель сообщений (как «Окно сообщений» в 1С) */
+#ob-msg-bar{position:fixed;left:0;right:0;bottom:0;z-index:300;background:#fff;border-top:1px solid #cbd5e1;box-shadow:0 -2px 8px rgba(0,0,0,.08);font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;transform:translateY(calc(100% - 30px));transition:transform .18s ease}
+#ob-msg-bar.open{transform:translateY(0)}
+#ob-msg-bar.hidden{display:none}
+#ob-msg-head{height:30px;display:flex;align-items:center;padding:0 10px;cursor:pointer;background:#f1f5f9;user-select:none;gap:10px}
+#ob-msg-head .ttl{font-weight:600;color:#334155;flex:1;display:flex;align-items:center;gap:8px}
+#ob-msg-head .cnt{background:#ef4444;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;min-width:18px;text-align:center;display:none}
+#ob-msg-head .cnt.show{display:inline-block}
+#ob-msg-head .arr{color:#64748b;font-size:11px;width:14px;text-align:center}
+#ob-msg-bar.open #ob-msg-head .arr{transform:rotate(180deg)}
+#ob-msg-head button{background:none;border:none;color:#64748b;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px}
+#ob-msg-head button:hover{background:#e2e8f0;color:#1e293b}
+#ob-msg-list{max-height:200px;overflow-y:auto;padding:6px 0;background:#fff}
+#ob-msg-list .it{padding:5px 14px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word}
+#ob-msg-list .it:last-child{border-bottom:none}
+#ob-msg-list .it .t{color:#94a3b8;flex-shrink:0;font-size:11px;padding-top:1px}
+#ob-msg-list .empty{padding:10px 14px;color:#94a3b8;font-style:italic}
+</style>
+<script>
+(function(){
+  if(window.__obMsgInit)return;window.__obMsgInit=true;
+  function init(){
+    if(document.getElementById('ob-msg-bar'))return;
+    var bar=document.createElement('div');bar.id='ob-msg-bar';bar.className='hidden';
+    bar.innerHTML='<div id="ob-msg-head"><span class="ttl">Сообщения <span class="cnt" id="ob-msg-cnt">0</span></span><button type="button" id="ob-msg-clear" title="Очистить">Очистить</button><span class="arr">▲</span></div><div id="ob-msg-list"><div class="empty">Сообщений нет</div></div>';
+    document.body.appendChild(bar);
+    var list=document.getElementById('ob-msg-list'),cnt=document.getElementById('ob-msg-cnt'),head=document.getElementById('ob-msg-head'),btnClear=document.getElementById('ob-msg-clear');
+    var prevSig=sessionStorage.getItem('obMsgSig')||'',prevOpen=sessionStorage.getItem('obMsgOpen')==='1';
+    function fmtTime(ts){try{var d=new Date(ts);var h=String(d.getHours()).padStart(2,'0'),m=String(d.getMinutes()).padStart(2,'0'),s=String(d.getSeconds()).padStart(2,'0');return h+':'+m+':'+s;}catch(e){return '';}}
+    function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+    function render(msgs){
+      if(!msgs||!msgs.length){bar.classList.add('hidden');bar.classList.remove('open');list.innerHTML='<div class="empty">Сообщений нет</div>';cnt.classList.remove('show');prevSig='';sessionStorage.removeItem('obMsgSig');return;}
+      bar.classList.remove('hidden');
+      var html='';for(var i=0;i<msgs.length;i++){var m=msgs[i];html+='<div class="it"><span class="t">'+fmtTime(m.time)+'</span><span>'+escapeHtml(m.text)+'</span></div>';}
+      list.innerHTML=html;cnt.textContent=msgs.length;cnt.classList.add('show');
+      var sig=msgs.length?msgs[msgs.length-1].time+'|'+msgs.length:'';
+      if(sig!==prevSig){bar.classList.add('open');prevOpen=true;sessionStorage.setItem('obMsgOpen','1');}
+      else if(prevOpen){bar.classList.add('open');}
+      prevSig=sig;sessionStorage.setItem('obMsgSig',sig);
+      list.scrollTop=list.scrollHeight;
+    }
+    head.addEventListener('click',function(e){if(e.target===btnClear)return;bar.classList.toggle('open');prevOpen=bar.classList.contains('open');sessionStorage.setItem('obMsgOpen',prevOpen?'1':'0');});
+    btnClear.addEventListener('click',function(e){e.stopPropagation();fetch('/ui/messages/clear',{method:'POST'}).then(function(){render([]);});});
+    function load(){fetch('/ui/messages').then(function(r){return r.json();}).then(function(d){render(d.messages||[]);}).catch(function(){});}
+    load();setInterval(load,3000);
+    document.addEventListener('submit',function(){setTimeout(load,400);},true);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+</head><body>
 {{end}}
 `
 
@@ -549,13 +601,21 @@ const tplForm = `
   {{end}}
   {{if not .IsNew}}
     <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">История</a>
-    {{if .PrintForms}}
+    {{if or .PrintForms .DSLPrintForms .HasPrintProc}}
     <div style="position:relative">
       <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">Печать ▾</button>
       <div style="display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);min-width:160px;z-index:50;margin-top:4px">
         {{range .PrintForms}}
         <a href="/ui/{{lower (str $.Entity.Kind)}}/{{$.Entity.Name}}/{{$.ID}}/print/{{.Name}}" target="_blank"
            style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">{{.Name}}</a>
+        {{end}}
+        {{range .DSLPrintForms}}
+        <a href="/ui/{{lower (str $.Entity.Kind)}}/{{$.Entity.Name}}/{{$.ID}}/print-dsl/{{.Name}}" target="_blank"
+           style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">📋 {{.Name}}</a>
+        {{end}}
+        {{if .HasPrintProc}}
+        <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/print-dsl/_module" target="_blank"
+           style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">📋 Печать (модуль)</a>
         {{end}}
       </div>
     </div>

@@ -58,45 +58,47 @@ type AuditFilter struct {
 
 // EnsureAuditSchema creates _audit table if it does not exist.
 func (db *DB) EnsureAuditSchema(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, `
+	d := db.dialect
+	ddl := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _audit (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			user_id UUID,
+			id %s PRIMARY KEY,
+			user_id %s,
 			user_login TEXT NOT NULL DEFAULT '',
 			action TEXT NOT NULL,
 			entity_kind TEXT NOT NULL DEFAULT '',
 			entity_name TEXT NOT NULL DEFAULT '',
-			record_id UUID,
+			record_id %s,
 			field TEXT NOT NULL DEFAULT '',
-			old_value JSONB,
-			new_value JSONB,
+			old_value %s,
+			new_value %s,
 			ip TEXT NOT NULL DEFAULT '',
-			at TIMESTAMPTZ NOT NULL DEFAULT now()
-		)`)
-	if err != nil {
+			at %s NOT NULL DEFAULT %s
+		)`, d.TypeUUID(), d.TypeUUID(), d.TypeUUID(), d.TypeJSON(), d.TypeJSON(),
+		d.TypeTimestamp(), d.CurrentTimestampTZ())
+	if _, err := db.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("audit: create _audit: %w", err)
 	}
-	_, _ = db.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_record ON _audit (entity_name, record_id)`)
-	_, _ = db.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_user ON _audit (user_id, at DESC)`)
-	_, _ = db.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_at ON _audit (at DESC)`)
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_record ON _audit (entity_name, record_id)`)
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_user ON _audit (user_id, at DESC)`)
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_audit_at ON _audit (at DESC)`)
 	return nil
 }
 
 // Log writes a single audit entry.
 func (db *DB) Log(ctx context.Context, e *AuditEntry) error {
-	var userID *uuid.UUID
+	d := db.dialect
+	var userID any
 	if e.UserID != "" {
 		if id, err := uuid.Parse(e.UserID); err == nil {
-			userID = &id
+			userID = id.String()
 		}
 	}
-	var recordID *uuid.UUID
+	var recordID any
 	if e.RecordID != "" {
 		if id, err := uuid.Parse(e.RecordID); err == nil {
-			recordID = &id
+			recordID = id.String()
 		}
 	}
-	// Use NULL for empty/nil values
 	oldVal := "null"
 	newVal := "null"
 	if e.OldValue != nil {
@@ -110,9 +112,14 @@ func (db *DB) Log(ctx context.Context, e *AuditEntry) error {
 		}
 	}
 
-	err := db.execAudit(ctx, `
-		INSERT INTO _audit (user_id, user_login, action, entity_kind, entity_name, record_id, field, old_value, new_value, ip)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)`,
+	q := fmt.Sprintf(`
+		INSERT INTO _audit (id, user_id, user_login, action, entity_kind, entity_name, record_id, field, old_value, new_value, ip)
+		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s%s, %s%s, %s)`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4),
+		d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8),
+		d.Placeholder(9), d.JSONCast(), d.Placeholder(10), d.JSONCast(), d.Placeholder(11))
+	err := db.execAudit(ctx, q,
+		uuid.NewString(),
 		userID, e.UserLogin, e.Action, e.EntityKind, e.EntityName, recordID, e.Field,
 		oldVal, newVal, e.IP)
 	return err
@@ -120,11 +127,13 @@ func (db *DB) Log(ctx context.Context, e *AuditEntry) error {
 
 // AuditByRecord returns all audit entries for a specific record, newest first.
 func (db *DB) AuditByRecord(ctx context.Context, entityName string, recordID uuid.UUID) ([]*AuditEntry, error) {
-	rows, err := db.pool.Query(ctx, `
+	d := db.dialect
+	q := fmt.Sprintf(`
 		SELECT id, user_id, user_login, action, entity_kind, entity_name, record_id, field, old_value, new_value, ip, at
 		FROM _audit
-		WHERE entity_name = $1 AND record_id = $2
-		ORDER BY at DESC`, entityName, recordID)
+		WHERE entity_name = %s AND record_id = %s
+		ORDER BY at DESC`, d.Placeholder(1), d.Placeholder(2))
+	rows, err := db.Query(ctx, q, entityName, recordID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -134,36 +143,37 @@ func (db *DB) AuditByRecord(ctx context.Context, entityName string, recordID uui
 
 // AuditSearch returns audit entries matching the filter, newest first.
 func (db *DB) AuditSearch(ctx context.Context, filter AuditFilter, limit, offset int) ([]*AuditEntry, error) {
+	d := db.dialect
 	var where []string
 	var args []any
 	idx := 1
 	if filter.UserID != "" {
-		where = append(where, fmt.Sprintf("user_id = $%d", idx))
+		where = append(where, fmt.Sprintf("user_id = %s", d.Placeholder(idx)))
 		args = append(args, filter.UserID)
 		idx++
 	}
 	if filter.UserLogin != "" {
-		where = append(where, fmt.Sprintf("user_login ILIKE $%d", idx))
+		where = append(where, fmt.Sprintf("%s %s %s", d.LowerLike("user_login"), "LIKE", d.LowerLike(d.Placeholder(idx))))
 		args = append(args, "%"+filter.UserLogin+"%")
 		idx++
 	}
 	if filter.Action != "" {
-		where = append(where, fmt.Sprintf("action = $%d", idx))
+		where = append(where, fmt.Sprintf("action = %s", d.Placeholder(idx)))
 		args = append(args, filter.Action)
 		idx++
 	}
 	if filter.EntityName != "" {
-		where = append(where, fmt.Sprintf("entity_name = $%d", idx))
+		where = append(where, fmt.Sprintf("entity_name = %s", d.Placeholder(idx)))
 		args = append(args, filter.EntityName)
 		idx++
 	}
 	if filter.DateFrom != nil {
-		where = append(where, fmt.Sprintf("at >= $%d", idx))
+		where = append(where, fmt.Sprintf("at >= %s", d.Placeholder(idx)))
 		args = append(args, *filter.DateFrom)
 		idx++
 	}
 	if filter.DateTo != nil {
-		where = append(where, fmt.Sprintf("at <= $%d", idx))
+		where = append(where, fmt.Sprintf("at <= %s", d.Placeholder(idx)))
 		args = append(args, *filter.DateTo)
 		idx++
 	}
@@ -172,10 +182,10 @@ func (db *DB) AuditSearch(ctx context.Context, filter AuditFilter, limit, offset
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
-	q += fmt.Sprintf(" ORDER BY at DESC LIMIT $%d OFFSET $%d", idx, idx+1)
+	q += fmt.Sprintf(" ORDER BY at DESC LIMIT %s OFFSET %s", d.Placeholder(idx), d.Placeholder(idx+1))
 	args = append(args, limit, offset)
 
-	rows, err := db.pool.Query(ctx, q, args...)
+	rows, err := db.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -253,14 +263,14 @@ func (db *DB) LogAction(ctx context.Context, action, kind, entityName, recordID,
 	})
 }
 
-type pgxRows interface {
+type auditRowsScanner interface {
 	Next() bool
 	Scan(dest ...any) error
 	Err() error
 	Close()
 }
 
-func scanAuditRows(rows pgxRows) ([]*AuditEntry, error) {
+func scanAuditRows(rows auditRowsScanner) ([]*AuditEntry, error) {
 	defer rows.Close()
 	var entries []*AuditEntry
 	for rows.Next() {
@@ -295,6 +305,6 @@ func scanAuditRows(rows pgxRows) ([]*AuditEntry, error) {
 
 // execAudit runs a statement on the pool directly (audit inserts bypass tx).
 func (db *DB) execAudit(ctx context.Context, sql string, args ...any) error {
-	_, err := db.pool.Exec(ctx, sql, args...)
+	_, err := db.Exec(ctx, sql, args...)
 	return err
 }

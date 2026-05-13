@@ -32,8 +32,21 @@ func (s *Server) URL() string { return "http://" + s.ln.Addr().String() }
 // Done returns a channel that is closed when /quit is received.
 func (s *Server) Done() <-chan struct{} { return s.quit }
 
-// Close shuts down the HTTP server and closes the listener.
+// Close shuts down the HTTP server, closes auth pools and kills any running
+// base processes — otherwise onebase-gui.exe children survive as zombies when
+// the launcher window is closed via the X button.
 func (s *Server) Close() {
+	if s.h != nil && s.h.runner != nil {
+		var ports []int
+		if s.h.store != nil {
+			if bases, err := s.h.store.List(); err == nil {
+				for _, b := range bases {
+					ports = append(ports, b.Port)
+				}
+			}
+		}
+		s.h.runner.StopAll(ports)
+	}
 	CloseAuthPools()
 	if s.httpSrv != nil {
 		s.httpSrv.Close()
@@ -76,10 +89,13 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/processor", s.h.configuratorSaveProcessor)
 		r.Post("/bases/{id}/configurator/new", s.h.configuratorNewObject)
 		r.Post("/bases/{id}/configurator/printform", s.h.configuratorSavePrintForm)
+		r.Post("/bases/{id}/configurator/layout", s.h.configuratorSaveLayout)
 		r.Post("/bases/{id}/configurator/new-printform", s.h.configuratorNewPrintForm)
 		r.Post("/bases/{id}/configurator/app", s.h.configuratorSaveApp)
 		r.Post("/bases/{id}/configurator/subsystem", s.h.configuratorSaveSubsystem)
 		r.Post("/bases/{id}/configurator/migrate", s.h.configuratorMigrate)
+			r.Get("/bases/{id}/configurator/config/export-zip", s.h.configExportZip)
+			r.Post("/bases/{id}/configurator/config/import-zip", s.h.configImportZip)
 		r.Get("/bases/{id}/configurator/admin/users", s.h.cfgAdminUsers)
 		r.Post("/bases/{id}/configurator/admin/users/create", s.h.cfgAdminUserCreate)
 		r.Post("/bases/{id}/configurator/admin/users/delete", s.h.cfgAdminUserDelete)
@@ -91,6 +107,10 @@ func (s *Server) ListenAndServe() error {
 		r.Get("/bases/{id}/configurator/backup/{file}/download", s.h.backupDownload)
 		r.Post("/bases/{id}/configurator/backup/{file}/delete", s.h.backupDelete)
 		r.Post("/bases/{id}/configurator/backup/settings", s.h.backupSettings)
+			r.Post("/bases/{id}/configurator/backup/upload", s.h.backupUpload)
+			r.Post("/bases/{id}/configurator/backup/{file}/restore", s.h.backupRestore)
+			r.Get("/bases/{id}/configurator/backup/full-export", s.h.backupFullExport)
+			r.Post("/bases/{id}/configurator/backup/full-import", s.h.backupFullImport)
 		// Debug proxy — forwards /bases/{id}/debug/{action} to UI server (avoids CORS in webview)
 		r.HandleFunc("/bases/{id}/debug/{action}", s.h.debugProxy) // GET + POST
 	})

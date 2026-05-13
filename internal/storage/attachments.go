@@ -26,30 +26,33 @@ type Attachment struct {
 
 // EnsureAttachmentTable creates the _attachments table if it does not exist.
 func (db *DB) EnsureAttachmentTable(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, `
+	d := db.dialect
+	ddl := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _attachments (
-			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			id          %s PRIMARY KEY,
 			owner_kind  TEXT NOT NULL,
 			owner_name  TEXT NOT NULL,
-			owner_id    UUID NOT NULL,
+			owner_id    %s NOT NULL,
 			filename    TEXT NOT NULL,
 			mime_type   TEXT NOT NULL DEFAULT '',
 			size_bytes  BIGINT NOT NULL DEFAULT 0,
-			uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			uploaded_at %s NOT NULL DEFAULT %s,
 			uploaded_by TEXT NOT NULL DEFAULT ''
-		)
-	`)
+		)`, d.TypeUUID(), d.TypeUUID(), d.TypeTimestamp(), d.CurrentTimestampTZ())
+	_, err := db.Exec(ctx, ddl)
 	return err
 }
 
 // ListAttachments returns all attachments for a given owner.
 func (db *DB) ListAttachments(ctx context.Context, ownerKind, ownerName string, ownerID uuid.UUID) ([]Attachment, error) {
-	rows, err := db.pool.Query(ctx, `
+	d := db.dialect
+	q := fmt.Sprintf(`
 		SELECT id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
 		FROM _attachments
-		WHERE owner_kind=$1 AND owner_name=$2 AND owner_id=$3
+		WHERE owner_kind=%s AND owner_name=%s AND owner_id=%s
 		ORDER BY uploaded_at DESC
-	`, ownerKind, ownerName, ownerID)
+	`, d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+	rows, err := db.Query(ctx, q, ownerKind, ownerName, ownerID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +70,7 @@ func (db *DB) ListAttachments(ctx context.Context, ownerKind, ownerName string, 
 
 // UploadAttachment saves a file to disk and records metadata in the database.
 func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string, ownerID uuid.UUID, filename, mimeType, uploadedBy string, r io.Reader, maxSizeBytes int64) (Attachment, error) {
+	d := db.dialect
 	id := uuid.New()
 	dir := filepath.Join(db.filesDir, ownerName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -90,12 +94,16 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 		return Attachment{}, fmt.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024))
 	}
 
-	var a Attachment
-	err = db.pool.QueryRow(ctx, `
+	q := fmt.Sprintf(`
 		INSERT INTO _attachments (id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
 		RETURNING id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
-	`, id, ownerKind, ownerName, ownerID, filename, mimeType, n, uploadedBy).Scan(
+	`, d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4),
+		d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8))
+	var a Attachment
+	err = db.QueryRow(ctx, q,
+		id.String(), ownerKind, ownerName, ownerID.String(), filename, mimeType, n, uploadedBy,
+	).Scan(
 		&a.ID, &a.OwnerKind, &a.OwnerName, &a.OwnerID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.UploadedAt, &a.UploadedBy,
 	)
 	if err != nil {
@@ -107,11 +115,14 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 
 // GetAttachment returns attachment metadata by ID.
 func (db *DB) GetAttachment(ctx context.Context, id uuid.UUID) (*Attachment, error) {
-	var a Attachment
-	err := db.pool.QueryRow(ctx, `
+	d := db.dialect
+	q := fmt.Sprintf(`
 		SELECT id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
-		FROM _attachments WHERE id=$1
-	`, id).Scan(&a.ID, &a.OwnerKind, &a.OwnerName, &a.OwnerID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.UploadedAt, &a.UploadedBy)
+		FROM _attachments WHERE id=%s
+	`, d.Placeholder(1))
+	var a Attachment
+	err := db.QueryRow(ctx, q, id.String()).Scan(
+		&a.ID, &a.OwnerKind, &a.OwnerName, &a.OwnerID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.UploadedAt, &a.UploadedBy)
 	if err != nil {
 		return nil, err
 	}
@@ -134,12 +145,14 @@ func (db *DB) OpenAttachment(ctx context.Context, id uuid.UUID) (*os.File, *Atta
 
 // DeleteAttachment removes the file from disk and deletes the database record.
 func (db *DB) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
+	d := db.dialect
 	a, err := db.GetAttachment(ctx, id)
 	if err != nil {
 		return err
 	}
 	filePath := filepath.Join(db.filesDir, a.OwnerName, id.String())
-	os.Remove(filePath) // best effort
-	_, err = db.pool.Exec(ctx, `DELETE FROM _attachments WHERE id=$1`, id)
+	os.Remove(filePath)
+	q := fmt.Sprintf(`DELETE FROM _attachments WHERE id=%s`, d.Placeholder(1))
+	_, err = db.Exec(ctx, q, id.String())
 	return err
 }

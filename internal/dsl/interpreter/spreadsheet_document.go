@@ -27,6 +27,7 @@ type SpreadsheetDocumentCell struct {
 	picture    string
 	colSpan    int
 	rowSpan    int
+	parameterName string // for макет: which named parameter fills this cell
 }
 
 // NewSpreadsheetDocumentCell creates a new cell with default formatting.
@@ -44,14 +45,27 @@ func NewSpreadsheetDocumentCell(text string) *SpreadsheetDocumentCell {
 
 // ─── SpreadsheetDocumentArea (ОбластьТабличногоДокумента) ─────────────────────
 
-// SpreadsheetDocumentArea represents a rectangular area of cells.
+// SpreadsheetDocumentArea represents a rectangular area template with its own cells.
+// Each area has independent cell storage — parameters are set in relative coordinates
+// (R1C1 = top-left of area) and copied to the document during Вывести/Присоединить.
 type SpreadsheetDocumentArea struct {
 	document *SpreadsheetDocument
+	cells    map[string]*SpreadsheetDocumentCell // own cell storage (relative coords)
 	top      int
 	left     int
 	bottom   int
 	right    int
 	name     string // optional name for named areas
+}
+
+// areaRows returns the number of rows in the area.
+func (a *SpreadsheetDocumentArea) areaRows() int {
+	return a.bottom - a.top + 1
+}
+
+// areaCols returns the number of columns in the area.
+func (a *SpreadsheetDocumentArea) areaCols() int {
+	return a.right - a.left + 1
 }
 
 func (a *SpreadsheetDocumentArea) CallMethod(name string, args []any) any {
@@ -67,75 +81,222 @@ func (a *SpreadsheetDocumentArea) CallMethod(name string, args []any) any {
 			a.setParameter(strArg(args, 0), args[1])
 		}
 	case "ширина", "width":
-		return float64(a.right - a.left + 1)
+		return float64(a.areaCols())
 	case "высота", "height":
-		return float64(a.bottom - a.top + 1)
+		return float64(a.areaRows())
 	case "очистить", "clear":
 		a.clear()
+	case "объединить", "merge":
+		a.mergeArea()
 	}
 	return nil
 }
 
-// parameters returns a Structure with all cell values in the area.
+// parameters returns an AreaParameters object for accessing area cells via dot notation.
 func (a *SpreadsheetDocumentArea) parameters(args []any) any {
-	s := &Struct{vals: make(map[string]any)}
-	for row := a.top; row <= a.bottom; row++ {
-		for col := a.left; col <= a.right; col++ {
-			if cell := a.document.getCell(row, col); cell != nil {
-				paramName := fmt.Sprintf("R%dC%d", row+1, col+1)
-				s.vals[paramName] = cell.text
-			}
-		}
-	}
-	return s
+	return &AreaParameters{area: a}
 }
 
-// getParameter returns the value of a parameter by name (e.g., "R1C1").
+// getParameter returns the value of a parameter by name (e.g., "R1C1") — relative to area.
 func (a *SpreadsheetDocumentArea) getParameter(name string) any {
-	// Parse R<row>C<col> format
-	if strings.HasPrefix(strings.ToUpper(name), "R") {
-		parts := strings.Split(strings.ToUpper(name), "C")
-		if len(parts) == 2 {
-			row, _ := strconv.Atoi(parts[0][1:])
-			col, _ := strconv.Atoi(parts[1])
-			if cell := a.document.getCell(row-1, col-1); cell != nil {
-				return cell.text
-			}
-		}
+	row, col, ok := parseRC(name)
+	if !ok {
+		return ""
+	}
+	key := fmt.Sprintf("%d,%d", row-1, col-1)
+	if cell, exists := a.cells[key]; exists {
+		return cell.text
 	}
 	return ""
 }
 
-// setParameter sets the value of a parameter (cell) by name.
+// setParameter sets the value of a parameter (cell) by name — relative to area.
 func (a *SpreadsheetDocumentArea) setParameter(name string, value any) {
-	// Parse R<row>C<col> format
-	if strings.HasPrefix(strings.ToUpper(name), "R") {
-		parts := strings.Split(strings.ToUpper(name), "C")
-		if len(parts) == 2 {
-			row, _ := strconv.Atoi(parts[0][1:])
-			col, _ := strconv.Atoi(parts[1])
-			a.document.setCell(row-1, col-1, strArg([]any{value}, 0))
-		}
+	row, col, ok := parseRC(name)
+	if !ok {
+		return
 	}
+	cell := a.areaGetOrCreateCell(row-1, col-1)
+	cell.text = strArg([]any{value}, 0)
+	cell.value = value
 }
 
 // clear removes all content in the area.
 func (a *SpreadsheetDocumentArea) clear() {
-	for row := a.top; row <= a.bottom; row++ {
-		for col := a.left; col <= a.right; col++ {
-			a.document.setCell(row, col, "")
-		}
-	}
+	a.cells = make(map[string]*SpreadsheetDocumentCell)
 }
 
-// Get allows accessing cells via dot notation (Area.R1C1).
+// mergeArea merges all cells in the area into one.
+func (a *SpreadsheetDocumentArea) mergeArea() {
+	cols := a.areaCols()
+	rows := a.areaRows()
+	if rows == 1 && cols == 1 {
+		return
+	}
+	cell := a.areaGetOrCreateCell(0, 0)
+	cell.colSpan = cols
+	cell.rowSpan = rows
+}
+
+// areaGetOrCreateCell gets or creates a cell at relative (row, col) within the area.
+func (a *SpreadsheetDocumentArea) areaGetOrCreateCell(row, col int) *SpreadsheetDocumentCell {
+	key := fmt.Sprintf("%d,%d", row, col)
+	if cell, ok := a.cells[key]; ok {
+		return cell
+	}
+	cell := NewSpreadsheetDocumentCell("")
+	a.cells[key] = cell
+	return cell
+}
+
+// Get allows accessing cells via dot notation (Area.R1C1) or properties (Area.Параметры).
 func (a *SpreadsheetDocumentArea) Get(field string) any {
+	switch strings.ToLower(field) {
+	case "текст", "text":
+		if cell, ok := a.cells["0,0"]; ok {
+			return cell.text
+		}
+		return ""
+	case "параметры", "parameters":
+		return &AreaParameters{area: a}
+	}
 	return a.getParameter(field)
 }
 
-// Set allows setting cells via dot notation (Area.R1C1 = "value").
+// Set allows setting cells via dot notation (Area.R1C1 = "value") or area properties.
 func (a *SpreadsheetDocumentArea) Set(field string, v any) {
-	a.setParameter(field, v)
+	a.setProperty(field, v)
+}
+
+// setProperty handles both R1C1 parameters and named properties on all area cells.
+func (a *SpreadsheetDocumentArea) setProperty(field string, v any) {
+	rows := a.areaRows()
+	cols := a.areaCols()
+	switch strings.ToLower(field) {
+	case "текст", "text":
+		text := strArg([]any{v}, 0)
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				cell := a.areaGetOrCreateCell(r, c)
+				cell.text = text
+				cell.value = text
+			}
+		}
+	case "шрифтжирный", "bold":
+		bold := truthy(v)
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).bold = bold
+			}
+		}
+	case "размершрифта", "fontsize":
+		size := int(toFloatOr0(v))
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).fontSize = size
+			}
+		}
+	case "курсив", "italic":
+		italic := truthy(v)
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).italic = italic
+			}
+		}
+	case "горизонтальноеположение", "horizontalalign", "halign":
+		align := strings.ToLower(strArg([]any{v}, 0))
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).align = align
+			}
+		}
+	case "вертикальноеположение", "verticalalign", "valign":
+		vAlign := strings.ToLower(strArg([]any{v}, 0))
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).vertical = vAlign
+			}
+		}
+	case "цветфона", "backcolor", "backgroundcolor":
+		color := strArg([]any{v}, 0)
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).backColor = color
+			}
+		}
+	case "цветтекста", "textcolor", "fontcolor":
+		color := strArg([]any{v}, 0)
+		for r := 0; r < rows; r++ {
+			for c := 0; c < cols; c++ {
+				a.areaGetOrCreateCell(r, c).textColor = color
+			}
+		}
+	default:
+		// Try R1C1 format
+		a.setParameter(field, v)
+	}
+}
+
+// ─── AreaParameters ────────────────────────────────────────────────────────────
+
+// AreaParameters provides dot-notation access to area cell values (R1C1, R1C2, etc.)
+// Used when DSL code accesses Обл.Параметры.R1C1 = "value".
+type AreaParameters struct {
+	area *SpreadsheetDocumentArea
+}
+
+func (p *AreaParameters) Get(field string) any {
+	// First try named parameter (from макет)
+	for _, cell := range p.area.cells {
+		if cell.parameterName != "" && strings.EqualFold(cell.parameterName, field) {
+			return cell.text
+		}
+	}
+	// Then try R1C1 format
+	return p.area.getParameter(field)
+}
+
+func (p *AreaParameters) Set(field string, v any) {
+	// First try named parameter (from макет)
+	found := false
+	for _, cell := range p.area.cells {
+		if cell.parameterName != "" && strings.EqualFold(cell.parameterName, field) {
+			cell.text = strArg([]any{v}, 0)
+			cell.value = v
+			found = true
+		}
+	}
+	if found {
+		return
+	}
+	// Then try R1C1 format
+	p.area.setParameter(field, v)
+}
+
+func (p *AreaParameters) CallMethod(name string, args []any) any {
+	return nil
+}
+
+// ─── parseRC helper ────────────────────────────────────────────────────────────
+
+// parseRC parses "R<row>C<col>" format and returns 1-based row, col.
+func parseRC(name string) (int, int, bool) {
+	if !strings.HasPrefix(strings.ToUpper(name), "R") {
+		return 0, 0, false
+	}
+	parts := strings.Split(strings.ToUpper(name), "C")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	row, err := strconv.Atoi(parts[0][1:])
+	if err != nil {
+		return 0, 0, false
+	}
+	col, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, false
+	}
+	return row, col, true
 }
 
 // ─── SpreadsheetDocument (ТабличныйДокумент) ─────────────────────────────────
@@ -256,12 +417,16 @@ func (d *SpreadsheetDocument) put(args []any) any {
 		return nil
 	}
 
-	// Copy area content to document starting at current position
-	for row := area.top; row <= area.bottom; row++ {
-		for col := area.left; col <= area.right; col++ {
-			targetRow := d.currentRow + (row - area.top)
-			targetCol := d.currentCol + (col - area.left)
-			if srcCell := area.document.getCell(row, col); srcCell != nil {
+	rows := area.areaRows()
+	cols := area.areaCols()
+
+	// Copy area's own cells to document at current position
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			key := fmt.Sprintf("%d,%d", r, c)
+			if srcCell, exists := area.cells[key]; exists {
+				targetRow := d.currentRow + r
+				targetCol := d.currentCol + c
 				destCell := d.getOrCreateCell(targetRow, targetCol)
 				*destCell = *srcCell
 			}
@@ -269,7 +434,7 @@ func (d *SpreadsheetDocument) put(args []any) any {
 	}
 
 	// Move to next line after the area
-	d.currentRow += (area.bottom - area.top + 1)
+	d.currentRow += rows
 	d.currentCol = 0
 	return nil
 }
@@ -293,12 +458,16 @@ func (d *SpreadsheetDocument) append(args []any) any {
 	}
 	d.currentCol = maxCol
 
-	// Copy area content
-	for row := area.top; row <= area.bottom; row++ {
-		for col := area.left; col <= area.right; col++ {
-			targetRow := d.currentRow + (row - area.top)
-			targetCol := d.currentCol + (col - area.left)
-			if srcCell := area.document.getCell(row, col); srcCell != nil {
+	rows := area.areaRows()
+	cols := area.areaCols()
+
+	// Copy area's own cells
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			key := fmt.Sprintf("%d,%d", r, c)
+			if srcCell, exists := area.cells[key]; exists {
+				targetRow := d.currentRow + r
+				targetCol := d.currentCol + c
 				destCell := d.getOrCreateCell(targetRow, targetCol)
 				*destCell = *srcCell
 			}
@@ -308,18 +477,19 @@ func (d *SpreadsheetDocument) append(args []any) any {
 	return nil
 }
 
-// area returns an area defined by coordinates (top, left, bottom, right).
+// area returns an area defined by coordinates (top, left, bottom, right) — 1-based.
 func (d *SpreadsheetDocument) area(args []any) any {
 	if len(args) < 4 {
 		return nil
 	}
-	top := int(floatArg(args, 0)) - 1     // 1-based to 0-based
+	top := int(floatArg(args, 0)) - 1 // 1-based to 0-based
 	left := int(floatArg(args, 1)) - 1
 	bottom := int(floatArg(args, 2)) - 1
 	right := int(floatArg(args, 3)) - 1
 
 	return &SpreadsheetDocumentArea{
 		document: d,
+		cells:    make(map[string]*SpreadsheetDocumentCell),
 		top:      top,
 		left:     left,
 		bottom:   bottom,
@@ -344,7 +514,11 @@ func (d *SpreadsheetDocument) setAreaName(areaArg any, name string) {
 // show displays the document in a dialog (for now, just prints info).
 func (d *SpreadsheetDocument) show() {
 	d.showMode = true
-	fmt.Printf("ТабличныйДокумент: %d строк x %d колонок\n", d.rowCount, d.colCount)
+}
+
+// HTMLString returns the full HTML representation of the document.
+func (d *SpreadsheetDocument) HTMLString() string {
+	return d.toHTML()
 }
 
 // write saves the document to a file.
@@ -375,7 +549,6 @@ func (d *SpreadsheetDocument) writeHTML(fileName string) any {
 
 // writePDF exports the document as PDF.
 func (d *SpreadsheetDocument) writePDF(fileName string) any {
-	// For now, use HTML as base
 	html := d.toHTML()
 	fmt.Printf("// Запись PDF: %s (используется HTML)\n", fileName)
 	return html
@@ -384,8 +557,10 @@ func (d *SpreadsheetDocument) writePDF(fileName string) any {
 // writeTXT exports the document as plain text.
 func (d *SpreadsheetDocument) writeTXT(fileName string) any {
 	var sb strings.Builder
-	for row := 0; row < d.rowCount; row++ {
-		for col := 0; col < d.colCount; col++ {
+	// Determine actual content bounds
+	maxRow, maxCol := d.contentBounds()
+	for row := 0; row <= maxRow; row++ {
+		for col := 0; col <= maxCol; col++ {
 			if cell := d.getCell(row, col); cell != nil {
 				sb.WriteString(cell.text)
 				sb.WriteString("\t")
@@ -396,6 +571,30 @@ func (d *SpreadsheetDocument) writeTXT(fileName string) any {
 	result := sb.String()
 	fmt.Printf("// Запись файла: %s\n", fileName)
 	return result
+}
+
+// contentBounds returns the max row and col indices that have content.
+func (d *SpreadsheetDocument) contentBounds() (int, int) {
+	maxRow, maxCol := 0, 0
+	for key, cell := range d.cells {
+		if cell == nil {
+			continue
+		}
+		var r, c int
+		fmt.Sscanf(key, "%d,%d", &r, &c)
+		// Consider colspan
+		extent := c + cell.colSpan - 1
+		if cell.colSpan <= 0 {
+			extent = c
+		}
+		if r > maxRow {
+			maxRow = r
+		}
+		if extent > maxCol {
+			maxCol = extent
+		}
+	}
+	return maxRow, maxCol
 }
 
 // toHTML converts the document to HTML representation.
@@ -409,55 +608,76 @@ func (d *SpreadsheetDocument) toHTML() string {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 @page{margin:1cm}
-body{font-family:'Times New Roman',Times,serif;font-size:10pt;color:#000;padding:20px}
-table{width:100%;border-collapse:collapse}
-td,th{border:1px solid #000;padding:2px 4px}
+body{font-family:'Times New Roman',Times,serif;font-size:10pt;color:#000;padding:0}
+.doc-toolbar{position:sticky;top:0;z-index:10;background:#f5f5f5;border-bottom:1px solid #ddd;padding:8px 16px;display:flex;gap:8px;align-items:center;font-family:Arial,sans-serif;font-size:13px}
+.doc-toolbar button{padding:6px 16px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;font-size:13px}
+.doc-toolbar button:hover{background:#e8e8e8}
+.doc-toolbar .btn-back{margin-right:auto}
+.doc-toolbar .btn-print{background:#4a9;color:#fff;border-color:#4a9}
+.doc-toolbar .btn-print:hover{background:#398}
+.doc-content{padding:20px}
+table{border-collapse:collapse;width:auto}
+td,th{border:1px solid #000;padding:2px 4px;empty-cells:show}
+@media print{.doc-toolbar{display:none}.doc-content{padding:0}}
 </style>
 </head>
 <body>
+<div class="doc-toolbar">
+<button class="btn-back" onclick="history.back()">&#8592; Назад</button>
+<button class="btn-print" onclick="window.print()">&#128424; Печать</button>
+<button onclick="window.print()">&#128196; PDF</button>
+</div>
+<div class="doc-content">
 <table>`)
 
-	for row := 0; row < d.rowCount; row++ {
-		hasContent := false
-		for col := 0; col < d.colCount; col++ {
-			if d.getCell(row, col) != nil {
-				hasContent = true
-				break
+	maxRow, maxCol := d.contentBounds()
+
+	// Track cells covered by colspan/rowspan
+	covered := make(map[string]bool)
+
+	for row := 0; row <= maxRow; row++ {
+		sb.WriteString("<tr>")
+		for col := 0; col <= maxCol; col++ {
+			key := fmt.Sprintf("%d,%d", row, col)
+			if covered[key] {
+				continue
 			}
-		}
-		if !hasContent && row > 0 {
-			// Skip empty rows at the end
-			maxRow := 0
-			for r := 0; r < d.rowCount; r++ {
-				for c := 0; c < d.colCount; c++ {
-					if d.getCell(r, c) != nil {
-						if r > maxRow {
-							maxRow = r
-						}
-						break
+
+			cell := d.getCell(row, col)
+			var attrs, style string
+
+			if cell != nil {
+				style = d.buildCellStyle(cell)
+				if cell.colSpan > 1 {
+					attrs += fmt.Sprintf(` colspan="%d"`, cell.colSpan)
+					for c := col + 1; c < col+cell.colSpan; c++ {
+						covered[fmt.Sprintf("%d,%d", row, c)] = true
+					}
+				}
+				if cell.rowSpan > 1 {
+					attrs += fmt.Sprintf(` rowspan="%d"`, cell.rowSpan)
+					for r := row + 1; r < row+cell.rowSpan; r++ {
+						covered[fmt.Sprintf("%d,%d", r, col)] = true
 					}
 				}
 			}
-			if row > maxRow {
-				break
-			}
-		}
 
-		sb.WriteString("<tr>")
-		for col := 0; col < d.colCount; col++ {
-			cell := d.getCell(row, col)
+			text := ""
 			if cell != nil {
-				style := d.buildCellStyle(cell)
-				sb.WriteString(fmt.Sprintf("<td style=\"%s\">%s</td>",
-					style, escapeHTML(cell.text)))
+				text = escapeHTML(cell.text)
+			}
+
+			if attrs != "" || style != "" {
+				sb.WriteString(fmt.Sprintf("<td%s style=\"%s\">%s</td>", attrs, style, text))
 			} else {
-				sb.WriteString("<td></td>")
+				sb.WriteString(fmt.Sprintf("<td>%s</td>", text))
 			}
 		}
 		sb.WriteString("</tr>\n")
 	}
 
 	sb.WriteString(`</table>
+</div>
 </body>
 </html>`)
 	return sb.String()
@@ -496,12 +716,6 @@ func (d *SpreadsheetDocument) buildCellStyle(cell *SpreadsheetDocumentCell) stri
 	}
 	if cell.textColor != "" {
 		styles = append(styles, "color:"+cell.textColor)
-	}
-	if cell.colSpan > 1 {
-		styles = append(styles, fmt.Sprintf("colspan:%d", cell.colSpan))
-	}
-	if cell.rowSpan > 1 {
-		styles = append(styles, fmt.Sprintf("rowspan:%d", cell.rowSpan))
 	}
 
 	return strings.Join(styles, ";")
@@ -543,8 +757,7 @@ func (d *SpreadsheetDocument) checkOutput(args []any) any {
 	if !ok {
 		return true
 	}
-	areaHeight := area.bottom - area.top + 1
-	// Assume page height of 50 rows for now
+	areaHeight := area.areaRows()
 	rowsRemaining := 50 - (d.currentRow % 50)
 	return float64(areaHeight) <= float64(rowsRemaining)
 }
@@ -593,7 +806,7 @@ func (d *SpreadsheetDocument) getPicture(areaArg any) any {
 func (d *SpreadsheetDocument) setColumnWidth(col int, width any) {
 	w := toFloatOr0(width)
 	for row := 0; row < d.rowCount; row++ {
-		cell := d.getOrCreateCell(row, col-1) // 1-based to 0-based
+		cell := d.getOrCreateCell(row, col-1)
 		cell.width = w
 	}
 }
@@ -602,7 +815,7 @@ func (d *SpreadsheetDocument) setColumnWidth(col int, width any) {
 func (d *SpreadsheetDocument) setRowHeight(row int, height any) {
 	h := toFloatOr0(height)
 	for col := 0; col < d.colCount; col++ {
-		cell := d.getOrCreateCell(row-1, col) // 1-based to 0-based
+		cell := d.getOrCreateCell(row-1, col)
 		cell.height = h
 	}
 }
@@ -634,7 +847,6 @@ func (d *SpreadsheetDocument) merge(top, left, bottom, right int) {
 	bottom--
 	right--
 
-	// Set colspan/rowspan on the top-left cell
 	if cell := d.getOrCreateCell(top, left); cell != nil {
 		cell.colSpan = right - left + 1
 		cell.rowSpan = bottom - top + 1
