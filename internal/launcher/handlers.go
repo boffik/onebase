@@ -71,18 +71,38 @@ func (h *handler) newForm(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	dbType := r.FormValue("db_type")
+	if dbType == "" {
+		dbType = "postgres"
+	}
 	b := &Base{
 		Name:         r.FormValue("name"),
 		ConfigSource: r.FormValue("config_source"),
 		Path:         r.FormValue("path"),
 		DB:           r.FormValue("db"),
+		DBType:       dbType,
+		DBPath:       r.FormValue("db_path"),
 		Port:         parsePort(r.FormValue("port")),
 	}
 
-	if b.Name == "" || b.DB == "" {
+	if b.Name == "" {
 		render(w, "page-form", map[string]any{
 			"Title": "onebase — Добавить базу",
-			"IsNew": true, "Base": b, "Error": "Наименование и строка подключения обязательны",
+			"IsNew": true, "Base": b, "Error": "Наименование обязательно",
+		})
+		return
+	}
+	if b.DBType == "sqlite" && b.DBPath == "" {
+		render(w, "page-form", map[string]any{
+			"Title": "onebase — Добавить базу",
+			"IsNew": true, "Base": b, "Error": "Укажите путь к файлу SQLite",
+		})
+		return
+	}
+	if b.DBType != "sqlite" && b.DB == "" {
+		render(w, "page-form", map[string]any{
+			"Title": "onebase — Добавить базу",
+			"IsNew": true, "Base": b, "Error": "Укажите строку подключения к PostgreSQL",
 		})
 		return
 	}
@@ -122,12 +142,16 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
-			render(w, "page-form", map[string]any{
-				"Title": "onebase — Добавить базу",
-				"IsNew": true, "Base": b, "Error": "Не удалось создать БД: " + err.Error(),
-			})
-			return
+		// PG базу создаём только для PG. Для SQLite файл создаётся при первом
+		// ConnectSQLite — здесь делать ничего не надо.
+		if b.DBType != "sqlite" {
+			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
+				render(w, "page-form", map[string]any{
+					"Title": "onebase — Добавить базу",
+					"IsNew": true, "Base": b, "Error": "Не удалось создать БД: " + err.Error(),
+				})
+				return
+			}
 		}
 	}
 
@@ -161,12 +185,30 @@ func (h *handler) update(w http.ResponseWriter, r *http.Request) {
 	b.ConfigSource = r.FormValue("config_source")
 	b.Path = r.FormValue("path")
 	b.DB = r.FormValue("db")
+	if dt := r.FormValue("db_type"); dt != "" {
+		b.DBType = dt
+	}
+	b.DBPath = r.FormValue("db_path")
 	b.Port = parsePort(r.FormValue("port"))
 
-	if b.Name == "" || b.DB == "" {
+	if b.Name == "" {
 		render(w, "page-form", map[string]any{
 			"Title": "onebase — Изменить базу",
-			"IsNew": false, "Base": b, "Error": "Наименование и строка подключения обязательны",
+			"IsNew": false, "Base": b, "Error": "Наименование обязательно",
+		})
+		return
+	}
+	if b.DBType == "sqlite" && b.DBPath == "" {
+		render(w, "page-form", map[string]any{
+			"Title": "onebase — Изменить базу",
+			"IsNew": false, "Base": b, "Error": "Укажите путь к файлу SQLite",
+		})
+		return
+	}
+	if b.DBType != "sqlite" && b.DB == "" {
+		render(w, "page-form", map[string]any{
+			"Title": "onebase — Изменить базу",
+			"IsNew": false, "Base": b, "Error": "Укажите строку подключения к PostgreSQL",
 		})
 		return
 	}

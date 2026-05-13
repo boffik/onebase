@@ -20,6 +20,12 @@ type Base struct {
 	Port         int       `yaml:"port"`
 	Created      time.Time `yaml:"created"`
 	LastOpened   time.Time `yaml:"last_opened,omitempty"`
+
+	// DBType selects the database engine: "postgres" (default, uses DB DSN)
+	// or "sqlite" (uses DBPath to point at a .db file).
+	DBType string `yaml:"db_type,omitempty"`
+	// DBPath is the SQLite database file path (only when DBType="sqlite").
+	DBPath string `yaml:"db_path,omitempty"`
 }
 
 type storeFile struct {

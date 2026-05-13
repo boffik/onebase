@@ -64,7 +64,12 @@ func (r *Runner) Start(base *Base) error {
 		return fmt.Errorf("runner: log: %w", err)
 	}
 
-	args := []string{"run", "--db", base.DB, "--port", fmt.Sprintf("%d", base.Port)}
+	var args []string
+	if base.DBType == "sqlite" {
+		args = []string{"run", "--sqlite", base.DBPath, "--port", fmt.Sprintf("%d", base.Port)}
+	} else {
+		args = []string{"run", "--db", base.DB, "--port", fmt.Sprintf("%d", base.Port)}
+	}
 	if base.ConfigSource == "file" {
 		args = append(args, "--project", base.Path)
 	} else {

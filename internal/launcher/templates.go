@@ -223,7 +223,7 @@ const tplForm = `
         <option value="database" {{if eq .Base.ConfigSource "database"}}selected{{end}}>В базе данных (1С-режим)</option>
         <option value="file" {{if eq .Base.ConfigSource "file"}}selected{{end}}>Файловый (разработка)</option>
       </select>
-      <div class="hint">«В базе данных» — конфигурация хранится в PostgreSQL, редактирование через Выгрузку/Загрузку. «Файловый» — папка на диске под git.</div>
+      <div class="hint">«В базе данных» — конфигурация хранится в БД, редактирование через Выгрузку/Загрузку. «Файловый» — папка на диске под git.</div>
     </div>
     <div class="fg" id="path-row" style="{{if ne .Base.ConfigSource "file"}}display:none{{end}}">
       <label>Путь к папке конфигурации</label>
@@ -231,9 +231,22 @@ const tplForm = `
       <div class="hint">Папка должна содержать catalogs/, documents/ и т.д.</div>
     </div>
     <div class="fg">
+      <label>Тип базы данных</label>
+      <select name="db_type" onchange="toggleDB(this.value)">
+        <option value="postgres" {{if or (eq .Base.DBType "") (eq .Base.DBType "postgres")}}selected{{end}}>Серверная (PostgreSQL)</option>
+        <option value="sqlite" {{if eq .Base.DBType "sqlite"}}selected{{end}}>Файловая (SQLite)</option>
+      </select>
+      <div class="hint">«Файловая» — один файл .db, без установки сервера, идеальна для pet-проектов. «Серверная» — PostgreSQL.</div>
+    </div>
+    <div class="fg" id="dsn-row" style="{{if eq .Base.DBType "sqlite"}}display:none{{end}}">
       <label>Строка подключения к PostgreSQL</label>
-      <input name="db" value="{{.Base.DB}}" required placeholder="postgres://localhost/mydb?sslmode=disable">
+      <input name="db" value="{{.Base.DB}}" placeholder="postgres://localhost/mydb?sslmode=disable">
       <div class="hint">База данных будет создана автоматически, если не существует.</div>
+    </div>
+    <div class="fg" id="dbpath-row" style="{{if ne .Base.DBType "sqlite"}}display:none{{end}}">
+      <label>Путь к файлу SQLite</label>
+      <input name="db_path" value="{{.Base.DBPath}}" placeholder="C:\onebase\mydb.db">
+      <div class="hint">Файл будет создан, если не существует. Расширение .db рекомендуется.</div>
     </div>
     <div class="form-row">
       <div class="fg">
@@ -265,6 +278,12 @@ function togglePath(v) {
     r.style.display = 'none';
     if (sl) sl.textContent = 'Создать пустую конфигурацию (новая база)';
   }
+}
+function toggleDB(v) {
+  var dsn = document.getElementById('dsn-row');
+  var dbp = document.getElementById('dbpath-row');
+  if (v === 'sqlite') { dsn.style.display='none'; dbp.style.display=''; }
+  else { dsn.style.display=''; dbp.style.display='none'; }
 }
 </script>
 </body></html>
