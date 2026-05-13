@@ -1172,23 +1172,28 @@ function qbExtractQuery(text){
   return null;
 }
 
-// Ищет в _mqbSchema источник по совпадению label-prefix (до '(').
+// Ищет в _mqbSchema источник по совпадению label-prefix (до '('), регистронезависимо.
 function qbFindSource(name){
-  var key=String(name||'').split('(')[0].trim();
+  var key=String(name||'').split('(')[0].trim().toLowerCase();
   var found=null;
-  _mqbSchema.forEach(function(s){if(s.label.split('(')[0]===key)found=s;});
+  _mqbSchema.forEach(function(s){
+    if(s.label.split('(')[0].toLowerCase()===key)found=s;
+  });
   return found;
 }
 
 // Разбивает строку по разделителю, игнорируя содержимое скобок.
+// \w в JS НЕ включает кириллицу — поэтому проверка границ слов сделана через qbIsWord.
+function qbIsWord(ch){return /[A-Za-zА-Яа-яЁё0-9_]/.test(ch);}
 function qbSplitTopLevel(s,sep){
   var out=[],depth=0,buf='';
+  var sepU=sep.toUpperCase();
   for(var i=0;i<s.length;i++){
     var ch=s[i];
     if(ch==='(')depth++;
     else if(ch===')')depth--;
-    if(depth===0 && s.substring(i,i+sep.length).toUpperCase()===sep.toUpperCase() &&
-       (i===0||!/\w/.test(s[i-1])) && (i+sep.length===s.length||!/\w/.test(s[i+sep.length]))){
+    if(depth===0 && s.substring(i,i+sep.length).toUpperCase()===sepU &&
+       (i===0||!qbIsWord(s[i-1])) && (i+sep.length===s.length||!qbIsWord(s[i+sep.length]))){
       out.push(buf); buf=''; i+=sep.length-1; continue;
     }
     buf+=ch;
@@ -1198,12 +1203,19 @@ function qbSplitTopLevel(s,sep){
 }
 
 function qbParseToFields(q){
+  try { return qbParseToFieldsImpl(q); }
+  catch(err){ if(window.console)console.warn('[QB] parse failed:',err,'\nquery:',q); }
+}
+
+function qbParseToFieldsImpl(q){
   q=q.replace(/\r/g,'').trim();
 
   // Разбить запрос на секции по ключевым словам верхнего уровня.
-  var kwRe=/\b(ВЫБРАТЬ|ИЗ|ГДЕ|СГРУППИРОВАТЬ\s+ПО|УПОРЯДОЧИТЬ\s+ПО)\b/gi;
+  var kwRe=/(^|[^\wА-Яа-яЁё])(ВЫБРАТЬ|ИЗ|ГДЕ|СГРУППИРОВАТЬ\s+ПО|УПОРЯДОЧИТЬ\s+ПО)(?=[^\wА-Яа-яЁё]|$)/gi;
   var marks=[],mk;
-  while((mk=kwRe.exec(q))){marks.push({k:mk[1].toUpperCase().replace(/\s+/g,' '),i:mk.index,l:mk[0].length});}
+  while((mk=kwRe.exec(q))){
+    marks.push({k:mk[2].toUpperCase().replace(/\s+/g,' '),i:mk.index+mk[1].length,l:mk[2].length});
+  }
   function section(name){
     for(var i=0;i<marks.length;i++){
       if(marks[i].k===name){
@@ -1218,27 +1230,29 @@ function qbParseToFields(q){
   var fromSec=section('ИЗ');
   var whereSec=section('ГДЕ');
   var orderSec=section('УПОРЯДОЧИТЬ ПО');
-  if(!fromSec)return;
+  if(!fromSec){if(window.console)console.warn('[QB] no ИЗ section in:',q);return;}
 
   // FROM: <source>[(...)] [КАК <alias>] [JOIN ...]
-  var joinRe=/\b(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b/i;
+  var joinRe=/(^|[^\wА-Яа-яЁё])(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b/i;
   var firstJ=fromSec.search(joinRe);
   var mainFrom=(firstJ>=0?fromSec.substring(0,firstJ):fromSec).trim();
   var rest=(firstJ>=0?fromSec.substring(firstJ):'').trim();
   var mm=mainFrom.match(/^(\S+(?:\([^)]*\))?)\s*(?:КАК\s+(\S+))?/i);
-  if(!mm)return;
+  if(!mm){if(window.console)console.warn('[QB] cannot parse FROM:',mainFrom);return;}
   var src=qbFindSource(mm[1]);
-  if(!src)return;
+  if(!src){if(window.console)console.warn('[QB] unknown source:',mm[1]);return;}
+
+  // 1) Выбираем источник (mqbSetSrc сбросит alias, vt и поля без префикса)
   document.getElementById('mqb-src').value=src.id;
-  mqbSetSrc(src.id); // сбрасывает _mqbSel в "всё"
+  mqbSetSrc(src.id);
+  // 2) Алиас и параметр виртуальной таблицы
   if(mm[2])document.getElementById('mqb-alias').value=mm[2];
-  // параметр виртуальной таблицы
   var vtm=mm[1].match(/\(([^)]*)\)/);
   if(vtm && src.vtParam){document.getElementById('mqb-vtpv').value=vtm[1];}
 
-  // JOINs
+  // 3) JOINs — добавляем все, заполняем поля
   if(rest){
-    var jRe=/\b(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\s+(\S+(?:\([^)]*\))?)\s+КАК\s+(\S+)\s+ПО\s+([\s\S]*?)(?=\b(?:ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b|$)/gi;
+    var jRe=/(?:^|[^\wА-Яа-яЁё])(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\s+(\S+(?:\([^)]*\))?)\s+КАК\s+(\S+)\s+ПО\s+([\s\S]*?)(?=(?:^|[^\wА-Яа-яЁё])(?:ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b|$)/gi;
     var jm;
     while((jm=jRe.exec(rest))){
       mqbAddJoin();
@@ -1249,10 +1263,12 @@ function qbParseToFields(q){
       lastJ.aliasInp.value=jm[3];
       lastJ.onInp.value=jm[4].trim();
     }
-    mqbRebuild();
   }
 
-  // SELECT — заменить автозаполненный _mqbSel выделением из запроса
+  // 4) Пересобрать список полей с учётом алиаса и JOINов
+  mqbRebuild();
+
+  // 5) SELECT — заменить автозаполненный _mqbSel выделением из запроса
   if(selSec && selSec!=='*'){
     var newSel={};
     qbSplitTopLevel(selSec,',').forEach(function(fld){
@@ -1261,7 +1277,7 @@ function qbParseToFields(q){
       var aggM=fld.match(/^(СУММА|КОЛИЧЕСТВО|МИНИМУМ|МАКСИМУМ|СРЕДНЕЕ)\s*\(([\s\S]+)\)\s*(?:КАК\s+(\S+))?\s*$/i);
       if(aggM){agg=aggM[1].toUpperCase();name=aggM[2].trim();if(aggM[3])alias=aggM[3];}
       else{
-        var aliasM=fld.match(/^(.+?)\s+КАК\s+(\S+)\s*$/i);
+        var aliasM=fld.match(/^([\s\S]+?)\s+КАК\s+(\S+)\s*$/i);
         if(aliasM){name=aliasM[1].trim();alias=aliasM[2];}
       }
       newSel[name]={alias:alias,agg:agg};
@@ -1269,7 +1285,7 @@ function qbParseToFields(q){
     if(Object.keys(newSel).length){_mqbSel=newSel; mqbRenderFields();}
   }
 
-  // WHERE
+  // 6) WHERE
   if(whereSec){
     qbSplitTopLevel(whereSec,'И').forEach(function(c){
       c=c.trim(); if(!c)return;
@@ -1278,23 +1294,23 @@ function qbParseToFields(q){
       var row=rows[rows.length-1];
       var sels=row.querySelectorAll('select');
       var inp=row.querySelector('input[type=text]');
-      var em=c.match(/^(.+?)\s+(НЕ\s+ЕСТЬ\s+ПУСТО|ЕСТЬ\s+ПУСТО)\s*$/i);
+      var em=c.match(/^([\s\S]+?)\s+(НЕ\s+ЕСТЬ\s+ПУСТО|ЕСТЬ\s+ПУСТО)\s*$/i);
       if(em){
         sels[0].value=em[1].trim();
         sels[1].value=em[2].toUpperCase().replace(/\s+/g,' ');
         inp.style.display='none';
         return;
       }
-      var im=c.match(/^(.+?)\s+В\s*\(([\s\S]+)\)\s*$/i);
+      var im=c.match(/^([\s\S]+?)\s+В\s*\(([\s\S]+)\)\s*$/i);
       if(im){sels[0].value=im[1].trim();sels[1].value='В';inp.value=im[2].trim();return;}
-      var pm=c.match(/^(.+?)\s+ПОДОБНО\s+([\s\S]+)$/i);
+      var pm=c.match(/^([\s\S]+?)\s+ПОДОБНО\s+([\s\S]+)$/i);
       if(pm){sels[0].value=pm[1].trim();sels[1].value='ПОДОБНО';inp.value=pm[2].trim();return;}
       var om=c.match(/^([\s\S]+?)\s*(<>|>=|<=|=|>|<)\s*([\s\S]+)$/);
       if(om){sels[0].value=om[1].trim();sels[1].value=om[2];inp.value=om[3].trim();}
     });
   }
 
-  // ORDER BY
+  // 7) ORDER BY
   if(orderSec){
     qbSplitTopLevel(orderSec,',').forEach(function(o){
       o=o.trim(); if(!o)return;
