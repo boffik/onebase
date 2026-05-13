@@ -1163,18 +1163,154 @@ function openQBModalMonaco(editorId){
   document.getElementById('qb-overlay').classList.add('active');
 }
 function qbExtractQuery(text){
+  // 1С-style: Запрос.Текст = "ВЫБРАТЬ ... |..."
   var m=text.match(/Текст\s*=\s*\n?\s*"([\s\S]*?)"/i);
   if(m)return m[1].replace(/\n\s*\|/g,'\n').trim();
-  if(text.match(/^\s*ВЫБРАТЬ\b/i))return text;
-  m=text.match(/(ВЫБРАТЬ[\s\S]*)/i);
-  return m?m[1].trim():null;
+  // прямой текст запроса
+  if(/\bВЫБРАТЬ\b/i.test(text)){
+    var i=text.search(/\bВЫБРАТЬ\b/i);
+    return text.substring(i).replace(/\n\s*\|/g,'\n').replace(/^"|"$/g,'').trim();
+  }
+  return null;
 }
+
+// Ищет в _mqbSchema источник по совпадению label-prefix (до '(').
+function qbFindSource(name){
+  var key=String(name||'').split('(')[0].trim();
+  var found=null;
+  _mqbSchema.forEach(function(s){if(s.label.split('(')[0]===key)found=s;});
+  return found;
+}
+
+// Разбивает строку по разделителю, игнорируя содержимое скобок.
+function qbSplitTopLevel(s,sep){
+  var out=[],depth=0,buf='';
+  for(var i=0;i<s.length;i++){
+    var ch=s[i];
+    if(ch==='(')depth++;
+    else if(ch===')')depth--;
+    if(depth===0 && s.substring(i,i+sep.length).toUpperCase()===sep.toUpperCase() &&
+       (i===0||!/\w/.test(s[i-1])) && (i+sep.length===s.length||!/\w/.test(s[i+sep.length]))){
+      out.push(buf); buf=''; i+=sep.length-1; continue;
+    }
+    buf+=ch;
+  }
+  if(buf.length)out.push(buf);
+  return out;
+}
+
 function qbParseToFields(q){
-  var srcM=q.match(/ИЗ\s+([^\s\n]+)(?:\s+КАК\s+(\S+))?/i);
-  if(!srcM)return;
-  var srcLabel=srcM[1],found=null;
-  _mqbSchema.forEach(function(s){if(s.label===srcLabel||s.label.indexOf(srcLabel)>=0)found=s;});
-  if(found){document.getElementById('mqb-src').value=found.id;mqbSetSrc(found.id);if(srcM[2])document.getElementById('mqb-alias').value=srcM[2];}
+  q=q.replace(/\r/g,'').trim();
+
+  // Разбить запрос на секции по ключевым словам верхнего уровня.
+  var kwRe=/\b(ВЫБРАТЬ|ИЗ|ГДЕ|СГРУППИРОВАТЬ\s+ПО|УПОРЯДОЧИТЬ\s+ПО)\b/gi;
+  var marks=[],mk;
+  while((mk=kwRe.exec(q))){marks.push({k:mk[1].toUpperCase().replace(/\s+/g,' '),i:mk.index,l:mk[0].length});}
+  function section(name){
+    for(var i=0;i<marks.length;i++){
+      if(marks[i].k===name){
+        var st=marks[i].i+marks[i].l;
+        var en=(i+1<marks.length)?marks[i+1].i:q.length;
+        return q.substring(st,en).trim();
+      }
+    }
+    return '';
+  }
+  var selSec=section('ВЫБРАТЬ');
+  var fromSec=section('ИЗ');
+  var whereSec=section('ГДЕ');
+  var orderSec=section('УПОРЯДОЧИТЬ ПО');
+  if(!fromSec)return;
+
+  // FROM: <source>[(...)] [КАК <alias>] [JOIN ...]
+  var joinRe=/\b(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b/i;
+  var firstJ=fromSec.search(joinRe);
+  var mainFrom=(firstJ>=0?fromSec.substring(0,firstJ):fromSec).trim();
+  var rest=(firstJ>=0?fromSec.substring(firstJ):'').trim();
+  var mm=mainFrom.match(/^(\S+(?:\([^)]*\))?)\s*(?:КАК\s+(\S+))?/i);
+  if(!mm)return;
+  var src=qbFindSource(mm[1]);
+  if(!src)return;
+  document.getElementById('mqb-src').value=src.id;
+  mqbSetSrc(src.id); // сбрасывает _mqbSel в "всё"
+  if(mm[2])document.getElementById('mqb-alias').value=mm[2];
+  // параметр виртуальной таблицы
+  var vtm=mm[1].match(/\(([^)]*)\)/);
+  if(vtm && src.vtParam){document.getElementById('mqb-vtpv').value=vtm[1];}
+
+  // JOINs
+  if(rest){
+    var jRe=/\b(ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\s+(\S+(?:\([^)]*\))?)\s+КАК\s+(\S+)\s+ПО\s+([\s\S]*?)(?=\b(?:ЛЕВОЕ|ПРАВОЕ|ВНУТРЕННЕЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\b|$)/gi;
+    var jm;
+    while((jm=jRe.exec(rest))){
+      mqbAddJoin();
+      var lastJ=_mqbJoins[_mqbJoins.length-1];
+      lastJ.typeSel.value=jm[1].toUpperCase();
+      var jSrc=qbFindSource(jm[2]);
+      if(jSrc)lastJ.srcSel.value=jSrc.id;
+      lastJ.aliasInp.value=jm[3];
+      lastJ.onInp.value=jm[4].trim();
+    }
+    mqbRebuild();
+  }
+
+  // SELECT — заменить автозаполненный _mqbSel выделением из запроса
+  if(selSec && selSec!=='*'){
+    var newSel={};
+    qbSplitTopLevel(selSec,',').forEach(function(fld){
+      fld=fld.trim(); if(!fld||fld==='*')return;
+      var agg='',alias='',name=fld;
+      var aggM=fld.match(/^(СУММА|КОЛИЧЕСТВО|МИНИМУМ|МАКСИМУМ|СРЕДНЕЕ)\s*\(([\s\S]+)\)\s*(?:КАК\s+(\S+))?\s*$/i);
+      if(aggM){agg=aggM[1].toUpperCase();name=aggM[2].trim();if(aggM[3])alias=aggM[3];}
+      else{
+        var aliasM=fld.match(/^(.+?)\s+КАК\s+(\S+)\s*$/i);
+        if(aliasM){name=aliasM[1].trim();alias=aliasM[2];}
+      }
+      newSel[name]={alias:alias,agg:agg};
+    });
+    if(Object.keys(newSel).length){_mqbSel=newSel; mqbRenderFields();}
+  }
+
+  // WHERE
+  if(whereSec){
+    qbSplitTopLevel(whereSec,'И').forEach(function(c){
+      c=c.trim(); if(!c)return;
+      mqbAddCond();
+      var rows=document.querySelectorAll('#mqb-conds > div');
+      var row=rows[rows.length-1];
+      var sels=row.querySelectorAll('select');
+      var inp=row.querySelector('input[type=text]');
+      var em=c.match(/^(.+?)\s+(НЕ\s+ЕСТЬ\s+ПУСТО|ЕСТЬ\s+ПУСТО)\s*$/i);
+      if(em){
+        sels[0].value=em[1].trim();
+        sels[1].value=em[2].toUpperCase().replace(/\s+/g,' ');
+        inp.style.display='none';
+        return;
+      }
+      var im=c.match(/^(.+?)\s+В\s*\(([\s\S]+)\)\s*$/i);
+      if(im){sels[0].value=im[1].trim();sels[1].value='В';inp.value=im[2].trim();return;}
+      var pm=c.match(/^(.+?)\s+ПОДОБНО\s+([\s\S]+)$/i);
+      if(pm){sels[0].value=pm[1].trim();sels[1].value='ПОДОБНО';inp.value=pm[2].trim();return;}
+      var om=c.match(/^([\s\S]+?)\s*(<>|>=|<=|=|>|<)\s*([\s\S]+)$/);
+      if(om){sels[0].value=om[1].trim();sels[1].value=om[2];inp.value=om[3].trim();}
+    });
+  }
+
+  // ORDER BY
+  if(orderSec){
+    qbSplitTopLevel(orderSec,',').forEach(function(o){
+      o=o.trim(); if(!o)return;
+      mqbAddOrd();
+      var rows=document.querySelectorAll('#mqb-ords > div');
+      var row=rows[rows.length-1];
+      var sels=row.querySelectorAll('select');
+      var ubM=o.match(/^(.+?)\s+УБЫВ\s*$/i);
+      if(ubM){sels[0].value=ubM[1].trim();sels[1].value='УБЫВ';}
+      else{sels[0].value=o.replace(/\s+ВОЗР\s*$/i,'').trim();sels[1].value='ВОЗР';}
+    });
+  }
+
+  mqbGen();
 }
 
 function mqbSetSrc(id){
