@@ -832,19 +832,17 @@ function applyYaml(n){
   renderLayoutEditor(n);
 }
 function saveLayoutEditor(n){
+  // sync textarea to in-memory state (handles case where blur didn't fire yet)
+  applyYaml(n);
   var src=document.getElementById('yaml-src-'+n);
-  var ta=document.getElementById('ta-mkt-'+n);
-  if(ta&&src){
-    // re-parse from visible textarea to catch manual edits
-    try{var d=jsyaml.parse(ta.value);}catch(e){}
-    if(d){
-      src.value=jsyaml.dump(d,{lineWidth:-1,quotingType:'"'});
-    }else{
-      src.value=ta.value;
-    }
-  }
+  if(!src)return true;
   var s=_led[n];
-  if(s){src.value=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});}
+  if(s){
+    src.value=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
+  }else{
+    var ta=document.getElementById('ta-mkt-'+n);
+    if(ta)src.value=ta.value;
+  }
   return true;
 }
 function addLayoutArea(n){
@@ -896,8 +894,12 @@ function initAllLayoutEditors(){
     setTimeout(function(nn){return function(){initLayoutEditor(nn);};}(n),100);
   }
 }
-if(window._jsyamlReady){console.log('[layout] jsyaml already ready');initAllLayoutEditors();}
-else{console.log('[layout] waiting for jsyaml...');setTimeout(initAllLayoutEditors,500);}
+// js-yaml is embedded inline so always ready; wait for DOM
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',initAllLayoutEditors);
+}else{
+  initAllLayoutEditors();
+}
 
 // ── HTML escape (shared) ────────────────────────────────────────
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -2789,7 +2791,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </div>
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
           <div style="background:#f1f5f9;padding:4px 10px;font-size:11px;font-weight:600;color:#64748b;border-bottom:1px solid #d1d5db">Макет <span style="color:#22c55e">v5</span></div>
-          <div id="veditor-{{.Name}}" style="padding:8px;min-height:300px;overflow:auto"><p style="color:#999;font-size:12px">Загрузка макета...</p></div>
+          <div id="veditor-{{.Name}}" style="padding:8px;min-height:300px;overflow:auto">{{if .LayoutPreview}}{{.LayoutPreview}}{{else}}<p style="color:#999;font-size:12px">Нет данных. Начните редактировать YAML слева.</p>{{end}}</div>
         </div>
       </div>
       <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
