@@ -184,18 +184,21 @@ function startBase(el, id) {
   var btn = el.target || el;
   var origText = btn.textContent || '';
   if (btn.innerHTML) btn.innerHTML = '⏳ Запуск...';
+  var win = window.open('', '_blank');
   fetch('/bases/' + id + '/start', {method:'POST'})
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.url) {
-        window.open(d.url, '_blank');
+        if (win) win.location.href = d.url;
         setTimeout(function(){ window.location.href = '/?sel=' + id; }, 800);
       } else if (d.error) {
+        if (win) win.close();
         alert('Ошибка запуска:\n' + d.error);
         if (btn.innerHTML) btn.innerHTML = origText;
       }
     })
     .catch(function(e){
+      if (win) win.close();
       alert('Ошибка запуска: ' + e);
       if (btn.innerHTML) btn.innerHTML = origText;
     });
