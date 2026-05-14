@@ -210,6 +210,9 @@ func (s *Server) queryConsoleAnalyze(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			col := strings.TrimRight(tokens[len(tokens)-2], "=><!")
+			if dotIdx := strings.LastIndex(col, "."); dotIdx >= 0 {
+				col = col[dotIdx+1:]
+			}
 			if strings.HasSuffix(col, "_id") || colTypeMap[col] == "uuid" {
 				paramTypes[pName] = "uuid"
 			} else if colTypeMap[col] == "number" {

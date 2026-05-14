@@ -161,10 +161,30 @@ function qcToggleBuilder() {
     el.style.display = '';
     btn.style.background = '#3b82f6';
     btn.style.color = '#fff';
+    qcParseQueryToBuilder();
   } else {
     el.style.display = 'none';
     btn.style.background = '#e2e8f0';
     btn.style.color = '#475569';
+  }
+}
+
+function qcParseQueryToBuilder() {
+  var code = window.qcEditor ? window.qcEditor.getValue() : '';
+  if (!code.trim()) return;
+  var fromM = code.match(/\bИЗ\s+([\wА-Яа-яёЁ.]+(?:\([^)]*\))?)/i);
+  if (!fromM) return;
+  var fromExpr = fromM[1].trim().replace(/\(.*$/, '').toLowerCase().trim();
+  var srcId = null;
+  _schema.forEach(function(s) {
+    var lbl = s.label.replace(/\(.*$/, '').toLowerCase().trim();
+    if (lbl === fromExpr) srcId = s.id;
+  });
+  if (!srcId) return;
+  var curSrc = document.getElementById('qb-src').value;
+  if (curSrc !== srcId) {
+    document.getElementById('qb-src').value = srcId;
+    qbSetSource(srcId);
   }
 }
 

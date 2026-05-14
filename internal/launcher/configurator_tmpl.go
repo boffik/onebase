@@ -686,7 +686,7 @@ document.addEventListener('contextmenu', function(ev) {
   var menu = document.createElement('div');
   menu.id = 'cfg-ctx-menu';
   menu.style.cssText = 'position:fixed;left:'+ev.clientX+'px;top:'+ev.clientY+'px;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);padding:4px 0;z-index:9999;min-width:150px';
-  var dname = item.textContent.trim();
+  var dname = did.replace(/^[a-z]+-/, '');
   var delBtn = document.createElement('div');
   delBtn.textContent = 'Удалить «' + dname + '»';
   delBtn.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:13px;color:#dc2626';

@@ -1361,12 +1361,8 @@ func (h *handler) deleteEntityFromDB(ctx context.Context, b *Base, entityName st
 	defer rows.Close()
 	for rows.Next() {
 		var p string
-		if err := rows.Scan(&p); err != nil {
-			continue
-		}
-		// Read content to check name
 		var content []byte
-		if err := db.QueryRow(ctx, `SELECT content FROM _onebase_config WHERE path = `+db.Dialect().Placeholder(1), p).Scan(&content); err != nil {
+		if err := rows.Scan(&p, &content); err != nil {
 			continue
 		}
 		var hdr struct {
