@@ -34,9 +34,11 @@ const (
 	NOT    // НЕ / Not
 	TRUE   // Истина / True
 	FALSE  // Ложь / False
-	TRY    // Попытка / Try
-	EXCEPT // Исключение / Except
-	ENDTRY // КонецПопытки / EndTry
+	TRY      // Попытка / Try
+	EXCEPT   // Исключение / Except
+	ENDTRY   // КонецПопытки / EndTry
+	BREAK    // Прервать / Break
+	CONTINUE // Продолжить / Continue
 
 	ASSIGN // =
 	NEQ    // <>
@@ -115,6 +117,11 @@ var keywords = map[string]Type{
 	"except":       EXCEPT,
 	"конецпопытки": ENDTRY,
 	"endtry":       ENDTRY,
+	// прервать / продолжить
+	"прервать":   BREAK,
+	"break":      BREAK,
+	"продолжить": CONTINUE,
+	"continue":   CONTINUE,
 }
 
 type Token struct {
@@ -194,6 +201,10 @@ func (t Type) String() string {
 		return "Исключение"
 	case ENDTRY:
 		return "КонецПопытки"
+	case BREAK:
+		return "Прервать"
+	case CONTINUE:
+		return "Продолжить"
 	case LBRACKET:
 		return "["
 	case RBRACKET:

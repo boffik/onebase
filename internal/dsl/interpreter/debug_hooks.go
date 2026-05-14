@@ -37,6 +37,10 @@ func getLocation(stmt ast.Stmt) *sourceLocation {
 		file, line, col = s.Tok.File, s.Tok.Line, s.Tok.Col
 	case *ast.VarDecl:
 		file, line, col = s.Name.File, s.Name.Line, s.Name.Col
+	case *ast.BreakStmt:
+		file, line, col = s.Tok.File, s.Tok.Line, s.Tok.Col
+	case *ast.ContinueStmt:
+		file, line, col = s.Tok.File, s.Tok.Line, s.Tok.Col
 	default:
 		return nil
 	}

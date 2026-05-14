@@ -42,6 +42,10 @@ func (p *Parser) consumeSemi() {
 	}
 }
 
+func (p *Parser) expectSemicolon() {
+	p.consumeSemi()
+}
+
 func (p *Parser) ParseProgram() (*ast.Program, error) {
 	prog := &ast.Program{}
 	for p.cur.Type != token.EOF {
@@ -133,6 +137,16 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		return p.parseReturn()
 	case token.TRY:
 		return p.parseTry()
+	case token.BREAK:
+		tok := p.cur
+		p.advance()
+		p.expectSemicolon()
+		return &ast.BreakStmt{Tok: tok}, nil
+	case token.CONTINUE:
+		tok := p.cur
+		p.advance()
+		p.expectSemicolon()
+		return &ast.ContinueStmt{Tok: tok}, nil
 	default:
 		return p.parseExprOrAssign()
 	}

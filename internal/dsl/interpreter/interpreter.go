@@ -20,6 +20,12 @@ type dslReturn struct{ val any }
 // userError — пользовательская ошибка через Error(), перехватывается Попыткой
 type userError struct{ Msg string }
 
+// loopBreak — выход из цикла через Прервать
+type loopBreak struct{}
+
+// loopContinue — переход к следующей итерации через Продолжить
+type loopContinue struct{}
+
 // DebugHook is the interface the interpreter calls for debugging.
 // When nil on the Interpreter, there is zero overhead.
 // Implemented by debugger.ActiveSession.
@@ -109,6 +115,26 @@ func (i *Interpreter) execBlock(stmts []ast.Stmt, e *env) {
 	}
 }
 
+// execLoopBody runs a loop body and returns true if the loop should continue,
+// false if Прервать was encountered. Продолжить causes early return to next iteration.
+func (i *Interpreter) execLoopBody(body []ast.Stmt, e *env) (cont bool) {
+	cont = true
+	defer func() {
+		if r := recover(); r != nil {
+			switch r.(type) {
+			case loopBreak:
+				cont = false
+			case loopContinue:
+				// cont stays true, body was interrupted but loop continues
+			default:
+				panic(r)
+			}
+		}
+	}()
+	i.execBlock(body, e)
+	return
+}
+
 func (i *Interpreter) beforeStmt(s ast.Stmt, e *env) {
 	loc := getLocation(s)
 	if loc == nil {
@@ -167,25 +193,33 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 			for _, row := range items {
 				child := e.child()
 				child.set(v.Var.Literal, &MapThis{M: row})
-				i.execBlock(v.Body, child)
+				if !i.execLoopBody(v.Body, child) {
+					break
+				}
 			}
 		case []any:
 			for _, item := range items {
 				child := e.child()
 				child.set(v.Var.Literal, item)
-				i.execBlock(v.Body, child)
+				if !i.execLoopBody(v.Body, child) {
+					break
+				}
 			}
 		case *Array:
 			for _, item := range items.Iterate() {
 				child := e.child()
 				child.set(v.Var.Literal, item)
-				i.execBlock(v.Body, child)
+				if !i.execLoopBody(v.Body, child) {
+					break
+				}
 			}
 		case *Map:
 			for idx, key := range items.keys {
 				child := e.child()
 				child.set(v.Var.Literal, &KeyValue{Key: key, Value: items.vals[idx]})
-				i.execBlock(v.Body, child)
+				if !i.execLoopBody(v.Body, child) {
+					break
+				}
 			}
 		}
 	case *ast.AssignStmt:
@@ -201,7 +235,9 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 		for counter := start; counter <= end; counter++ {
 			child := e.child()
 			child.set(v.Var.Literal, counter)
-			i.execBlock(v.Body, child)
+			if !i.execLoopBody(v.Body, child) {
+				break
+			}
 		}
 	case *ast.ReturnStmt:
 		var val any
@@ -211,6 +247,10 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 		panic(dslReturn{val: val})
 	case *ast.TryStmt:
 		i.execTry(v, e)
+	case *ast.BreakStmt:
+		panic(loopBreak{})
+	case *ast.ContinueStmt:
+		panic(loopContinue{})
 	}
 }
 
@@ -512,7 +552,7 @@ func (i *Interpreter) execTry(t *ast.TryStmt, e *env) {
 					caught = &ue
 					return
 				}
-				panic(r) // dslReturn, dslStop, Go panic — пробрасываем
+				panic(r) // dslReturn, dslStop, loopBreak, loopContinue — пробрасываем
 			}
 		}()
 		i.execBlock(t.Try, e)

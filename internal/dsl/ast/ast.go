@@ -116,6 +116,12 @@ type TryStmt struct {
 	Except []Stmt
 }
 
+// BreakStmt — Прервать / Break (loop exit)
+type BreakStmt struct{ Tok token.Token }
+
+// ContinueStmt — Продолжить / Continue (skip to next iteration)
+type ContinueStmt struct{ Tok token.Token }
+
 func (*Program) nodeType() string       { return "Program" }
 func (*ProcedureDecl) nodeType() string { return "ProcedureDecl" }
 func (*IfStmt) nodeType() string        { return "IfStmt" }
@@ -136,6 +142,8 @@ func (*IndexExpr) nodeType() string     { return "IndexExpr" }
 func (*BoolLit) nodeType() string       { return "BoolLit" }
 func (*UnaryExpr) nodeType() string     { return "UnaryExpr" }
 func (*TryStmt) nodeType() string       { return "TryStmt" }
+func (*BreakStmt) nodeType() string     { return "BreakStmt" }
+func (*ContinueStmt) nodeType() string  { return "ContinueStmt" }
 
 func (*IfStmt) stmtNode()      {}
 func (*ExprStmt) stmtNode()    {}
@@ -145,6 +153,8 @@ func (*ForEachStmt) stmtNode()    {}
 func (*NumericForStmt) stmtNode() {}
 func (*ReturnStmt) stmtNode()     {}
 func (*TryStmt) stmtNode()        {}
+func (*BreakStmt) stmtNode()      {}
+func (*ContinueStmt) stmtNode()   {}
 
 func (*CallExpr) exprNode()   {}
 func (*MemberExpr) exprNode() {}
