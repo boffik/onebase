@@ -738,7 +738,7 @@ function initLayoutEditor(n){
   try{d=jsyaml.parse(ta.value);}catch(e){}
   if(!d)d={areas:{}};
   _led[n]={data:d,sel:null,init:true};
-  renderLayoutEditor(n);
+  if(Object.keys(d.areas||{}).length>0){renderLayoutEditor(n);}
 }
 function renderLayoutEditor(n){
   var s=_led[n];if(!s)return;
@@ -891,7 +891,7 @@ function initAllLayoutEditors(){
   var tas=document.querySelectorAll('[id^="ta-mkt-"]');
   for(var i=0;i<tas.length;i++){
     var n=tas[i].id.replace('ta-mkt-','');
-    setTimeout(function(nn){return function(){initLayoutEditor(nn);};}(n),100);
+    (function(nn){initLayoutEditor(nn);})(n);
   }
 }
 // js-yaml is embedded inline so always ready; wait for DOM

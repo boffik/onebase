@@ -782,6 +782,9 @@ const tplCodeConsole = `
 
 <div class="card" style="margin-bottom:12px">
 <div id="cc-editor" style="height:320px;border:1px solid #e2e8f0;border-radius:6px"></div>
+<textarea id="cc-textarea" style="display:none;width:100%;height:320px;font-family:'Cascadia Code',Consolas,monospace;font-size:13px;padding:10px;border:1px solid #e2e8f0;border-radius:6px;box-sizing:border-box;resize:vertical;tab-size:2">// Введите DSL-код
+Сообщить("Привет из консоли!");
+</textarea>
 </div>
 
 <div class="card">
@@ -794,39 +797,44 @@ const tplCodeConsole = `
 
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js"
+  onerror="document.getElementById('cc-editor').style.display='none';document.getElementById('cc-textarea').style.display='block'"></script>
 <script>
-require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs' }});
-require(['vs/editor/editor.main'], function() {
-  monaco.languages.register({ id: 'onebase-dsl' });
-  monaco.languages.setMonarchTokensProvider('onebase-dsl', {
-    keywords: ['Процедура','КонецПроцедуры','Функция','КонецФункции','Если','Тогда','ИначеЕсли','Иначе','КонецЕсли','Для','Каждого','Из','Цикл','КонецЦикла','Пока','По','Прервать','Продолжить','Перем','Новый','Попытка','Исключение','КонецПопытки','ВызватьИсключение','Возврат','Экспорт','И','Или','Не','Null','Неопределено','Истина','Ложь'],
-    builtin: ['Сообщить','Строка','Число','Окр','Мин','Макс','Формат','Найти','СтрДлина','Лев','Прав','Сред','ВРег','НРег','СокрЛП','ТипЗнч','Запрос','Массив','ТаблицаЗначений','Соответствие','ЗаписьJSON','ЧтениеJSON'],
-    tokenizer: {
-      root: [
-        [/\/\/.*$/, 'comment'],
-        [/"[^"]*"/, 'string'],
-        [/'[^']*'/, 'string'],
-        [/\d+(\.\d+)?/, 'number'],
-        [/&[А-Яа-яёЁA-Za-z_][А-Яа-яёЁA-Za-z_0-9]*/, 'variable.predefined'],
-        [/[A-Za-zА-Яа-яёЁ_]\w*/, { cases: { '@keywords': 'keyword', '@builtin': 'type', '@default': 'identifier' } }],
-      ]
-    }
+if(typeof require !== 'undefined') {
+  require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs' }});
+  require(['vs/editor/editor.main'], function() {
+    monaco.languages.register({ id: 'onebase-dsl' });
+    monaco.languages.setMonarchTokensProvider('onebase-dsl', {
+      keywords: ['Процедура','КонецПроцедуры','Функция','КонецФункции','Если','Тогда','ИначеЕсли','Иначе','КонецЕсли','Для','Каждого','Из','Цикл','КонецЦикла','Пока','По','Прервать','Продолжить','Перем','Новый','Попытка','Исключение','КонецПопытки','ВызватьИсключение','Возврат','Экспорт','И','Или','Не','Null','Неопределено','Истина','Ложь'],
+      builtin: ['Сообщить','Строка','Число','Окр','Мин','Макс','Формат','Найти','СтрДлина','Лев','Прав','Сред','ВРег','НРег','СокрЛП','ТипЗнч','Запрос','Массив','ТаблицаЗначений','Соответствие','ЗаписьJSON','ЧтениеJSON'],
+      tokenizer: {
+        root: [
+          [/\/\/.*$/, 'comment'],
+          [/"[^"]*"/, 'string'],
+          [/'[^']*'/, 'string'],
+          [/\d+(\.\d+)?/, 'number'],
+          [/&[А-Яа-яёЁA-Za-z_][А-Яа-яёЁA-Za-z_0-9]*/, 'variable.predefined'],
+          [/[A-Za-zА-Яа-яёЁ_]\w*/, { cases: { '@keywords': 'keyword', '@builtin': 'type', '@default': 'identifier' } }],
+        ]
+      }
+    });
+    document.getElementById('cc-editor').style.display = 'block';
+    document.getElementById('cc-textarea').style.display = 'none';
+    window.ccEditor = monaco.editor.create(document.getElementById('cc-editor'), {
+      value: '// Введите DSL-код\nСообщить("Привет из консоли!");\n',
+      language: 'onebase-dsl',
+      theme: 'vs',
+      minimap: { enabled: false },
+      automaticLayout: true,
+      fontSize: 14,
+      lineNumbers: 'on',
+      scrollBeyondLastLine: false
+    });
   });
-  window.ccEditor = monaco.editor.create(document.getElementById('cc-editor'), {
-    value: '// Введите DSL-код\nСообщить("Привет из консоли!");\n',
-    language: 'onebase-dsl',
-    theme: 'vs',
-    minimap: { enabled: false },
-    automaticLayout: true,
-    fontSize: 14,
-    lineNumbers: 'on',
-    scrollBeyondLastLine: false
-  });
-});
+}
 
 function ccExec() {
-  var code = window.ccEditor.getValue();
+  var code = window.ccEditor ? window.ccEditor.getValue() : document.getElementById('cc-textarea').value;
   var out = document.getElementById('cc-output');
   out.innerHTML += '<div style="color:#94a3b8;border-bottom:1px solid #334155;padding:2px 0;font-size:11px">--- ' + new Date().toLocaleTimeString() + ' ---</div>';
   fetch('/ui/dev/code-exec', {
