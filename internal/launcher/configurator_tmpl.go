@@ -299,7 +299,7 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js" crossorigin="anonymous" onerror="window._monacoLoadErr='loader.js failed'"></script>
-<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js" onload="window._jsyamlReady=true;initAllLayoutEditors()" onerror="console.error('js-yaml failed to load')"></script>
 <title>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
 {{template "css" .}}
 </head>
@@ -875,13 +875,15 @@ function delLayoutRow(n,a,ri){
   renderLayoutEditor(n);
 }
 // Init layout editors on load
-(function(){
+function initAllLayoutEditors(){
   var tas=document.querySelectorAll('[id^="ta-mkt-"]');
   for(var i=0;i<tas.length;i++){
     var n=tas[i].id.replace('ta-mkt-','');
     setTimeout(function(nn){return function(){initLayoutEditor(nn);};}(n),100);
   }
-})();
+}
+if(window._jsyamlReady){initAllLayoutEditors();}
+else{setTimeout(initAllLayoutEditors,500);}
 
 // ── HTML escape (shared) ────────────────────────────────────────
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
