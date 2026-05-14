@@ -131,7 +131,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return template.JS(b)
 	},
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -145,11 +145,21 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .sys-menu{position:relative}
 .sys-btn{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:15px;padding:6px 10px;border-radius:5px;line-height:1}
 .sys-btn:hover{background:#334155;color:#fff}
-.sys-drop{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:170px;overflow:hidden;z-index:200}
+.sys-drop{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:170px;padding:4px 0;z-index:200}
 .sys-drop.open{display:block}
-.sys-drop a,.sys-drop button{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;width:100%;text-align:left;background:none;border:none;cursor:pointer;border-bottom:1px solid #f1f5f9}
-.sys-drop a:last-child,.sys-drop button:last-child{border-bottom:none}
-.sys-drop a:hover,.sys-drop button:hover{background:#f1f5f9}
+.sys-drop>a,.sys-drop>button,.sys-drop>.sys-sub>a{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;width:100%;text-align:left;background:none;border:none;cursor:pointer;border-bottom:1px solid #f1f5f9}
+.sys-drop>:last-child>a,.sys-drop>a:last-child,.sys-drop>button:last-child{border-bottom:none}
+.sys-drop>a:hover,.sys-drop>button:hover,.sys-drop>.sys-sub:hover>a{background:#f1f5f9}
+.sys-sub{position:relative}
+.sys-sub>.sys-submenu{display:none;position:absolute;right:100%;top:-4px;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:220px;padding:4px 0;z-index:200}
+.sys-sub:hover>.sys-submenu{display:block}
+.sys-submenu a{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
+.sys-submenu a:last-child{border-bottom:none}
+.sys-submenu a:hover{background:#f1f5f9}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
+.tbl td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155;font-size:13px}
+.tbl tr:hover td{background:#f8fafc}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
@@ -273,8 +283,13 @@ const tplNav = `
       <a href="/ui/delete-marked">Удалить помеченные</a>
       <a href="/ui/admin/cleanup">Очистка регистров</a>
       {{if .IsAdmin}}<a href="/ui/all-functions">Все функции</a>{{end}}
-      <a href="/ui/query-builder">Конструктор запросов</a>
-      <form method="POST" action="/logout"><button type="submit">Выйти</button></form>
+      {{if .IsAdmin}}<div class="sys-sub"><a href="#" onclick="event.preventDefault()">Инструменты разработчика &#9654;</a>
+      <div class="sys-submenu">
+        <a href="/ui/dev/query-console">Консоль запросов</a>
+        <a href="/ui/dev/code-console">Консоль кода</a>
+      </div>
+    </div>{{end}}
+      <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">Выйти</button></form>
     </div>
   </div>
 </header>

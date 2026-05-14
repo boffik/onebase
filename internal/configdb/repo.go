@@ -78,6 +78,11 @@ func (r *Repo) SaveFile(ctx context.Context, path string, content []byte) error 
 	return err
 }
 
+func (r *Repo) DeleteFile(ctx context.Context, path string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM _onebase_config WHERE path = `+r.db.Dialect().Placeholder(1), path)
+	return err
+}
+
 func (r *Repo) ExportToDir(ctx context.Context, dir string) error {
 	rows, err := r.db.Query(ctx, `SELECT path, content FROM _onebase_config ORDER BY path`)
 	if err != nil {

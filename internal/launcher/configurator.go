@@ -25,12 +25,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// cfgUpsert saves/updates a single file in _onebase_config using the correct dialect.
 func cfgUpsert(ctx context.Context, db *storage.DB, path string, content []byte) error {
 	return configdb.New(db).SaveFile(ctx, path, content)
 }
 
-// в”Ђв”Ђ YAML save structs в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── YAML save structs ────────────────────────────────────────────────────────
 
 type saveField struct {
 	Name string `yaml:"name"`
@@ -56,7 +55,7 @@ type saveRegister struct {
 	Attributes []saveField `yaml:"attributes,omitempty"`
 }
 
-// в”Ђв”Ђ view types в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── view types ────────────────────────────────────────────────────────────────
 
 type cfgField struct {
 	Name           string
@@ -87,12 +86,12 @@ type cfgTablePart struct {
 
 type cfgEntity struct {
 	Name             string
-	Kind             string // "РЎРїСЂР°РІРѕС‡РЅРёРє" / "Р”РѕРєСѓРјРµРЅС‚"
+	Kind             string // "Справочник" / "Документ"
 	Posting          bool
 	Fields           []cfgField
 	TableParts       []cfgTablePart
 	Source           string // raw .os content (object module)
-	PostingSource    string // raw .posting.os content (РћР±СЂР°Р±РѕС‚РєР°РџСЂРѕРІРµРґРµРЅРёСЏ)
+	PostingSource    string // raw .posting.os content (ОбработкаПроведения)
 	LinkedPrintForms []cfgPrintForm
 }
 
@@ -203,10 +202,10 @@ type configuratorData struct {
 	BackupSettings backupSettings
 	// session token for passing to UI server (bootstrap auth)
 	SessionToken string
-	// IsRunning: РїСЂРѕС†РµСЃСЃ Р±Р°Р·С‹ Р·Р°РїСѓС‰РµРЅ СЃРµР№С‡Р°СЃ
+	// IsRunning: процесс базы запущен сейчас
 	IsRunning bool
-	// ConfigDirty: РЅР° РґРёСЃРєРµ РµСЃС‚СЊ РёР·РјРµРЅРµРЅРёСЏ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РЅРѕРІРµРµ, С‡РµРј Р·Р°РїСѓСЃРє Р±Р°Р·С‹
-	// вЂ” РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ РЅСѓР¶РЅРѕ РїРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ Р±Р°Р·Сѓ, С‡С‚РѕР±С‹ РїСЂРёРјРµРЅРёС‚СЊ.
+	// ConfigDirty: на диске есть изменения конфигурации новее, чем запуск базы
+	// — пользователю нужно перезапустить базу, чтобы применить.
 	ConfigDirty bool
 }
 
@@ -223,7 +222,7 @@ type backupSettings struct {
 	Directory string
 }
 
-// в”Ђв”Ђ handlers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── handlers ──────────────────────────────────────────────────────────────────
 
 func (h *handler) configuratorPage(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -256,7 +255,7 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 	data.ConvertSrcDir = srcDir
 
 	if srcDir == "" {
-		data.Error = "РЈРєР°Р¶РёС‚Рµ РїСѓС‚СЊ Рє РїР°РїРєРµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё 1РЎ"
+		data.Error = "Укажите путь к папке конфигурации 1С"
 		renderCfg(w, data)
 		return
 	}
@@ -272,7 +271,7 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 
 	rep, err := converter.Convert(converter.Options{SourceDir: srcDir, OutDir: outDir})
 	if err != nil {
-		data.Error = "РћС€РёР±РєР° РєРѕРЅРІРµСЂС‚Р°С†РёРё: " + err.Error()
+		data.Error = "Ошибка конвертации: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -282,7 +281,7 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 		if b.ConfigSource == "database" {
 			db, cerr := OpenDB(r.Context(), b)
 			if cerr != nil {
-				data.Error = "РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє Р‘Р”: " + cerr.Error()
+				data.Error = "Ошибка подключения к БД: " + cerr.Error()
 				renderCfg(w, data)
 				return
 			}
@@ -290,14 +289,14 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 			repo := configdb.New(db)
 			repo.EnsureSchema(r.Context())
 			if cerr := repo.ImportFromDir(r.Context(), outDir); cerr != nil {
-				data.Error = "РћС€РёР±РєР° РёРјРїРѕСЂС‚Р°: " + cerr.Error()
+				data.Error = "Ошибка импорта: " + cerr.Error()
 				renderCfg(w, data)
 				return
 			}
 		} else {
-			// file mode вЂ” copy files into base path
+			// file mode — copy files into base path
 			if cerr := copyDir(outDir, b.Path); cerr != nil {
-				data.Error = "РћС€РёР±РєР° РєРѕРїРёСЂРѕРІР°РЅРёСЏ: " + cerr.Error()
+				data.Error = "Ошибка копирования: " + cerr.Error()
 				renderCfg(w, data)
 				return
 			}
@@ -314,11 +313,11 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 	renderCfg(w, data)
 }
 
-// в”Ђв”Ђ data loading в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── data loading ──────────────────────────────────────────────────────────────
 
-// configDirtyAfter РІРѕР·РІСЂР°С‰Р°РµС‚ true, РµСЃР»Рё РІ rootDir РµСЃС‚СЊ .os/.yaml/.yml С„Р°Р№Р»
-// СЃ mtime РЅРѕРІРµРµ threshold. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґР»СЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ В«Р·РІС‘Р·РґРѕС‡РєРёВ» РІ РґРµСЂРµРІРµ
-// РјРµС‚Р°РґР°РЅРЅС‹С… вЂ” РєРѕРЅС„РёРіСѓСЂР°С†РёСЏ РЅР° РґРёСЃРєРµ РёР·РјРµРЅРёР»Р°СЃСЊ СЃ РјРѕРјРµРЅС‚Р° Р·Р°РїСѓСЃРєР° Р±Р°Р·С‹.
+// configDirtyAfter возвращает true, если в rootDir есть .os/.yaml/.yml файл
+// с mtime новее threshold. Используется для отображения «звёздочки» в дереве
+// метаданных — конфигурация на диске изменилась с момента запуска базы.
 func configDirtyAfter(rootDir string, threshold time.Time) bool {
 	dirty := false
 	filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
@@ -365,7 +364,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	if b.ConfigSource == "database" {
 		db, cerr := OpenDB(ctx, b)
 		if cerr != nil {
-			data.Error = "РќРµС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє Р‘Р”: " + cerr.Error()
+			data.Error = "Нет подключения к БД: " + cerr.Error()
 			return data
 		}
 		defer db.Close()
@@ -374,13 +373,18 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 			data.Error = cerr.Error()
 			return data
 		}
+		empty, _ := repo.IsEmpty(ctx)
+		if empty {
+			data.Error = "Конфигурация не загружена в базу данных. Воспользуйтесь вкладкой «Файлы»."
+			return data
+		}
 		proj, err = project.LoadFromDB(ctx, repo)
 	} else {
 		proj, err = project.Load(b.Path)
 	}
 
 	if err != nil {
-		data.Error = "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РєРѕРЅС„РёРіСѓСЂР°С†РёРё: " + err.Error()
+		data.Error = "Ошибка загрузки конфигурации: " + err.Error()
 		return data
 	}
 	defer proj.Close()
@@ -400,9 +404,9 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 			PostingSource: postingSources[strings.ToLower(e.Name)],
 		}
 		if e.Kind == metadata.KindCatalog {
-			ev.Kind = "РЎРїСЂР°РІРѕС‡РЅРёРє"
+			ev.Kind = "Справочник"
 		} else {
-			ev.Kind = "Р”РѕРєСѓРјРµРЅС‚"
+			ev.Kind = "Документ"
 		}
 		for _, f := range e.Fields {
 			ev.Fields = append(ev.Fields, toCfgField(f))
@@ -476,7 +480,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	for _, e := range data.Entities {
 		data.AllEntityNames = append(data.AllEntityNames, e.Name)
 		e.LinkedPrintForms = pfByDoc[strings.ToLower(e.Name)]
-		if e.Kind == "РЎРїСЂР°РІРѕС‡РЅРёРє" {
+		if e.Kind == "Справочник" {
 			data.Catalogs = append(data.Catalogs, e)
 		} else {
 			data.Docs = append(data.Docs, e)
@@ -623,7 +627,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	return data
 }
 
-// в”Ђв”Ђ query builder schema в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── query builder schema ────────────────────────────────────────────────────
 
 type cfgQBField struct {
 	Name  string `json:"name"`
@@ -658,7 +662,7 @@ func buildQBSchema(d *configuratorData) template.JS {
 	var sources []cfgQBSource
 
 	for _, e := range d.Catalogs {
-		src := cfgQBSource{ID: "catalog:" + e.Name, Label: "РЎРїСЂР°РІРѕС‡РЅРёРє." + e.Name, Group: "РЎРїСЂР°РІРѕС‡РЅРёРєРё"}
+		src := cfgQBSource{ID: "catalog:" + e.Name, Label: "Справочник." + e.Name, Group: "Справочники"}
 		for _, f := range e.Fields {
 			src.Fields = append(src.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
 		}
@@ -666,7 +670,7 @@ func buildQBSchema(d *configuratorData) template.JS {
 	}
 
 	for _, e := range d.Docs {
-		src := cfgQBSource{ID: "document:" + e.Name, Label: "Р”РѕРєСѓРјРµРЅС‚." + e.Name, Group: "Р”РѕРєСѓРјРµРЅС‚С‹"}
+		src := cfgQBSource{ID: "document:" + e.Name, Label: "Документ." + e.Name, Group: "Документы"}
 		for _, f := range e.Fields {
 			src.Fields = append(src.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
 		}
@@ -674,9 +678,9 @@ func buildQBSchema(d *configuratorData) template.JS {
 	}
 
 	for _, reg := range d.Registers {
-		raw := cfgQBSource{ID: "register:" + reg.Name, Label: "Р РµРіРёСЃС‚СЂРќР°РєРѕРїР»РµРЅРёСЏ." + reg.Name, Group: "Р РµРіРёСЃС‚СЂС‹ РЅР°РєРѕРїР»РµРЅРёСЏ"}
-		raw.Fields = append(raw.Fields, cfgQBField{Name: "РїРµСЂРёРѕРґ", Label: "РџРµСЂРёРѕРґ", Type: "date"})
-		raw.Fields = append(raw.Fields, cfgQBField{Name: "РІРёРґ_РґРІРёР¶РµРЅРёСЏ", Label: "Р’РёРґР”РІРёР¶РµРЅРёСЏ", Type: "string"})
+		raw := cfgQBSource{ID: "register:" + reg.Name, Label: "РегистрНакопления." + reg.Name, Group: "Регистры накопления"}
+		raw.Fields = append(raw.Fields, cfgQBField{Name: "период", Label: "Период", Type: "date"})
+		raw.Fields = append(raw.Fields, cfgQBField{Name: "вид_движения", Label: "ВидДвижения", Type: "string"})
 		for _, f := range reg.Dimensions {
 			raw.Fields = append(raw.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
 		}
@@ -685,31 +689,31 @@ func buildQBSchema(d *configuratorData) template.JS {
 		}
 		sources = append(sources, raw)
 
-		bal := cfgQBSource{ID: "vt_balances:" + reg.Name, Label: "Р РµРіРёСЃС‚СЂРќР°РєРѕРїР»РµРЅРёСЏ." + reg.Name + ".РћСЃС‚Р°С‚РєРё(&РќР°Р”Р°С‚Сѓ)", Group: "Р’РёСЂС‚СѓР°Р»СЊРЅС‹Рµ С‚Р°Р±Р»РёС†С‹", VTParam: "&РќР°Р”Р°С‚Сѓ"}
+		bal := cfgQBSource{ID: "vt_balances:" + reg.Name, Label: "РегистрНакопления." + reg.Name + ".Остатки(&НаДату)", Group: "Виртуальные таблицы", VTParam: "&НаДату"}
 		for _, f := range reg.Dimensions {
 			bal.Fields = append(bal.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
 		}
 		for _, f := range reg.Resources {
-			bal.Fields = append(bal.Fields, cfgQBField{Name: f.Name + "РћСЃС‚Р°С‚РѕРє", Label: f.Name + "РћСЃС‚Р°С‚РѕРє", Type: "res"})
+			bal.Fields = append(bal.Fields, cfgQBField{Name: f.Name + "Остаток", Label: f.Name + "Остаток", Type: "res"})
 		}
 		sources = append(sources, bal)
 
-		trn := cfgQBSource{ID: "vt_turnovers:" + reg.Name, Label: "Р РµРіРёСЃС‚СЂРќР°РєРѕРїР»РµРЅРёСЏ." + reg.Name + ".РћР±РѕСЂРѕС‚С‹(&РќР°С‡Р°Р»Рѕ, &РљРѕРЅРµС†)", Group: "Р’РёСЂС‚СѓР°Р»СЊРЅС‹Рµ С‚Р°Р±Р»РёС†С‹", VTParam: "&РќР°С‡Р°Р»Рѕ, &РљРѕРЅРµС†"}
+		trn := cfgQBSource{ID: "vt_turnovers:" + reg.Name, Label: "РегистрНакопления." + reg.Name + ".Обороты(&Начало, &Конец)", Group: "Виртуальные таблицы", VTParam: "&Начало, &Конец"}
 		for _, f := range reg.Dimensions {
 			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
 		}
 		for _, f := range reg.Resources {
-			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "РџСЂРёС…РѕРґ", Label: f.Name + "РџСЂРёС…РѕРґ", Type: "res"})
-			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Р Р°СЃС…РѕРґ", Label: f.Name + "Р Р°СЃС…РѕРґ", Type: "res"})
-			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "РћР±РѕСЂРѕС‚", Label: f.Name + "РћР±РѕСЂРѕС‚", Type: "res"})
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Приход", Label: f.Name + "Приход", Type: "res"})
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Расход", Label: f.Name + "Расход", Type: "res"})
+			trn.Fields = append(trn.Fields, cfgQBField{Name: f.Name + "Оборот", Label: f.Name + "Оборот", Type: "res"})
 		}
 		sources = append(sources, trn)
 	}
 
 	for _, ir := range d.InfoRegisters {
-		raw := cfgQBSource{ID: "inforeg:" + ir.Name, Label: "Р РµРіРёСЃС‚СЂРЎРІРµРґРµРЅРёР№." + ir.Name, Group: "Р РµРіРёСЃС‚СЂС‹ СЃРІРµРґРµРЅРёР№"}
+		raw := cfgQBSource{ID: "inforeg:" + ir.Name, Label: "РегистрСведений." + ir.Name, Group: "Регистры сведений"}
 		if ir.Periodic {
-			raw.Fields = append(raw.Fields, cfgQBField{Name: "period", Label: "РџРµСЂРёРѕРґ", Type: "date"})
+			raw.Fields = append(raw.Fields, cfgQBField{Name: "period", Label: "Период", Type: "date"})
 		}
 		for _, f := range ir.Dimensions {
 			raw.Fields = append(raw.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
@@ -720,7 +724,7 @@ func buildQBSchema(d *configuratorData) template.JS {
 		sources = append(sources, raw)
 
 		if ir.Periodic {
-			sl := cfgQBSource{ID: "vt_slice:" + ir.Name, Label: "Р РµРіРёСЃС‚СЂРЎРІРµРґРµРЅРёР№." + ir.Name + ".РЎСЂРµР·РџРѕСЃР»РµРґРЅРёС…(&РќР°Р”Р°С‚Сѓ)", Group: "Р’РёСЂС‚СѓР°Р»СЊРЅС‹Рµ С‚Р°Р±Р»РёС†С‹", VTParam: "&РќР°Р”Р°С‚Сѓ"}
+			sl := cfgQBSource{ID: "vt_slice:" + ir.Name, Label: "РегистрСведений." + ir.Name + ".СрезПоследних(&НаДату)", Group: "Виртуальные таблицы", VTParam: "&НаДату"}
 			for _, f := range ir.Dimensions {
 				sl.Fields = append(sl.Fields, cfgQBField{Name: f.Name, Label: f.Name, Type: cfgQBFieldType(f.Type)})
 			}
@@ -735,7 +739,7 @@ func buildQBSchema(d *configuratorData) template.JS {
 	return template.JS(b)
 }
 
-// в”Ђв”Ђ helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 func toCfgField(f metadata.Field) cfgField {
 	typ := string(f.Type)
@@ -767,7 +771,7 @@ func readOSSources(dir string) (sources, postingSources map[string]string) {
 			base := strings.ToLower(strings.TrimSuffix(name, ".posting.os"))
 			postingSources[base] = string(raw)
 		} else if strings.HasSuffix(name, ".module.os") || strings.HasSuffix(name, ".proc.os") {
-			// skip вЂ” handled by readModuleAndProcSources
+			// skip — handled by readModuleAndProcSources
 		} else {
 			base := strings.ToLower(strings.TrimSuffix(name, ".os"))
 			sources[base] = string(raw)
@@ -878,7 +882,11 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 			saveErr = err
 		} else {
 			defer db.Close()
-			saveErr = cfgUpsert(r.Context(), db, "src/"+filename, []byte(source))
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "src/"+filename, []byte(source))
 		}
 	} else {
 		srcDir := filepath.Join(b.Path, "src")
@@ -888,7 +896,7 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.ModuleSaved = true
 		data.ModuleSavedEntity = entityName
@@ -896,7 +904,7 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 	renderCfg(w, data)
 }
 
-// entityToFilename converts "РџРѕСЃС‚СѓРїР»РµРЅРёРµРўРѕРІР°СЂРѕРІ" в†’ "РїРѕСЃС‚СѓРїР»РµРЅРёРµРўРѕРІР°СЂРѕРІ.os"
+// entityToFilename converts "ПоступлениеТоваров" → "поступлениеТоваров.os"
 func entityToFilename(name string) string {
 	if name == "" {
 		return ".os"
@@ -906,7 +914,7 @@ func entityToFilename(name string) string {
 	return string(runes) + ".os"
 }
 
-// entityToPostingFilename converts "РџРѕСЃС‚СѓРїР»РµРЅРёРµРўРѕРІР°СЂРѕРІ" в†’ "РїРѕСЃС‚СѓРїР»РµРЅРёРµРўРѕРІР°СЂРѕРІ.posting.os"
+// entityToPostingFilename converts "ПоступлениеТоваров" → "поступлениеТоваров.posting.os"
 func entityToPostingFilename(name string) string {
 	if name == "" {
 		return ".posting.os"
@@ -916,7 +924,7 @@ func entityToPostingFilename(name string) string {
 	return string(runes) + ".posting.os"
 }
 
-// в”Ђв”Ђ field-type save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── field-type save ───────────────────────────────────────────────────────────
 
 func findEntityFilePath(dir, entityName string) (string, error) {
 	for _, sub := range []string{"catalogs", "documents"} {
@@ -1016,7 +1024,11 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 	if err != nil {
 		return err
 	}
-	err = cfgUpsert(ctx, db, targetPath, out)
+	_, err = db.Exec(ctx, `
+		INSERT INTO _onebase_config (path, content, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+	`, targetPath, out)
 	return err
 }
 
@@ -1052,7 +1064,7 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if entityDir == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Р¤Р°Р№Р» СЃСѓС‰РЅРѕСЃС‚Рё РЅРµ РЅР°Р№РґРµРЅ: " + entityName
+		data.Error = "Файл сущности не найден: " + entityName
 		renderCfg(w, data)
 		return
 	}
@@ -1061,7 +1073,7 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	raw, err := os.ReadFile(filePath)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РћС€РёР±РєР° С‡С‚РµРЅРёСЏ: " + err.Error()
+		data.Error = "Ошибка чтения: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -1070,7 +1082,7 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	var doc map[string]any
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РћС€РёР±РєР° YAML: " + err.Error()
+		data.Error = "Ошибка YAML: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -1139,14 +1151,14 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	out, err := yaml.Marshal(doc)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РћС€РёР±РєР° СЃРµСЂРёР°Р»РёР·Р°С†РёРё: " + err.Error()
+		data.Error = "Ошибка сериализации: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if err := os.WriteFile(filePath, out, 0o644); err != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + err.Error()
+		data.Error = "Ошибка сохранения: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -1173,7 +1185,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 
 	// read posting checkbox (only meaningful for documents)
 	var posting *bool
-	if entityKind == "Р”РѕРєСѓРјРµРЅС‚" {
+	if entityKind == "Документ" {
 		v := r.FormValue("posting") == "true"
 		posting = &v
 	}
@@ -1189,7 +1201,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		if typ == "reference" {
 			if ref == "" {
 				data := h.loadCfgData(r.Context(), b, "tree")
-				data.Error = fmt.Sprintf("РџРѕР»Рµ В«%sВ»: РІС‹Р±РµСЂРёС‚Рµ РѕР±СЉРµРєС‚ РґР»СЏ СЃСЃС‹Р»РєРё", name)
+				data.Error = fmt.Sprintf("Поле «%s»: выберите объект для ссылки", name)
 				renderCfg(w, data)
 				return
 			}
@@ -1197,7 +1209,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		}
 		fields = append(fields, saveField{Name: name, Type: typ})
 	}
-	// new fields added via "+ Р”РѕР±Р°РІРёС‚СЊ РїРѕР»Рµ"
+	// new fields added via "+ Добавить поле"
 	for i := 1; i <= 500; i++ {
 		name := strings.TrimSpace(r.FormValue(fmt.Sprintf("new_field.%d.name", i)))
 		if name == "" {
@@ -1208,7 +1220,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		if typ == "reference" {
 			if ref == "" {
 				data := h.loadCfgData(r.Context(), b, "tree")
-				data.Error = fmt.Sprintf("РџРѕР»Рµ В«%sВ»: РІС‹Р±РµСЂРёС‚Рµ РѕР±СЉРµРєС‚ РґР»СЏ СЃСЃС‹Р»РєРё", name)
+				data.Error = fmt.Sprintf("Поле «%s»: выберите объект для ссылки", name)
 				renderCfg(w, data)
 				return
 			}
@@ -1230,7 +1242,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			if typ == "reference" {
 				if ref == "" {
 					data := h.loadCfgData(r.Context(), b, "tree")
-					data.Error = fmt.Sprintf("РџРѕР»Рµ В«%s.%sВ»: РІС‹Р±РµСЂРёС‚Рµ РѕР±СЉРµРєС‚ РґР»СЏ СЃСЃС‹Р»РєРё", tpName, name)
+					data.Error = fmt.Sprintf("Поле «%s.%s»: выберите объект для ссылки", tpName, name)
 					renderCfg(w, data)
 					return
 				}
@@ -1240,7 +1252,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		}
 		tpFields[tpName] = f
 	}
-	// new table parts added via "+ Р”РѕР±Р°РІРёС‚СЊ С‚Р°Р±Р»РёС‡РЅСѓСЋ С‡Р°СЃС‚СЊ"
+	// new table parts added via "+ Добавить табличную часть"
 	for _, tpIdx := range r.Form["new_tp_name"] {
 		tpName := strings.TrimSpace(tpIdx)
 		if tpName == "" {
@@ -1264,7 +1276,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			if typ == "reference" {
 				if ref == "" {
 					data := h.loadCfgData(r.Context(), b, "tree")
-					data.Error = fmt.Sprintf("РџРѕР»Рµ В«%s.%sВ»: РІС‹Р±РµСЂРёС‚Рµ РѕР±СЉРµРєС‚ РґР»СЏ СЃСЃС‹Р»РєРё", tpKey, name)
+					data.Error = fmt.Sprintf("Поле «%s.%s»: выберите объект для ссылки", tpKey, name)
 					renderCfg(w, data)
 					return
 				}
@@ -1284,12 +1296,83 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = entityName
 	}
 	renderCfg(w, data)
+}
+
+func (h *handler) configuratorDeleteEntity(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	entityName := r.FormValue("entity")
+	if entityName == "" {
+		http.Error(w, "entity name required", 400)
+		return
+	}
+
+	var delErr error
+	if b.ConfigSource == "database" {
+		delErr = h.deleteEntityFromDB(r.Context(), b, entityName)
+	} else {
+		delErr = deleteEntityFromFile(b.Path, entityName)
+	}
+
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if delErr != nil {
+		data.Error = "Ошибка удаления: " + delErr.Error()
+	} else {
+		data.Error = "Сущность «" + entityName + "» удалена"
+	}
+	renderCfg(w, data)
+}
+
+func deleteEntityFromFile(dir, entityName string) error {
+	path, err := findEntityFilePath(dir, entityName)
+	if err != nil {
+		return err
+	}
+	return os.Remove(path)
+}
+
+func (h *handler) deleteEntityFromDB(ctx context.Context, b *Base, entityName string) error {
+	db, err := OpenDB(ctx, b)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer db.Close()
+	repo := configdb.New(db)
+
+	// Find and delete the entity YAML file by scanning all catalog/document paths
+	rows, err := db.Query(ctx,
+		`SELECT path, content FROM _onebase_config WHERE path LIKE 'catalogs/%.yaml' OR path LIKE 'documents/%.yaml'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p string
+		var content []byte
+		if err := rows.Scan(&p, &content); err != nil {
+			continue
+		}
+		var hdr struct {
+			Name string `yaml:"name"`
+		}
+		if yaml.Unmarshal(content, &hdr) == nil && hdr.Name == entityName {
+			return repo.DeleteFile(ctx, p)
+		}
+	}
+	return fmt.Errorf("сущность %q не найдена", entityName)
 }
 
 func renderCfg(w http.ResponseWriter, data *configuratorData) {
@@ -1299,7 +1382,7 @@ func renderCfg(w http.ResponseWriter, data *configuratorData) {
 	}
 }
 
-// в”Ђв”Ђ Register field save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Register field save ───────────────────────────────────────────────────────
 
 func findRegisterFilePath(dir, regName string) (string, error) {
 	items, _ := os.ReadDir(filepath.Join(dir, "registers"))
@@ -1386,7 +1469,11 @@ func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName s
 	if err != nil {
 		return err
 	}
-	err = cfgUpsert(ctx, db, targetPath, out)
+	_, err = db.Exec(ctx, `
+		INSERT INTO _onebase_config (path, content, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+	`, targetPath, out)
 	return err
 }
 
@@ -1432,7 +1519,7 @@ func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = regName
@@ -1440,7 +1527,7 @@ func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.
 	renderCfg(w, data)
 }
 
-// в”Ђв”Ђ New object creation в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── New object creation ───────────────────────────────────────────────────────
 
 func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1458,7 +1545,7 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 
 	if name == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РЈРєР°Р¶РёС‚Рµ РёРјСЏ РѕР±СЉРµРєС‚Р°"
+		data.Error = "Укажите имя объекта"
 		renderCfg(w, data)
 		return
 	}
@@ -1466,7 +1553,7 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 	subdir, content := newObjectContent(kind, name)
 	if subdir == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РќРµРёР·РІРµСЃС‚РЅС‹Р№ С‚РёРї РѕР±СЉРµРєС‚Р°: " + kind
+		data.Error = "Неизвестный тип объекта: " + kind
 		renderCfg(w, data)
 		return
 	}
@@ -1483,7 +1570,11 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 			repo := configdb.New(db)
 			repo.EnsureSchema(r.Context())
 			path := subdir + "/" + filename
-			saveErr = cfgUpsert(r.Context(), db, path, []byte(content))
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, path, []byte(content))
 		}
 	} else {
 		dir := filepath.Join(b.Path, subdir)
@@ -1493,25 +1584,28 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 
 	if saveErr != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка создания: " + saveErr.Error()
 		renderCfg(w, data)
 		return
 	}
-	http.Redirect(w, r, "/bases/"+b.ID+"/configurator?tab=tree", http.StatusFound)
+	data := h.loadCfgData(r.Context(), b, "tree")
+	data.FieldsSavedEntity = name
+	data.FieldsSaved = true
+	renderCfg(w, data)
 }
 
 func newObjectContent(kind, name string) (subdir, content string) {
 	switch kind {
 	case "catalog":
-		return "catalogs", "name: " + name + "\nfields:\n  - name: РќР°РёРјРµРЅРѕРІР°РЅРёРµ\n    type: string\n"
+		return "catalogs", "name: " + name + "\nfields:\n  - name: Наименование\n    type: string\n"
 	case "document":
-		return "documents", "name: " + name + "\nfields:\n  - name: Р”Р°С‚Р°\n    type: date\n"
+		return "documents", "name: " + name + "\nfields:\n  - name: Дата\n    type: date\n"
 	case "register":
-		return "registers", "name: " + name + "\ndimensions:\n  - name: РР·РјРµСЂРµРЅРёРµ1\n    type: string\nresources:\n  - name: Р РµСЃСѓСЂСЃ1\n    type: number\n"
+		return "registers", "name: " + name + "\ndimensions:\n  - name: Измерение1\n    type: string\nresources:\n  - name: Ресурс1\n    type: number\n"
 	case "inforeg":
-		return "inforegs", "name: " + name + "\nperiodic: false\ndimensions:\n  - name: РљР»СЋС‡\n    type: string\nresources:\n  - name: Р—РЅР°С‡РµРЅРёРµ\n    type: string\n"
+		return "inforegs", "name: " + name + "\nperiodic: false\ndimensions:\n  - name: Ключ\n    type: string\nresources:\n  - name: Значение\n    type: string\n"
 	case "enum":
-		return "enums", "name: " + name + "\nvalues:\n  - Р—РЅР°С‡РµРЅРёРµ1\n  - Р—РЅР°С‡РµРЅРёРµ2\n"
+		return "enums", "name: " + name + "\nvalues:\n  - Значение1\n  - Значение2\n"
 	case "subsystem":
 		return "subsystems", "name: " + name + "\ntitle: " + name + "\norder: 10\ncontents:\n  catalogs: []\n  documents: []\n  registers: []\n"
 	}
@@ -1522,7 +1616,7 @@ func nameToFilename(name string) string {
 	return strings.ToLower(name)
 }
 
-// в”Ђв”Ђ Enum save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Enum save ─────────────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1556,7 +1650,11 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 		} else {
 			defer db.Close()
 			path := "enums/" + nameToFilename(enumName) + ".yaml"
-			saveErr = cfgUpsert(r.Context(), db, path, out)
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, path, out)
 		}
 	} else {
 		dir := filepath.Join(b.Path, "enums")
@@ -1581,7 +1679,7 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = enumName
@@ -1589,7 +1687,7 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 	renderCfg(w, data)
 }
 
-// в”Ђв”Ђ Constant save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Constant save ─────────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1665,7 +1763,11 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 			rows.Close()
 			if targetPath != "" {
 				if out, err := updateConstantsFile(targetContent); err == nil {
-					saveErr = cfgUpsert(r.Context(), db, targetPath, out)
+					_, saveErr = db.Exec(r.Context(), `
+						INSERT INTO _onebase_config (path, content, updated_at)
+						VALUES ($1, $2, now())
+						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+					`, targetPath, out)
 				}
 			}
 		}
@@ -1704,7 +1806,7 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = constName
@@ -1712,7 +1814,7 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 	renderCfg(w, data)
 }
 
-// в”Ђв”Ђ Report save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Report save ───────────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1787,7 +1889,11 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 			rows.Close()
 			if targetPath != "" {
 				if out, err := updateReportFile(targetContent); err == nil {
-					saveErr = cfgUpsert(r.Context(), db, targetPath, out)
+					_, saveErr = db.Exec(r.Context(), `
+						INSERT INTO _onebase_config (path, content, updated_at)
+						VALUES ($1, $2, now())
+						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+					`, targetPath, out)
 				}
 			}
 		}
@@ -1816,7 +1922,7 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = repName
@@ -1824,7 +1930,7 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 	renderCfg(w, data)
 }
 
-// в”Ђв”Ђ Common module save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Common module save ────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1845,7 +1951,11 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 			saveErr = err
 		} else {
 			defer db.Close()
-			saveErr = cfgUpsert(r.Context(), db, "src/"+filename, []byte(source))
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "src/"+filename, []byte(source))
 		}
 	} else {
 		srcDir := filepath.Join(b.Path, "src")
@@ -1855,7 +1965,7 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.ModuleSaved = true
 		data.ModuleSavedEntity = moduleName
@@ -1872,7 +1982,7 @@ func moduleNameToFilename(name string) string {
 	return string(runes) + ".module.os"
 }
 
-// в”Ђв”Ђ Processor save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Processor save ────────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1918,11 +2028,19 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			if err := cfgUpsert(r.Context(), db, yamlFilename, yamlData); err != nil {
+			if _, err := db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, yamlFilename, yamlData); err != nil {
 				saveErr = err
 			}
 			if saveErr == nil {
-				saveErr = cfgUpsert(r.Context(), db, srcFilename, []byte(source))
+				_, saveErr = db.Exec(r.Context(), `
+					INSERT INTO _onebase_config (path, content, updated_at)
+					VALUES ($1, $2, now())
+					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				`, srcFilename, []byte(source))
 			}
 		}
 	} else {
@@ -1940,7 +2058,7 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = procName
@@ -1957,7 +2075,7 @@ func processorSrcFilename(name string) string {
 	return string(runes) + ".proc.os"
 }
 
-// в”Ђв”Ђ Print form save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Print form save ───────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -1971,7 +2089,7 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 
 	if filename == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РРјСЏ С„Р°Р№Р»Р° РїРµС‡Р°С‚РЅРѕР№ С„РѕСЂРјС‹ РЅРµ СѓРєР°Р·Р°РЅРѕ"
+		data.Error = "Имя файла печатной формы не указано"
 		renderCfg(w, data)
 		return
 	}
@@ -1983,7 +2101,11 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			saveErr = cfgUpsert(r.Context(), db, "printforms/"+filename, []byte(source))
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "printforms/"+filename, []byte(source))
 		}
 	} else {
 		pfDir := filepath.Join(b.Path, "printforms")
@@ -2005,7 +2127,7 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = pfName
@@ -2025,7 +2147,7 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 
 	if name == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РРјСЏ РїРµС‡Р°С‚РЅРѕР№ С„РѕСЂРјС‹ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ"
+		data.Error = "Имя печатной формы обязательно"
 		renderCfg(w, data)
 		return
 	}
@@ -2034,7 +2156,7 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 	runes[0] = unicode.ToLower(runes[0])
 	filename := string(runes) + ".yaml"
 
-	source := fmt.Sprintf("name: %s\ndocument: %s\ntitle: \"{{РќРѕРјРµСЂ}} РѕС‚ {{Р”Р°С‚Р° | date}}\"\n\nheader: |\n  ## %s\n\ntable:\n  source: РўРѕРІР°СЂС‹\n  columns:\n    - field: \"@row\"\n      label: \"в„–\"\n      width: 36px\n      align: center\n", name, document, name)
+	source := fmt.Sprintf("name: %s\ndocument: %s\ntitle: \"{{Номер}} от {{Дата | date}}\"\n\nheader: |\n  ## %s\n\ntable:\n  source: Товары\n  columns:\n    - field: \"@row\"\n      label: \"№\"\n      width: 36px\n      align: center\n", name, document, name)
 
 	var saveErr error
 	if b.ConfigSource == "database" {
@@ -2043,7 +2165,11 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			saveErr = cfgUpsert(r.Context(), db, "printforms/"+filename, []byte(source))
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "printforms/"+filename, []byte(source))
 		}
 	} else {
 		pfDir := filepath.Join(b.Path, "printforms")
@@ -2056,7 +2182,7 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка создания: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = name
@@ -2088,7 +2214,11 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			saveErr = cfgUpsert(r.Context(), db, "printforms/"+filename, []byte(source))
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "printforms/"+filename, []byte(source))
 		}
 	} else {
 		pfDir := filepath.Join(b.Path, "printforms")
@@ -2121,7 +2251,7 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РјР°РєРµС‚Р°: " + saveErr.Error()
+		data.Error = "Ошибка сохранения макета: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = layoutName
@@ -2130,7 +2260,7 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 }
 
 
-// в”Ђв”Ђ Subsystem save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── Subsystem save ──────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -2202,7 +2332,7 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if err := os.WriteFile(targetFile, out, 0o644); err != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + err.Error()
+		data.Error = "Ошибка сохранения: " + err.Error()
 		renderCfg(w, data)
 		return
 	}
@@ -2217,7 +2347,7 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	renderCfg(w, fresh)
 }
 
-// в”Ђв”Ђ App config save в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── App config save ───────────────────────────────────────────────────────────
 
 func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
@@ -2230,7 +2360,7 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	newVersion := strings.TrimSpace(r.FormValue("app_version"))
 	if newName == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "РРјСЏ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј"
+		data.Error = "Имя конфигурации не может быть пустым"
 		renderCfg(w, data)
 		return
 	}
@@ -2248,7 +2378,11 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			saveErr = cfgUpsert(r.Context(), db, "config/app.yaml", out)
+			_, saveErr = db.Exec(r.Context(), `
+				INSERT INTO _onebase_config (path, content, updated_at)
+				VALUES ($1, $2, now())
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+			`, "config/app.yaml", out)
 		}
 	} else {
 		dir := filepath.Join(b.Path, "config")
@@ -2258,7 +2392,7 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + saveErr.Error()
+		data.Error = "Ошибка сохранения: " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "__app__"
@@ -2266,7 +2400,7 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	renderCfg(w, data)
 }
 
-// в”Ђв”Ђ debug proxy в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ── debug proxy ──────────────────────────────────────────────────────────────
 
 // debugProxy forwards debug API requests from the configurator (launcher server)
 // to the UI server, avoiding CORS issues in the webview.

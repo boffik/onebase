@@ -123,6 +123,13 @@ func (s *Server) Mount(r chi.Router) {
 	// Query builder
 	r.Get("/ui/query-builder", s.queryBuilder)
 
+	// Developer tools
+	r.Get("/ui/dev/query-console", s.queryConsolePage)
+	r.Post("/ui/dev/query-exec", s.queryConsoleExec)
+	r.Post("/ui/dev/query-analyze", s.queryConsoleAnalyze)
+	r.Get("/ui/dev/code-console", s.codeConsolePage)
+	r.Post("/ui/dev/code-exec", s.codeConsoleExec)
+
 	// All functions (admin only)
 	r.Get("/ui/all-functions", s.allFunctions)
 
