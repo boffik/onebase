@@ -671,6 +671,42 @@ function selItem(el) {
   var panel = document.getElementById(el.dataset.id);
   if (panel) panel.classList.add('active');
 }
+// Context menu for tree items
+document.addEventListener('contextmenu', function(ev) {
+  var item = ev.target.closest('.cfg-item');
+  if (!item) return;
+  var did = item.dataset.id || '';
+  if (did.indexOf('e-') !== 0 && did.indexOf('r-') !== 0 && did.indexOf('ir-') !== 0 &&
+      did.indexOf('en-') !== 0 && did.indexOf('rep-') !== 0 && did.indexOf('mod-') !== 0 &&
+      did.indexOf('proc-') !== 0 && did.indexOf('pf-') !== 0 && did.indexOf('sub-') !== 0) return;
+  ev.preventDefault();
+  selItem(item);
+  var existing = document.getElementById('cfg-ctx-menu');
+  if (existing) existing.remove();
+  var menu = document.createElement('div');
+  menu.id = 'cfg-ctx-menu';
+  menu.style.cssText = 'position:fixed;left:'+ev.clientX+'px;top:'+ev.clientY+'px;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);padding:4px 0;z-index:9999;min-width:150px';
+  var dname = item.textContent.trim();
+  var delBtn = document.createElement('div');
+  delBtn.textContent = 'Удалить «' + dname + '»';
+  delBtn.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:13px;color:#dc2626';
+  delBtn.onmouseover = function(){this.style.background='#fef2f2'};
+  delBtn.onmouseout = function(){this.style.background=''};
+  delBtn.onclick = function(){
+    menu.remove();
+    if (!confirm('Удалить «' + dname + '»? Это действие необратимо!')) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/bases/' + _dbgBase + '/configurator/entity-delete';
+    var inp = document.createElement('input'); inp.type='hidden'; inp.name='entity'; inp.value=dname;
+    form.appendChild(inp);
+    document.body.appendChild(form);
+    form.submit();
+  };
+  menu.appendChild(delBtn);
+  document.body.appendChild(menu);
+  setTimeout(function(){ document.addEventListener('click', function rm(){ menu.remove(); document.removeEventListener('click',rm); }); }, 10);
+});
 function cfgSelectPanel(id) {
   var el = document.querySelector('[data-id="' + id + '"]');
   if (el) selItem(el);
@@ -2985,9 +3021,6 @@ const cfgTabTree = `{{define "tab-tree"}}
 <div class="module-save-row" style="margin-bottom:14px">
   <button class="btn-save" type="submit">Сохранить типы полей</button>
   {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
-  <button type="submit" formaction="/bases/{{$baseID}}/configurator/entity-delete" formmethod="POST"
-    onclick="return confirm('Удалить «{{$e.Name}}»? Это действие необратимо!')"
-    style="margin-left:auto;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Удалить</button>
 </div>
 </form>
 

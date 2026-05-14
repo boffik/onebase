@@ -77,7 +77,7 @@ const tplQueryConsole = `
 <div class="card">
 <h3 style="margin-top:0">Параметры запроса</h3>
 <p style="font-size:12px;color:#64748b;margin-bottom:8px">Значения &amp;Параметров для выполнения</p>
-<div id="qc-params" style="font-size:13px">—</div>
+<div id="qb-params" style="font-size:13px">—</div>
 <div style="margin-top:12px">
   <button onclick="qbApplyToEditor()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">Применить к редактору</button>
 </div>
@@ -571,7 +571,7 @@ function qbGenerate(){
 
   // Update params UI
   var pList = Object.keys(params);
-  var paramDiv = document.getElementById('qc-params');
+  var paramDiv = document.getElementById('qb-params');
   paramDiv.innerHTML = '';
   if(!pList.length){ paramDiv.innerHTML='—'; return; }
   pList.forEach(function(p){

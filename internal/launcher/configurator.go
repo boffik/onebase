@@ -1354,7 +1354,7 @@ func (h *handler) deleteEntityFromDB(ctx context.Context, b *Base, entityName st
 
 	// Find and delete the entity YAML file by scanning all catalog/document paths
 	rows, err := db.Query(ctx,
-		`SELECT path FROM _onebase_config WHERE path LIKE 'catalogs/%.yaml' OR path LIKE 'documents/%.yaml'`)
+		`SELECT path, content FROM _onebase_config WHERE path LIKE 'catalogs/%.yaml' OR path LIKE 'documents/%.yaml'`)
 	if err != nil {
 		return err
 	}
@@ -1592,7 +1592,10 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 		renderCfg(w, data)
 		return
 	}
-	http.Redirect(w, r, "/bases/"+b.ID+"/configurator?tab=tree", http.StatusFound)
+	data := h.loadCfgData(r.Context(), b, "tree")
+	data.FieldsSavedEntity = name
+	data.FieldsSaved = true
+	renderCfg(w, data)
 }
 
 func newObjectContent(kind, name string) (subdir, content string) {
