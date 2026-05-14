@@ -204,6 +204,7 @@ type configuratorData struct {
 	BackupSettings backupSettings
 	// session token for passing to UI server (bootstrap auth)
 	SessionToken string
+	InlineJSYaml template.JS
 	// IsRunning: процесс базы запущен сейчас
 	IsRunning bool
 	// ConfigDirty: на диске есть изменения конфигурации новее, чем запуск базы
@@ -351,7 +352,7 @@ func configDirtyAfter(rootDir string, threshold time.Time) bool {
 }
 
 func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configuratorData {
-	data := &configuratorData{Base: b, Tab: tab, PlatformVer: version.String(), UIServerURL: fmt.Sprintf("http://localhost:%d", b.Port), DSNMasked: maskDSN(b.DB)}
+	data := &configuratorData{Base: b, Tab: tab, PlatformVer: version.String(), UIServerURL: fmt.Sprintf("http://localhost:%d", b.Port), DSNMasked: maskDSN(b.DB), InlineJSYaml: InlineJSYaml}
 
 	if startedAt, ok := h.runner.StartedAt(b.ID); ok {
 		data.IsRunning = true

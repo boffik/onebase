@@ -1,12 +1,24 @@
 package launcher
 
 import (
+	"embed"
+	"io/fs"
 	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
+
+//go:embed static
+var staticFiles embed.FS
+
+func init() {
+	sub, _ := fs.Sub(staticFiles, "static")
+	staticHTTP = http.FileServer(http.FS(sub))
+}
+
+var staticHTTP http.Handler
 
 // Server is the launcher HTTP server (list of registered bases).
 type Server struct {
@@ -56,6 +68,9 @@ func (s *Server) Close() {
 func (s *Server) ListenAndServe() error {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
+
+	// Static assets (embedded)
+	r.Handle("/static/*", http.StripPrefix("/static/", staticHTTP))
 
 	// Launcher pages (no auth)
 	r.Get("/", s.h.index)

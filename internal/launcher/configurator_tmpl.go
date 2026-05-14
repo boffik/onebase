@@ -299,7 +299,7 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js" crossorigin="anonymous" onerror="window._monacoLoadErr='loader.js failed'"></script>
-<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+<script>{{.InlineJSYaml}}</script>
 <title>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
 {{template "css" .}}
 </head>
@@ -731,22 +731,25 @@ function modTab(el, panelId) {
 var _led={};
 function initLayoutEditor(n){
   var ta=document.getElementById('ta-mkt-'+n);
-  if(!ta||!window.jsyaml)return;
+  var ved=document.getElementById('veditor-'+n);
+  if(!ta){if(ved)ved.innerHTML='<p style="color:red">ta not found: '+n+'</p>';return;}
+  if(!window.jsyaml){if(ved)ved.innerHTML='<p style="color:red">js-yaml not loaded! [v5]</p>';return;}
   var d=null;
   try{d=jsyaml.parse(ta.value);}catch(e){}
   if(!d)d={areas:{}};
-  _led[n]={data:d,sel:null};
+  _led[n]={data:d,sel:null,init:true};
   renderLayoutEditor(n);
 }
 function renderLayoutEditor(n){
   var s=_led[n];if(!s)return;
-  // sync to YAML textarea
-  if(window.jsyaml){var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
+  // sync to YAML textarea (skip on first init to preserve original content)
+  if(window.jsyaml&&!s.init){var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
     var ta=document.getElementById('ta-mkt-'+n);
     if(ta)ta.value=y;
     var src=document.getElementById('yaml-src-'+n);
     if(src)src.value=y;
   }
+  if(s.init)s.init=false;
   var d=s.data,areas=d.areas||{},h='<div style="font-family:Arial,sans-serif;font-size:12px">';
   var aNames=Object.keys(areas);
   for(var ai=0;ai<aNames.length;ai++){
@@ -829,9 +832,19 @@ function applyYaml(n){
   renderLayoutEditor(n);
 }
 function saveLayoutEditor(n){
-  var s=_led[n];if(!s)return;
-  var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
-  document.getElementById('yaml-src-'+n).value=y;
+  var src=document.getElementById('yaml-src-'+n);
+  var ta=document.getElementById('ta-mkt-'+n);
+  if(ta&&src){
+    // re-parse from visible textarea to catch manual edits
+    try{var d=jsyaml.parse(ta.value);}catch(e){}
+    if(d){
+      src.value=jsyaml.dump(d,{lineWidth:-1,quotingType:'"'});
+    }else{
+      src.value=ta.value;
+    }
+  }
+  var s=_led[n];
+  if(s){src.value=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});}
   return true;
 }
 function addLayoutArea(n){
@@ -875,13 +888,16 @@ function delLayoutRow(n,a,ri){
   renderLayoutEditor(n);
 }
 // Init layout editors on load
-(function(){
+function initAllLayoutEditors(){
+  console.log('[layout] initAllLayoutEditors called, jsyaml=', !!window.jsyaml, 'found', document.querySelectorAll('[id^="ta-mkt-"]').length, 'editors');
   var tas=document.querySelectorAll('[id^="ta-mkt-"]');
   for(var i=0;i<tas.length;i++){
     var n=tas[i].id.replace('ta-mkt-','');
     setTimeout(function(nn){return function(){initLayoutEditor(nn);};}(n),100);
   }
-})();
+}
+if(window._jsyamlReady){console.log('[layout] jsyaml already ready');initAllLayoutEditors();}
+else{console.log('[layout] waiting for jsyaml...');setTimeout(initAllLayoutEditors,500);}
 
 // ── HTML escape (shared) ────────────────────────────────────────
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -1879,7 +1895,7 @@ function dbgTab(name) {
   });
 }
 
-// ── Watch (Табло v3) ──────────────────────────────────────────
+// ── Watch (Табло v4) ──────────────────────────────────────────
 var _dbgWatchList = []; // [{name: 'Перем', id: 'w0'}]
 var _dbgWatchId = 0;
 
@@ -2772,8 +2788,8 @@ const cfgTabTree = `{{define "tab-tree"}}
                     onblur="applyYaml('{{.Name}}')">{{.LayoutYAML}}</textarea>
         </div>
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-          <div style="background:#f1f5f9;padding:4px 10px;font-size:11px;font-weight:600;color:#64748b;border-bottom:1px solid #d1d5db">Макет</div>
-          <div id="veditor-{{.Name}}" style="padding:8px;min-height:300px;overflow:auto"></div>
+          <div style="background:#f1f5f9;padding:4px 10px;font-size:11px;font-weight:600;color:#64748b;border-bottom:1px solid #d1d5db">Макет <span style="color:#22c55e">v5</span></div>
+          <div id="veditor-{{.Name}}" style="padding:8px;min-height:300px;overflow:auto"><p style="color:#999;font-size:12px">Загрузка макета...</p></div>
         </div>
       </div>
       <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
