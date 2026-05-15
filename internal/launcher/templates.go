@@ -140,7 +140,7 @@ const tplIndex = `
 
 {{if .Selected}}
 <div class="info-panel">
-  {{if .Selected.LogoBase64}}<div style="text-align:center;margin-bottom:8px"><img src="{{.Selected.LogoBase64}}" alt="Logo" style="max-height:48px;max-width:140px"></div>{{end}}
+  {{if .Selected.LogoBase64}}<div style="text-align:center;margin-bottom:8px"><img src="{{.Selected.LogoBase64}}" alt="Logo" style="max-height:80px;max-width:220px"></div>{{end}}
   <div style="font-weight:600;margin-bottom:8px;font-size:12px">{{.Selected.Name}}</div>
   <table style="width:100%;border-collapse:collapse">
   {{if .Selected.AppName}}<tr><td style="color:#888;padding:2px 0;width:90px">Конфигурация</td><td>{{.Selected.AppName}}</td></tr>{{end}}

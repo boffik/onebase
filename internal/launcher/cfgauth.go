@@ -65,7 +65,7 @@ input:focus{border-color:#3070D8;box-shadow:0 0 0 2px rgba(48,112,216,.15)}
 </style></head>
 <body>
 <div class="box">
-  {{if .LogoURL}}<div style="text-align:center;margin-bottom:16px"><img src="{{.LogoURL}}" alt="" style="max-height:80px;max-width:200px"></div>{{end}}
+  {{if .LogoURL}}<div style="text-align:center;margin-bottom:16px"><img src="{{.LogoURL}}" alt="" style="max-height:120px;max-width:260px"></div>{{end}}
   <h2>Конфигуратор — Вход</h2>
   <div class="sub">Только для администраторов</div>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
