@@ -472,6 +472,16 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if archiveFormat == "universal" {
 		db, cerr := OpenDB(r.Context(), b)
 		if cerr != nil {
+			// For SQLite: if the file exists but is not a valid database (new/empty/corrupt),
+			// delete it so SQLite creates a fresh file — full restore will repopulate everything.
+			if b.DBType == "sqlite" && b.DBPath != "" &&
+				strings.Contains(cerr.Error(), "file is not a database") {
+				if os.Remove(b.DBPath) == nil {
+					db, cerr = OpenDB(r.Context(), b)
+				}
+			}
+		}
+		if cerr != nil {
 			data := h.loadCfgData(r.Context(), b, "backup")
 			data.Error = "Ошибка подключения к БД: " + cerr.Error()
 			renderCfg(w, data)
