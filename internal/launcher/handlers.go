@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,28 +39,33 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loadAppInfo := func(b *Base, vm *baseVM) {
-		if b.ConfigSource != "file" || b.Path == "" {
-			return
-		}
-		data, err := os.ReadFile(filepath.Join(b.Path, "config", "app.yaml"))
-		if err != nil {
-			return
-		}
 		var cfg struct {
 			Name    string `yaml:"name"`
 			Version string `yaml:"version"`
 			Logo    string `yaml:"logo"`
 		}
-		if yaml.Unmarshal(data, &cfg) != nil {
-			return
+		if b.ConfigSource == "database" {
+			db, err := OpenDB(context.Background(), b)
+			if err != nil {
+				return
+			}
+			defer db.Close()
+			var content []byte
+			if err := db.QueryRow(context.Background(), "SELECT content FROM _onebase_config WHERE path = $1", "config/app.yaml").Scan(&content); err != nil {
+				return
+			}
+			yaml.Unmarshal(content, &cfg)
+		} else if b.Path != "" {
+			data, err := os.ReadFile(filepath.Join(b.Path, "config", "app.yaml"))
+			if err != nil {
+				return
+			}
+			yaml.Unmarshal(data, &cfg)
 		}
 		vm.AppName = cfg.Name
 		vm.AppVersion = cfg.Version
 		if cfg.Logo != "" {
-			logoPath := filepath.Join(b.Path, cfg.Logo)
-			if logoData, err := os.ReadFile(logoPath); err == nil {
-				vm.LogoBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(logoData)
-			}
+			vm.LogoBase64 = "/bases/" + b.ID + "/configurator/logo"
 		}
 	}
 
