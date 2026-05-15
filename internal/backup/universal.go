@@ -698,8 +698,6 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 	}
 
 	// Get the columns that actually exist in the target table.
-	// Columns present in the archive but absent in the target are silently skipped —
-	// this handles schema version differences between source and destination.
 	existingCols, err := getTableCols(ctx, db, tableName)
 	if err != nil {
 		return 0, fmt.Errorf("get columns for %s: %w", tableName, err)
@@ -711,6 +709,7 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 	}
 
 	n := 0
+	colsChecked := false
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -720,6 +719,19 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 		var raw map[string]json.RawMessage
 		if err := json.Unmarshal(line, &raw); err != nil {
 			return n, fmt.Errorf("parse row %d: %w", n+1, err)
+		}
+
+		// On first data row discover columns that exist in the archive but not in
+		// the target table (e.g. stale columns from schema evolution in source DB).
+		// Add them so no data is silently dropped during a full restore.
+		if !colsChecked {
+			colsChecked = true
+			for col := range raw {
+				if !existingCols[col] {
+					_ = db.AddColumnIfMissing(ctx, tableName, col, db.Dialect().TypeText())
+					existingCols[col] = true
+				}
+			}
 		}
 
 		if err := insertRow(ctx, db, tableName, raw, btypes, existingCols); err != nil {
