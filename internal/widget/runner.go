@@ -152,6 +152,7 @@ func (r *Runner) runList(ctx context.Context, w *metadata.Widget, res *Result) {
 	if w.Limit > 0 && len(rows) > w.Limit {
 		rows = rows[:w.Limit]
 	}
+	r.resolveUUIDs(ctx, rows)
 	res.Rows = rows
 	res.Columns = columnsForList(w, cols)
 }
@@ -162,11 +163,18 @@ func (r *Runner) runChart(ctx context.Context, w *metadata.Widget, res *Result) 
 		res.Error = err.Error()
 		return
 	}
-	x := w.XField
+	x := resolveFieldName(cols, w.XField)
 	if x == "" && len(cols) > 0 {
 		x = cols[0]
 	}
-	yFields := w.YFields
+	yFields := make([]string, 0, len(w.YFields))
+	if len(w.YFields) > 0 {
+		for _, yf := range w.YFields {
+			if resolved := resolveFieldName(cols, yf); resolved != "" {
+				yFields = append(yFields, resolved)
+			}
+		}
+	}
 	if len(yFields) == 0 {
 		for _, c := range cols {
 			if !strings.EqualFold(c, x) {
@@ -174,11 +182,15 @@ func (r *Runner) runChart(ctx context.Context, w *metadata.Widget, res *Result) 
 			}
 		}
 	}
+	r.resolveUUIDs(ctx, rows)
 	chart := &ChartData{Kind: w.ChartKind}
 	for _, row := range rows {
-		label := fmt.Sprintf("%v", row[x])
-		if t, ok := row[x].(time.Time); ok {
+		v := row[x]
+		label := fmt.Sprintf("%v", v)
+		if t, ok := v.(time.Time); ok {
 			label = t.Format("02.01")
+		} else if v == nil {
+			label = ""
 		}
 		chart.XAxis = append(chart.XAxis, label)
 	}
@@ -190,6 +202,28 @@ func (r *Runner) runChart(ctx context.Context, w *metadata.Widget, res *Result) 
 		chart.Series = append(chart.Series, s)
 	}
 	res.Chart = chart
+}
+
+// resolveFieldName matches a YAML-declared field name against the columns
+// actually returned by the query, case-insensitively. SQL backends often
+// lowercase identifiers (PostgreSQL most aggressively), so a widget declaring
+// `x_field: Дата` may have to look up "дата" in the row map.
+func resolveFieldName(cols []string, declared string) string {
+	if declared == "" {
+		return ""
+	}
+	for _, c := range cols {
+		if c == declared {
+			return c
+		}
+	}
+	lower := strings.ToLower(declared)
+	for _, c := range cols {
+		if strings.ToLower(c) == lower {
+			return c
+		}
+	}
+	return ""
 }
 
 func (r *Runner) runActions(w *metadata.Widget, res *Result) {
@@ -273,6 +307,57 @@ func (r *Runner) runRecent(ctx context.Context, w *metadata.Widget, res *Result)
 	}
 }
 
+// resolveUUIDs walks rows and replaces any UUID-shaped string with the
+// display name of the corresponding entity. Same idea as
+// ui.resolveUUIDsInReport but kept inside the widget package to avoid a
+// circular import.
+func (r *Runner) resolveUUIDs(ctx context.Context, rows []map[string]any) {
+	uuidToLabel := make(map[string]string)
+	for _, row := range rows {
+		for _, v := range row {
+			if str, ok := v.(string); ok {
+				if _, err := uuid.Parse(str); err == nil {
+					uuidToLabel[str] = ""
+				}
+			}
+		}
+	}
+	if len(uuidToLabel) == 0 {
+		return
+	}
+	for _, entity := range r.Reg.Entities() {
+		for idStr, label := range uuidToLabel {
+			if label != "" {
+				continue
+			}
+			id, perr := uuid.Parse(idStr)
+			if perr != nil {
+				continue
+			}
+			if refRow, err := r.Store.GetByID(ctx, entity.Name, id, entity); err == nil {
+				for _, f := range entity.Fields {
+					if s, ok := refRow[f.Name].(string); ok && strings.TrimSpace(s) != "" {
+						uuidToLabel[idStr] = s
+						break
+					}
+				}
+				if uuidToLabel[idStr] == "" {
+					uuidToLabel[idStr] = shortID(idStr)
+				}
+			}
+		}
+	}
+	for _, row := range rows {
+		for col, v := range row {
+			if str, ok := v.(string); ok {
+				if label, found := uuidToLabel[str]; found && label != "" {
+					row[col] = label
+				}
+			}
+		}
+	}
+}
+
 // runQuery is the shared back-end for kpi/list/chart widgets.
 func (r *Runner) runQuery(ctx context.Context, w *metadata.Widget) ([]map[string]any, []string, error) {
 	params := make(map[string]any, len(w.Params))
@@ -297,7 +382,11 @@ func columnsForList(w *metadata.Widget, cols []string) []ColumnSpec {
 	if len(w.Columns) > 0 {
 		out := make([]ColumnSpec, len(w.Columns))
 		for i, c := range w.Columns {
-			out[i] = ColumnSpec{Field: c.Field, Label: c.Label, Format: c.Format, Align: c.Align}
+			actual := resolveFieldName(cols, c.Field)
+			if actual == "" {
+				actual = c.Field
+			}
+			out[i] = ColumnSpec{Field: actual, Label: c.Label, Format: c.Format, Align: c.Align}
 			if out[i].Label == "" {
 				out[i].Label = c.Field
 			}
