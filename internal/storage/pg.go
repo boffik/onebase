@@ -76,6 +76,39 @@ func (db *DB) Pool() *pgxpool.Pool {
 	return db.pool
 }
 
+// DisableFKForImport disables foreign-key constraint enforcement for the
+// duration of a bulk import and returns a cleanup function that re-enables it.
+//
+// SQLite: pins the connection pool to 1 connection so that the PRAGMA applies
+// to every subsequent statement, then executes PRAGMA foreign_keys=OFF.
+// The cleanup restores PRAGMA foreign_keys=ON and the pool size.
+//
+// PostgreSQL: attempts SET session_replication_role='replica' which suppresses
+// FK trigger evaluation. Requires the connected role to have the REPLICATION
+// attribute. On permission error the call succeeds silently (FK constraints
+// remain active but data is presumed to be internally consistent).
+func (db *DB) DisableFKForImport(ctx context.Context) (cleanup func(), err error) {
+	if db.sqlDB != nil {
+		db.sqlDB.SetMaxOpenConns(1)
+		if _, err := db.sqlDB.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+			db.sqlDB.SetMaxOpenConns(0)
+			return func() {}, err
+		}
+		return func() {
+			_, _ = db.sqlDB.ExecContext(context.Background(), "PRAGMA foreign_keys=ON")
+			db.sqlDB.SetMaxOpenConns(0)
+		}, nil
+	}
+	// PostgreSQL: best-effort; ignore permission errors.
+	_, pgErr := db.pool.Exec(ctx, "SET session_replication_role='replica'")
+	if pgErr != nil {
+		return func() {}, nil
+	}
+	return func() {
+		_, _ = db.pool.Exec(context.Background(), "SET session_replication_role='origin'")
+	}, nil
+}
+
 // EnsureDatabase creates the PostgreSQL database named in dsn if it does not
 // exist. It connects via the "postgres" maintenance database to issue
 // CREATE DATABASE, so the caller doesn't need to create the DB manually.

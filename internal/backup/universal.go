@@ -490,6 +490,15 @@ func ImportUniversal(
 	// --- 5. Import data and system tables -------------------------------------
 	report := &ImportReport{Tables: make(map[string]int)}
 
+	// Disable FK constraint enforcement for the bulk load: tables are imported
+	// in alphabetical order which may not respect FK dependency order (e.g.
+	// поступлениетоваров → склады where с > п alphabetically).
+	fkCleanup, err := db.DisableFKForImport(ctx)
+	if err != nil {
+		return report, fmt.Errorf("import: disable FK: %w", err)
+	}
+	defer fkCleanup()
+
 	// Import data/ tables (application tables).
 	dataDir := filepath.Join(tmpDir, "data")
 	if _, err := os.Stat(dataDir); err == nil {
