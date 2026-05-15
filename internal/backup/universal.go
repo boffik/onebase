@@ -697,6 +697,14 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 		return 0, nil
 	}
 
+	// Get the columns that actually exist in the target table.
+	// Columns present in the archive but absent in the target are silently skipped —
+	// this handles schema version differences between source and destination.
+	existingCols, err := getTableCols(ctx, db, tableName)
+	if err != nil {
+		return 0, fmt.Errorf("get columns for %s: %w", tableName, err)
+	}
+
 	// Clear existing data — we do a full replace.
 	if _, err := db.Exec(ctx, "DELETE FROM "+quotedIdent(db, tableName)); err != nil {
 		return 0, fmt.Errorf("clear table %s: %w", tableName, err)
@@ -714,7 +722,7 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 			return n, fmt.Errorf("parse row %d: %w", n+1, err)
 		}
 
-		if err := insertRow(ctx, db, tableName, raw, btypes); err != nil {
+		if err := insertRow(ctx, db, tableName, raw, btypes, existingCols); err != nil {
 			return n, fmt.Errorf("insert row %d into %s: %w", n+1, tableName, err)
 		}
 		n++
@@ -723,7 +731,9 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 }
 
 // insertRow builds and executes an INSERT statement for one JSON row.
-func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[string]json.RawMessage, btypes map[string]bool) error {
+// existingCols is the set of column names that exist in the target table;
+// columns not in this set are skipped (handles source/target schema differences).
+func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[string]json.RawMessage, btypes map[string]bool, existingCols map[string]bool) error {
 	d := db.Dialect()
 
 	cols := make([]string, 0, len(raw))
@@ -732,6 +742,9 @@ func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[st
 	idx := 1
 
 	for col, rawVal := range raw {
+		if len(existingCols) > 0 && !existingCols[col] {
+			continue // column absent in target table — skip
+		}
 		var goVal any
 
 		if string(rawVal) == "null" {
@@ -785,6 +798,42 @@ func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[st
 	)
 	_, err := db.Exec(ctx, sql, args...)
 	return err
+}
+
+// getTableCols returns the set of column names that exist in tableName.
+func getTableCols(ctx context.Context, db *storage.DB, tableName string) (map[string]bool, error) {
+	cols := make(map[string]bool)
+	if db.IsSQLite() {
+		rows, err := db.Query(ctx, "PRAGMA table_info("+sqliteQuote(tableName)+")")
+		if err != nil {
+			return cols, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var cid int
+			var name, ctype string
+			var notnull, pk int
+			var dflt any
+			if rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk) == nil {
+				cols[name] = true
+			}
+		}
+	} else {
+		rows, err := db.Query(ctx,
+			`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
+			tableName)
+		if err != nil {
+			return cols, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			if rows.Scan(&name) == nil {
+				cols[name] = true
+			}
+		}
+	}
+	return cols, nil
 }
 
 // tableExists reports whether tableName exists in the target DB.
