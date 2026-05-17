@@ -81,15 +81,6 @@ func dateDiffBuiltin(args []any, _ string, _ int) (any, error) {
 	}
 }
 
-func splitBuiltin(args []any, _ string, _ int) (any, error) {
-	parts := strings.Split(strArg(args, 0), strArg(args, 1))
-	result := make([]any, len(parts))
-	for i, p := range parts {
-		result[i] = p
-	}
-	return result, nil
-}
-
 func joinBuiltin(args []any, _ string, _ int) (any, error) {
 	sep := strArg(args, 1)
 	var parts []string
@@ -105,14 +96,3 @@ func joinBuiltin(args []any, _ string, _ int) (any, error) {
 	return strings.Join(parts, sep), nil
 }
 
-func templateBuiltin(args []any, _ string, _ int) (any, error) {
-	s := strArg(args, 0)
-	for i := 1; i < len(args); i++ {
-		s = strings.ReplaceAll(s, "%"+intToStr(i), fmt.Sprintf("%v", args[i]))
-	}
-	return s, nil
-}
-
-func intToStr(n int) string {
-	return fmt.Sprintf("%d", n)
-}

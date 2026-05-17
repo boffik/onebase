@@ -157,6 +157,11 @@ func formatValue(v any) string {
 			return "Истина"
 		}
 		return "Ложь"
+	case time.Time:
+		if val.Hour() == 0 && val.Minute() == 0 && val.Second() == 0 {
+			return val.Format("02.01.2006")
+		}
+		return val.Format("02.01.2006 15:04:05")
 	default:
 		str := fmt.Sprintf("%v", v)
 		if len(str) > 50 {
