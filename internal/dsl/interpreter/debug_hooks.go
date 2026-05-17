@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 )
@@ -121,8 +122,12 @@ func getTypeName(v any) string {
 		return "Булево"
 	case float64:
 		return "Число"
+	case int, int32, int64:
+		return "Число"
 	case string:
 		return "Строка"
+	case time.Time:
+		return "Дата"
 	case *Array:
 		return "Массив"
 	case *Map:
@@ -152,6 +157,11 @@ func formatValue(v any) string {
 			return "Истина"
 		}
 		return "Ложь"
+	case time.Time:
+		if val.Hour() == 0 && val.Minute() == 0 && val.Second() == 0 {
+			return val.Format("02.01.2006")
+		}
+		return val.Format("02.01.2006 15:04:05")
 	default:
 		str := fmt.Sprintf("%v", v)
 		if len(str) > 50 {
