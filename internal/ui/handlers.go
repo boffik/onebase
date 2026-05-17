@@ -1603,6 +1603,9 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	if _, ok := data["IsAdmin"]; !ok {
 		data["IsAdmin"] = s.isAdmin(r)
 	}
+	if _, ok := data["HasAuth"]; !ok {
+		data["HasAuth"] = s.authRepo != nil && auth.UserFromContext(r.Context()) != nil
+	}
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}

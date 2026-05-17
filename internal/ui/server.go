@@ -100,6 +100,12 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/admin/users/new", s.adminUserNew)
 	r.Post("/ui/admin/users/new", s.adminUserCreate)
 	r.Post("/ui/admin/users/{id}/delete", s.adminUserDelete)
+	r.Get("/ui/admin/users/{id}/passwd", s.adminUserPasswd)
+	r.Post("/ui/admin/users/{id}/passwd", s.adminUserPasswd)
+
+	// Self-service: change own password
+	r.Get("/ui/profile/passwd", s.selfPasswd)
+	r.Post("/ui/profile/passwd", s.selfPasswd)
 
 	// Admin: active sessions
 	r.Get("/ui/admin/sessions", s.adminSessions)

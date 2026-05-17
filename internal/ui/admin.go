@@ -15,7 +15,7 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
-var adminTmpl = template.Must(template.New("admin").Parse(tplAdminUsers + tplAdminUserForm + tplAdminSessions + tplAdminCleanup + tplAdminRoles + tplAdminUserRoles + tplAdminAudit))
+var adminTmpl = template.Must(template.New("admin").Parse(tplAdminUsers + tplAdminUserForm + tplAdminPasswd + tplAdminSessions + tplAdminCleanup + tplAdminRoles + tplAdminUserRoles + tplAdminAudit))
 
 const tplAdminUsers = `{{define "admin-users"}}` + adminHead + `
 <main>
@@ -37,6 +37,7 @@ const tplAdminUsers = `{{define "admin-users"}}` + adminHead + `
   <td style="font-size:12px;color:#94a3b8">{{.CreatedAt.Format "02.01.2006"}}</td>
   <td style="display:flex;gap:6px">
     <a class="btn btn-sm btn-secondary" href="/ui/admin/users/{{.ID}}/roles">Роли</a>
+    <a class="btn btn-sm" href="/ui/admin/users/{{.ID}}/passwd" style="background:#f59e0b;color:#fff">Пароль</a>
     <form method="POST" action="/ui/admin/users/{{.ID}}/delete" onsubmit="return confirm('Удалить пользователя {{.Login}}?')">
       <button class="btn btn-sm btn-danger" type="submit">Удалить</button>
     </form>
@@ -160,6 +161,101 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
+}
+
+func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	userID := chi.URLParam(r, "id")
+	users, _ := s.authRepo.List(r.Context())
+	var userLogin string
+	for _, u := range users {
+		if u.ID == userID {
+			userLogin = u.Login
+			break
+		}
+	}
+	data := map[string]any{
+		"UserLogin": userLogin,
+		"BackURL":   "/ui/admin/users",
+		"NeedOld":   false,
+	}
+	if r.Method == http.MethodPost {
+		r.ParseForm()
+		newPwd := r.FormValue("new_password")
+		confirm := r.FormValue("confirm_password")
+		if newPwd == "" || len(newPwd) < 4 {
+			data["Error"] = "Пароль должен содержать минимум 4 символа"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		if newPwd != confirm {
+			data["Error"] = "Пароли не совпадают"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		if err := s.authRepo.UpdatePassword(r.Context(), userID, newPwd); err != nil {
+			data["Error"] = err.Error()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		data["Success"] = true
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+}
+
+// selfPasswd lets any authenticated user change their own password.
+func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFromContext(r.Context())
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	data := map[string]any{
+		"UserLogin": u.Login,
+		"BackURL":   "/ui",
+		"NeedOld":   true,
+	}
+	if r.Method == http.MethodPost {
+		r.ParseForm()
+		oldPwd := r.FormValue("old_password")
+		newPwd := r.FormValue("new_password")
+		confirm := r.FormValue("confirm_password")
+
+		if _, err := s.authRepo.Authenticate(r.Context(), u.Login, oldPwd); err != nil {
+			data["Error"] = "Неверный текущий пароль"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		if newPwd == "" || len(newPwd) < 4 {
+			data["Error"] = "Пароль должен содержать минимум 4 символа"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		if newPwd != confirm {
+			data["Error"] = "Пароли не совпадают"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		if err := s.authRepo.UpdatePassword(r.Context(), u.ID, newPwd); err != nil {
+			data["Error"] = err.Error()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
+			return
+		}
+		data["Success"] = true
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 }
 
 func (s *Server) adminUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -415,6 +511,39 @@ func (s *Server) isAdmin(r *http.Request) bool {
 	u := auth.UserFromContext(r.Context())
 	return u != nil && u.IsAdmin
 }
+
+const tplAdminPasswd = `{{define "admin-passwd"}}` + adminHead + `
+<main>
+<div class="row-top" style="max-width:500px">
+  <h2>Смена пароля{{if .UserLogin}} — {{.UserLogin}}{{end}}</h2>
+  <a class="btn" href="{{.BackURL}}" style="background:#e2e8f0;color:#475569">← Назад</a>
+</div>
+{{if .Error}}<div class="error" style="max-width:500px">{{.Error}}</div>{{end}}
+{{if .Success}}<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:12px;border-radius:7px;margin-bottom:16px;max-width:500px;font-size:14px">Пароль успешно изменён.</div>{{end}}
+<div class="card" style="max-width:500px">
+<form method="POST">
+  {{if .NeedOld}}
+  <div class="form-group">
+    <label>Текущий пароль</label>
+    <input type="password" name="old_password" required autofocus>
+  </div>
+  {{end}}
+  <div class="form-group">
+    <label>Новый пароль</label>
+    <input type="password" name="new_password" required {{if not .NeedOld}}autofocus{{end}} minlength="4">
+  </div>
+  <div class="form-group">
+    <label>Повторите новый пароль</label>
+    <input type="password" name="confirm_password" required minlength="4">
+  </div>
+  <div style="display:flex;gap:12px;margin-top:8px">
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+    <a class="btn" href="{{.BackURL}}" style="background:#e2e8f0;color:#475569">Отмена</a>
+  </div>
+</form>
+</div>
+</main></body></html>
+{{end}}`
 
 const tplAdminSessions = `{{define "admin-sessions"}}` + adminHead + `
 <main>

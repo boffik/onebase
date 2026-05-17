@@ -200,6 +200,18 @@ func (r *Repo) ActiveSessions(ctx context.Context) ([]*SessionInfo, error) {
 	return sessions, rows.Err()
 }
 
+// UpdatePassword sets a new bcrypt-hashed password for the given user ID.
+func (r *Repo) UpdatePassword(ctx context.Context, userID, newPassword string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`UPDATE _users SET password_hash = %s WHERE id = %s`, d.Placeholder(1), d.Placeholder(2))
+	_, err = r.db.Exec(ctx, q, hash, userID)
+	return err
+}
+
 // KickUser deletes all sessions for the given login (forces re-login).
 func (r *Repo) KickUser(ctx context.Context, login string) error {
 	d := r.db.Dialect()

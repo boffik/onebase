@@ -297,6 +297,7 @@ const tplNav = `
         <a href="/ui/dev/code-console">Консоль кода</a>
       </div>
     </div>{{end}}
+      {{if .HasAuth}}<a href="/ui/profile/passwd">Сменить пароль</a>{{end}}
       <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">Выйти</button></form>
     </div>
   </div>
