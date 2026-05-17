@@ -102,6 +102,7 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/admin/users/{id}/delete", s.adminUserDelete)
 	r.Get("/ui/admin/users/{id}/passwd", s.adminUserPasswd)
 	r.Post("/ui/admin/users/{id}/passwd", s.adminUserPasswd)
+	r.Post("/ui/admin/users/{id}/deny-passwd", s.adminUserDenyPasswd)
 
 	// Self-service: change own password
 	r.Get("/ui/profile/passwd", s.selfPasswd)

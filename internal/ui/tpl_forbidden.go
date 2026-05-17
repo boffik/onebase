@@ -1,0 +1,19 @@
+package ui
+
+const tplForbidden = `
+{{define "page-forbidden"}}
+{{template "head" .}}{{template "nav" .}}
+<main style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+<div style="text-align:center;max-width:400px">
+  <div style="font-size:56px;margin-bottom:16px">⛔</div>
+  <h2 style="font-size:22px;font-weight:700;color:#1e293b;margin-bottom:8px">Доступ запрещён</h2>
+  <p style="color:#64748b;font-size:14px;margin-bottom:28px">У вас нет прав для просмотра этого раздела.</p>
+  <div style="display:flex;gap:12px;justify-content:center">
+    <a onclick="history.back();return false" href="#" class="btn" style="background:#e2e8f0;color:#475569">← Назад</a>
+    <a href="/ui" class="btn btn-primary">На главную</a>
+  </div>
+</div>
+</main>
+</div></body></html>
+{{end}}
+`

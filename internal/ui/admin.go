@@ -39,6 +39,9 @@ const tplAdminUsers = `{{define "admin-users"}}` + adminHead + `
     <div style="display:flex;flex-wrap:wrap;gap:4px">
       <a class="btn btn-sm btn-secondary" href="/ui/admin/users/{{.ID}}/roles">Роли</a>
       <a class="btn btn-sm" href="/ui/admin/users/{{.ID}}/passwd" style="background:#f59e0b;color:#fff">Пароль</a>
+      <form method="POST" action="/ui/admin/users/{{.ID}}/deny-passwd" style="margin:0" title="{{if .DenyPasswdChange}}Снять запрет смены пароля{{else}}Запретить смену пароля{{end}}">
+        <button class="btn btn-sm" style="background:{{if .DenyPasswdChange}}#dc2626{{else}}#e2e8f0{{end}};color:{{if .DenyPasswdChange}}#fff{{else}}#475569{{end}}">{{if .DenyPasswdChange}}🔒{{else}}🔓{{end}}</button>
+      </form>
       <form method="POST" action="/ui/admin/users/{{.ID}}/delete" onsubmit="return confirm('Удалить пользователя {{.Login}}?')" style="margin:0">
         <button class="btn btn-sm btn-danger" type="submit">Удалить</button>
       </form>
@@ -75,6 +78,11 @@ const tplAdminUserForm = `{{define "admin-user-form"}}` + adminHead + `
   <div class="form-group">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
       <input type="checkbox" name="is_admin" value="1"> Администратор
+    </label>
+  </div>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" name="deny_passwd_change" value="1"> Запретить смену пароля
     </label>
   </div>
   <div style="display:flex;gap:12px;margin-top:8px">
@@ -119,7 +127,7 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	users, err := s.authRepo.List(r.Context())
@@ -133,7 +141,7 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminUserNew(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -142,7 +150,7 @@ func (s *Server) adminUserNew(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	r.ParseForm()
@@ -150,6 +158,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	fullName := r.FormValue("full_name")
 	isAdmin := r.FormValue("is_admin") == "1"
+	denyPasswd := r.FormValue("deny_passwd_change") == "1"
 
 	if login == "" || password == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -157,17 +166,39 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.authRepo.Create(r.Context(), login, password, fullName, isAdmin); err != nil {
+	u, err := s.authRepo.Create(r.Context(), login, password, fullName, isAdmin)
+	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": err.Error()})
 		return
 	}
+	if denyPasswd {
+		s.authRepo.SetDenyPasswdChange(r.Context(), u.ID, true)
+	}
+	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
+}
+
+func (s *Server) adminUserDenyPasswd(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	userID := chi.URLParam(r, "id")
+	users, _ := s.authRepo.List(r.Context())
+	var current bool
+	for _, u := range users {
+		if u.ID == userID {
+			current = u.DenyPasswdChange
+			break
+		}
+	}
+	s.authRepo.SetDenyPasswdChange(r.Context(), userID, !current)
 	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
 }
 
 func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	userID := chi.URLParam(r, "id")
@@ -219,6 +250,10 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
+	if u.DenyPasswdChange {
+		s.renderForbidden(w, r)
+		return
+	}
 	data := map[string]any{
 		"UserLogin": u.Login,
 		"BackURL":   "/ui",
@@ -262,7 +297,7 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminUserDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -272,7 +307,7 @@ func (s *Server) adminUserDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminSessions(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -291,7 +326,7 @@ func (s *Server) adminSessions(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminKickUser(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	login := chi.URLParam(r, "login")
@@ -303,7 +338,7 @@ func (s *Server) adminKickUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminCleanup(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	registers := s.reg.Registers()
@@ -326,7 +361,7 @@ func (s *Server) adminCleanup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminRoles(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	if s.authRepo == nil {
@@ -344,7 +379,7 @@ func (s *Server) adminRoles(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminUserRoles(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	userID := chi.URLParam(r, "id")
@@ -369,7 +404,7 @@ func (s *Server) adminUserRoles(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminUserRolesUpdate(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	userID := chi.URLParam(r, "id")
@@ -403,7 +438,7 @@ type auditFilterView struct {
 
 func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	const pageSize = 50

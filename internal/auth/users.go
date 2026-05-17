@@ -14,12 +14,13 @@ import (
 )
 
 type User struct {
-	ID        string
-	Login     string
-	FullName  string
-	IsAdmin   bool
-	CreatedAt time.Time
-	Roles     []*Role // loaded by middleware after session lookup
+	ID               string
+	Login            string
+	FullName         string
+	IsAdmin          bool
+	DenyPasswdChange bool
+	CreatedAt        time.Time
+	Roles            []*Role // loaded by middleware after session lookup
 }
 
 type Repo struct {
@@ -58,6 +59,10 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	if err := r.EnsureRolesSchema(ctx); err != nil {
 		return err
 	}
+	// idempotent migration: add deny_passwd_change if missing
+	alterQ := fmt.Sprintf(`ALTER TABLE _users ADD COLUMN deny_passwd_change %s NOT NULL DEFAULT %s`,
+		d.TypeBool(), boolFalseFor(d))
+	r.db.Exec(ctx, alterQ) // ignore error: harmless if column already exists
 	return nil
 }
 
@@ -76,7 +81,7 @@ func (r *Repo) HasUsers(ctx context.Context) (bool, error) {
 }
 
 func (r *Repo) List(ctx context.Context) ([]*User, error) {
-	rows, err := r.db.Query(ctx, `SELECT id, login, full_name, is_admin, created_at FROM _users ORDER BY login`)
+	rows, err := r.db.Query(ctx, `SELECT id, login, full_name, is_admin, deny_passwd_change, created_at FROM _users ORDER BY login`)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +89,7 @@ func (r *Repo) List(ctx context.Context) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		u := &User{}
-		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &u.CreatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -152,11 +157,11 @@ func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
 	d := r.db.Dialect()
 	u := &User{}
 	q := fmt.Sprintf(`
-		SELECT u.id, u.login, u.full_name, u.is_admin
+		SELECT u.id, u.login, u.full_name, u.is_admin, u.deny_passwd_change
 		FROM _sessions s JOIN _users u ON u.id = s.user_id
 		WHERE s.token = %s AND s.expires_at > %s
 	`, d.Placeholder(1), d.Now())
-	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin)
+	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange)
 	if err != nil {
 		return nil, err
 	}
@@ -202,6 +207,14 @@ func (r *Repo) ActiveSessions(ctx context.Context) ([]*SessionInfo, error) {
 		sessions = append(sessions, si)
 	}
 	return sessions, rows.Err()
+}
+
+// SetDenyPasswdChange sets the deny_passwd_change flag for a user.
+func (r *Repo) SetDenyPasswdChange(ctx context.Context, userID string, deny bool) error {
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`UPDATE _users SET deny_passwd_change = %s WHERE id = %s`, d.Placeholder(1), d.Placeholder(2))
+	_, err := r.db.Exec(ctx, q, deny, userID)
+	return err
 }
 
 // UpdatePassword sets a new bcrypt-hashed password for the given user ID.

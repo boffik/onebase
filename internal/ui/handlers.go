@@ -744,7 +744,7 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 // POST: deletes all marked records that have no references.
 func (s *Server) deleteMarkedAll(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 
@@ -830,7 +830,7 @@ func (s *Server) deleteMarked(w http.ResponseWriter, r *http.Request) {
 
 	user := auth.UserFromContext(r.Context())
 	if user != nil && !user.IsAdmin {
-		http.Error(w, "доступ запрещён", 403)
+		s.renderForbidden(w, r)
 		return
 	}
 
@@ -1608,6 +1608,11 @@ func regFmtDate(v any) string {
 	return fmt.Sprintf("%v", v)
 }
 
+func (s *Server) renderForbidden(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusForbidden)
+	s.render(w, r, "page-forbidden", map[string]any{})
+}
+
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data map[string]any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if _, ok := data["Cfg"]; !ok {
@@ -1627,7 +1632,11 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 		data["IsAdmin"] = s.isAdmin(r)
 	}
 	if _, ok := data["HasAuth"]; !ok {
-		data["HasAuth"] = s.authRepo != nil && auth.UserFromContext(r.Context()) != nil
+		u := auth.UserFromContext(r.Context())
+		data["HasAuth"] = s.authRepo != nil && u != nil
+		if u != nil {
+			data["DenyPasswdChange"] = u.DenyPasswdChange
+		}
 	}
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -1636,7 +1645,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 
 func (s *Server) allFunctions(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	var catalogs, documents []*metadata.Entity

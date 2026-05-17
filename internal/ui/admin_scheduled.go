@@ -8,6 +8,10 @@ import (
 )
 
 func (s *Server) scheduledList(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
 	jobs := s.sched.Jobs()
 	var runs []map[string]any
 	for _, j := range jobs {
@@ -26,6 +30,10 @@ func (s *Server) scheduledList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) scheduledDetail(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
 	name := chi.URLParam(r, "name")
 	if dec, err := url.PathUnescape(name); err == nil {
 		name = dec
@@ -43,6 +51,10 @@ func (s *Server) scheduledDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) scheduledRunNow(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
 	name := chi.URLParam(r, "name")
 	if dec, err := url.PathUnescape(name); err == nil {
 		name = dec

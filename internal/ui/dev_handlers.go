@@ -22,7 +22,7 @@ import (
 
 func (s *Server) queryConsolePage(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "Доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	sources := s.buildQuerySources()
@@ -34,7 +34,7 @@ func (s *Server) queryConsolePage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) queryConsoleExec(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "Доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (s *Server) queryConsoleExec(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) queryConsoleAnalyze(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "Доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	var req struct {
@@ -273,7 +273,7 @@ func (s *Server) queryConsoleAnalyze(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) devEntitySearch(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "Доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	entityType := r.URL.Query().Get("type")
@@ -346,7 +346,7 @@ func (s *Server) devEntitySearch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) codeConsolePage(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "Доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 	s.render(w, r, "page-code-console", nil)
@@ -354,7 +354,7 @@ func (s *Server) codeConsolePage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) codeConsoleExec(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Error(w, "Доступ запрещён", http.StatusForbidden)
+		s.renderForbidden(w, r)
 		return
 	}
 
