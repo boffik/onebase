@@ -3,6 +3,7 @@
 /onebase.exe
 onebase-gui.exe
 onebase-linux-arm64
+onebase-arm64
 
 # Temp files
 __*.py
