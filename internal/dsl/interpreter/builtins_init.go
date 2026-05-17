@@ -1,0 +1,188 @@
+package interpreter
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// init wires the helpers and ext-functions declared in builtins_helpers.go
+// and builtins_ext.go into the global builtins map. Until this init() ran,
+// «НачалоМесяца», «Формат», «Пустая» and friends were dead code: defined but
+// not callable from DSL.
+func init() {
+	// ─── Даты: начало/конец периода ───────────────────────────────────────
+	begMonth := dateBuiltin(func(t time.Time) any {
+		return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+	})
+	begYear := dateBuiltin(func(t time.Time) any {
+		return time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location())
+	})
+	endYear := dateBuiltin(func(t time.Time) any {
+		return time.Date(t.Year(), 12, 31, 23, 59, 59, 0, t.Location())
+	})
+	begDay := dateBuiltin(func(t time.Time) any {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	})
+	endDay := dateBuiltin(func(t time.Time) any {
+		return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
+	})
+
+	builtins["началомесяца"] = begMonth
+	builtins["begmonth"] = begMonth
+	builtins["конецмесяца"] = dateEndMonth
+	builtins["endmonth"] = dateEndMonth
+	builtins["началогода"] = begYear
+	builtins["begyear"] = begYear
+	builtins["конецгода"] = endYear
+	builtins["endyear"] = endYear
+	builtins["началонедели"] = dateBegWeek
+	builtins["begweek"] = dateBegWeek
+	builtins["конецнедели"] = dateEndWeek
+	builtins["endweek"] = dateEndWeek
+	builtins["началодня"] = begDay
+	builtins["begday"] = begDay
+	builtins["конецдня"] = endDay
+	builtins["endday"] = endDay
+	builtins["добавитьмесяц"] = addMonthBuiltin
+	builtins["addmonth"] = addMonthBuiltin
+	builtins["разностьдат"] = dateDiffBuiltin
+	builtins["datediff"] = dateDiffBuiltin
+
+	// ─── B2: Час / Минута / Секунда / ДеньНедели ──────────────────────────
+	hourFn := dateBuiltin(func(t time.Time) any { return float64(t.Hour()) })
+	minuteFn := dateBuiltin(func(t time.Time) any { return float64(t.Minute()) })
+	secondFn := dateBuiltin(func(t time.Time) any { return float64(t.Second()) })
+	// 1С convention: Пн=1, Вс=7. Go time.Weekday: Sun=0..Sat=6.
+	dowFn := dateBuiltin(func(t time.Time) any {
+		w := int(t.Weekday())
+		return float64(((w + 6) % 7) + 1)
+	})
+	builtins["час"] = hourFn
+	builtins["hour"] = hourFn
+	builtins["минута"] = minuteFn
+	builtins["minute"] = minuteFn
+	builtins["секунда"] = secondFn
+	builtins["second"] = secondFn
+	builtins["деньнедели"] = dowFn
+	builtins["dayofweek"] = dowFn
+
+	// ─── B3: Строковые функции ────────────────────────────────────────────
+	replaceFn := func(args []any, _ string, _ int) (any, error) {
+		return strings.ReplaceAll(strArg(args, 0), strArg(args, 1), strArg(args, 2)), nil
+	}
+	startsFn := func(args []any, _ string, _ int) (any, error) {
+		return strings.HasPrefix(strArg(args, 0), strArg(args, 1)), nil
+	}
+	endsFn := func(args []any, _ string, _ int) (any, error) {
+		return strings.HasSuffix(strArg(args, 0), strArg(args, 1)), nil
+	}
+	containsFn := func(args []any, _ string, _ int) (any, error) {
+		return strings.Contains(strArg(args, 0), strArg(args, 1)), nil
+	}
+
+	// СтрРазделить должен возвращать *Array, а не []any — иначе цикл
+	// «Для Каждого ... Из» работает, но `arr.Количество()` бросает.
+	splitToArray := func(args []any, _ string, _ int) (any, error) {
+		parts := strings.Split(strArg(args, 0), strArg(args, 1))
+		arr := &Array{}
+		for _, p := range parts {
+			arr.items = append(arr.items, p)
+		}
+		return arr, nil
+	}
+
+	builtins["стрзаменить"] = replaceFn
+	builtins["strreplace"] = replaceFn
+	builtins["стрначинаетсяс"] = startsFn
+	builtins["strstartswith"] = startsFn
+	builtins["стрзаканчиваетсяна"] = endsFn
+	builtins["strendswith"] = endsFn
+	builtins["стрсодержит"] = containsFn
+	builtins["strcontains"] = containsFn
+	builtins["стрразделить"] = splitToArray
+	builtins["strsplit"] = splitToArray
+	builtins["стрсоединить"] = joinBuiltin
+	builtins["strjoin"] = joinBuiltin
+	builtins["стршаблон"] = templateFromArgs
+	builtins["strtemplate"] = templateFromArgs
+
+	// ─── B4: Пустая / ЗначениеЗаполнено ───────────────────────────────────
+	emptyFn := func(args []any, _ string, _ int) (any, error) {
+		if len(args) == 0 {
+			return true, nil
+		}
+		return isBlankVal(args[0]), nil
+	}
+	filledFn := func(args []any, _ string, _ int) (any, error) {
+		if len(args) == 0 {
+			return false, nil
+		}
+		return !isBlankVal(args[0]), nil
+	}
+	builtins["пустая"] = emptyFn
+	builtins["isblank"] = emptyFn
+	builtins["значениезаполнено"] = filledFn
+	builtins["isfilled"] = filledFn
+
+	// ─── B5: Формат ───────────────────────────────────────────────────────
+	formatFn := func(args []any, _ string, _ int) (any, error) {
+		s, err := fmtBuiltin(args)
+		return s, err
+	}
+	builtins["формат"] = formatFn
+	builtins["format"] = formatFn
+
+	// ─── B6: ТипЗнч / Тип ─────────────────────────────────────────────────
+	typeOfFn := func(args []any, _ string, _ int) (any, error) {
+		if len(args) == 0 {
+			return "Неопределено", nil
+		}
+		return getTypeName(args[0]), nil
+	}
+	// Тип("Число") — возвращает строку-маркер, чтобы можно было сравнивать с
+	// результатом ТипЗнч(). Сама строка нормализуется (Capital case).
+	typeFn := func(args []any, _ string, _ int) (any, error) {
+		return normalizeTypeName(strArg(args, 0)), nil
+	}
+	builtins["типзнч"] = typeOfFn
+	builtins["typeof"] = typeOfFn
+	builtins["тип"] = typeFn
+	builtins["type"] = typeFn
+}
+
+// templateFromArgs is СтрШаблон("Привет, %1!", "Иван") → "Привет, Иван!".
+// Replacement order is largest-index first so «%10» doesn't get treated as
+// «%1» followed by literal "0".
+func templateFromArgs(args []any, _ string, _ int) (any, error) {
+	s := strArg(args, 0)
+	for i := len(args) - 1; i >= 1; i-- {
+		s = strings.ReplaceAll(s, fmt.Sprintf("%%%d", i), fmt.Sprintf("%v", args[i]))
+	}
+	return s, nil
+}
+
+// normalizeTypeName maps user-typed names ("число", "СТРОКА") to canonical form
+// returned by getTypeName ("Число", "Строка").
+func normalizeTypeName(s string) string {
+	low := strings.ToLower(strings.TrimSpace(s))
+	switch low {
+	case "число", "number":
+		return "Число"
+	case "строка", "string":
+		return "Строка"
+	case "булево", "bool", "boolean":
+		return "Булево"
+	case "дата", "date", "time":
+		return "Дата"
+	case "массив", "array":
+		return "Массив"
+	case "структура", "structure":
+		return "Структура"
+	case "соответствие", "map":
+		return "Соответствие"
+	case "неопределено", "undefined", "nil":
+		return "Неопределено"
+	}
+	return s
+}

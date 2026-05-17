@@ -317,18 +317,18 @@ func (p *Parser) parseExprOrAssign() (ast.Stmt, error) {
 			p.consumeSemi()
 			return &ast.AssignStmt{Target: left, Op: token.ASSIGN, Value: val}, nil
 		}
-		if isCompoundAssign(p.cur.Type) {
-			switch left.(type) {
-			case *ast.Ident, *ast.MemberExpr, *ast.IndexExpr:
-				op := p.cur.Type
-				p.advance()
-				val, err := p.parseExpr()
-				if err != nil {
-					return nil, err
-				}
-				p.consumeSemi()
-				return &ast.AssignStmt{Target: left, Op: op, Value: val}, nil
+	}
+	if isCompoundAssign(p.cur.Type) {
+		switch left.(type) {
+		case *ast.Ident, *ast.MemberExpr, *ast.IndexExpr:
+			op := p.cur.Type
+			p.advance()
+			val, err := p.parseExpr()
+			if err != nil {
+				return nil, err
 			}
+			p.consumeSemi()
+			return &ast.AssignStmt{Target: left, Op: op, Value: val}, nil
 		}
 	}
 

@@ -111,6 +111,8 @@ func (l *Lexer) NextToken() token.Token {
 		return l.tok(token.SLASH, "/", line, col)
 	case '=':
 		return l.tok(token.ASSIGN, "=", line, col)
+	case '?':
+		return l.tok(token.QUESTION, "?", line, col)
 	case '<':
 		if l.pos < len(l.input) && l.peek() == '>' {
 			l.next()
