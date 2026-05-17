@@ -1896,6 +1896,13 @@ function cfgAdmin(name) {
       overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative">'
         +'<div style="position:sticky;top:0;background:#fff;padding:8px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:13px">Администрирование</span><button onclick="document.getElementById(\'admin-overlay\').style.display=\'none\'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">×</button></div>'
         +'<div style="padding:16px">'+html+'</div></div>';
+      // Scripts inside innerHTML don't execute — re-run them manually
+      overlay.querySelectorAll('script').forEach(function(s){
+        var ns = document.createElement('script');
+        ns.textContent = s.textContent;
+        document.body.appendChild(ns);
+        document.body.removeChild(ns);
+      });
     });
 }
 
