@@ -19,11 +19,16 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
 	"fmtDate": func(v any) string {
 		if t, ok := v.(time.Time); ok {
-			return t.Format("02.01.2006")
+			return t.In(time.Local).Format("02.01.2006")
 		}
 		if s, ok := v.(string); ok && len(s) >= 10 {
 			if t, err := time.Parse(time.RFC3339, s); err == nil {
-				return t.Format("02.01.2006")
+				return t.In(time.Local).Format("02.01.2006")
+			}
+			for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+				if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+					return t.Format("02.01.2006")
+				}
 			}
 		}
 		return fmt.Sprintf("%v", v)
@@ -819,12 +824,15 @@ const tplForm = `
 <div class="form-group">
   <label>{{$fn}}</label>
   {{if isRef (str .Type)}}
-    <select name="{{$fn}}">
-      <option value="">— выбрать —</option>
-      {{range index $.RefOptions $fn}}
-      <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
-      {{end}}
-    </select>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="ref-{{$fn}}" name="{{$fn}}" style="flex:1">
+        <option value="">— выбрать —</option>
+        {{range index $.RefOptions $fn}}
+        <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
+        {{end}}
+      </select>
+      <button type="button" onclick="openRefPicker('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="Выбрать из списка">...</button>
+    </div>
   {{else if isEnum (str .Type)}}
     <select name="{{$fn}}">
       <option value="">— выбрать —</option>
@@ -859,12 +867,15 @@ const tplForm = `
       {{range $tp.Fields}}{{$fn := .Name}}
         <td>
         {{if isRef (str .Type)}}
-          <select name="tp.{{$tpName}}.{{$i}}.{{$fn}}">
-            <option value="">— выбрать —</option>
-            {{range index $tpRef $fn}}
-            <option value="{{index . "id"}}" {{if eq (str (index . "id")) (str (index $row $fn))}}selected{{end}}>{{index . "_label"}}</option>
-            {{end}}
-          </select>
+          <div style="display:flex;gap:4px;align-items:center">
+            <select name="tp.{{$tpName}}.{{$i}}.{{$fn}}" style="flex:1">
+              <option value="">— выбрать —</option>
+              {{range index $tpRef $fn}}
+              <option value="{{index . "id"}}" {{if eq (str (index . "id")) (str (index $row $fn))}}selected{{end}}>{{index . "_label"}}</option>
+              {{end}}
+            </select>
+            <button type="button" onclick="openRefPicker(this.parentElement.querySelector('select'))" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="Выбрать из списка">...</button>
+          </div>
         {{else if eq (str .Type) "number"}}
           <input type="number" name="tp.{{$tpName}}.{{$i}}.{{$fn}}" value="{{index $row $fn}}"
             data-tp-num="{{$fn}}" oninput="recalcTpRow(this)">
@@ -952,8 +963,11 @@ function addTpRow(tpName, fields, numFields, idx) {
   fields.forEach(function(fn) {
     var td = document.createElement('td');
     if (refOpts[fn] !== undefined) {
+      var wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex;gap:4px;align-items:center';
       var sel = document.createElement('select');
       sel.name = 'tp.' + tpName + '.' + idx + '.' + fn;
+      sel.style.flex = '1';
       var defOpt = document.createElement('option');
       defOpt.value = ''; defOpt.textContent = '— выбрать —';
       sel.appendChild(defOpt);
@@ -962,7 +976,14 @@ function addTpRow(tpName, fields, numFields, idx) {
         o.value = opt.id; o.textContent = opt._label || opt.id;
         sel.appendChild(o);
       });
-      td.appendChild(sel);
+      var pickBtn = document.createElement('button');
+      pickBtn.type = 'button'; pickBtn.textContent = '...';
+      pickBtn.title = 'Выбрать из списка';
+      pickBtn.style.cssText = 'padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0';
+      (function(s){ pickBtn.onclick = function(){ openRefPicker(s); }; })(sel);
+      wrapper.appendChild(sel);
+      wrapper.appendChild(pickBtn);
+      td.appendChild(wrapper);
     } else {
       var inp = document.createElement('input');
       inp.name = 'tp.' + tpName + '.' + idx + '.' + fn;
@@ -995,6 +1016,54 @@ function recalcTpRow(inp) {
     var b = parseFloat(nums[1].value) || 0;
     nums[2].value = (a * b).toFixed(2);
   }
+}
+function openRefPicker(selOrId) {
+  var sel = (typeof selOrId === 'string') ? document.getElementById(selOrId) : selOrId;
+  if (!sel) return;
+  var opts = [];
+  for (var i = 0; i < sel.options.length; i++) {
+    var o = sel.options[i];
+    if (o.value) opts.push({id: o.value, label: o.text});
+  }
+  var old = document.getElementById('_ref-picker-modal');
+  if (old) old.remove();
+  var modal = document.createElement('div');
+  modal.id = '_ref-picker-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var inner = '<div style="background:#fff;border-radius:10px;padding:20px;width:480px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18)">';
+  inner += '<div style="font-weight:600;font-size:15px;margin-bottom:12px;color:#1e293b">Выбор из списка</div>';
+  inner += '<input id="_rp-search" type="text" placeholder="Поиск..." autocomplete="off" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;margin-bottom:10px;outline:none">';
+  inner += '<div id="_rp-list" style="overflow-y:auto;flex:1;border:1px solid #e2e8f0;border-radius:7px">';
+  if (opts.length === 0) {
+    inner += '<div style="padding:16px;color:#94a3b8;font-size:13px;text-align:center">Список пуст</div>';
+  } else {
+    for (var i = 0; i < opts.length; i++) {
+      inner += '<div data-id="' + opts[i].id.replace(/"/g,'&quot;') + '" class="_rp-item" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px;color:#1e293b">' + opts[i].label + '</div>';
+    }
+  }
+  inner += '</div>';
+  inner += '<div style="margin-top:12px;text-align:right"><button type="button" id="_rp-cancel" style="padding:6px 18px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">Отмена</button></div>';
+  inner += '</div>';
+  modal.innerHTML = inner;
+  document.body.appendChild(modal);
+  window._rpTarget = sel;
+  var search = document.getElementById('_rp-search');
+  search.focus();
+  search.addEventListener('input', function() {
+    var q = this.value.toLowerCase();
+    var items = document.querySelectorAll('._rp-item');
+    for (var i = 0; i < items.length; i++) {
+      items[i].style.display = items[i].textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+    }
+  });
+  document.getElementById('_rp-list').addEventListener('click', function(e) {
+    var item = e.target.closest('._rp-item');
+    if (!item) return;
+    if (window._rpTarget) window._rpTarget.value = item.getAttribute('data-id');
+    modal.remove();
+  });
+  document.getElementById('_rp-cancel').addEventListener('click', function() { modal.remove(); });
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
 }
 </script>
 </main></div></body></html>

@@ -428,7 +428,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		}
 		if f.Type == metadata.FieldTypeDate {
 			if t, ok := v.(time.Time); ok {
-				vals[f.Name] = t.Format("2006-01-02T15:04")
+				vals[f.Name] = t.In(time.Local).Format("2006-01-02T15:04")
 				continue
 			}
 		}
@@ -489,6 +489,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"HasPrintProc":  s.reg.GetProcedure(entity.Name, "Печать") != nil || s.reg.GetProcedure(entity.Name, "Print") != nil,
 		"FolderOptions": folderOptsEdit,
 		"DocMovements":  docMovements,
+		"Error":         r.URL.Query().Get("posting_error"),
 	})
 }
 
@@ -617,8 +618,9 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 	mc := runtime.NewMovementsCollector(entity.Name, id)
 	setPeriodFromFields(mc, entity, obj.Fields)
 
+	docURL := "/ui/" + strings.ToLower(string(entity.Kind)) + "/" + entity.Name + "/" + id.String()
 	if errMsg, _ := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
-		http.Error(w, "Проведение: "+errMsg, 422)
+		http.Redirect(w, r, docURL+"?posting_error="+url.QueryEscape(errMsg), http.StatusSeeOther)
 		return
 	}
 
@@ -631,7 +633,7 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	http.Redirect(w, r, "/ui/"+strings.ToLower(string(entity.Kind))+"/"+entity.Name+"/"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, docURL, http.StatusSeeOther)
 }
 
 // unpostDocument clears movements and sets posted=false.
@@ -869,8 +871,16 @@ func setPeriodFromFields(mc *runtime.MovementsCollector, entity *metadata.Entity
 	for _, f := range entity.Fields {
 		if f.Type == metadata.FieldTypeDate {
 			if v, ok := fields[f.Name]; ok && v != nil {
-				if t, ok := v.(time.Time); ok {
-					mc.SetPeriod(t)
+				switch tv := v.(type) {
+				case time.Time:
+					mc.SetPeriod(tv)
+				case string:
+					for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+						if t, err := time.ParseInLocation(layout, tv, time.Local); err == nil {
+							mc.SetPeriod(t)
+							break
+						}
+					}
 				}
 			}
 			return
@@ -976,7 +986,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	for _, p := range rep.Params {
 		if p.Type == "date" {
 			if str, ok := queryValues[p.Name].(string); ok && str != "" {
-				if t, err2 := time.Parse("2006-01-02", str); err2 == nil {
+				if t, err2 := time.ParseInLocation("2006-01-02", str, time.Local); err2 == nil {
 					queryValues[p.Name] = t
 				}
 			}
@@ -1139,7 +1149,7 @@ func parseParamValue(s, typ string) any {
 	switch typ {
 	case "date":
 		for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
-			if t, err := time.Parse(layout, s); err == nil {
+			if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
 				return t
 			}
 		}
@@ -1659,7 +1669,7 @@ func formToFields(r *http.Request, entity *metadata.Entity) map[string]any {
 		case metadata.FieldTypeDate:
 			parsed := false
 			for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
-				if t, err := time.Parse(layout, val); err == nil {
+				if t, err := time.ParseInLocation(layout, val, time.Local); err == nil {
 					fields[f.Name] = t
 					parsed = true
 					break
@@ -2137,7 +2147,7 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
-			if t, err := time.Parse(layout, pStr); err == nil {
+			if t, err := time.ParseInLocation(layout, pStr, time.Local); err == nil {
 				periodPtr = &t
 				break
 			}
@@ -2209,7 +2219,7 @@ func parseInfoRegFieldValue(f metadata.Field, val string) any {
 	switch f.Type {
 	case metadata.FieldTypeDate:
 		for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
-			if t, err := time.Parse(layout, val); err == nil {
+			if t, err := time.ParseInLocation(layout, val, time.Local); err == nil {
 				return t
 			}
 		}
@@ -2522,7 +2532,7 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 			paramValues[p.Name] = nil
 		} else {
 			if p.Type == "date" {
-				if t, err := time.Parse("2006-01-02", val); err == nil {
+				if t, err := time.ParseInLocation("2006-01-02", val, time.Local); err == nil {
 					paramValues[p.Name] = t
 				} else {
 					paramValues[p.Name] = val

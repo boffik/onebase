@@ -852,9 +852,11 @@ function cfgSelectPanel(id) {
   if (el) selItem(el);
 }
 (function(){
+  var directId='{{.SelectedTreeID}}';
   var saved='{{.FieldsSavedEntity}}'?'{{.FieldsSavedEntity}}':'{{.ModuleSavedEntity}}';
   var el=null;
-  if(saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
+  if(directId)el=document.querySelector('[data-id="'+directId+'"]');
+  if(!el&&saved&&saved!=='')['e-','r-','ir-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
   if(el)selItem(el);else{var f=document.querySelector('.cfg-item');if(f)selItem(f);}
 })();
 
@@ -875,7 +877,7 @@ function initLayoutEditor(n){
   if(!ta){if(ved)ved.innerHTML='<p style="color:red">ta not found: '+n+'</p>';return;}
   if(!window.jsyaml){if(ved)ved.innerHTML='<p style="color:red">js-yaml not loaded! [v5]</p>';return;}
   var d=null;
-  try{d=jsyaml.parse(ta.value);}catch(e){}
+  try{d=jsyaml.load(ta.value);}catch(e){}
   if(!d)d={areas:{}};
   _led[n]={data:d,sel:null,init:true};
   if(Object.keys(d.areas||{}).length>0){renderLayoutEditor(n);}
@@ -909,11 +911,10 @@ function _ldColgroup(d){
   }
   return h+'</colgroup>';
 }
-function renderLayoutEditor(n){
+// noYamlSync=true prevents overwriting textarea (used when only selection changes)
+function renderLayoutEditor(n,noYamlSync){
   var s=_led[n];if(!s)return;
-  // always sync YAML textarea from in-memory state (except on very first init
-  // where we preserve the server-rendered content to show original formatting)
-  if(window.jsyaml&&!s.init){
+  if(!noYamlSync&&window.jsyaml&&!s.init){
     var y=jsyaml.dump(s.data,{lineWidth:-1,quotingType:'"'});
     var ta=document.getElementById('ta-mkt-'+n);
     if(ta)ta.value=y;
@@ -998,7 +999,7 @@ function renderPreviewOnly(n){
 function selectCell(n,a,r,c){
   var s=_led[n];if(!s)return;
   s.sel={area:a,row:r,col:c};
-  renderLayoutEditor(n);
+  renderLayoutEditor(n,true); // don't reformat YAML on cell selection
 }
 function _setVal(id,v){var el=document.getElementById(id);if(el)el.value=v;}
 function _setChk(id,v){var el=document.getElementById(id);if(el)el.checked=v;}
@@ -1011,6 +1012,7 @@ function syncProps(n){
   if(!ar||!ar.rows||!ar.rows[s.sel.row]){pp.style.display='none';return;}
   var c=ar.rows[s.sel.row].cells[s.sel.col]||{};
   pp.style.display='block';
+  pp.scrollIntoView({behavior:'smooth',block:'nearest'});
   _setVal('vp-text-'+n,c.text||'');
   _setVal('vp-param-'+n,c.parameter||'');
   _setChk('vp-bold-'+n,!!c.bold);
@@ -1045,7 +1047,7 @@ function applyYaml(n){
   var ta=document.getElementById('ta-mkt-'+n);
   if(!ta)return;
   var d=null;
-  try{d=jsyaml.parse(ta.value);}catch(e){return;}
+  try{d=jsyaml.load(ta.value);}catch(e){return;}
   if(!d||typeof d!=='object')return; // invalid YAML — keep current state
   if(!d.areas)d.areas={};
   if(!_led[n])_led[n]={data:d,sel:null};
@@ -1061,10 +1063,14 @@ function scheduleYamlSync(n){
   _yamlTimers[n]=setTimeout(function(){applyYaml(n);},400);
 }
 function saveLayoutEditor(n){
-  // ta-mkt-{n} has name="source" and is submitted directly.
-  // Flush any pending debounced sync first so the textarea is current.
+  // Flush debounced YAML input timer first.
   if(_yamlTimers[n]){clearTimeout(_yamlTimers[n]);delete _yamlTimers[n];}
-  applyYaml(n);
+  // Sync in-memory state → textarea (in case visual editor made changes without syncing).
+  if(window.jsyaml&&_led[n]){
+    var y=jsyaml.dump(_led[n].data,{lineWidth:-1,quotingType:'"'});
+    var ta=document.getElementById('ta-mkt-'+n);
+    if(ta)ta.value=y;
+  }
   return true;
 }
 function addLayoutArea(n){
@@ -1075,7 +1081,7 @@ function addLayoutArea(n){
     // init if not yet initialized
     var ta=document.getElementById('ta-mkt-'+n);
     if(!ta||!window.jsyaml)return;
-    var d=null;try{d=jsyaml.parse(ta.value);}catch(e){}
+    var d=null;try{d=jsyaml.load(ta.value);}catch(e){}
     if(!d)d={areas:{}};
     s={data:d,sel:null};_led[n]=s;
   }

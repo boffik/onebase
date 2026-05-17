@@ -256,3 +256,47 @@ func TestCompile_RefDim_AutoJoin(t *testing.T) {
 		t.Errorf("expected GROUP BY ref_номенклатура.наименование, got: %s", sql)
 	}
 }
+
+// TestCompile_StringDim_NoIdSuffix ensures that a string-type dimension
+// in one register is not incorrectly mapped to _id when another register
+// in opts has a reference-type dimension with the same name.
+func TestCompile_StringDim_NoIdSuffix(t *testing.T) {
+	src := `ВЫБРАТЬ
+  Номенклатура,
+  Склад,
+  СУММА(Количество) КАК Количество
+ИЗ РегистрНакопления.ОстаткиТоваров
+СГРУППИРОВАТЬ ПО Номенклатура, Склад`
+
+	// ОстаткиТоваров has Номенклатура as plain string
+	regStock := &metadata.Register{
+		Name: "ОстаткиТоваров",
+		Dimensions: []metadata.Field{
+			{Name: "Номенклатура", Type: "string"},
+			{Name: "Склад", Type: "string"},
+		},
+		Resources: []metadata.Field{{Name: "Количество"}},
+	}
+	// ВаловаяПрибыль has Номенклатура as reference — should NOT pollute colMap
+	regProfit := &metadata.Register{
+		Name: "ВаловаяПрибыль",
+		Dimensions: []metadata.Field{
+			{Name: "Номенклатура", Type: "reference:Номенклатура", RefEntity: "Номенклатура"},
+		},
+		Resources: []metadata.Field{{Name: "Выручка"}},
+	}
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Registers: []*metadata.Register{regStock, regProfit},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+	if strings.Contains(sql, "номенклатура_id") {
+		t.Errorf("string-type dim must NOT become _id; got: %s", sql)
+	}
+	if !strings.Contains(sql, "номенклатура") {
+		t.Errorf("expected plain 'номенклатура' column in SQL, got: %s", sql)
+	}
+}

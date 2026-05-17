@@ -954,9 +954,9 @@ func (tr *translator) findRefDim(name string) *refDimInfo {
 // --- main translator loop ---
 
 // buildColMap creates a mapping from lowercase field name to actual DB column name
-// for all reference-type fields across all known registers and info-registers.
-// This allows the query language to use "Номенклатура" while the DB column is "номенклатура_id".
-func buildColMap(opts CompileOpts) map[string]string {
+// for reference-type fields. It scans tokens to find the specific source register
+// so that reference dims from one register don't pollute queries against another.
+func buildColMap(tokens []tok, opts CompileOpts) map[string]string {
 	m := map[string]string{}
 	addFields := func(fields []metadata.Field) {
 		for _, f := range fields {
@@ -967,6 +967,44 @@ func buildColMap(opts CompileOpts) map[string]string {
 			}
 		}
 	}
+
+	// Find the specific register being queried (same scan as preScanRefDims).
+	for i := 0; i+2 < len(tokens); i++ {
+		t := tokens[i]
+		if t.kind != tIdent {
+			continue
+		}
+		upper := strings.ToUpper(t.val)
+		if !isSourceType(upper) || tokens[i+1].kind != tDot || tokens[i+2].kind != tIdent {
+			continue
+		}
+		if i+3 < len(tokens) && tokens[i+3].kind == tDot {
+			continue // skip virtual tables
+		}
+		regName := tokens[i+2].val
+		if isAccumRegType(upper) {
+			for _, reg := range opts.Registers {
+				if strings.EqualFold(reg.Name, regName) {
+					addFields(reg.Dimensions)
+					addFields(reg.Resources)
+					addFields(reg.Attributes)
+					return m
+				}
+			}
+		} else if isInfoRegType(upper) {
+			for _, ir := range opts.InfoRegs {
+				if strings.EqualFold(ir.Name, regName) {
+					addFields(ir.Dimensions)
+					addFields(ir.Resources)
+					return m
+				}
+			}
+		}
+		// Found a source but not a register — stop searching (entity query needs no colMap)
+		return m
+	}
+
+	// Fallback: no explicit register source — build from all (rare, backward-compat)
 	for _, reg := range opts.Registers {
 		addFields(reg.Dimensions)
 		addFields(reg.Resources)
@@ -975,15 +1013,6 @@ func buildColMap(opts CompileOpts) map[string]string {
 	for _, ir := range opts.InfoRegs {
 		addFields(ir.Dimensions)
 		addFields(ir.Resources)
-	}
-	for _, ar := range opts.AccountRegs {
-		for _, r := range ar.Resources {
-			name := strings.ToLower(r.Name)
-			col := strings.ToLower(r.Name)
-			if col != name {
-				m[name] = col
-			}
-		}
 	}
 	return m
 }
@@ -997,7 +1026,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		params:      map[string]int{},
 		paramValues: opts.Params,
 		opts:        opts,
-		colMap:      buildColMap(opts),
+		colMap:      buildColMap(tokens, opts),
 		refDims:     preScanRefDims(tokens, opts),
 		section:     sectionOther,
 	}

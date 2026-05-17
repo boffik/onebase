@@ -208,6 +208,8 @@ type configuratorData struct {
 	// fields save
 	FieldsSaved       bool
 	FieldsSavedEntity string
+	// exact tree item to select after save (overrides prefix-search for FieldsSavedEntity)
+	SelectedTreeID string
 	// platform version
 	PlatformVer    string
 	UIServerURL    string
@@ -2370,6 +2372,7 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = layoutName
+		data.SelectedTreeID = "mkt-" + layoutName
 	}
 	renderCfg(w, data)
 }
