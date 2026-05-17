@@ -41,13 +41,36 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 			docs++
 		}
 	}
+	cfg := s.cfg
+	cfg.DSN = maskDSN(cfg.DSN)
 	s.render(w, r, "page-about", map[string]any{
-		"Cfg":        s.cfg,
+		"Cfg":        cfg,
 		"Catalogs":   catalogs,
 		"Documents":  docs,
 		"Registers":  len(s.reg.Registers()),
 		"Reports":    len(s.reg.Reports()),
 	})
+}
+
+func maskDSN(dsn string) string {
+	if i := strings.Index(dsn, "://"); i >= 0 {
+		rest := dsn[i+3:]
+		if at := strings.Index(rest, "@"); at >= 0 {
+			userPart := rest[:at]
+			if colon := strings.LastIndex(userPart, ":"); colon >= 0 {
+				return dsn[:i+3+colon+1] + "***" + dsn[i+3+at:]
+			}
+		}
+	}
+	if i := strings.Index(dsn, "password="); i >= 0 {
+		end := i + len("password=")
+		rest := dsn[end:]
+		if sp := strings.IndexByte(rest, ' '); sp >= 0 {
+			return dsn[:end] + "***" + rest[sp:]
+		}
+		return dsn[:end] + "***"
+	}
+	return dsn
 }
 
 func (s *Server) logo(w http.ResponseWriter, r *http.Request) {
