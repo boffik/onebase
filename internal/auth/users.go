@@ -132,6 +132,10 @@ func (r *Repo) Authenticate(ctx context.Context, login, password string) (*User,
 
 func (r *Repo) CreateSession(ctx context.Context, userID string) (string, error) {
 	d := r.db.Dialect()
+	// удаляем все старые сессии пользователя перед созданием новой
+	delQ := fmt.Sprintf(`DELETE FROM _sessions WHERE user_id = %s`, d.Placeholder(1))
+	r.db.Exec(ctx, delQ, userID)
+
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
