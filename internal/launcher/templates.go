@@ -259,7 +259,7 @@ const tplForm = `
       <label>Путь к файлу SQLite</label>
       <div class="input-browse">
         <input id="inp-dbpath" name="db_path" value="{{.Base.DBPath}}" placeholder="C:\onebase\mydb.db">
-        <button type="button" class="btn-browse" onclick="pickFile('inp-dbpath','Выберите файл SQLite','SQLite (*.db)|*.db|Все файлы (*.*)|*.*')">📁</button>
+        <button type="button" class="btn-browse" onclick="pickSQLiteDir('inp-dbpath')">📁</button>
       </div>
       <div class="hint">Файл будет создан, если не существует. Расширение .db рекомендуется.</div>
     </div>
@@ -319,6 +319,21 @@ function pickFile(inputId, title, filter) {
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.path) document.getElementById(inputId).value = d.path;
+    })
+    .finally(function(){ btn.disabled = false; btn.textContent = '📁'; });
+}
+function pickSQLiteDir(inputId) {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '...';
+  fetch('/browse-dir?title=' + encodeURIComponent('Выберите папку для файла базы данных'))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.path) return;
+      var name = (document.querySelector('input[name=name]').value || 'database')
+        .replace(/[\\/:*?"<>|]/g, '_').trim() || 'database';
+      var sep = d.path.slice(-1) === '\\' ? '' : '\\';
+      document.getElementById(inputId).value = d.path + sep + name + '.db';
     })
     .finally(function(){ btn.disabled = false; btn.textContent = '📁'; });
 }
