@@ -1392,6 +1392,7 @@ function repAddParam(tableId) {
   tr.innerHTML = '<td><input type="text" name="param.' + i + '.name" value="" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="ИмяПараметра"></td>'
     + '<td><select name="param.' + i + '.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">'
     + '<option value="string">строка</option><option value="date">дата</option><option value="number">число</option><option value="select">список</option>'
+    {{range $.AllEntityNames}}+'<option value="reference:{{.}}">ссылка: {{.}}</option>'{{end}}
     + '</select></td>'
     + '<td><input type="text" name="param.' + i + '.label" value="" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="Заголовок"></td>'
     + '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();repReindex(\'' + tableId + '\')">✕</button></td>';
@@ -2964,6 +2965,8 @@ const cfgTabTree = `{{define "tab-tree"}}
               <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>дата</option>
               <option value="number" {{if eq $p.Type "number"}}selected{{end}}>число</option>
               <option value="select" {{if eq $p.Type "select"}}selected{{end}}>список</option>
+              {{range $.AllEntityNames}}<option value="reference:{{.}}" {{if eq $p.Type (print "reference:" .)}}selected{{end}}>ссылка: {{.}}</option>
+              {{end}}
             </select>
           </td>
           <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>

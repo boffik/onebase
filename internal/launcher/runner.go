@@ -79,6 +79,7 @@ func (r *Runner) Start(base *Base) error {
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	noWindow(cmd)
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
@@ -252,6 +253,7 @@ func (r *Runner) MigrateBase(ctx context.Context, base *Base) (string, error) {
 	}
 
 	cmd := exec.CommandContext(ctx, exe, args...)
+	noWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

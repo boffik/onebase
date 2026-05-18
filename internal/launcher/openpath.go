@@ -75,8 +75,8 @@ if ($d.ShowDialog() -eq 'OK') { Write-Output $d.FileName }`
 }
 
 func runPowerShell(script string) (string, error) {
-	// -WindowStyle Hidden prevents the PowerShell console window from flashing.
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
+	noWindow(cmd) // CREATE_NO_WINDOW: suppresses the brief flash before -WindowStyle kicks in
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	if err := cmd.Run(); err != nil {

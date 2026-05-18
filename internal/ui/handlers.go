@@ -196,6 +196,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 
 	var breadcrumbs []map[string]string
 	var parentStr string
+	var upURL string
 	if entity.Hierarchical && !treeView {
 		parentStr = r.URL.Query().Get("parent")
 		if parentStr == "" {
@@ -203,6 +204,22 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		} else {
 			params.ParentStr = parentStr
 			breadcrumbs = s.buildHierarchyBreadcrumbs(r.Context(), entity, parentStr)
+			baseListURL := "/ui/" + strings.ToLower(string(entity.Kind)) + "/" + strings.ToLower(entity.Name)
+			csys := r.URL.Query().Get("subsystem")
+			if len(breadcrumbs) <= 1 {
+				if csys != "" {
+					upURL = baseListURL + "?subsystem=" + csys
+				} else {
+					upURL = baseListURL
+				}
+			} else {
+				pid := breadcrumbs[len(breadcrumbs)-2]["ID"]
+				if csys != "" {
+					upURL = baseListURL + "?parent=" + pid + "&subsystem=" + csys
+				} else {
+					upURL = baseListURL + "?parent=" + pid
+				}
+			}
 		}
 	}
 
@@ -246,6 +263,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		"IsAdmin":          isAdmin,
 		"Breadcrumbs":      breadcrumbs,
 		"ParentStr":        parentStr,
+		"UpURL":            upURL,
 		"TreeView":         treeView,
 		"TreeRows":         treeRows,
 		"Total":            total,
@@ -454,6 +472,30 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 				vals[f.Name] = t.In(time.Local).Format("2006-01-02T15:04")
 				continue
 			}
+			// SQLite returns dates as strings — parse and reformat for <input type="datetime-local">
+			if s2, ok := v.(string); ok && s2 != "" {
+				parsed := false
+				for _, layout := range []string{
+					time.RFC3339, time.RFC3339Nano,
+					"2006-01-02 15:04:05 -0700 MST",
+					"2006-01-02 15:04:05.999999999 -0700 MST",
+					"2006-01-02T15:04:05", "2006-01-02 15:04:05",
+					"2006-01-02T15:04", "2006-01-02",
+				} {
+					if t, err2 := time.Parse(layout, s2); err2 == nil {
+						vals[f.Name] = t.In(time.Local).Format("2006-01-02T15:04")
+						parsed = true
+						break
+					}
+				}
+				// Last resort: extract just the date prefix
+				if !parsed && len(s2) >= 10 {
+					if t, err2 := time.ParseInLocation("2006-01-02", s2[:10], time.Local); err2 == nil {
+						vals[f.Name] = t.Format("2006-01-02T15:04")
+					}
+				}
+				continue
+			}
 		}
 		vals[f.Name] = fmt.Sprintf("%v", v)
 	}
@@ -474,7 +516,11 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	if entity.Hierarchical {
 		folderOptsEdit = s.loadFolderOptions(r.Context(), entity)
 		if v, ok := row["is_folder"]; ok {
-			vals["is_folder"] = fmt.Sprintf("%v", v)
+			if asBool(v) {
+				vals["is_folder"] = "true"
+			} else {
+				vals["is_folder"] = "false"
+			}
 		} else {
 			vals["is_folder"] = "false"
 		}
@@ -960,8 +1006,9 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, r, "page-report", map[string]any{
-		"Report":      rep,
-		"ParamValues": map[string]any{},
+		"Report":       rep,
+		"ParamValues":  map[string]any{},
+		"ReportParams": s.buildReportParams(r.Context(), rep.Params),
 	})
 }
 
@@ -1022,20 +1069,23 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		AccountRegs: s.reg.AccountRegisters(),
 		Dialect:     s.store.Dialect(),
 	})
+	reportParams := s.buildReportParams(r.Context(), rep.Params)
 	if err != nil {
 		s.render(w, r, "page-report", map[string]any{
-			"Report":      rep,
-			"QueryError":  err.Error(),
-			"ParamValues": paramValues,
+			"Report":       rep,
+			"QueryError":   err.Error(),
+			"ParamValues":  paramValues,
+			"ReportParams": reportParams,
 		})
 		return
 	}
 	rows, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
 	if err != nil {
 		s.render(w, r, "page-report", map[string]any{
-			"Report":      rep,
-			"QueryError":  err.Error(),
-			"ParamValues": paramValues,
+			"Report":       rep,
+			"QueryError":   err.Error(),
+			"ParamValues":  paramValues,
+			"ReportParams": reportParams,
 		})
 		return
 	}
@@ -1047,11 +1097,12 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	}
 
 	s.render(w, r, "page-report", map[string]any{
-		"Report":      rep,
-		"Cols":        cols,
-		"Rows":        rows,
-		"ParamValues": paramValues,
-		"ChartOption": chartOption,
+		"Report":       rep,
+		"Cols":         cols,
+		"Rows":         rows,
+		"ParamValues":  paramValues,
+		"ChartOption":  chartOption,
+		"ReportParams": reportParams,
 	})
 }
 
@@ -1509,6 +1560,78 @@ func (s *Server) loadRefOptions(ctx context.Context, entity *metadata.Entity) (m
 	return opts, nil
 }
 
+// reportParamUI is a template-friendly wrapper around a report parameter.
+type reportParamUI struct {
+	Name    string
+	Label   string
+	Type    string // raw type string
+	IsDate  bool
+	IsNum   bool
+	IsSel   bool
+	IsRef   bool
+	Options []string          // for IsSel
+	Opts    []map[string]any  // for IsRef: [{id, _label}]
+}
+
+// buildReportParams builds UI-ready param descriptors, loading reference options inline.
+func (s *Server) buildReportParams(ctx context.Context, params []reportpkg.Param) []reportParamUI {
+	out := make([]reportParamUI, 0, len(params))
+	for _, p := range params {
+		ui := reportParamUI{
+			Name:  p.Name,
+			Label: p.DisplayLabel(),
+			Type:  p.Type,
+		}
+		switch {
+		case p.Type == "date":
+			ui.IsDate = true
+		case p.Type == "number":
+			ui.IsNum = true
+		case p.Type == "select":
+			ui.IsSel = true
+			ui.Options = p.Options
+		case strings.HasPrefix(p.Type, "reference:"):
+			ui.IsRef = true
+			entityName := strings.TrimPrefix(p.Type, "reference:")
+			if entity := s.reg.GetEntity(entityName); entity != nil {
+				rows, _ := s.store.List(ctx, entity.Name, entity, storage.ListParams{})
+				rows = filterOutFolders(rows)
+				for _, row := range rows {
+					row["_label"] = firstStringField(row, entity)
+				}
+				ui.Opts = rows
+			}
+		}
+		out = append(out, ui)
+	}
+	return out
+}
+
+// loadReportRefOpts returns select options for report params with type "reference:EntityName".
+func (s *Server) loadReportRefOpts(ctx context.Context, params []reportpkg.Param) map[string][]map[string]any {
+	opts := make(map[string][]map[string]any)
+	for _, p := range params {
+		if !strings.HasPrefix(p.Type, "reference:") {
+			continue
+		}
+		entityName := strings.TrimPrefix(p.Type, "reference:")
+		entity := s.reg.GetEntity(entityName)
+		if entity == nil {
+			continue
+		}
+		rows, err := s.store.List(ctx, entity.Name, entity, storage.ListParams{})
+		if err != nil {
+			continue
+		}
+		rows = filterOutFolders(rows)
+		for _, row := range rows {
+			row["_label"] = firstStringField(row, entity)
+		}
+		opts[p.Name] = rows
+	}
+	return opts
+}
+
 // loadTPRefOptions returns select options for reference fields in all table parts.
 // Result: tpName → fieldName → [{id, _label, ...}]
 func (s *Server) loadTPRefOptions(ctx context.Context, entity *metadata.Entity) (map[string]map[string][]map[string]any, error) {
@@ -1669,12 +1792,26 @@ func (s *Server) allFunctions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// asBool converts DB boolean values to Go bool.
+// SQLite stores booleans as int64(0/1); PostgreSQL returns bool directly.
+func asBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case int64:
+		return t != 0
+	case int:
+		return t != 0
+	}
+	return false
+}
+
 // filterOutFolders removes rows where is_folder=true (hierarchical catalog groups).
 // Used to prevent selecting groups in reference fields of documents/table parts.
 func filterOutFolders(rows []map[string]any) []map[string]any {
 	out := rows[:0:len(rows)]
 	for _, row := range rows {
-		if v, ok := row["is_folder"].(bool); ok && v {
+		if asBool(row["is_folder"]) {
 			continue
 		}
 		out = append(out, row)
@@ -1918,7 +2055,7 @@ func (s *Server) loadFolderOptions(ctx context.Context, entity *metadata.Entity)
 	}
 	var folders []map[string]any
 	for _, row := range rows {
-		if isFolder, ok := row["is_folder"].(bool); ok && isFolder {
+		if asBool(row["is_folder"]) {
 			row["_label"] = firstStringField(row, entity)
 			folders = append(folders, row)
 		}
@@ -2151,6 +2288,30 @@ func (s *Server) infoRegList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) loadInfoRegRefOpts(ctx context.Context, ir *metadata.InfoRegister) map[string][]map[string]any {
+	opts := make(map[string][]map[string]any)
+	for _, f := range ir.Dimensions {
+		if f.RefEntity == "" {
+			continue
+		}
+		opts[f.Name] = []map[string]any{}
+		refEntity := s.reg.GetEntity(f.RefEntity)
+		if refEntity == nil {
+			continue
+		}
+		rows, err := s.store.List(ctx, f.RefEntity, refEntity, storage.ListParams{})
+		if err != nil {
+			continue
+		}
+		for _, row := range filterOutFolders(rows) {
+			id, _ := row["id"].(string)
+			label := firstStringField(row, refEntity)
+			opts[f.Name] = append(opts[f.Name], map[string]any{"id": id, "_label": label})
+		}
+	}
+	return opts
+}
+
 func (s *Server) infoRegForm(w http.ResponseWriter, r *http.Request) {
 	ir := s.getInfoReg(w, r)
 	if ir == nil {
@@ -2161,6 +2322,7 @@ func (s *Server) infoRegForm(w http.ResponseWriter, r *http.Request) {
 		"InfoReg": ir,
 		"Values":  map[string]string{"period": now},
 		"Error":   "",
+		"RefOpts": s.loadInfoRegRefOpts(r.Context(), ir),
 	})
 }
 
@@ -2179,6 +2341,7 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 				"InfoReg": ir,
 				"Values":  formValuesFromRequest(r, ir),
 				"Error":   "Период обязателен для периодического регистра",
+				"RefOpts": s.loadInfoRegRefOpts(r.Context(), ir),
 			})
 			return
 		}
@@ -2193,6 +2356,7 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 				"InfoReg": ir,
 				"Values":  formValuesFromRequest(r, ir),
 				"Error":   "Неверный формат даты периода",
+				"RefOpts": s.loadInfoRegRefOpts(r.Context(), ir),
 			})
 			return
 		}
@@ -2206,6 +2370,7 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 			"InfoReg": ir,
 			"Values":  formValuesFromRequest(r, ir),
 			"Error":   err.Error(),
+			"RefOpts": s.loadInfoRegRefOpts(r.Context(), ir),
 		})
 		return
 	}

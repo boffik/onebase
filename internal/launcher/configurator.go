@@ -989,8 +989,8 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 			defer db.Close()
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, "src/"+filename, []byte(source))
 		}
 	} else {
@@ -1131,8 +1131,8 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 	}
 	_, err = db.Exec(ctx, `
 		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, now())
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+		VALUES ($1, $2, CURRENT_TIMESTAMP)
+		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 	`, targetPath, out)
 	return err
 }
@@ -1576,8 +1576,8 @@ func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName s
 	}
 	_, err = db.Exec(ctx, `
 		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, now())
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+		VALUES ($1, $2, CURRENT_TIMESTAMP)
+		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 	`, targetPath, out)
 	return err
 }
@@ -1677,8 +1677,8 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 			path := subdir + "/" + filename
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, path, []byte(content))
 		}
 	} else {
@@ -1759,8 +1759,8 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 			path := "enums/" + nameToFilename(enumName) + ".yaml"
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, path, out)
 		}
 	} else {
@@ -1872,8 +1872,8 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 				if out, err := updateConstantsFile(targetContent); err == nil {
 					_, saveErr = db.Exec(r.Context(), `
 						INSERT INTO _onebase_config (path, content, updated_at)
-						VALUES ($1, $2, now())
-						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+						VALUES ($1, $2, CURRENT_TIMESTAMP)
+						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 					`, targetPath, out)
 				}
 			}
@@ -2002,8 +2002,8 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 				if out, err := updateReportFile(targetContent); err == nil {
 					_, saveErr = db.Exec(r.Context(), `
 						INSERT INTO _onebase_config (path, content, updated_at)
-						VALUES ($1, $2, now())
-						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+						VALUES ($1, $2, CURRENT_TIMESTAMP)
+						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 					`, targetPath, out)
 				}
 			}
@@ -2070,8 +2070,8 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 			defer db.Close()
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, "src/"+filename, []byte(source))
 		}
 	} else {
@@ -2147,16 +2147,16 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 			defer db.Close()
 			if _, err := db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, yamlFilename, yamlData); err != nil {
 				saveErr = err
 			}
 			if saveErr == nil {
 				_, saveErr = db.Exec(r.Context(), `
 					INSERT INTO _onebase_config (path, content, updated_at)
-					VALUES ($1, $2, now())
-					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+					VALUES ($1, $2, CURRENT_TIMESTAMP)
+					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 				`, srcFilename, []byte(source))
 			}
 		}
@@ -2220,8 +2220,8 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 			defer db.Close()
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, "printforms/"+filename, []byte(source))
 		}
 	} else {
@@ -2284,8 +2284,8 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 			defer db.Close()
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, "printforms/"+filename, []byte(source))
 		}
 	} else {
@@ -2333,8 +2333,8 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 			defer db.Close()
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, "printforms/"+filename, []byte(source))
 		}
 	} else {
@@ -2525,8 +2525,8 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 				defer db.Close()
 				db.Exec(r.Context(), `
 					INSERT INTO _onebase_config (path, content, updated_at)
-					VALUES ($1, $2, now())
-					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+					VALUES ($1, $2, CURRENT_TIMESTAMP)
+					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 				`, logoPath, logoData)
 			}
 		} else {
@@ -2564,8 +2564,8 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 			defer db.Close()
 			_, saveErr = db.Exec(r.Context(), `
 				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, now())
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+				VALUES ($1, $2, CURRENT_TIMESTAMP)
+				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
 			`, "config/app.yaml", out)
 		}
 	} else {

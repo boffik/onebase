@@ -89,12 +89,43 @@ func (r *Repo) List(ctx context.Context) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		u := &User{}
-		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &u.CreatedAt); err != nil {
+		// Scan into any to handle SQLite (int64 bools, string timestamps) vs PG (bool, time.Time).
+		var isAdmin, denyPasswd, createdAt any
+		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &createdAt); err != nil {
 			return nil, err
 		}
+		u.IsAdmin = scanBool(isAdmin)
+		u.DenyPasswdChange = scanBool(denyPasswd)
+		u.CreatedAt = scanTime(createdAt)
 		users = append(users, u)
 	}
 	return users, nil
+}
+
+func scanBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case int64:
+		return t != 0
+	case int:
+		return t != 0
+	}
+	return false
+}
+
+func scanTime(v any) time.Time {
+	if t, ok := v.(time.Time); ok {
+		return t
+	}
+	if s, ok := v.(string); ok {
+		for _, layout := range []string{time.RFC3339, time.RFC3339Nano, "2006-01-02 15:04:05 -0700 MST", "2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02"} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t
+			}
+		}
+	}
+	return time.Time{}
 }
 
 func (r *Repo) Create(ctx context.Context, login, password, fullName string, isAdmin bool) (*User, error) {

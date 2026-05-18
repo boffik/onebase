@@ -34,5 +34,6 @@ func openBrowser(url string) {
 	default:
 		cmd = exec.Command("xdg-open", url)
 	}
+	noWindow(cmd)
 	cmd.Start()
 }

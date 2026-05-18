@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -620,6 +621,13 @@ func fieldValueDialect(d Dialect, f metadata.Field, fields map[string]any) any {
 				return idArg(d, id)
 			}
 			return nil
+		}
+	}
+	// SQLite stores time.Time as its .String() representation ("2006-01-02 15:04:05 -0700 MST")
+	// which is unreadable by modernc. Normalize to RFC3339 for reliable round-trip.
+	if f.Type == metadata.FieldTypeDate && d.Name() == "sqlite" {
+		if t, ok := v.(time.Time); ok {
+			return t.UTC().Format(time.RFC3339)
 		}
 	}
 	return v

@@ -13,7 +13,7 @@ import (
 
 var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"lower": strings.ToLower,
-	"str":   func(v any) string { return fmt.Sprintf("%v", v) },
+	"str":   func(v any) string { if v == nil { return "" }; return fmt.Sprintf("%v", v) },
 	"add":   func(a, b int) int { return a + b },
 	"isRef":  func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
@@ -22,11 +22,20 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 			return t.In(time.Local).Format("02.01.2006")
 		}
 		if s, ok := v.(string); ok && len(s) >= 10 {
-			if t, err := time.Parse(time.RFC3339, s); err == nil {
-				return t.In(time.Local).Format("02.01.2006")
+			for _, layout := range []string{
+				time.RFC3339, time.RFC3339Nano,
+				"2006-01-02 15:04:05 -0700 MST",
+				"2006-01-02 15:04:05.999999999 -0700 MST",
+				"2006-01-02T15:04:05", "2006-01-02 15:04:05",
+				"2006-01-02T15:04", "2006-01-02",
+			} {
+				if t, err := time.Parse(layout, s); err == nil {
+					return t.In(time.Local).Format("02.01.2006")
+				}
 			}
-			for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
-				if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			// Last resort: try just the date prefix
+			if len(s) >= 10 {
+				if t, err := time.ParseInLocation("2006-01-02", s[:10], time.Local); err == nil {
 					return t.Format("02.01.2006")
 				}
 			}
@@ -333,7 +342,7 @@ const tplIndex = `
 .dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
 .w-card{background:#fff;border-radius:10px;padding:18px 20px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;min-height:120px}
 .w-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:600;margin-bottom:8px}
-.w-kpi-value{font-size:32px;font-weight:700;color:#0f172a;line-height:1.1}
+.w-kpi-value{font-size:32px;font-weight:700;color:#0f172a;line-height:1.1;white-space:nowrap}
 .w-kpi-sub{font-size:12px;color:#94a3b8;margin-top:6px}
 .w-list table{margin-top:4px;font-size:13px}
 .w-list th{padding:6px 8px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;text-align:left;background:transparent}
@@ -470,6 +479,7 @@ const tplList = `
       {{else}}
         <a class="btn btn-secondary btn-sm" href="?view=tree{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">📂 Дерево</a>
       {{end}}
+      {{if .UpURL}}<a class="btn btn-secondary btn-sm" href="{{.UpURL}}">↑ Наверх</a>{{end}}
       <a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?{{if .ParentStr}}parent={{.ParentStr}}&{{end}}subsystem={{$.CurrentSubsystem}}">+ Элемент</a>
       <a class="btn btn-secondary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?is_folder=true{{if .ParentStr}}&parent={{.ParentStr}}{{end}}">📁 Группа</a>
     {{else}}
@@ -746,7 +756,7 @@ const tplForm = `
     <button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
-        <button class="btn btn-primary btn-sm" form="form-repost" type="submit">Перепровести</button>
+        <button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">Перепровести</button>
         <button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">Отменить проведение</button>
       {{else}}
         <button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>
@@ -910,7 +920,6 @@ const tplForm = `
 {{if and (not .IsNew) .Entity.Posting}}
 {{if eq (index .Values "posted") "true"}}
 <form id="form-unpost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/unpost"></form>
-<form id="form-repost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/post"></form>
 {{end}}
 {{end}}
 {{if not .IsNew}}
@@ -1081,23 +1090,33 @@ const tplReport = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <h2>{{if .Report.Title}}{{.Report.Title}}{{else}}{{.Report.Name}}{{end}}</h2>
-{{if .Report.Params}}
+{{if .ReportParams}}
 <div class="card" style="margin-bottom:16px">
 <form method="POST">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
-  {{range .Report.Params}}{{$pname := .Name}}
+  {{range .ReportParams}}{{$p := .}}{{$pname := .Name}}{{$pval := str (index $.ParamValues .Name)}}
     <div class="form-group" style="margin-bottom:0">
-      <label>{{.DisplayLabel}}</label>
-      {{if eq .Type "date"}}
-        <input type="date" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
-      {{else if eq .Type "number"}}
-        <input type="number" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
-      {{else if eq .Type "select"}}
+      <label>{{$p.Label}}</label>
+      {{if $p.IsDate}}
+        <input type="date" name="{{$pname}}" value="{{$pval}}">
+      {{else if $p.IsNum}}
+        <input type="number" name="{{$pname}}" value="{{$pval}}">
+      {{else if $p.IsSel}}
         <select name="{{$pname}}">
-          {{range .Options}}<option value="{{.}}" {{if eq . (str (index $.ParamValues $pname))}}selected{{end}}>{{if .}}{{.}}{{else}}— все —{{end}}</option>{{end}}
+          {{range $p.Options}}<option value="{{.}}" {{if eq . $pval}}selected{{end}}>{{if .}}{{.}}{{else}}— все —{{end}}</option>{{end}}
         </select>
+      {{else if $p.IsRef}}
+        <div style="display:flex;gap:4px;align-items:center">
+          <select name="{{$pname}}" id="rp-{{$pname}}" style="flex:1;min-width:0">
+            <option value="">— все —</option>
+            {{range $p.Opts}}
+              <option value="{{index . "id"}}" {{if eq $pval (str (index . "id"))}}selected{{end}}>{{index . "_label"}}</option>
+            {{end}}
+          </select>
+          <button type="button" onclick="openRefPicker('rp-{{$pname}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="Выбрать из списка">...</button>
+        </div>
       {{else}}
-        <input type="text" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
+        <input type="text" name="{{$pname}}" value="{{$pval}}">
       {{end}}
     </div>
   {{end}}
@@ -1365,9 +1384,20 @@ const tplInfoReg = `
   </div>
   {{end}}
   {{range .InfoReg.Dimensions}}
+  {{$dn := .Name}}
   <div class="form-row">
     <label>{{.Name}} <span style="color:#94a3b8;font-size:11px">[измерение]</span></label>
-    <input type="text" name="{{.Name}}" value="{{index $.Values .Name}}">
+    {{if .RefEntity}}
+    <div style="display:flex;gap:4px;align-items:center">
+      <select name="{{$dn}}" id="ird-{{$dn}}" style="flex:1;min-width:0">
+        <option value="">— выбрать —</option>
+        {{range index $.RefOpts $dn}}<option value="{{index . "id"}}" {{if eq (index $.Values $dn) (index . "id")}}selected{{end}}>{{index . "_label"}}</option>{{end}}
+      </select>
+      <button type="button" onclick="openRefPicker('ird-{{$dn}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="Выбрать из списка">...</button>
+    </div>
+    {{else}}
+    <input type="text" name="{{$dn}}" value="{{index $.Values $dn}}">
+    {{end}}
   </div>
   {{end}}
   {{range .InfoReg.Resources}}
@@ -1381,7 +1411,11 @@ const tplInfoReg = `
     <a class="btn btn-secondary" href="/ui/inforeg/{{lower .InfoReg.Name}}">Отмена</a>
   </div>
 </form>
-</div></main></div></body></html>
+</div>
+<script>
+function openRefPicker(selOrId){var sel=(typeof selOrId==='string')?document.getElementById(selOrId):selOrId;if(!sel)return;var opts=[];for(var i=0;i<sel.options.length;i++){var o=sel.options[i];if(o.value)opts.push({id:o.value,label:o.text});}var old=document.getElementById('_ref-picker-modal');if(old)old.remove();var modal=document.createElement('div');modal.id='_ref-picker-modal';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';var inner='<div style="background:#fff;border-radius:10px;padding:20px;width:480px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18)">';inner+='<div style="font-weight:600;font-size:15px;margin-bottom:12px;color:#1e293b">Выбор из списка</div>';inner+='<input id="_rp-search" type="text" placeholder="Поиск..." autocomplete="off" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;margin-bottom:10px;outline:none">';inner+='<div id="_rp-list" style="overflow-y:auto;flex:1;border:1px solid #e2e8f0;border-radius:7px">';if(opts.length===0){inner+='<div style="padding:16px;color:#94a3b8;font-size:13px;text-align:center">Список пуст</div>';}else{for(var i=0;i<opts.length;i++){inner+='<div data-id="'+opts[i].id.replace(/"/g,"&quot;")+'" class="_rp-item" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px;color:#1e293b">'+opts[i].label+'</div>';}}inner+='</div>';inner+='<div style="margin-top:12px;text-align:right"><button type="button" id="_rp-cancel" style="padding:6px 18px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">Отмена</button></div>';inner+='</div>';modal.innerHTML=inner;document.body.appendChild(modal);window._rpTarget=sel;var search=document.getElementById('_rp-search');search.focus();search.addEventListener('input',function(){var q=this.value.toLowerCase();document.querySelectorAll('._rp-item').forEach(function(el){el.style.display=el.textContent.toLowerCase().indexOf(q)>=0?'':'none';});});document.getElementById('_rp-list').addEventListener('click',function(e){var item=e.target.closest('._rp-item');if(!item)return;if(window._rpTarget)window._rpTarget.value=item.getAttribute('data-id');modal.remove();});document.getElementById('_rp-cancel').addEventListener('click',function(){modal.remove();});modal.addEventListener('click',function(e){if(e.target===modal)modal.remove();});}
+</script>
+</main></div></body></html>
 {{end}}
 `
 
