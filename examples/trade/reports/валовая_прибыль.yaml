@@ -8,8 +8,8 @@ params:
     type: date
     label: "По дату"
   - name: Номенклатура
-    type: string
-    label: "Номенклатура (фильтр)"
+    type: reference:Номенклатура
+    label: "Номенклатура"
 query: |
   ВЫБРАТЬ
     Номенклатура,
