@@ -380,20 +380,23 @@ func (tr *translator) build() string {
 
 // addParam registers a named parameter and returns its SQL placeholder.
 func (tr *translator) addParam(name string) string {
-	if _, exists := tr.params[name]; !exists {
-		v := tr.paramValues[name]
-		if v == nil {
-			tr.params[name] = 0
-		} else {
-			tr.args = append(tr.args, v)
-			tr.params[name] = len(tr.args)
-		}
-	}
-	if tr.params[name] == 0 {
+	v := tr.paramValues[name]
+	if v == nil {
 		return "NULL"
 	}
 	d := dialectOrDefault(tr.opts.Dialect)
-	return d.Placeholder(tr.params[name]) + castSuffix(d, tr.paramValues[name])
+	if d.Name() != "postgres" {
+		// SQLite uses positional `?` — each occurrence consumes a separate arg slot.
+		// Unlike PostgreSQL's $N, `?` cannot be reused for the same param.
+		tr.args = append(tr.args, v)
+		return d.Placeholder(len(tr.args))
+	}
+	// PostgreSQL: $N references can be shared — deduplicate by param name.
+	if _, exists := tr.params[name]; !exists {
+		tr.args = append(tr.args, v)
+		tr.params[name] = len(tr.args)
+	}
+	return d.Placeholder(tr.params[name]) + castSuffix(d, v)
 }
 
 // castSuffix returns the explicit cast suffix for v on the active dialect.
