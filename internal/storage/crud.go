@@ -155,7 +155,7 @@ func (db *DB) GetByID(ctx context.Context, entityName string, id uuid.UUID, enti
 	}
 	off := len(entity.Fields) + 1
 	if entity.Kind == metadata.KindDocument {
-		result["posted"] = normalizeValue(dest[off])
+		result["posted"] = normalizeBool(dest[off])
 		off++
 	}
 	result["deletion_mark"] = normalizeValue(dest[off])
@@ -184,8 +184,24 @@ func normalizeValue(v any) any {
 			return f.Float64
 		}
 		return nil
+	case int64:
+		return t
 	}
 	return v
+}
+
+// normalizeBool converts any DB boolean representation (bool, int64 0/1) to bool.
+// SQLite stores booleans as integers; PostgreSQL returns bool directly.
+func normalizeBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case int64:
+		return t != 0
+	case int:
+		return t != 0
+	}
+	return false
 }
 
 // normalizeUUID is a convenience alias for UUID normalization only.
@@ -346,7 +362,7 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 		}
 		off := len(entity.Fields) + 1
 		if entity.Kind == metadata.KindDocument {
-			row["posted"] = normalizeValue(dest[off])
+			row["posted"] = normalizeBool(dest[off])
 			off++
 		}
 		row["deletion_mark"] = normalizeValue(dest[off])
