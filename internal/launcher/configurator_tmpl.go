@@ -3382,12 +3382,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{$fSaved := .FieldsSaved}}
 {{$fSavedEnt := .FieldsSavedEntity}}
 
-<form method="POST" action="/bases/{{$baseID}}/configurator/fields">
-<input type="hidden" name="entity" value="{{$e.Name}}">
-<input type="hidden" name="entity_kind" value="{{$e.Kind}}">
-{{range $e.TableParts}}<input type="hidden" name="tp_names" value="{{.Name}}">{{end}}
-
-{{/* Module section — shown first for quick access */}}
+{{/* Module section — outside the fields form to avoid nested <form> elements */}}
 <details open><summary class="section-hd" style="cursor:pointer">Модули</summary>
 <div class="module-editor-wrap">
   <div class="module-tabs">
@@ -3447,6 +3442,11 @@ const cfgTabTree = `{{define "tab-tree"}}
 </div>
 
 </details>
+
+<form method="POST" action="/bases/{{$baseID}}/configurator/fields">
+<input type="hidden" name="entity" value="{{$e.Name}}">
+<input type="hidden" name="entity_kind" value="{{$e.Kind}}">
+{{range $e.TableParts}}<input type="hidden" name="tp_names" value="{{.Name}}">{{end}}
 
 {{if eq $e.Kind "Документ"}}
 <div class="section-hd">Свойства</div>
