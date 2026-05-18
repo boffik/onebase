@@ -343,7 +343,7 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 </div>
 <div class="cfg-body">
 {{if .Error}}<div class="err-box">{{.Error}}</div>{{end}}
-{{if .FieldsSaved}}<div class="success-box">✓ Типы полей для «{{.FieldsSavedEntity}}» сохранены. Перезапустите базу, чтобы изменения вступили в силу.</div>{{end}}
+{{if and .FieldsSaved (ne .FieldsSavedEntity "panel-backup")}}<div class="success-box">✓ Типы полей для «{{.FieldsSavedEntity}}» сохранены. Перезапустите базу, чтобы изменения вступили в силу.</div>{{end}}
 <div id="dbg-wrapper" style="display:flex;flex:1;overflow:hidden">
 {{end}}`
 
@@ -1882,6 +1882,21 @@ var _lastVarsKey = '';
 var _lastStackHtml = '';
 var _lastDiagHtml = '';
 var _dbgCurrentLineDecos = {}; // { editorId: decorationIds }
+
+// ── Backup progress helper ────────────────────────────────────────
+function cfgBackupStart(form, label) {
+  var btn = form.querySelector('[type=submit]');
+  if (btn) { btn.disabled = true; btn.textContent = label || '⏳ Выполняется...'; }
+  // Show page-level overlay so user can't click anything else
+  var ov = document.getElementById('_backup-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = '_backup-overlay';
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.3);z-index:8000;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML = '<div style="background:#fff;border-radius:10px;padding:28px 40px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.18);font-size:15px;color:#1e293b">' + (label||'⏳ Выполняется...') + '<br><span style="font-size:12px;color:#64748b;margin-top:6px;display:block">Пожалуйста, подождите…</span></div>';
+    document.body.appendChild(ov);
+  }
+}
 
 // ── Configurator admin panels ────────────────────────────────────
 function cfgAdmin(name) {
@@ -3766,10 +3781,10 @@ const cfgTabBackup = `{{define "tab-backup"}}
   <div style="font-size:12px;color:#64748b;margin-bottom:12px;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
     Папка бэкапов: <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px">{{.BackupDir}}</code>
   </div>
-  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px">
+  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px" onsubmit="cfgBackupStart(this,'⏳ Создаю бэкап...')">
     <button class="btn-save" type="submit">Создать бэкап сейчас</button>
   </form>
-  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/upload" enctype="multipart/form-data" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+  <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/upload" enctype="multipart/form-data" style="margin-bottom:16px;display:flex;align-items:center;gap:8px" onsubmit="cfgBackupStart(this,'⏳ Загружаю...')">
     <input type="file" name="backup_file" accept=".sql.gz,.sql" required style="font-size:12px">
     <button class="btn-save" type="submit">Загрузить файл бэкапа</button>
   </form>
@@ -3783,7 +3798,7 @@ const cfgTabBackup = `{{define "tab-backup"}}
     <td style="font-size:12px;color:#64748b">{{.Date}}</td>
     <td style="white-space:nowrap">
       <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
-      <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/restore" style="display:inline" onsubmit="return confirm('Восстановить {{.Name}}? Текущие данные будут заменены!')">
+      <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/restore" style="display:inline" onsubmit="if(!confirm('Восстановить {{.Name}}? Текущие данные будут заменены!'))return false;cfgBackupStart(this,'⏳ Восстановление...')">
         <button type="submit" style="font-size:11px;color:#16a34a;background:none;border:none;cursor:pointer;padding:0 4px">Восстановить</button>
       </form>
       <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
@@ -3829,7 +3844,7 @@ const cfgTabBackup = `{{define "tab-backup"}}
       <div style="font-size:11px;color:#64748b;margin-left:22px">Без галки — быстрый бинарный дамп, только для той же СУБД</div>
       <button class="btn-save" type="submit" style="width:fit-content">Выгрузить всё в .obz</button>
     </form>
-    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="return confirm('Восстановить из .obz файла? Все текущие данные будут заменены!')">
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="if(!confirm('Восстановить из .obz файла? Все текущие данные будут заменены!'))return false;cfgBackupStart(this,'⏳ Восстановление из .obz...')">
       <input type="file" name="obz_file" accept=".obz" required style="font-size:12px">
       <button class="btn-save" type="submit" style="background:#dc2626">Загрузить из .obz</button>
     </form>

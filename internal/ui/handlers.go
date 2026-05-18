@@ -43,12 +43,14 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := s.cfg
 	cfg.DSN = maskDSN(cfg.DSN)
+	user := auth.UserFromContext(r.Context())
 	s.render(w, r, "page-about", map[string]any{
 		"Cfg":        cfg,
 		"Catalogs":   catalogs,
 		"Documents":  docs,
 		"Registers":  len(s.reg.Registers()),
 		"Reports":    len(s.reg.Reports()),
+		"User":       user,
 	})
 }
 

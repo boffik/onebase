@@ -1301,6 +1301,16 @@ const tplAbout = `
 <div class="card" style="max-width:560px">
   {{if .Cfg.Logo}}<div style="text-align:center;margin-bottom:20px"><img src="/ui/logo" alt="Logo" style="max-height:160px;max-width:360px"></div>{{end}}
   <table style="width:100%;border-collapse:collapse">
+    {{if .User}}
+    <tr>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">Пользователь</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px">
+        <span style="font-weight:600">{{.User.Login}}</span>
+        {{if .User.FullName}}<span style="color:#64748b;margin-left:8px">{{.User.FullName}}</span>{{end}}
+        {{if .User.IsAdmin}}<span style="margin-left:8px;background:#dbeafe;color:#1d4ed8;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600">Администратор</span>{{end}}
+      </td>
+    </tr>
+    {{end}}
     <tr>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">Версия платформы</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:14px">onebase {{if .Cfg.PlatVersion}}{{.Cfg.PlatVersion}}{{else}}dev{{end}}</td>
