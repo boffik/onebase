@@ -338,6 +338,12 @@ func KnownBuiltinNames() map[string]struct{} {
 		"сообщить", "message",
 		"httpполучить", "httpget", "httpотправить", "httppost",
 		"отправитьписьмо", "sendemail",
+		// transactions (injected via TxState.Builtins)
+		"начатьтранзакцию", "begintransaction",
+		"зафиксироватьтранзакцию", "committransaction",
+		"отменитьтранзакцию", "rollbacktransaction",
+		// injected in except-block context
+		"описаниеошибки", "errordescription",
 	} {
 		names[k] = struct{}{}
 	}

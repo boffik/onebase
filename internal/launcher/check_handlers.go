@@ -364,6 +364,10 @@ func walkExpr(e ast.Expr, known map[string]struct{}, label string, issues *[]che
 		walkExpr(v.Cond, known, label, issues)
 		walkExpr(v.True, known, label, issues)
 		walkExpr(v.False, known, label, issues)
+	case *ast.NewExpr:
+		for _, arg := range v.Args {
+			walkExpr(arg, known, label, issues)
+		}
 	}
 }
 
