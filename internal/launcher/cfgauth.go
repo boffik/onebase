@@ -77,28 +77,15 @@ input:focus,select:focus{border-color:#3070D8;box-shadow:0 0 0 2px rgba(48,112,2
   <div class="sub">Только для администраторов</div>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
   <form method="POST">
-    {{if .Users}}
-    <label>Быстрый выбор</label>
-    <select onchange="pickUser(this)">
-      <option value=""></option>
-      {{range .Users}}<option value="{{.Login}}">{{if .FullName}}{{.FullName}}{{else}}{{.Login}}{{end}}</option>{{end}}
-    </select>
-    {{end}}
     <label>Имя пользователя</label>
-    <input id="loginInput" name="login" autofocus autocomplete="username">
+    <input name="login" id="loginInput" autofocus autocomplete="off" {{if .Users}}list="cfg-users"{{end}}>
+    {{if .Users}}<datalist id="cfg-users">{{range .Users}}<option value="{{.Login}}">{{if .FullName}}{{.FullName}}{{end}}</option>{{end}}</datalist>{{end}}
     <label>Пароль</label>
-    <input id="pwdInput" name="password" type="password" autocomplete="current-password">
+    <input name="password" type="password" autocomplete="current-password">
     <button class="btn" type="submit">Войти</button>
   </form>
   <a class="back" href="/">← Назад к списку баз</a>
 </div>
-<script>
-function pickUser(sel){
-  if(!sel.value)return;
-  document.getElementById('loginInput').value=sel.value;
-  document.getElementById('pwdInput').focus();
-}
-</script>
 </body></html>`))
 
 func (h *handler) cfgLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +125,7 @@ func (h *handler) cfgLoginPage(w http.ResponseWriter, r *http.Request) {
 				}
 				data["Users"] = admins
 			}
-			db.Close()
+			// do NOT close — getAuthDB returns a shared cached pool
 		}
 	}
 	cfgLoginTmpl.Execute(w, data)

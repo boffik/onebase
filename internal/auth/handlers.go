@@ -27,27 +27,14 @@ input:focus,select:focus{border-color:#1a5fa8;box-shadow:0 0 0 2px rgba(26,95,16
   <h2>⚡ onebase — Вход</h2>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
   <form method="POST">
-    {{if .Users}}
-    <label>Быстрый выбор</label>
-    <select id="userSelect" onchange="pickUser(this)">
-      <option value=""></option>
-      {{range .Users}}<option value="{{.Login}}">{{if .FullName}}{{.FullName}}{{else}}{{.Login}}{{end}}</option>{{end}}
-    </select>
-    {{end}}
     <label>Имя пользователя</label>
-    <input id="loginInput" name="login" autofocus autocomplete="username">
+    <input name="login" autofocus autocomplete="off" {{if .Users}}list="ob-users"{{end}}>
+    {{if .Users}}<datalist id="ob-users">{{range .Users}}<option value="{{.Login}}">{{if .FullName}}{{.FullName}}{{end}}</option>{{end}}</datalist>{{end}}
     <label>Пароль</label>
-    <input id="pwdInput" name="password" type="password" autocomplete="current-password">
+    <input name="password" type="password" autocomplete="current-password">
     <button class="btn" type="submit">Войти</button>
   </form>
 </div>
-<script>
-function pickUser(sel){
-  if(!sel.value) return;
-  document.getElementById('loginInput').value=sel.value;
-  document.getElementById('pwdInput').focus();
-}
-</script>
 </body></html>`))
 
 // AuditLogger is implemented by storage.DB to log auth events.
