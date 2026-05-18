@@ -1020,6 +1020,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		Registers:   s.reg.Registers(),
 		InfoRegs:    s.reg.InfoRegisters(),
 		AccountRegs: s.reg.AccountRegisters(),
+		Dialect:     s.store.Dialect(),
 	})
 	if err != nil {
 		s.render(w, r, "page-report", map[string]any{
@@ -2582,6 +2583,7 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		Registers:   s.reg.Registers(),
 		InfoRegs:    s.reg.InfoRegisters(),
 		AccountRegs: s.reg.AccountRegisters(),
+		Dialect:     s.store.Dialect(),
 	})
 	if err != nil {
 		http.Error(w, "query compile error: "+err.Error(), 400)
