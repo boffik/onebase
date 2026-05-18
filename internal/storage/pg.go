@@ -99,13 +99,47 @@ func (db *DB) DisableFKForImport(ctx context.Context) (cleanup func(), err error
 			db.sqlDB.SetMaxOpenConns(0)
 		}, nil
 	}
-	// PostgreSQL: best-effort; ignore permission errors.
+	// PostgreSQL: try session_replication_role first (needs superuser).
 	_, pgErr := db.pool.Exec(ctx, "SET session_replication_role='replica'")
-	if pgErr != nil {
+	if pgErr == nil {
+		return func() {
+			_, _ = db.pool.Exec(context.Background(), "SET session_replication_role='origin'")
+		}, nil
+	}
+
+	// Fallback for non-superuser: drop all FK constraints, recreate after import.
+	type fkInfo struct {
+		table string
+		name  string
+		def   string
+	}
+	rows, err := db.pool.Query(ctx,
+		`SELECT conname, conrelid::regclass::text, pg_get_constraintdef(oid)
+		 FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace`)
+	if err != nil {
 		return func() {}, nil
 	}
+	var fks []fkInfo
+	for rows.Next() {
+		var name, table, def string
+		if rows.Scan(&name, &table, &def) == nil {
+			fks = append(fks, fkInfo{table: table, name: name, def: def})
+		}
+	}
+	rows.Close()
+
+	for _, fk := range fks {
+		tq := `"` + strings.ReplaceAll(fk.table, `"`, `""`) + `"`
+		nq := `"` + strings.ReplaceAll(fk.name, `"`, `""`) + `"`
+		_, _ = db.pool.Exec(ctx, "ALTER TABLE "+tq+" DROP CONSTRAINT "+nq)
+	}
 	return func() {
-		_, _ = db.pool.Exec(context.Background(), "SET session_replication_role='origin'")
+		for _, fk := range fks {
+			tq := `"` + strings.ReplaceAll(fk.table, `"`, `""`) + `"`
+			nq := `"` + strings.ReplaceAll(fk.name, `"`, `""`) + `"`
+			_, _ = db.pool.Exec(context.Background(),
+				"ALTER TABLE "+tq+" ADD CONSTRAINT "+nq+" "+fk.def+" NOT VALID")
+		}
 	}, nil
 }
 

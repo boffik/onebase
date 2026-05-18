@@ -347,7 +347,7 @@ const tplIndex = `
 .w-list table{margin-top:4px;font-size:13px}
 .w-list th{padding:6px 8px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;text-align:left;background:transparent}
 .w-list td{padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155}
-.w-list td.right{text-align:right;font-variant-numeric:tabular-nums}
+.w-list td.right{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .w-list tr:last-child td{border-bottom:none}
 .w-chart{min-height:240px}
 .w-chart-canvas{width:100%;height:240px}

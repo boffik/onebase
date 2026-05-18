@@ -276,6 +276,29 @@ func detectByteCols(ctx context.Context, db *storage.DB, tableName string) (map[
 	return result, nil
 }
 
+// detectJSONCols returns the set of columns in tableName that have JSON/JSONB type.
+func detectJSONCols(ctx context.Context, db *storage.DB, tableName string) (map[string]bool, error) {
+	result := make(map[string]bool)
+	if db.IsSQLite() {
+		return result, nil // SQLite doesn't enforce JSON types
+	}
+	rows, err := db.Query(ctx,
+		`SELECT column_name FROM information_schema.columns
+		 WHERE table_schema='public' AND table_name=$1 AND data_type IN ('json','jsonb')`,
+		tableName)
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var col string
+		if rows.Scan(&col) == nil {
+			result[col] = true
+		}
+	}
+	return result, nil
+}
+
 // marshalValue converts a scanned DB value to a JSON-safe Go value.
 // For bytes columns, returns base64 string. For Numeric, returns exact decimal string.
 func marshalValue(v any, isBytesCol bool) any {
@@ -716,6 +739,9 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 		return 0, fmt.Errorf("get columns for %s: %w", tableName, err)
 	}
 
+	// Detect JSON/JSONB columns so we can cast values on insert.
+	jsonCols, _ := detectJSONCols(ctx, db, tableName)
+
 	// Clear existing data — we do a full replace.
 	if _, err := db.Exec(ctx, "DELETE FROM "+quotedIdent(db, tableName)); err != nil {
 		return 0, fmt.Errorf("clear table %s: %w", tableName, err)
@@ -747,7 +773,7 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 			}
 		}
 
-		if err := insertRow(ctx, db, tableName, raw, btypes, existingCols); err != nil {
+		if err := insertRow(ctx, db, tableName, raw, btypes, existingCols, jsonCols); err != nil {
 			return n, fmt.Errorf("insert row %d into %s: %w", n+1, tableName, err)
 		}
 		n++
@@ -758,7 +784,9 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 // insertRow builds and executes an INSERT statement for one JSON row.
 // existingCols is the set of column names that exist in the target table;
 // columns not in this set are skipped (handles source/target schema differences).
-func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[string]json.RawMessage, btypes map[string]bool, existingCols map[string]bool) error {
+// jsonCols is the set of JSON/JSONB columns — their raw string value is passed
+// directly so PostgreSQL can parse it as JSON.
+func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[string]json.RawMessage, btypes map[string]bool, existingCols map[string]bool, jsonCols map[string]bool) error {
 	d := db.Dialect()
 
 	cols := make([]string, 0, len(raw))
@@ -784,6 +812,9 @@ func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[st
 				return fmt.Errorf("col %s: base64 decode: %w", col, err)
 			}
 			goVal = decoded
+		} else if jsonCols[col] {
+			// JSON/JSONB column: pass raw JSON string directly.
+			goVal = string(rawVal)
 		} else {
 			// Decode the JSON value as a generic Go type.
 			// Strings cover UUIDs, timestamps, numeric amounts.
@@ -808,7 +839,11 @@ func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[st
 
 		cols = append(cols, quotedIdent(db, col))
 		args = append(args, goVal)
-		placeholders = append(placeholders, d.Placeholder(idx))
+		ph := d.Placeholder(idx)
+		if jsonCols[col] && !db.IsSQLite() {
+			ph += "::jsonb"
+		}
+		placeholders = append(placeholders, ph)
 		idx++
 	}
 
