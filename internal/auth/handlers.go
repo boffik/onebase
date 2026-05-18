@@ -28,16 +28,14 @@ input:focus,select:focus{border-color:#1a5fa8;box-shadow:0 0 0 2px rgba(26,95,16
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
   <form method="POST">
     {{if .Users}}
-    <label>Пользователь</label>
-    <select id="userSelect" onchange="pickUser(this)" autofocus>
+    <label>Быстрый выбор</label>
+    <select id="userSelect" onchange="pickUser(this)">
       <option value=""></option>
       {{range .Users}}<option value="{{.Login}}">{{if .FullName}}{{.FullName}}{{else}}{{.Login}}{{end}}</option>{{end}}
     </select>
-    <input id="loginInput" name="login" type="hidden">
-    {{else}}
-    <label>Имя пользователя</label>
-    <input name="login" autofocus autocomplete="username">
     {{end}}
+    <label>Имя пользователя</label>
+    <input id="loginInput" name="login" autofocus autocomplete="username">
     <label>Пароль</label>
     <input id="pwdInput" name="password" type="password" autocomplete="current-password">
     <button class="btn" type="submit">Войти</button>
@@ -45,8 +43,9 @@ input:focus,select:focus{border-color:#1a5fa8;box-shadow:0 0 0 2px rgba(26,95,16
 </div>
 <script>
 function pickUser(sel){
+  if(!sel.value) return;
   document.getElementById('loginInput').value=sel.value;
-  if(sel.value) document.getElementById('pwdInput').focus();
+  document.getElementById('pwdInput').focus();
 }
 </script>
 </body></html>`))
