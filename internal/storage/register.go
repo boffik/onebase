@@ -10,6 +10,30 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
+// refUUIDGetter is implemented by DSL *Ref values — extracts UUID without
+// importing the interpreter package (would be a circular dependency).
+type refUUIDGetter interface{ GetRefUUID() string }
+
+// resolveRefArg converts a reference field value to a DB-ready UUID argument.
+// Accepts string (UUID or empty), or any type implementing GetRefUUID().
+func resolveRefArg(d Dialect, v any) any {
+	switch val := v.(type) {
+	case string:
+		if val != "" {
+			if id, err := uuid.Parse(val); err == nil {
+				return idArg(d, id)
+			}
+		}
+	case refUUIDGetter:
+		if uuidStr := val.GetRefUUID(); uuidStr != "" {
+			if id, err := uuid.Parse(uuidStr); err == nil {
+				return idArg(d, id)
+			}
+		}
+	}
+	return v
+}
+
 // OrphanStat describes orphaned movements (recorder document no longer exists).
 type OrphanStat struct {
 	RegisterName string
@@ -130,11 +154,7 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 			phs = append(phs, d.Placeholder(idx))
 			v := ciGet(row, f.Name)
 			if f.RefEntity != "" {
-				if s, ok := v.(string); ok && s != "" {
-					if id, err := uuid.Parse(s); err == nil {
-						v = idArg(d, id)
-					}
-				}
+				v = resolveRefArg(d, v)
 			}
 			args = append(args, v)
 			idx++
