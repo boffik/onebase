@@ -34,6 +34,33 @@ func resolveRefArg(d Dialect, v any) any {
 	return v
 }
 
+// refStringer — *Ref имеет String() через runtime.Object интерфейс. Здесь
+// избегаем импорт interpreter (был бы циклический), поэтому ловим
+// через fmt.Stringer.
+type refStringer interface{ String() string }
+
+// normalizeRegArg — общая нормализация значения перед записью в любую
+// колонку регистра (замечание #17). Если значение — *Ref:
+//   - reference-поле  → UUID (через resolveRefArg)
+//   - не-ref поле     → строка из String() (имя записи)
+// Для не-Ref значений возвращается как есть.
+func normalizeRegArg(d Dialect, v any, isRef bool) any {
+	if isRef {
+		return resolveRefArg(d, v)
+	}
+	// Поле объявлено как string/number/etc., но DSL положил Ref —
+	// исторический сценарий (П.17): измерение объявлено string как
+	// workaround. Падали на pgx «unsupported type interpreter.Ref,
+	// a struct». Кладём display-имя.
+	if r, ok := v.(refUUIDGetter); ok {
+		if s, ok2 := v.(refStringer); ok2 {
+			return s.String()
+		}
+		return r.GetRefUUID()
+	}
+	return v
+}
+
 // OrphanStat describes orphaned movements (recorder document no longer exists).
 type OrphanStat struct {
 	RegisterName string
@@ -153,9 +180,7 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 			cols = append(cols, metadata.ColumnName(f))
 			phs = append(phs, d.Placeholder(idx))
 			v := ciGet(row, f.Name)
-			if f.RefEntity != "" {
-				v = resolveRefArg(d, v)
-			}
+			v = normalizeRegArg(d, v, f.RefEntity != "")
 			args = append(args, v)
 			idx++
 		}
