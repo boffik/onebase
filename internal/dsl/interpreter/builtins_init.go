@@ -137,6 +137,24 @@ func init() {
 	builtins["пустаяссылка"] = emptyRefFn
 	builtins["isemptyref"] = emptyRefFn
 
+	// ЧислоПрописью(сумма [, валюта]) — текстовое представление денежной суммы
+	// с правильным склонением рубль/рубля/рублей и копейки (замечание #8).
+	amountWordsFn := func(args []any, _ string, _ int) (any, error) {
+		if len(args) == 0 {
+			return "", nil
+		}
+		amount, _ := toFloat(args[0])
+		currency := "rub"
+		if len(args) >= 2 {
+			if s, ok := args[1].(string); ok && s != "" {
+				currency = s
+			}
+		}
+		return AmountInWords(amount, currency), nil
+	}
+	builtins["числопрописью"] = amountWordsFn
+	builtins["amountinwords"] = amountWordsFn
+
 	// ─── B5: Формат ───────────────────────────────────────────────────────
 	formatFn := func(args []any, _ string, _ int) (any, error) {
 		s, err := fmtBuiltin(args)
