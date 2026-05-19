@@ -182,9 +182,13 @@ function qbApplyToEditor() {
 function qcParseQueryToBuilder() {
   var code = window.qcEditor ? window.qcEditor.getValue() : '';
   if (!code.trim()) return;
-  var fromM = code.match(/(?:^|\s)ИЗ\s+([\wА-Яа-яёЁ.]+(?:\([^)]*\))?)/i);
+  var norm = code.replace(/\s+/g, ' ').trim();
+
+  // 1. Parse FROM source + alias
+  var fromM = norm.match(/\bИЗ\s+([\wА-Яа-яёЁ.]+(?:\([^)]*\))?)(?:\s+КАК\s+(\w+))?/i);
   if (!fromM) return;
   var fromExpr = fromM[1].trim().replace(/\(.*$/, '').toLowerCase().trim();
+  var fromAlias = fromM[2] || '';
   var srcId = null;
   _schema.forEach(function(s) {
     var lbl = s.label.replace(/\(.*$/, '').toLowerCase().trim();
@@ -196,6 +200,158 @@ function qcParseQueryToBuilder() {
     document.getElementById('qb-src').value = srcId;
     qbSetSource(srcId);
   }
+  if (fromAlias) document.getElementById('qb-main-alias').value = fromAlias;
+
+  // VT params
+  var vtSrc = _srcMap[srcId];
+  if (vtSrc && vtSrc.vtParam) {
+    var vtM = fromM[1].match(/\((.+)\)$/);
+    document.getElementById('qb-vt-param-val').value = vtM ? vtM[1] : vtSrc.vtParam;
+  }
+
+  // 2. Parse JOINs
+  var joinRe = /\b(ЛЕВОЕ|ВНУТРЕННЕЕ|ПРАВОЕ|ПОЛНОЕ)\s+СОЕДИНЕНИЕ\s+([\wА-Яа-яёЁ.]+)(?:\s+КАК\s+(\w+))?\s+ПО\s+([^ГСУ]+?)(?=\s+(?:ГДЕ|СГРУППИРОВАТЬ|УПОРЯДОЧИТЬ|ЛЕВОЕ|ВНУТРЕННЕЕ|ПРАВОЕ|ПОЛНОЕ|$))/gi;
+  _joins = [];
+  document.getElementById('qb-joins').innerHTML = '';
+  var jm;
+  while ((jm = joinRe.exec(norm)) !== null) {
+    var jType = jm[1], jLabel = jm[2], jAlias = jm[3] || '', jOn = jm[4] ? jm[4].trim() : '';
+    var jLabelClean = jLabel.replace(/\(.*$/, '').toLowerCase().trim();
+    var jSrcId = '';
+    _schema.forEach(function(s) {
+      var lbl = s.label.replace(/\(.*$/, '').toLowerCase().trim();
+      if (lbl === jLabelClean) jSrcId = s.id;
+    });
+    if (!jSrcId) continue;
+    qbAddJoin();
+    var lastJoin = _joins[_joins.length - 1];
+    if (lastJoin) {
+      for (var ti = 0; ti < lastJoin.typeSel.options.length; ti++) {
+        if (lastJoin.typeSel.options[ti].value === jType) { lastJoin.typeSel.selectedIndex = ti; break; }
+      }
+      lastJoin.srcSel.value = jSrcId;
+      if (jAlias) lastJoin.aliasInp.value = jAlias;
+      if (jOn) lastJoin.onInp.value = jOn;
+    }
+  }
+  if (!_joins.length) {
+    document.getElementById('qb-joins').innerHTML =
+      '<p style="font-size:12px;color:#94a3b8;margin:0" id="qb-joins-hint">Нет соединений</p>';
+  }
+
+  // 3. Parse SELECT fields
+  var selM = norm.match(/\bВЫБРАТЬ\s+(.+?)(?=\s+ИЗ\b)/i);
+  if (selM) {
+    var selParts = splitTopLevel(selM[1], ',');
+    _selFields = {};
+    selParts.forEach(function(part) {
+      part = part.trim(); if (!part) return;
+      var asM = part.match(/(.+?)\s+КАК\s+(\w+)$/i);
+      var expr = asM ? asM[1].trim() : part;
+      var alias = asM ? asM[2].trim() : '';
+      var aggM = expr.match(/^(СУММА|КОЛИЧЕСТВО|МИНИМУМ|МАКСИМУМ|СРЕДНЕЕ)\((.+)\)$/i);
+      var agg = aggM ? aggM[1] : '';
+      var field = aggM ? aggM[2].trim() : expr;
+      if (fromAlias && field.toLowerCase().indexOf(fromAlias.toLowerCase() + '.') === 0)
+        field = field.substring(fromAlias.length + 1);
+      _selFields[field] = {alias: alias, agg: agg};
+    });
+    qbRebuildAllFields();
+  } else {
+    qbRebuildAllFields();
+  }
+
+  // 4. Parse WHERE
+  var whereM = norm.match(/\bГДЕ\s+(.+?)(?=\s+(?:СГРУППИРОВАТЬ|УПОРЯДОЧИТЬ|$))/i);
+  if (whereM) {
+    var condParts = splitTopLevel(whereM[1], /\s+И\s+/i);
+    condParts.forEach(function(cp) {
+      cp = cp.trim();
+      if (cp.charAt(0) === '(' && cp.charAt(cp.length-1) === ')')
+        cp = cp.substring(1, cp.length-1).trim();
+      var opM = cp.match(/(.+?)\s*(<>|>=|<=|!=|=|>|<|ЕСТЬ\s+ПУСТО|НЕ\s+ЕСТЬ\s+ПУСТО|ПОДОБНО|В)\s*(.*)/i);
+      if (!opM) return;
+      var cField = opM[1].trim(), cOp = opM[2].trim(), cVal = (opM[3] || '').trim();
+      if (fromAlias && cField.toLowerCase().indexOf(fromAlias.toLowerCase() + '.') === 0)
+        cField = cField.substring(fromAlias.length + 1);
+      qbAddCond();
+      var condDivs = document.getElementById('qb-conds').querySelectorAll('div');
+      var lc = condDivs[condDivs.length - 1];
+      if (lc) {
+        var sels = lc.querySelectorAll('select');
+        var inp = lc.querySelector('input[type=text]');
+        setSelectValue(sels[0], cField);
+        if (sels[1]) setSelectValue(sels[1], cOp);
+        if (inp) {
+          if (cOp === 'ЕСТЬ ПУСТО' || cOp === 'НЕ ЕСТЬ ПУСТО') inp.style.display = 'none';
+          else inp.value = cVal;
+        }
+      }
+    });
+  }
+
+  // 5. Parse ORDER BY
+  var orderM = norm.match(/\bУПОРЯДОЧИТЬ\s+ПО\s+(.+)$/i);
+  if (orderM) {
+    splitTopLevel(orderM[1], ',').forEach(function(op) {
+      op = op.trim();
+      var dirM = op.match(/(.+?)\s+(УБЫВ|ВОЗР)$/i);
+      var oField = dirM ? dirM[1].trim() : op;
+      var oDir = dirM ? dirM[2].trim() : 'ВОЗР';
+      if (fromAlias && oField.toLowerCase().indexOf(fromAlias.toLowerCase() + '.') === 0)
+        oField = oField.substring(fromAlias.length + 1);
+      qbAddOrder();
+      var orderDivs = document.getElementById('qb-orders').querySelectorAll('div');
+      var lo = orderDivs[orderDivs.length - 1];
+      if (lo) {
+        var osels = lo.querySelectorAll('select');
+        setSelectValue(osels[0], oField);
+        if (osels[1]) setSelectValue(osels[1], oDir);
+      }
+    });
+  }
+
+  qbGenerate();
+}
+
+function setSelectValue(sel, val) {
+  if (!sel) return;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
+  }
+  var o = document.createElement('option'); o.value = val; o.textContent = val;
+  sel.appendChild(o); sel.value = val;
+}
+
+function splitTopLevel(str, sep) {
+  var parts = [], depth = 0, cur = '';
+  if (typeof sep === 'string') {
+    for (var i = 0; i < str.length; i++) {
+      var ch = str.charAt(i);
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (depth === 0 && str.substring(i, i + sep.length) === sep) {
+        parts.push(cur); cur = ''; i += sep.length - 1;
+      } else cur += ch;
+    }
+    if (cur) parts.push(cur);
+  } else {
+    var rem = str;
+    while (rem.length > 0) {
+      var m = rem.match(sep);
+      if (!m) { parts.push(cur + rem); cur = ''; break; }
+      var before = rem.substring(0, m.index);
+      var pd = (before.match(/\(/g) || []).length - (before.match(/\)/g) || []).length;
+      if (pd === 0 && depth === 0) {
+        parts.push(cur + before); cur = ''; rem = rem.substring(m.index + m[0].length);
+      } else {
+        cur += rem.substring(0, m.index + m[0].length);
+        depth += pd; rem = rem.substring(m.index + m[0].length);
+      }
+    }
+    if (cur) parts.push(cur);
+  }
+  return parts;
 }
 
 function qcExec() {
