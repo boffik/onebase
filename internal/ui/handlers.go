@@ -1782,6 +1782,9 @@ func (s *Server) renderForbidden(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data map[string]any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if data == nil {
+		data = make(map[string]any)
+	}
 	if _, ok := data["Cfg"]; !ok {
 		data["Cfg"] = s.cfg
 	}

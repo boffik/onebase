@@ -602,6 +602,10 @@ func fieldValue(f metadata.Field, fields map[string]any) any {
 	return fieldValueDialect(PgDialect{}, f, fields)
 }
 
+// uuidProvider is implemented by *interpreter.Ref to expose its UUID without
+// creating an import cycle between storage and interpreter packages.
+type uuidProvider interface{ GetRefUUID() string }
+
 // fieldValueDialect extracts a field value and normalizes UUIDs:
 // PG accepts uuid.UUID directly; SQLite stores them as TEXT strings.
 func fieldValueDialect(d Dialect, f metadata.Field, fields map[string]any) any {
@@ -611,6 +615,16 @@ func fieldValueDialect(d Dialect, f metadata.Field, fields map[string]any) any {
 	}
 	if f.RefEntity != "" {
 		if v == nil {
+			return nil
+		}
+		if rv, ok := v.(uuidProvider); ok {
+			s := rv.GetRefUUID()
+			if s == "" {
+				return nil
+			}
+			if id, err := uuid.Parse(s); err == nil {
+				return idArg(d, id)
+			}
 			return nil
 		}
 		if s, ok := v.(string); ok {

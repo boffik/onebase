@@ -14,7 +14,8 @@ type Ref struct {
 	Name string
 }
 
-func (r *Ref) String() string { return r.Name }
+func (r *Ref) String() string    { return r.Name }
+func (r *Ref) GetRefUUID() string { return r.UUID }
 
 // refKey extracts the comparison key: UUID for Ref, string representation otherwise.
 // Used in Map.findIdx and equal() so *Ref and plain UUID strings match each other.

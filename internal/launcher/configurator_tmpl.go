@@ -2204,7 +2204,7 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'F10') { e.preventDefault(); e.stopPropagation(); dbgStep('over'); }
   else if (e.key === 'F11' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); dbgStep('into'); }
   else if (e.key === 'F11' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); dbgStep('out'); }
-});
+}, true);
 function dbgStop() {
   fetch('/bases/' + _dbgBase + '/debug/stop', {method:'POST'})
     .then(function(){
