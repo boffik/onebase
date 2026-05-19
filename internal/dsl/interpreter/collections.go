@@ -89,7 +89,13 @@ func (a *Array) Iterate() []any { return a.items }
 func (a *Array) String() string  { return fmt.Sprintf("Массив[%d]", len(a.items)) }
 func (a *Array) TypeName() string { return "Массив" }
 
-func (m *Map) Keys() []any         { return m.keys }
+func (m *Map) Keys() []any            { return m.keys }
+func (m *Map) Get(key any) any {
+	if idx := m.findIdx(key); idx >= 0 {
+		return m.vals[idx]
+	}
+	return nil
+}
 func (s *Struct) Fields() []string { return s.keys }
 
 type Struct struct {
