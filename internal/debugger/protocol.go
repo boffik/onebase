@@ -3,6 +3,7 @@ package debugger
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -131,6 +132,42 @@ func FormatValue(v any) string {
 			return "Истина"
 		}
 		return "Ложь"
+	default:
+		return formatCollection(v)
+	}
+}
+
+// formatCollection tries to expand DSL collection types (Array, Map, Struct).
+// Falls back to fmt.Sprintf("%v") for unknown types.
+func formatCollection(v any) string {
+	switch c := v.(type) {
+	case interface{ Iterate() []any }:
+		items := c.Iterate()
+		parts := make([]string, 0, len(items))
+		for i, item := range items {
+			parts = append(parts, fmt.Sprintf("%d: %s", i, FormatValue(item)))
+		}
+		return fmt.Sprintf("Массив[%d]{%s}", len(items), strings.Join(parts, ", "))
+	case interface {
+		Keys() []any
+		Get(key any) any
+	}:
+		keys := c.Keys()
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s: %s", FormatValue(k), FormatValue(c.Get(k))))
+		}
+		return fmt.Sprintf("Соответствие[%d]{%s}", len(keys), strings.Join(parts, ", "))
+	case interface {
+		Fields() []string
+		Get(field string) any
+	}:
+		fields := c.Fields()
+		parts := make([]string, 0, len(fields))
+		for _, f := range fields {
+			parts = append(parts, fmt.Sprintf("%s: %s", f, FormatValue(c.Get(f))))
+		}
+		return fmt.Sprintf("Структура[%d]{%s}", len(fields), strings.Join(parts, ", "))
 	default:
 		s := fmt.Sprintf("%v", v)
 		if len(s) > 100 {

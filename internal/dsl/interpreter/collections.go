@@ -89,7 +89,8 @@ func (a *Array) Iterate() []any { return a.items }
 func (a *Array) String() string  { return fmt.Sprintf("Массив[%d]", len(a.items)) }
 func (a *Array) TypeName() string { return "Массив" }
 
-// ─── Struct (Структура) ───────────────────────────────────────────────────────
+func (m *Map) Keys() []any         { return m.keys }
+func (s *Struct) Fields() []string { return s.keys }
 
 type Struct struct {
 	keys []string
