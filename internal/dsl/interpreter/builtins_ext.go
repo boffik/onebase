@@ -25,8 +25,30 @@ func isBlankVal(v any) bool {
 		return len(t.items) == 0
 	case *Map:
 		return len(t.keys) == 0
+	case *Ref:
+		return isEmptyRefUUID(t.UUID)
 	}
 	return false
+}
+
+// isEmptyRefVal — узкое определение «пустой ссылки», в отличие от isBlankVal,
+// которая считает пустым и 0, и false. Используется в ПустаяСсылка(x).
+func isEmptyRefVal(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch t := v.(type) {
+	case string:
+		return isEmptyRefUUID(t)
+	case *Ref:
+		return isEmptyRefUUID(t.UUID)
+	}
+	return false
+}
+
+// isEmptyRefUUID — пустой UUID = "" или нули.
+func isEmptyRefUUID(s string) bool {
+	return s == "" || s == "00000000-0000-0000-0000-000000000000"
 }
 
 // formatValue implements Формат(value, formatString) with minimal format support.

@@ -226,6 +226,33 @@ func TestCompile_Ssylka_Bare(t *testing.T) {
 	}
 }
 
+// Замечание #19а: системные колонки регистра должны быть доступны
+// под PascalCase русскоязычными именами.
+func TestCompile_SystemCols_BareAndDotted(t *testing.T) {
+	src := `ВЫБРАТЬ Р.Период, Р.ВидДвижения, Период
+ИЗ РегистрНакопления.ТоварноеДвижение КАК Р
+ГДЕ Период >= &Дата`
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Params: map[string]any{"Дата": "2026-01-01"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+	// alias-форма
+	if !strings.Contains(sql, "р.period") {
+		t.Errorf("ожидалось р.period, получили: %s", sql)
+	}
+	if !strings.Contains(sql, "р.вид_движения") {
+		t.Errorf("ожидалось р.вид_движения, получили: %s", sql)
+	}
+	// bare и в WHERE
+	if !strings.Contains(sql, "period >=") {
+		t.Errorf("ожидалось period >= в WHERE, получили: %s", sql)
+	}
+}
+
 func TestCompile_Ssylka_InWhere(t *testing.T) {
 	src := `ВЫБРАТЬ Наименование ИЗ Справочник.ТипЦен ГДЕ Ссылка = &ИД`
 

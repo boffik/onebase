@@ -1241,6 +1241,12 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				tr.emit("id")
 				continue
 			}
+			// Системные колонки регистра — PascalCase русские алиасы
+			// (см. замечание #19а). Работает и с префиксом (Х.Период), и без.
+			if col, ok := systemColAlias(t.val); ok {
+				tr.emit(col)
+				continue
+			}
 			if agg, ok := sqlAgg(t.val); ok && tr.peek(0).kind == tLParen {
 				tr.emit(agg)
 			} else if kw, ok := sqlKW(t.val); ok {
@@ -1282,6 +1288,23 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		tr.advance()
 	}
 	return Result{SQL: tr.build(), Args: tr.args}, nil
+}
+
+// systemColAlias maps the PascalCase русский alias for register system columns
+// (period / вид_движения / recorder / line_number) to the actual DB column name.
+// Используется и в SELECT/WHERE верхнего уровня, и после точки (alias.Период).
+func systemColAlias(name string) (string, bool) {
+	switch strings.ToLower(name) {
+	case "период":
+		return "period", true
+	case "виддвижения":
+		return "вид_движения", true
+	case "регистратор":
+		return "recorder", true
+	case "номерстроки":
+		return "line_number", true
+	}
+	return "", false
 }
 
 func isUUID(s string) bool {

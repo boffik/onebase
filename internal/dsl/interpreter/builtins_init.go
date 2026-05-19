@@ -125,6 +125,18 @@ func init() {
 	builtins["значениезаполнено"] = filledFn
 	builtins["isfilled"] = filledFn
 
+	// ПустаяСсылка(x) — узкий предикат именно для ссылок (см. замечание #3).
+	// Отличается от Пустая(x) тем, что 0 / Ложь / пустая коллекция → НЕ пустая
+	// ссылка. Принимает nil, строку (UUID или ""), *Ref.
+	emptyRefFn := func(args []any, _ string, _ int) (any, error) {
+		if len(args) == 0 {
+			return true, nil
+		}
+		return isEmptyRefVal(args[0]), nil
+	}
+	builtins["пустаяссылка"] = emptyRefFn
+	builtins["isemptyref"] = emptyRefFn
+
 	// ─── B5: Формат ───────────────────────────────────────────────────────
 	formatFn := func(args []any, _ string, _ int) (any, error) {
 		s, err := fmtBuiltin(args)
