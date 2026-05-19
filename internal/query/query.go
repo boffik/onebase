@@ -1256,8 +1256,10 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				}
 			} else {
 				lower := strings.ToLower(t.val)
-				// ref dim substitution is only for top-level (not after a dot)
-				if rd := tr.findRefDim(lower); rd != nil && !prevDot {
+				if tr.section == sectionFrom && !prevDot {
+					// In FROM clause bare identifiers are table names — skip colMap/refDim
+					tr.emit(lower)
+				} else if rd := tr.findRefDim(lower); rd != nil && !prevDot {
 					switch tr.section {
 					case sectionSelect:
 						tr.emit(rd.joinAlias + ".наименование")
@@ -1265,7 +1267,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 						tr.emit(rd.fieldName)
 					case sectionGroupBy:
 						tr.emit(rd.joinAlias + ".наименование")
-					default: // WHERE, HAVING, ORDER BY, FROM, OTHER → use _id column
+					default: // WHERE, HAVING, ORDER BY, FROM (after dot), OTHER → use _id column
 						tr.emit(rd.idCol)
 					}
 				} else if col, ok := tr.colMap[lower]; ok && !prevDot {

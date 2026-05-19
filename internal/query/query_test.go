@@ -300,3 +300,33 @@ func TestCompile_StringDim_NoIdSuffix(t *testing.T) {
 		t.Errorf("expected plain 'номенклатура' column in SQL, got: %s", sql)
 	}
 }
+
+// TestCompile_BareCatalogInFrom ensures that a bare catalog name in FROM clause
+// is not replaced by colMap entry from a reference dimension in another register.
+// Regression: "ИЗ Номенклатура" was compiled to "FROM номенклатура_id" because
+// colMap fallback mapped it from a register with reference:Номенклатура.
+func TestCompile_BareCatalogInFrom(t *testing.T) {
+	src := "ВЫБРАТЬ Наименование, ЦенаПродажи ИЗ Номенклатура"
+
+	regProfit := &metadata.Register{
+		Name: "ВаловаяПрибыль",
+		Dimensions: []metadata.Field{
+			{Name: "Номенклатура", Type: "reference:Номенклатура", RefEntity: "Номенклатура"},
+		},
+		Resources: []metadata.Field{{Name: "Выручка"}},
+	}
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Registers: []*metadata.Register{regProfit},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+	if !strings.Contains(sql, "FROM номенклатура") {
+		t.Errorf("expected FROM номенклатура, got: %s", sql)
+	}
+	if strings.Contains(sql, "FROM номенклатура_id") {
+		t.Errorf("bare catalog name must NOT be replaced by _id column; got: %s", sql)
+	}
+}
