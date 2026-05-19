@@ -279,6 +279,32 @@ func (fi *FormInterpreter) ExecuteOnChange(ctx context.Context, form *metadata.F
 	return fi.ExecuteElementEvent(ctx, form, elementName, "ПриИзменении", formCtx)
 }
 
+// События табличных частей (замечание #15). FormInterpreter уже умеет
+// диспатчить произвольные события через ExecuteElementEvent — эти методы
+// дают удобный API для UI-обработчиков, которые знают тип события заранее.
+// Тригерринг из браузера реализуется отдельно в UI/JS — здесь только
+// серверная сторона исполнения.
+
+// ExecuteOnRowAdded executes ПриДобавленииСтроки handler for a table part.
+func (fi *FormInterpreter) ExecuteOnRowAdded(ctx context.Context, form *metadata.FormModule, tablePartName string, formCtx *FormContext) error {
+	return fi.ExecuteElementEvent(ctx, form, tablePartName, string(metadata.FormEventOnRowAdded), formCtx)
+}
+
+// ExecuteOnRowChanged executes ПриИзмененииСтроки handler for a table part.
+func (fi *FormInterpreter) ExecuteOnRowChanged(ctx context.Context, form *metadata.FormModule, tablePartName string, formCtx *FormContext) error {
+	return fi.ExecuteElementEvent(ctx, form, tablePartName, string(metadata.FormEventOnRowChanged), formCtx)
+}
+
+// ExecuteOnRowDeleted executes ПриУдаленииСтроки handler for a table part.
+func (fi *FormInterpreter) ExecuteOnRowDeleted(ctx context.Context, form *metadata.FormModule, tablePartName string, formCtx *FormContext) error {
+	return fi.ExecuteElementEvent(ctx, form, tablePartName, string(metadata.FormEventOnRowDeleted), formCtx)
+}
+
+// ExecuteOnRowActivated executes ПриАктивизацииСтроки handler for a table part.
+func (fi *FormInterpreter) ExecuteOnRowActivated(ctx context.Context, form *metadata.FormModule, tablePartName string, formCtx *FormContext) error {
+	return fi.ExecuteElementEvent(ctx, form, tablePartName, string(metadata.FormEventOnRowActivated), formCtx)
+}
+
 // ExecuteItemChoice executes ОбработкаВыбора (ItemChoice) handler
 func (fi *FormInterpreter) ExecuteItemChoice(ctx context.Context, form *metadata.FormModule, elementName string, selectedItem This, formCtx *FormContext) error {
 	formCtx.SelectedItem = selectedItem

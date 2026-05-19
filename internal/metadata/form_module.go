@@ -22,6 +22,14 @@ const (
 	FormEventBeforeDelete  FormEventType = "ПередУдалением"      // BeforeDelete
 	FormEventOnDelete      FormEventType = "ПриУдалении"         // OnDelete
 	FormEventAfterDelete   FormEventType = "ПослеУдаления"       // AfterDelete
+	// События для табличных частей (замечание #15): даём YAML-конфигу
+	// возможность их объявлять. UI пока умеет дергать ExecuteElementEvent
+	// generic-маршрутом — кастомные триггеры (auto-fill цены при добавлении
+	// строки и т.п.) реализуются в конфиге пользователя.
+	FormEventOnRowAdded    FormEventType = "ПриДобавленииСтроки" // OnRowAdded
+	FormEventOnRowChanged  FormEventType = "ПриИзмененииСтроки"  // OnRowChanged
+	FormEventOnRowDeleted  FormEventType = "ПриУдаленииСтроки"   // OnRowDeleted
+	FormEventOnRowActivated FormEventType = "ПриАктивизацииСтроки" // OnRowActivated
 )
 
 // FormElementType represents types of form elements
