@@ -1216,13 +1216,23 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				}
 			}
 
-			// Regular source: TypeName.EntityName → table_name [+ auto-JOINs]
+			// Regular source: TypeName.EntityName → table_name [+ КАК alias] [+ auto-JOINs]
 			tr.advance()
 			tr.advance()
 			entity := tr.advance()
 			tableName := sourceToTable(upper, entity.val)
 			tr.mainTable = tableName
 			tr.emit(tableName)
+			// Consume optional КАК/AS alias before auto-JOINs
+			if p := tr.peek(0); p.kind == tIdent {
+				pUpper := strings.ToUpper(p.val)
+				if pUpper == "КАК" || pUpper == "AS" {
+					tr.advance()
+					if a := tr.peek(0); a.kind == tIdent {
+						tr.emit("AS " + strings.ToLower(tr.advance().val))
+					}
+				}
+			}
 			if tr.section == sectionFrom {
 				for _, rd := range tr.refDims {
 					tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
