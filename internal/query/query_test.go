@@ -373,3 +373,35 @@ func TestCompile_VT_RefDim_AutoJoin(t *testing.T) {
 		t.Errorf("expected ORDER BY ном (alias), got: %s", sql)
 	}
 }
+
+// TestCompile_VT_WithUserAlias verifies that КАК after a VT subquery is consumed
+// and the user-provided alias is used in the auto-JOIN ON clause.
+func TestCompile_VT_WithUserAlias(t *testing.T) {
+	src := "ВЫБРАТЬ Номенклатура ИЗ РегистрНакопления.ПартииТоваров.Остатки() КАК Пар"
+
+	reg := &metadata.Register{
+		Name: "ПартииТоваров",
+		Dimensions: []metadata.Field{
+			{Name: "Номенклатура", RefEntity: "Номенклатура"},
+		},
+		Resources: []metadata.Field{{Name: "Количество"}},
+	}
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Registers: []*metadata.Register{reg},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+
+	if !strings.Contains(sql, "AS пар") {
+		t.Errorf("expected user alias 'пар', got: %s", sql)
+	}
+	if strings.Contains(sql, "AS остатки_партиитоваров") {
+		t.Errorf("default alias must not appear when user provides КАК, got: %s", sql)
+	}
+	if !strings.Contains(sql, "пар.номенклатура") {
+		t.Errorf("JOIN ON must use user alias, got: %s", sql)
+	}
+}

@@ -1040,6 +1040,30 @@ func (tr *translator) findRefDim(name string) *refDimInfo {
 	return nil
 }
 
+// emitVTSubquery emits a VT subquery with its alias, detects optional user alias (КАК),
+// and adds auto-JOINs for reference dimensions using the correct alias.
+func (tr *translator) emitVTSubquery(subq, defaultAlias string) {
+	alias := defaultAlias
+	if p := tr.peek(0); p.kind == tIdent {
+		pUpper := strings.ToUpper(p.val)
+		if pUpper == "КАК" || pUpper == "AS" {
+			tr.advance()
+			if a := tr.peek(0); a.kind == tIdent {
+				alias = strings.ToLower(tr.advance().val)
+			}
+		}
+	}
+	tr.emit("(" + subq + ") AS " + alias)
+	if tr.section == sectionFrom {
+		for _, rd := range tr.refDims {
+			if rd.isVT {
+				tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
+					rd.joinTable, rd.joinAlias, rd.joinAlias, alias, rd.fieldName))
+			}
+		}
+	}
+}
+
 // --- main translator loop ---
 
 // buildColMap creates a mapping from lowercase field name to actual DB column name
@@ -1155,16 +1179,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if err != nil {
 						return Result{}, err
 					}
-					tr.emit("(" + subq + ") AS " + alias)
-					// Auto-JOIN for reference dimensions in VT outer query
-					if tr.section == sectionFrom {
-						for _, rd := range tr.refDims {
-							if rd.isVT {
-								tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
-									rd.joinTable, rd.joinAlias, rd.joinAlias, alias, rd.fieldName))
-							}
-						}
-					}
+					tr.emitVTSubquery(subq, alias)
 					continue
 				}
 
@@ -1180,16 +1195,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if err != nil {
 						return Result{}, err
 					}
-					tr.emit("(" + subq + ") AS " + alias)
-					// Auto-JOIN for reference dimensions in VT outer query
-					if tr.section == sectionFrom {
-						for _, rd := range tr.refDims {
-							if rd.isVT {
-								tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
-									rd.joinTable, rd.joinAlias, rd.joinAlias, alias, rd.fieldName))
-							}
-						}
-					}
+					tr.emitVTSubquery(subq, alias)
 					continue
 				}
 
@@ -1205,16 +1211,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if err != nil {
 						return Result{}, err
 					}
-					tr.emit("(" + subq + ") AS " + alias)
-					// Auto-JOIN for reference dimensions in VT outer query
-					if tr.section == sectionFrom {
-						for _, rd := range tr.refDims {
-							if rd.isVT {
-								tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
-									rd.joinTable, rd.joinAlias, rd.joinAlias, alias, rd.fieldName))
-							}
-						}
-					}
+					tr.emitVTSubquery(subq, alias)
 					continue
 				}
 			}
