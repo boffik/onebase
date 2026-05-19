@@ -142,6 +142,43 @@ func TestInterpreter_SiblingProcResolution(t *testing.T) {
 	}
 }
 
+// Замечание #5: Module.Proc() namespaced calls.
+func TestInterpreter_NamespacedModuleProc(t *testing.T) {
+	helperSrc := `Функция Удвоить(Х)
+  Возврат Х * 2;
+КонецФункции`
+	l := lexer.New(helperSrc, "утилиты.module.os")
+	p := parser.New(l)
+	helperProg, err := p.ParseProgram()
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper := helperProg.Procedures[0]
+
+	mainSrc := `Процедура Главная()
+  ЭтотОбъект.Результат = Утилиты.Удвоить(21);
+КонецПроцедуры`
+	l2 := lexer.New(mainSrc, "test.proc.os")
+	p2 := parser.New(l2)
+	mainProg, _ := p2.ParseProgram()
+	main := mainProg.Procedures[0]
+
+	interp := interpreter.New()
+	interp.LookupModuleProc = func(module, name string) *ast.ProcedureDecl {
+		if strings.EqualFold(module, "Утилиты") && strings.EqualFold(name, "Удвоить") {
+			return helper
+		}
+		return nil
+	}
+	obj := runtime.NewObject("X", metadata.KindDocument)
+	if err := interp.Run(main, obj); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if obj.Get("Результат") != float64(42) {
+		t.Errorf("expected 42, got %v", obj.Get("Результат"))
+	}
+}
+
 // Без правильного file-контекста sibling lookup не должен пускать.
 func TestInterpreter_SiblingProcScopedByFile(t *testing.T) {
 	src := `Процедура Главная()

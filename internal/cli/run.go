@@ -177,6 +177,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	interp := interpreter.New()
 	interp.LookupProc = reg.GetModuleProc
 	interp.LookupSiblingProc = reg.GetSiblingProc
+	interp.LookupModuleProc = reg.GetModuleNamespacedProc
 
 	if err := db.EnsureScheduledRunsTable(ctx); err != nil {
 		return fmt.Errorf("scheduled runs schema: %w", err)

@@ -44,9 +44,13 @@ type Interpreter struct {
 	// `.proc.os` / `.posting.os` / `.rep.os` могут содержать вспомогательные
 	// процедуры (см. замечание #13). Optional — может быть nil.
 	LookupSiblingProc func(file, name string) *ast.ProcedureDecl
-	DebugHook         DebugHook // nil = no debugging
-	curFile           string    // last executed statement location (for error reporting)
-	curLine           int
+	// LookupModuleProc resolves Module.Proc() namespaced calls, например
+	// `Утилиты.ФИФО(...)`. Используется когда object-часть MemberExpr —
+	// идентификатор, не разрешённый в env как переменная. См. замечание #5.
+	LookupModuleProc func(module, name string) *ast.ProcedureDecl
+	DebugHook        DebugHook // nil = no debugging
+	curFile          string    // last executed statement location (for error reporting)
+	curLine          int
 }
 
 func New() *Interpreter { return &Interpreter{} }
@@ -490,6 +494,15 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 			return o.CallMethod(method, args)
 		case *Struct:
 			return o.CallMethod(method, args)
+		}
+		// Если object — идентификатор, не разрешившийся в значение,
+		// и это известный модуль — резолвим Module.Proc() (замечание #5).
+		if recv == nil && i.LookupModuleProc != nil {
+			if objIdent, ok := callee.Object.(*ast.Ident); ok {
+				if proc := i.LookupModuleProc(objIdent.Tok.Literal, callee.Field.Literal); proc != nil {
+					return i.callUserProc(proc, e, args)
+				}
+			}
 		}
 		return nil
 	}

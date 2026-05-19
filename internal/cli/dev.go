@@ -63,6 +63,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	interp := interpreter.New()
 	interp.LookupProc = reg.GetModuleProc
 	interp.LookupSiblingProc = reg.GetSiblingProc
+	interp.LookupModuleProc = reg.GetModuleNamespacedProc
 
 	sched := scheduler.New(db, reg, interp)
 

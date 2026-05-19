@@ -26,6 +26,7 @@ type Registry struct {
 	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
 	procs           map[string]map[string]*ast.ProcedureDecl
 	moduleProcs     map[string]*ast.ProcedureDecl // flat: proc name → decl
+	moduleByName    map[string]map[string]*ast.ProcedureDecl // lowercase module → procs in it
 	processors      map[string]*processor.Processor
 	subsystems      []*metadata.Subsystem // sorted by Order
 	journals        map[string]*metadata.Journal
@@ -49,6 +50,7 @@ func NewRegistry() *Registry {
 		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
 		procs:           make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),
+		moduleByName:    make(map[string]map[string]*ast.ProcedureDecl),
 		processors:      make(map[string]*processor.Processor),
 		journals:        make(map[string]*metadata.Journal),
 		accountRegs:     make(map[string]*metadata.AccountRegister),
@@ -380,14 +382,33 @@ var eventAliases = map[string]string{
 
 func (r *Registry) LoadModules(modules map[string]*ast.Program) {
 	flat := make(map[string]*ast.ProcedureDecl)
-	for _, prog := range modules {
+	byModule := make(map[string]map[string]*ast.ProcedureDecl)
+	for moduleName, prog := range modules {
+		modKey := strings.ToLower(moduleName)
+		byModule[modKey] = make(map[string]*ast.ProcedureDecl, len(prog.Procedures))
 		for _, p := range prog.Procedures {
-			flat[strings.ToLower(p.Name.Literal)] = p
+			procKey := strings.ToLower(p.Name.Literal)
+			flat[procKey] = p
+			byModule[modKey][procKey] = p
 		}
 	}
 	r.mu.Lock()
 	r.moduleProcs = flat
+	r.moduleByName = byModule
 	r.mu.Unlock()
+}
+
+// GetModuleNamespacedProc resolves Module.Proc() syntax — например
+// Утилиты.ФИФО(...). Это позволяет вызывать процедуры общих модулей
+// без коллизий имён между модулями (замечание #5).
+func (r *Registry) GetModuleNamespacedProc(moduleName, procName string) *ast.ProcedureDecl {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	mod, ok := r.moduleByName[strings.ToLower(moduleName)]
+	if !ok {
+		return nil
+	}
+	return mod[strings.ToLower(procName)]
 }
 
 func (r *Registry) LoadProcessors(procs []*processor.Processor) {
