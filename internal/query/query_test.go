@@ -6,6 +6,7 @@ import (
 
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func TestCompile_BalancesQuery(t *testing.T) {
@@ -250,6 +251,84 @@ func TestCompile_SystemCols_BareAndDotted(t *testing.T) {
 	// bare и в WHERE
 	if !strings.Contains(sql, "period >=") {
 		t.Errorf("ожидалось period >= в WHERE, получили: %s", sql)
+	}
+}
+
+// Замечание #19б: функции даты в DSL должны транслироваться в SQL-эквиваленты
+// под нужный диалект. SQL case-insensitive — сравниваем в lowercase, поскольку
+// транслятор лоуэркейсит идентификаторы.
+func TestCompile_DateFuncs_SQLite(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`ВЫБРАТЬ Год(Период) ИЗ РегистрНакопления.Х`, "cast(strftime('%Y', period) AS integer)"},
+		{`ВЫБРАТЬ Месяц(Период) ИЗ РегистрНакопления.Х`, "cast(strftime('%m', period) AS integer)"},
+		{`ВЫБРАТЬ День(Период) ИЗ РегистрНакопления.Х`, "cast(strftime('%d', period) AS integer)"},
+		{`ВЫБРАТЬ НачалоДня(Период) ИЗ РегистрНакопления.Х`, "date(period)"},
+		{`ВЫБРАТЬ НачалоМесяца(Период) ИЗ РегистрНакопления.Х`, "date(period, 'start of month')"},
+	}
+	for _, c := range cases {
+		r, err := query.Compile(c.src, query.CompileOpts{Dialect: storage.SQLiteDialect{}})
+		if err != nil {
+			t.Errorf("Compile(%q): %v", c.src, err)
+			continue
+		}
+		if !strings.Contains(r.SQL, c.want) {
+			t.Errorf("Compile(%q):\n  got: %s\n want substring: %s", c.src, r.SQL, c.want)
+		}
+	}
+}
+
+func TestCompile_DateFuncs_PG(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`ВЫБРАТЬ Год(Период) ИЗ РегистрНакопления.Х`, "cast(extract(year FROM period) AS integer)"},
+		{`ВЫБРАТЬ Месяц(Период) ИЗ РегистрНакопления.Х`, "cast(extract(month FROM period) AS integer)"},
+		{`ВЫБРАТЬ НачалоДня(Период) ИЗ РегистрНакопления.Х`, "date_trunc('day', period)"},
+		{`ВЫБРАТЬ НачалоМесяца(Период) ИЗ РегистрНакопления.Х`, "date_trunc('month', period)"},
+	}
+	for _, c := range cases {
+		r, err := query.Compile(c.src, query.CompileOpts{}) // default = PG
+		if err != nil {
+			t.Errorf("Compile(%q): %v", c.src, err)
+			continue
+		}
+		if !strings.Contains(r.SQL, c.want) {
+			t.Errorf("Compile(%q):\n  got: %s\n want substring: %s", c.src, r.SQL, c.want)
+		}
+	}
+}
+
+// Вложенные date-функции тоже должны разворачиваться: Месяц(НачалоМесяца(x)).
+func TestCompile_DateFuncs_Nested(t *testing.T) {
+	src := `ВЫБРАТЬ Месяц(НачалоМесяца(Период)) ИЗ РегистрНакопления.Х`
+	r, err := query.Compile(src, query.CompileOpts{Dialect: storage.SQLiteDialect{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// внутри Месяц(...) должно быть date(period, ...)
+	if !strings.Contains(r.SQL, "strftime('%m', date(period, 'start of month'))") {
+		t.Errorf("вложенность не развернулась: %s", r.SQL)
+	}
+}
+
+// Английские алиасы Year/Month/Day тоже должны работать.
+func TestCompile_DateFuncs_EnglishAliases(t *testing.T) {
+	r, err := query.Compile(
+		`ВЫБРАТЬ Year(Period), Month(Period) ИЗ РегистрНакопления.Х`,
+		query.CompileOpts{Dialect: storage.SQLiteDialect{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "strftime('%Y'") {
+		t.Errorf("Year не развернулся: %s", r.SQL)
+	}
+	if !strings.Contains(r.SQL, "strftime('%m'") {
+		t.Errorf("Month не развернулся: %s", r.SQL)
 	}
 }
 

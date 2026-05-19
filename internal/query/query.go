@@ -1084,6 +1084,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 	if opts.Params == nil {
 		opts.Params = map[string]any{}
 	}
+	// Замечание #19б: расширяем НачалоДня/Год/Месяц/... в SQL-эквиваленты
+	// до основной трансляции, чтобы остальные шаги ничего не знали о них.
+	tokens = rewriteDateFuncs(tokens, dialectName(opts.Dialect))
 	tr := &translator{
 		tokens:      tokens,
 		params:      map[string]int{},
@@ -1288,6 +1291,127 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		tr.advance()
 	}
 	return Result{SQL: tr.build(), Args: tr.args}, nil
+}
+
+// dialectName возвращает строковое имя диалекта SQL для opts.Dialect; nil → "pg"
+// (значение по умолчанию из dialectOrDefault). Используется в выборе шаблонов
+// функций даты — strftime в SQLite, EXTRACT в PostgreSQL.
+func dialectName(d storage.Dialect) string {
+	if d == nil {
+		return "pg"
+	}
+	return d.Name()
+}
+
+// dateFuncRewrite — пара prefix/suffix токенов, которые оборачивают исходный
+// аргумент функции даты. Например, Год(x) в SQLite → CAST(strftime('%Y', x) AS INTEGER).
+type dateFuncRewrite struct {
+	prefix []tok
+	suffix []tok
+}
+
+// tokenizeFragment токенизирует SQL-фрагмент и убирает финальный EOF.
+func tokenizeFragment(s string) []tok {
+	t := tokenize(s)
+	if len(t) > 0 && t[len(t)-1].kind == tEOF {
+		t = t[:len(t)-1]
+	}
+	return t
+}
+
+// dateFuncRewrites возвращает таблицу замен для функций даты под нужный диалект.
+// Ключи в нижнем регистре, сопоставление case-insensitive.
+func dateFuncRewrites(dialect string) map[string]dateFuncRewrite {
+	rw := func(prefix, suffix string) dateFuncRewrite {
+		return dateFuncRewrite{prefix: tokenizeFragment(prefix), suffix: tokenizeFragment(suffix)}
+	}
+	switch dialect {
+	case "sqlite":
+		return map[string]dateFuncRewrite{
+			"началодня":   rw("date(", ")"),
+			"startofday":  rw("date(", ")"),
+			"конецдня":    rw("datetime(date(", "), '+1 day', '-1 second')"),
+			"endofday":    rw("datetime(date(", "), '+1 day', '-1 second')"),
+			"началомесяца": rw("date(", ", 'start of month')"),
+			"startofmonth": rw("date(", ", 'start of month')"),
+			"началогода":   rw("date(", ", 'start of year')"),
+			"startofyear":  rw("date(", ", 'start of year')"),
+			"год":          rw("CAST(strftime('%Y',", ") AS INTEGER)"),
+			"year":         rw("CAST(strftime('%Y',", ") AS INTEGER)"),
+			"месяц":        rw("CAST(strftime('%m',", ") AS INTEGER)"),
+			"month":        rw("CAST(strftime('%m',", ") AS INTEGER)"),
+			"день":         rw("CAST(strftime('%d',", ") AS INTEGER)"),
+			"day":          rw("CAST(strftime('%d',", ") AS INTEGER)"),
+		}
+	default: // pg
+		return map[string]dateFuncRewrite{
+			"началодня":    rw("date_trunc('day',", ")"),
+			"startofday":   rw("date_trunc('day',", ")"),
+			"конецдня":     rw("(date_trunc('day',", ") + INTERVAL '1 day' - INTERVAL '1 microsecond')"),
+			"endofday":     rw("(date_trunc('day',", ") + INTERVAL '1 day' - INTERVAL '1 microsecond')"),
+			"началомесяца": rw("date_trunc('month',", ")"),
+			"startofmonth": rw("date_trunc('month',", ")"),
+			"началогода":   rw("date_trunc('year',", ")"),
+			"startofyear":  rw("date_trunc('year',", ")"),
+			// CAST(... AS INTEGER) — портативно (PG поддерживает обе формы,
+			// :: не транслируется нашим токенизатором).
+			"год":   rw("CAST(EXTRACT(YEAR FROM", ") AS INTEGER)"),
+			"year":  rw("CAST(EXTRACT(YEAR FROM", ") AS INTEGER)"),
+			"месяц": rw("CAST(EXTRACT(MONTH FROM", ") AS INTEGER)"),
+			"month": rw("CAST(EXTRACT(MONTH FROM", ") AS INTEGER)"),
+			"день":  rw("CAST(EXTRACT(DAY FROM", ") AS INTEGER)"),
+			"day":   rw("CAST(EXTRACT(DAY FROM", ") AS INTEGER)"),
+		}
+	}
+}
+
+// rewriteDateFuncs обходит токены и разворачивает Год(x), НачалоДня(x), … в
+// соответствующий SQL-шаблон диалекта. Раскрытие — на уровне токенов:
+// сохраняются tIdent/tStr/tLParen и т.п., чтобы основной транслятор обработал
+// внутренний аргумент через обычные правила (resolve ref dims, параметры и т.п.).
+// Рекурсивно для вложенных вызовов: Месяц(НачалоМесяца(x)) тоже разворачивается.
+func rewriteDateFuncs(tokens []tok, dialect string) []tok {
+	rewrites := dateFuncRewrites(dialect)
+	var out []tok
+	for i := 0; i < len(tokens); i++ {
+		t := tokens[i]
+		if t.kind == tIdent && i+1 < len(tokens) && tokens[i+1].kind == tLParen {
+			key := strings.ToLower(t.val)
+			if rw, ok := rewrites[key]; ok {
+				// поиск парной закрывающей )
+				depth := 0
+				end := -1
+				for j := i + 1; j < len(tokens); j++ {
+					switch tokens[j].kind {
+					case tLParen:
+						depth++
+					case tRParen:
+						depth--
+						if depth == 0 {
+							end = j
+						}
+					}
+					if end >= 0 {
+						break
+					}
+				}
+				if end < 0 {
+					// нет пары — оставляем как есть, пусть SQL потом упадёт явно
+					out = append(out, t)
+					continue
+				}
+				inner := tokens[i+2 : end]
+				inner = rewriteDateFuncs(inner, dialect) // рекурсия
+				out = append(out, rw.prefix...)
+				out = append(out, inner...)
+				out = append(out, rw.suffix...)
+				i = end // пропускаем закрывающую )
+				continue
+			}
+		}
+		out = append(out, t)
+	}
+	return out
 }
 
 // systemColAlias maps the PascalCase русский alias for register system columns
