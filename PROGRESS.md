@@ -7,8 +7,8 @@
 
 - [ ] **#13** — в `*.proc.os` видна только одна процедура
 - [x] **#18** — виртуальное поле `Ссылка` в запросах не работает → проверка `prevDot` в `internal/query/query.go:1238` убрана; теперь `Ссылка`/`Reference`/`Ref` транслируется в `id` и с префиксом (`Н.Ссылка`), и без (`Ссылка`). Тесты `TestCompile_Ssylka_Bare`, `TestCompile_Ssylka_InWhere` в `query_test.go`.
-- [ ] **#20** — `Справочники.X.ИмяПредопределённой` → nil
-- [ ] **#21** — `НайтиПоНаименованию` → nil
+- [x] **#20** — `Справочники.X.ИмяПредопределённой` → теперь возвращает `*Ref`. Добавил `CatalogsRoot/CatalogProxy` в `internal/dsl/interpreter/catalogs_proxy.go`, зарегистрировал как `Справочники`/`Catalogs` в `internal/ui/handlers.go:1454`.
+- [x] **#21** — `НайтиПоНаименованию` / `НайтиПоКоду` → реализованы как методы `CatalogProxy`. Storage-метод `FindCatalogByField` в `internal/storage/predefined.go`.
 - [x] **#22** — `Если/Иначе` теряет присваивание во внешнем scope → код уже корректен (`internal/dsl/interpreter/env.go:69-79`, fix `feae0205`). Добавлен регресс-тест `scope_test.go` (4 кейса). **Запустить:** `go test ./internal/dsl/interpreter/ -run TestIfElseScope -v`
 - [x] **#17** — Ref-типы в измерениях регистров → починено коммитом `1ffa7bf` (resolveRefArg в `internal/storage/register.go:19-35`)
 

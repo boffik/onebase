@@ -125,3 +125,39 @@ func (db *DB) GetPredefinedIDStr(ctx context.Context, entityName, predefinedName
 	}
 	return id.String(), nil
 }
+
+// FindCatalogByField looks up a single catalog row by exact match of fieldName.
+// Returns (id, displayValue, true) on hit; ("", "", false, nil) when not found.
+// displayValue is the matched field's value — handy for building a *Ref.
+// fieldName lookup is case-insensitive against entity.Fields names.
+func (db *DB) FindCatalogByField(ctx context.Context, entity *metadata.Entity, fieldName, value string) (string, string, bool, error) {
+	var field *metadata.Field
+	for i := range entity.Fields {
+		if strings.EqualFold(entity.Fields[i].Name, fieldName) {
+			field = &entity.Fields[i]
+			break
+		}
+	}
+	if field == nil {
+		return "", "", false, fmt.Errorf("entity %s has no field %q", entity.Name, fieldName)
+	}
+	col := metadata.ColumnName(*field)
+	table := metadata.TableName(entity.Name)
+	d := db.dialect
+	rows, err := db.Query(ctx,
+		fmt.Sprintf(`SELECT id, %s FROM %s WHERE %s = %s LIMIT 1`, col, table, col, d.Placeholder(1)),
+		value,
+	)
+	if err != nil {
+		return "", "", false, fmt.Errorf("find %s.%s: %w", entity.Name, fieldName, err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", "", false, nil
+	}
+	var idStr, display string
+	if err := rows.Scan(&idStr, &display); err != nil {
+		return "", "", false, fmt.Errorf("find %s.%s scan: %w", entity.Name, fieldName, err)
+	}
+	return idStr, display, true, nil
+}
