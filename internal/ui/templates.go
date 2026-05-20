@@ -386,11 +386,14 @@ const tplIndex = `
 .dash{display:flex;flex-direction:column;gap:14px;max-width:1280px}
 .dash-row{display:flex;gap:14px;flex-wrap:wrap}
 .dash-row > *{flex:1 1 220px;min-width:0}
+/* Виджеты с табличным/широким содержимым шире компактных KPI */
+.dash-row > .w-card-list,.dash-row > .w-card-chart,.dash-row > .w-card-recent{flex:1 1 360px}
 .dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
 .w-card{background:#fff;border-radius:10px;padding:18px 20px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;min-height:120px}
 .w-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:600;margin-bottom:8px}
 .w-kpi-value{font-size:32px;font-weight:700;color:#0f172a;line-height:1.1;white-space:nowrap}
 .w-kpi-sub{font-size:12px;color:#94a3b8;margin-top:6px}
+.w-list{overflow-x:auto}
 .w-list table{margin-top:4px;font-size:13px}
 .w-list th{padding:6px 8px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;text-align:left;background:transparent}
 .w-list td{padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155}
@@ -450,7 +453,7 @@ window.__obWidgetCharts = window.__obWidgetCharts || {};
 {{end}}
 
 {{define "widget-card"}}
-<div class="w-card">
+<div class="w-card w-card-{{.Type}}">
   {{if .Title}}<div class="w-title">{{.Title}}</div>{{end}}
   {{if .Error}}<div class="w-error">{{.Error}}</div>
   {{else if eq .Type "kpi"}}{{template "widget-kpi-body" .}}
