@@ -280,19 +280,25 @@ body{padding-bottom:32px}
     bar.innerHTML='<div id="ob-msg-head"><span class="ttl">Сообщения <span class="cnt" id="ob-msg-cnt">0</span></span><button type="button" id="ob-msg-clear" title="Очистить">Очистить</button><span class="arr">▲</span></div><div id="ob-msg-list"><div class="empty">Сообщений нет</div></div>';
     document.body.appendChild(bar);
     var list=document.getElementById('ob-msg-list'),cnt=document.getElementById('ob-msg-cnt'),head=document.getElementById('ob-msg-head'),btnClear=document.getElementById('ob-msg-clear');
-    var prevSig=sessionStorage.getItem('obMsgSig')||'',prevOpen=sessionStorage.getItem('obMsgOpen')==='1';
+    var prevSig=sessionStorage.getItem('obMsgSig')||'',prevOpen=sessionStorage.getItem('obMsgOpen')==='1',lastHtml='';
     function fmtTime(ts){try{var d=new Date(ts);var h=String(d.getHours()).padStart(2,'0'),m=String(d.getMinutes()).padStart(2,'0'),s=String(d.getSeconds()).padStart(2,'0');return h+':'+m+':'+s;}catch(e){return '';}}
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
     function render(msgs){
-      if(!msgs||!msgs.length){bar.classList.add('hidden');bar.classList.remove('open');list.innerHTML='<div class="empty">Сообщений нет</div>';cnt.classList.remove('show');prevSig='';sessionStorage.removeItem('obMsgSig');return;}
+      if(!msgs||!msgs.length){bar.classList.add('hidden');bar.classList.remove('open');list.innerHTML='<div class="empty">Сообщений нет</div>';lastHtml='';cnt.classList.remove('show');prevSig='';sessionStorage.removeItem('obMsgSig');return;}
       bar.classList.remove('hidden');
       var html='';for(var i=0;i<msgs.length;i++){var m=msgs[i];html+='<div class="it"><span class="t">'+fmtTime(m.time)+'</span><span>'+escapeHtml(m.text)+'</span></div>';}
-      list.innerHTML=html;cnt.textContent=msgs.length;cnt.classList.add('show');
+      if(html!==lastHtml){
+        // не перерисовывать пока пользователь выделяет текст внутри панели — иначе сбрасывается выделение
+        var sel=window.getSelection?window.getSelection():null;
+        if(!(sel&&!sel.isCollapsed&&sel.anchorNode&&list.contains(sel.anchorNode))){
+          list.innerHTML=html;lastHtml=html;list.scrollTop=list.scrollHeight;
+        }
+      }
+      cnt.textContent=msgs.length;cnt.classList.add('show');
       var sig=msgs.length?msgs[msgs.length-1].time+'|'+msgs.length:'';
       if(sig!==prevSig){bar.classList.add('open');prevOpen=true;sessionStorage.setItem('obMsgOpen','1');}
       else if(prevOpen){bar.classList.add('open');}
       prevSig=sig;sessionStorage.setItem('obMsgSig',sig);
-      list.scrollTop=list.scrollHeight;
     }
     head.addEventListener('click',function(e){if(e.target===btnClear)return;bar.classList.toggle('open');prevOpen=bar.classList.contains('open');sessionStorage.setItem('obMsgOpen',prevOpen?'1':'0');});
     btnClear.addEventListener('click',function(e){e.stopPropagation();fetch('/ui/messages/clear',{method:'POST'}).then(function(){render([]);});});
