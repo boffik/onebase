@@ -1,4 +1,4 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 type CatalogsDB interface {
 	PredefinedDB
 	FindCatalogByField(ctx context.Context, entity *metadata.Entity, fieldName, value string) (idStr, display string, ok bool, err error)
-	// WriteCatalogRecord upserts a record (замечание #25). idStr пустой →
+	// WriteCatalogRecord upserts a record. idStr пустой →
 	// генерируется новый UUID. Возвращает UUID записанной записи.
 	WriteCatalogRecord(ctx context.Context, entity *metadata.Entity, idStr string, fields map[string]any) (string, error)
 }
@@ -25,8 +25,8 @@ type EntityLookup interface {
 
 // ctxSource предоставляет «живой» контекст. Для обычного запуска это
 // статический контекст; при активной DSL-транзакции — *TxState, чей
-// Ctx() несёт открытую транзакцию (замечание #25: запись справочника
-// из обработки должна участвовать в транзакции).
+// Ctx() несёт открытую транзакцию — запись справочника
+// из обработки участвует в ней.
 type ctxSource interface {
 	Ctx() context.Context
 }
@@ -134,7 +134,7 @@ func (p *CatalogProxy) findByField(field string, args []any) any {
 }
 
 // CatalogRecordWriter — записываемый объект справочника/документа,
-// созданный через Справочники.X.Создать() (замечание #25).
+// созданный через Справочники.X.Создать() (
 //
 //	Зап = Справочники.Контрагент.Создать();
 //	Зап.Наименование = "ООО Ромашка";
@@ -177,7 +177,7 @@ func (w *CatalogRecordWriter) CallMethod(method string, args []any) any {
 	case "записать", "write":
 		id, err := w.db.WriteCatalogRecord(w.ctx(), w.entity, w.idStr, w.fields)
 		if err != nil {
-			panic(userError{Msg: "Записать(" + w.entity.Name + "): " + err.Error()})
+			RaiseUserError("Записать(" + w.entity.Name + "): " + err.Error())
 		}
 		w.idStr = id
 		name := ""

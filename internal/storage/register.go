@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func resolveRefArg(d Dialect, v any) any {
 type refStringer interface{ String() string }
 
 // normalizeRegArg — общая нормализация значения перед записью в любую
-// колонку регистра (замечание #17). Если значение — *Ref:
+// колонку регистра ( Если значение — *Ref:
 //   - reference-поле  → UUID (через resolveRefArg)
 //   - не-ref поле     → строка из String() (имя записи)
 // Для не-Ref значений возвращается как есть.

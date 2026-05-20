@@ -400,7 +400,7 @@ func (r *Registry) LoadModules(modules map[string]*ast.Program) {
 
 // GetModuleNamespacedProc resolves Module.Proc() syntax — например
 // Утилиты.ФИФО(...). Это позволяет вызывать процедуры общих модулей
-// без коллизий имён между модулями (замечание #5).
+// без коллизий имён между модулями (
 func (r *Registry) GetModuleNamespacedProc(moduleName, procName string) *ast.ProcedureDecl {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

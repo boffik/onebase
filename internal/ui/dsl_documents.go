@@ -1,4 +1,4 @@
-package ui
+﻿package ui
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type docsCtxSource interface {
 	Ctx() context.Context
 }
 
-// docsRoot — DSL-глобал Документы / Documents (замечание #26).
+// docsRoot — DSL-глобал Документы / Documents (
 // Документы.X.Создать() → пишущий объект документа с табличными частями
 // и методами Записать()/Провести().
 type docsRoot struct {

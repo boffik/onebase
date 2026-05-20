@@ -1,4 +1,4 @@
-package runtime
+﻿package runtime
 
 import (
 	"fmt"
@@ -60,7 +60,7 @@ func (o *Object) GetRefUUID() string {
 }
 
 // MomentTime — снимок «момента времени» для виртуальных таблиц регистров
-// (замечание #1). Передаётся в .Остатки/.Обороты/.СрезПоследних как
+// ( Передаётся в .Остатки/.Обороты/.СрезПоследних как
 // первый аргумент и обрабатывается query-translator'ом:
 //   WHERE period < @Period OR (period = @Period AND recorder != @DocID)
 // то есть «всё что было ДО этой документной строки». При перепроведении

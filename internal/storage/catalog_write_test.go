@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Замечание #25: WriteCatalogRecord должен реально персистить запись
+// WriteCatalogRecord должен реально персистить запись
 // справочника (раньше путь Справочники.X.Создать().Записать() был no-op).
 func TestWriteCatalogRecord_Persists(t *testing.T) {
 	ctx := context.Background()

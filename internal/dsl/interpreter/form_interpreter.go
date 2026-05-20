@@ -1,4 +1,4 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"context"
@@ -279,7 +279,7 @@ func (fi *FormInterpreter) ExecuteOnChange(ctx context.Context, form *metadata.F
 	return fi.ExecuteElementEvent(ctx, form, elementName, "ПриИзменении", formCtx)
 }
 
-// События табличных частей (замечание #15). FormInterpreter уже умеет
+// События табличных частей ( FormInterpreter уже умеет
 // диспатчить произвольные события через ExecuteElementEvent — эти методы
 // дают удобный API для UI-обработчиков, которые знают тип события заранее.
 // Тригерринг из браузера реализуется отдельно в UI/JS — здесь только

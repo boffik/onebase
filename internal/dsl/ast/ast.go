@@ -1,4 +1,4 @@
-package ast
+﻿package ast
 
 import "github.com/ivantit66/onebase/internal/dsl/token"
 
@@ -21,7 +21,7 @@ type ProcedureDecl struct {
 	Params []token.Token
 	// Defaults параллелен Params: Defaults[i] = nil → у параметра нет дефолта,
 	// Defaults[i] = expr → выражение вычисляется в caller-scope если арг не
-	// передан (см. замечание #12).
+	// передан (см.
 	Defaults []Expr
 	Body     []Stmt
 }

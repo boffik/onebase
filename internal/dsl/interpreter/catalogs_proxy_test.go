@@ -76,7 +76,7 @@ func newCatalogsTestEnv() (*CatalogsRoot, *fakeCatalogsDB, *fakeEntityLookup) {
 	return NewCatalogsRoot(NewStaticCtx(context.Background()), db, lookup), db, lookup
 }
 
-// Замечание #25: Справочники.X.Создать().Записать() должно персистить.
+// Справочники.X.Создать().Записать() должно персистить.
 func TestCatalogProxy_CreateAndWrite(t *testing.T) {
 	root, db, _ := newCatalogsTestEnv()
 	cp := root.Get("ТипЦен").(*CatalogProxy)
