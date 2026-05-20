@@ -125,7 +125,7 @@ func (db *DB) MigrateInfoRegisters(ctx context.Context, regs []*metadata.InfoReg
 				return fmt.Errorf("migrate info register %s.%s: %w", ir.Name, f.Name, err)
 			}
 		}
-		// Замечание #23 (продолжение): фактический PK таблицы может не
+		// фактический PK таблицы может не
 		// совпадать с pkCols(ir) — наследие старого CREATE до того как
 		// регистр стал periodic / добавили измерения. SQLite не позволяет
 		// ALTER PK, поэтому при mismatch пересоздаём таблицу через

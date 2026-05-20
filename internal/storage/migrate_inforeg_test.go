@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Замечание #4 (ошибка no such column: period): MigrateInfoRegisters должна
+// period): MigrateInfoRegisters должна
 // дотягивать схему существующих таблиц. Если YAML обновился — добавлены
 // колонки, periodic-флаг — миграция должна добавить недостающие колонки
 // без потери данных.
@@ -103,7 +103,7 @@ func TestMigrateInfoRegisters_AddsDimension(t *testing.T) {
 	}
 }
 
-// Замечание #23: при mismatch фактического PK (наследие старого CREATE)
+// при mismatch фактического PK (наследие старого CREATE)
 // миграция пересоздаёт таблицу с правильным PK через CREATE+INSERT SELECT+DROP+RENAME.
 func TestMigrateInfoRegisters_RebuildsPK(t *testing.T) {
 	ctx := context.Background()
