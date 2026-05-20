@@ -63,7 +63,10 @@ type PredefinedItem struct {
 }
 
 type Entity struct {
-	Name       string
+	Name string
+	// Title — человекочитаемое представление (аналог «Синонима» в 1С).
+	// Если пусто, в интерфейсе показывается Name.
+	Title      string
 	Kind       Kind
 	Fields     []Field
 	TableParts []TablePart
@@ -103,6 +106,15 @@ func InfoRegTableName(regName string) string {
 
 func TablePartTableName(entityName, tpName string) string {
 	return strings.ToLower(entityName) + "_" + strings.ToLower(tpName)
+}
+
+// DisplayName возвращает представление объекта для интерфейса: Title, либо
+// Name как запасной вариант. Name всегда остаётся идентификатором (URL, DSL).
+func (e *Entity) DisplayName() string {
+	if e.Title != "" {
+		return e.Title
+	}
+	return e.Name
 }
 
 func IsReference(ft FieldType) bool {

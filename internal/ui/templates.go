@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -29,6 +30,22 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	},
 	"isRef":  func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
+	// navLabel вставляет zero-width space на границах слов PascalCase-имени
+	// (перед заглавной после строчной), чтобы длинные имена объектов
+	// переносились по словам в боковой панели, а не обрезались.
+	"navLabel": func(s string) string {
+		const zwsp = '​' // zero-width space — невидимая точка переноса
+		var b strings.Builder
+		var prev rune
+		for i, r := range s {
+			if i > 0 && unicode.IsUpper(r) && !unicode.IsUpper(prev) {
+				b.WriteRune(zwsp)
+			}
+			b.WriteRune(r)
+			prev = r
+		}
+		return b.String()
+	},
 	"fmtDate": func(v any) string {
 		fmtT := func(t time.Time) string {
 			lt := t.In(time.Local)
@@ -203,12 +220,13 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
-aside a{display:block;padding:6px 14px;color:#cbd5e1;text-decoration:none;font-size:14px;margin:1px 6px;border-radius:5px}
+aside a{display:block;padding:6px 14px;color:#cbd5e1;text-decoration:none;font-size:14px;margin:1px 6px;border-radius:5px;line-height:1.3;overflow-wrap:break-word}
 aside a:hover{background:#334155;color:#fff}
 main{flex:1;padding:28px;overflow-y:auto}
 h2{font-size:22px;font-weight:600;margin-bottom:20px;color:#1e293b}
 h3{font-size:16px;font-weight:600;margin:24px 0 10px;color:#1e293b}
 .card{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.1);max-width:900px}
+.main-list .card,.main-list .row-top,.main-list details,.main-list .breadcrumb{max-width:1400px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;padding:10px 12px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600}
 th a{color:#64748b;text-decoration:none}
@@ -355,7 +373,7 @@ const tplNav = `
   <a href="/ui{{if .CurrentSubsystem}}/?subsystem={{.CurrentSubsystem}}{{end}}" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">Главная</a>
   {{range .Nav}}
   <div class="sec">{{.Kind}}</div>
-  {{range .Items}}<a href="{{.URL}}">{{.Label}}</a>
+  {{range .Items}}<a href="{{.URL}}" title="{{.Label}}">{{navLabel .Label}}</a>
   {{end}}{{end}}
 </aside>
 {{end}}
@@ -498,9 +516,9 @@ window.__obWidgetCharts = window.__obWidgetCharts || {};
 const tplList = `
 {{define "page-list"}}
 {{template "head" .}}{{template "nav" .}}
-<main>
+<main class="main-list">
 <div class="row-top">
-  <h2>{{.Entity.Name}}</h2>
+  <h2>{{.Entity.DisplayName}}</h2>
   <div style="display:flex;gap:8px">
     {{if .Entity.Hierarchical}}
       {{if .TreeView}}
@@ -768,7 +786,7 @@ const tplForm = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:900px">
-  <h2 style="margin-bottom:0">{{if .IsNew}}Создать{{else}}Редактировать{{end}} — {{.Entity.Name}}</h2>
+  <h2 style="margin-bottom:0">{{if .IsNew}}Создать{{else}}Редактировать{{end}} — {{.Entity.DisplayName}}</h2>
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
