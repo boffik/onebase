@@ -227,7 +227,7 @@ func TestCompile_Ssylka_Bare(t *testing.T) {
 	}
 }
 
-// Замечание #19а: системные колонки регистра должны быть доступны
+// системные колонки регистра должны быть доступны
 // под PascalCase русскоязычными именами.
 func TestCompile_SystemCols_BareAndDotted(t *testing.T) {
 	src := `ВЫБРАТЬ Р.Период, Р.ВидДвижения, Период
@@ -254,7 +254,7 @@ func TestCompile_SystemCols_BareAndDotted(t *testing.T) {
 	}
 }
 
-// Замечание #19б: функции даты в DSL должны транслироваться в SQL-эквиваленты
+// функции даты в DSL должны транслироваться в SQL-эквиваленты
 // под нужный диалект. SQL case-insensitive — сравниваем в lowercase, поскольку
 // транслятор лоуэркейсит идентификаторы.
 func TestCompile_DateFuncs_SQLite(t *testing.T) {
