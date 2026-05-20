@@ -18,6 +18,22 @@ func (r *Ref) String() string     { return r.Name }
 func (r *Ref) GetRefUUID() string { return r.UUID }
 func (r *Ref) TypeName() string   { return "Ссылка" }
 
+// Get обеспечивает доступ к полям ссылки: ссылка.Наименование / ссылка.Имя
+// возвращают наименование объекта, ссылка.УникальныйИдентификатор — UUID.
+// Прочие реквизиты объекта недоступны без его загрузки (ссылка несёт только
+// UUID и наименование).
+func (r *Ref) Get(field string) any {
+	switch strings.ToLower(field) {
+	case "наименование", "имя", "name":
+		return r.Name
+	case "ссылка", "ref":
+		return r
+	case "уникальныйидентификатор", "уидентификатор", "uuid", "ид", "id":
+		return r.UUID
+	}
+	return nil
+}
+
 // refKey extracts the comparison key: UUID for Ref, string representation otherwise.
 // Used in Map.findIdx and equal() so *Ref and plain UUID strings match each other.
 func refKey(v any) string {

@@ -8,7 +8,7 @@ import (
 
 type Param struct {
 	Name    string   `yaml:"name"`
-	Type    string   `yaml:"type"`    // string, date, number, select
+	Type    string   `yaml:"type"`    // string, date, number, bool, select, reference:Entity
 	Label   string   `yaml:"label"`   // display label; falls back to Name
 	Options []string `yaml:"options"` // for type: select
 }

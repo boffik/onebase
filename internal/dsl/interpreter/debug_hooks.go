@@ -28,6 +28,8 @@ func getLocation(stmt ast.Stmt) *sourceLocation {
 		file, line, col = s.Var.File, s.Var.Line, s.Var.Col
 	case *ast.NumericForStmt:
 		file, line, col = s.Var.File, s.Var.Line, s.Var.Col
+	case *ast.WhileStmt:
+		file, line, col = s.Tok.File, s.Tok.Line, s.Tok.Col
 	case *ast.AssignStmt:
 		file, line, col = getExprLocation(s.Target)
 	case *ast.ExprStmt:

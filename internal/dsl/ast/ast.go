@@ -62,6 +62,13 @@ type NumericForStmt struct {
 	Body  []Stmt
 }
 
+// WhileStmt — цикл с предусловием: Пока <cond> Цикл ... КонецЦикла
+type WhileStmt struct {
+	Tok  token.Token
+	Cond Expr
+	Body []Stmt
+}
+
 // ReturnStmt — ранний выход или возврат значения: Возврат [expr];
 type ReturnStmt struct {
 	Tok   token.Token
@@ -149,6 +156,7 @@ func (*AssignStmt) nodeType() string    { return "AssignStmt" }
 func (*VarDecl) nodeType() string       { return "VarDecl" }
 func (*ForEachStmt) nodeType() string    { return "ForEachStmt" }
 func (*NumericForStmt) nodeType() string { return "NumericForStmt" }
+func (*WhileStmt) nodeType() string      { return "WhileStmt" }
 func (*ReturnStmt) nodeType() string     { return "ReturnStmt" }
 func (*CallExpr) nodeType() string      { return "CallExpr" }
 func (*MemberExpr) nodeType() string    { return "MemberExpr" }
@@ -171,6 +179,7 @@ func (*AssignStmt) stmtNode()  {}
 func (*VarDecl) stmtNode()     {}
 func (*ForEachStmt) stmtNode()    {}
 func (*NumericForStmt) stmtNode() {}
+func (*WhileStmt) stmtNode()      {}
 func (*ReturnStmt) stmtNode()     {}
 func (*TryStmt) stmtNode()        {}
 func (*BreakStmt) stmtNode()      {}

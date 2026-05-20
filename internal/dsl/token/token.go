@@ -40,6 +40,7 @@ const (
 	ENDTRY   // КонецПопытки / EndTry
 	BREAK    // Прервать / Break
 	CONTINUE // Продолжить / Continue
+	WHILE    // Пока / While
 
 	ASSIGN // =
 	NEQ    // <>
@@ -132,6 +133,9 @@ var keywords = map[string]Type{
 	"break":      BREAK,
 	"продолжить": CONTINUE,
 	"continue":   CONTINUE,
+	// пока / while
+	"пока":  WHILE,
+	"while": WHILE,
 }
 
 type Token struct {
@@ -217,6 +221,8 @@ func (t Type) String() string {
 		return "Прервать"
 	case CONTINUE:
 		return "Продолжить"
+	case WHILE:
+		return "Пока"
 	case LBRACKET:
 		return "["
 	case RBRACKET:

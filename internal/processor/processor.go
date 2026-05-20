@@ -10,8 +10,11 @@ import (
 
 type Param struct {
 	Name  string `yaml:"name"`
-	Type  string `yaml:"type"`
-	Label string `yaml:"label"`
+	Type  string `yaml:"type"`  // string, number, date, bool, reference:Entity
+	Label string `yaml:"label"` // подпись поля; по умолчанию совпадает с Name
+	// Default — значение по умолчанию, подставляется при первом открытии формы.
+	// Для type: bool допустимы true/false (флажок), для остальных — строка/число.
+	Default any `yaml:"default"`
 }
 
 type Processor struct {

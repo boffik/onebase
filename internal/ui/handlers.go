@@ -1081,12 +1081,16 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		queryValues[k] = v
 	}
 	for _, p := range rep.Params {
-		if p.Type == "date" {
+		switch p.Type {
+		case "date":
 			if str, ok := queryValues[p.Name].(string); ok && str != "" {
 				if t, err2 := time.ParseInLocation("2006-01-02", str, time.Local); err2 == nil {
 					queryValues[p.Name] = t
 				}
 			}
+		case "bool":
+			str, _ := queryValues[p.Name].(string)
+			queryValues[p.Name] = parseParamValue(str, "bool")
 		}
 	}
 	compiled, err := query.Compile(rep.Query, query.CompileOpts{
@@ -1171,10 +1175,39 @@ func (s *Server) processorForm(w http.ResponseWriter, r *http.Request) {
 	if proc == nil {
 		return
 	}
+	paramValues := map[string]any{}
+	for _, p := range proc.Params {
+		if p.Default != nil {
+			paramValues[p.Name] = paramDefaultValue(p.Default, p.Type)
+		}
+	}
 	s.render(w, r, "page-processor", map[string]any{
 		"Processor":   proc,
-		"ParamValues": map[string]any{},
+		"ParamValues": paramValues,
 	})
+}
+
+// paramDefaultValue приводит значение default из YAML обработки к виду,
+// пригодному для подстановки в форму параметров.
+func paramDefaultValue(def any, typ string) any {
+	switch typ {
+	case "bool":
+		switch d := def.(type) {
+		case bool:
+			return d
+		case string:
+			return d == "true" || d == "1" || strings.EqualFold(d, "да")
+		default:
+			return false
+		}
+	case "date":
+		if t, ok := def.(time.Time); ok {
+			return t.Format("2006-01-02")
+		}
+		return fmt.Sprint(def)
+	default:
+		return def
+	}
 }
 
 func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
@@ -1245,6 +1278,10 @@ func (s *Server) getProcessor(w http.ResponseWriter, r *http.Request) *processor
 }
 
 func parseParamValue(s, typ string) any {
+	if typ == "bool" {
+		// Чекбокс: значение приходит в форме только когда флажок установлен.
+		return s == "true" || s == "on" || s == "1" || strings.EqualFold(s, "да")
+	}
 	if s == "" {
 		return nil
 	}
@@ -1667,6 +1704,7 @@ type reportParamUI struct {
 	Type    string // raw type string
 	IsDate  bool
 	IsNum   bool
+	IsBool  bool
 	IsSel   bool
 	IsRef   bool
 	Options []string          // for IsSel
@@ -1687,6 +1725,8 @@ func (s *Server) buildReportParams(ctx context.Context, params []reportpkg.Param
 			ui.IsDate = true
 		case p.Type == "number":
 			ui.IsNum = true
+		case p.Type == "bool":
+			ui.IsBool = true
 		case p.Type == "select":
 			ui.IsSel = true
 			ui.Options = p.Options
@@ -2876,6 +2916,10 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 	paramValues := make(map[string]any, len(rep.Params))
 	for _, p := range rep.Params {
 		val := r.URL.Query().Get(p.Name)
+		if p.Type == "bool" {
+			paramValues[p.Name] = parseParamValue(val, "bool")
+			continue
+		}
 		if val == "" {
 			paramValues[p.Name] = nil
 		} else {

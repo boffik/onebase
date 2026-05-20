@@ -143,6 +143,8 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 			return p.parseForEach()
 		}
 		return p.parseNumericFor()
+	case token.WHILE:
+		return p.parseWhile()
 	case token.VAR:
 		return p.parseVarDecl()
 	case token.RETURN:
@@ -271,6 +273,28 @@ func (p *Parser) parseNumericFor() (*ast.NumericForStmt, error) {
 	}
 	p.consumeSemi()
 	return &ast.NumericForStmt{Var: varTok, Start: start, End: end, Body: body}, nil
+}
+
+// parseWhile разбирает: Пока <условие> Цикл ... КонецЦикла
+func (p *Parser) parseWhile() (*ast.WhileStmt, error) {
+	tok := p.cur
+	p.advance() // consume Пока/While
+	cond, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.DO); err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock(token.ENDDO)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.ENDDO); err != nil {
+		return nil, err
+	}
+	p.consumeSemi()
+	return &ast.WhileStmt{Tok: tok, Cond: cond, Body: body}, nil
 }
 
 // parseReturn разбирает: Возврат [expr];

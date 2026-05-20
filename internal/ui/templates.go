@@ -1128,6 +1128,14 @@ const tplReport = `
 <form method="POST">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .ReportParams}}{{$p := .}}{{$pname := .Name}}{{$pval := str (index $.ParamValues .Name)}}
+    {{if $p.IsBool}}
+    <div class="form-group" style="margin-bottom:0">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" name="{{$pname}}" value="true" {{if index $.ParamValues $pname}}checked{{end}}>
+        <span>{{$p.Label}}</span>
+      </label>
+    </div>
+    {{else}}
     <div class="form-group" style="margin-bottom:0">
       <label>{{$p.Label}}</label>
       {{if $p.IsDate}}
@@ -1152,6 +1160,7 @@ const tplReport = `
         <input type="text" name="{{$pname}}" value="{{$pval}}">
       {{end}}
     </div>
+    {{end}}
   {{end}}
   </div>
   <button class="btn btn-primary" type="submit">Сформировать</button>
@@ -1287,6 +1296,14 @@ const tplProcessor = `
 <form method="POST">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .Processor.Params}}{{$pname := .Name}}
+    {{if eq .Type "bool"}}
+    <div class="form-group" style="margin-bottom:0">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" name="{{$pname}}" value="true" {{if index $.ParamValues $pname}}checked{{end}}>
+        <span>{{.DisplayLabel}}</span>
+      </label>
+    </div>
+    {{else}}
     <div class="form-group" style="margin-bottom:0">
       <label>{{.DisplayLabel}}</label>
       {{if eq .Type "date"}}
@@ -1297,6 +1314,7 @@ const tplProcessor = `
         <input type="text" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
       {{end}}
     </div>
+    {{end}}
   {{end}}
   </div>
   <button class="btn btn-primary" type="submit">Выполнить</button>

@@ -276,6 +276,20 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 				break
 			}
 		}
+	case *ast.WhileStmt:
+		// Защита от зацикливания: сессия onebase однопоточная, runaway-цикл
+		// заблокировал бы всю работу платформы.
+		const maxWhileIter = 50_000_000
+		iter := 0
+		for truthy(i.evalExpr(v.Cond, e)) {
+			iter++
+			if iter > maxWhileIter {
+				RaiseUserError("Цикл «Пока»: превышено максимальное число итераций — вероятно, бесконечный цикл")
+			}
+			if !i.execLoopBody(v.Body, e.child()) {
+				break
+			}
+		}
 	case *ast.ReturnStmt:
 		var val any
 		if v.Value != nil {
@@ -337,6 +351,8 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 		case *Struct:
 			return o.Get(field)
 		case *KeyValue:
+			return o.Get(field)
+		case *Ref:
 			return o.Get(field)
 		}
 		return nil
