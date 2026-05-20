@@ -1,4 +1,4 @@
-package metadata
+﻿package metadata
 
 import (
 	"os"
@@ -21,7 +21,7 @@ type JournalColumn struct {
 	Label    string
 	Fallback []string
 	// Map — явное соответствие docTypeName → fieldName в этом документе.
-	// Замечание #7: лучшая альтернатива fallback, потому что:
+	// лучшая альтернатива fallback, потому что:
 	//   1. Explicit — видно для какого документа какое поле.
 	//   2. Не зависит от порядка обхода fallback (raw COALESCE мог давать
 	//      нежелательные совпадения если в документе два совпадающих поля).

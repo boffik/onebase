@@ -733,7 +733,7 @@ func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string,
 
 	var conds []string
 	if len(args) > 0 && len(args[0]) > 0 {
-		// Замечание #1: момент времени документа — особое условие.
+		// момент времени документа — особое условие.
 		if mt := tr.firstArgMoment(args[0]); mt != nil {
 			conds = append(conds, tr.momentTimeCondition(mt))
 		} else if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
@@ -1174,7 +1174,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 	if opts.Params == nil {
 		opts.Params = map[string]any{}
 	}
-	// Замечание #19б: расширяем НачалоДня/Год/Месяц/... в SQL-эквиваленты
+	// расширяем НачалоДня/Год/Месяц/... в SQL-эквиваленты
 	// до основной трансляции, чтобы остальные шаги ничего не знали о них.
 	tokens = rewriteDateFuncs(tokens, dialectName(opts.Dialect))
 	tr := &translator{
@@ -1551,14 +1551,15 @@ func (tr *translator) momentTimeCondition(mt momentTimeValue) string {
 		// document-less moment — простое сравнение
 		return "period <= " + periodPH
 	}
-	if id, err := uuid.Parse(docID); err == nil {
-		if d.Name() == "sqlite" {
-			tr.args = append(tr.args, id.String())
-		} else {
-			tr.args = append(tr.args, id)
-		}
+	id, err := uuid.Parse(docID)
+	if err != nil {
+		// docID — невалидный UUID, безопасный fallback: только по периоду.
+		return "period <= " + periodPH
+	}
+	if d.Name() == "sqlite" {
+		tr.args = append(tr.args, id.String())
 	} else {
-		tr.args = append(tr.args, docID)
+		tr.args = append(tr.args, id)
 	}
 	docPH := d.Placeholder(len(tr.args))
 	return fmt.Sprintf("(period < %s OR (period = %s AND recorder != %s))",

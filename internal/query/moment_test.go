@@ -1,4 +1,4 @@
-package query_test
+﻿package query_test
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ type momentValue struct {
 
 func (m *momentValue) PointInTime() (time.Time, string) { return m.period, m.docID }
 
-// Замечание #1: .Остатки(МоментВремени) должна давать period < @ OR (period = @ AND recorder != @doc).
+// .Остатки(МоментВремени) должна давать period < @ OR (period = @ AND recorder != @doc).
 func TestCompile_MomentTime_Balances(t *testing.T) {
 	src := `ВЫБРАТЬ Номенклатура, КоличествоОстаток
 ИЗ РегистрНакопления.ОстаткиТоваров.Остатки(&МВ)`

@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 // colExprForDoc returns the SQL expression for a journal column in the given entity's SELECT.
 // Returns ("NULL", nil) if the column has no matching field in the entity.
 //
-// Замечание #7: приоритет резолва:
+// приоритет резолва:
 //   1. jcol.Map[entity.Name] — явный per-doc mapping (новый рекомендуемый путь).
 //   2. Exact match — у документа есть поле с именем jcol.Field.
 //   3. Fallback list — старый fallback (back compat); COALESCE если несколько.

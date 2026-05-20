@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Замечание #14: cross-ref внутри одного справочника в predefined.
+// cross-ref внутри одного справочника в predefined.
 // Розничная → Закупочная: Закупочная должна вставляться первой.
 func TestTopoSortPredefined_LinearChain(t *testing.T) {
 	items := []*metadata.PredefinedItem{

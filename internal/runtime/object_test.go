@@ -72,7 +72,7 @@ func TestObject_String_Nil(t *testing.T) {
 	}
 }
 
-// Замечание #1: ЭтотОбъект.МоментВремени() возвращает MomentTime с
+// ЭтотОбъект.МоментВремени() возвращает MomentTime с
 // period из поля «Дата» документа и DocID = ID объекта.
 func TestObject_MomentTime(t *testing.T) {
 	docDate := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)

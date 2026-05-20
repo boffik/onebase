@@ -9,27 +9,30 @@ import (
 
 // LockManager — глобальный менеджер блокировок уровня процесса.
 //
-// Замечание #2: блокировки гранулярные по (регистр, набор измерений).
-// Когда DSL зовёт Блок.Заблокировать(), для каждого «элемента» строится
-// ключ "регистр|изм1=знач&изм2=знач...", и берётся sync.Mutex по этому
-// ключу. Два параллельных проведения с пересекающимся набором (например
-// одна и та же Номенклатура+Склад) сериализуются.
+// Блокировки гранулярные по (регистр, набор измерений): ключ имеет вид
+// "регистр|изм1=знач&изм2=знач...". Два параллельных проведения с
+// пересекающимся набором (одна и та же Номенклатура+Склад) сериализуются.
 //
-// Ограничения этой реализации:
+// Ограничения:
 //   - Работает только в пределах одного процесса. Для распределённого
-//     развёртывания (несколько onebase-инстансов) нужно дополнить
-//     SELECT FOR UPDATE или pg_advisory_xact_lock — оставлено на будущее.
-//   - Гранулярность ровно та, что задал DSL — если кто-то забыл указать
-//     ключ, блокировка не сработает.
+//     развёртывания нужен SELECT FOR UPDATE или pg_advisory_xact_lock.
+//   - Гранулярность ровно та, что задал DSL.
 //   - Освобождение происходит явно через Разблокировать или автоматически
 //     при завершении проведения (defer в handlers.go).
 type LockManager struct {
 	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	locks map[string]*lockEntry
+}
+
+// lockEntry хранит мьютекс и счётчик горутин, удерживающих или ожидающих
+// блокировку. Когда refs падает до 0, запись удаляется из карты.
+type lockEntry struct {
+	mu   sync.Mutex
+	refs int
 }
 
 func NewLockManager() *LockManager {
-	return &LockManager{locks: map[string]*sync.Mutex{}}
+	return &LockManager{locks: map[string]*lockEntry{}}
 }
 
 // Acquire берёт мьютексы по всем ключам в детерминированном порядке
@@ -40,27 +43,36 @@ func (lm *LockManager) Acquire(keys []string) {
 	sort.Strings(sorted)
 	for _, k := range sorted {
 		lm.mu.Lock()
-		m, ok := lm.locks[k]
+		e, ok := lm.locks[k]
 		if !ok {
-			m = &sync.Mutex{}
-			lm.locks[k] = m
+			e = &lockEntry{}
+			lm.locks[k] = e
 		}
+		e.refs++
 		lm.mu.Unlock()
-		m.Lock()
+		e.mu.Lock()
 	}
 }
 
-// Release отпускает мьютексы в обратном порядке.
+// Release отпускает мьютексы в обратном порядке и удаляет записи с refs==0.
 func (lm *LockManager) Release(keys []string) {
 	sorted := append([]string{}, keys...)
 	sort.Strings(sorted)
 	for i := len(sorted) - 1; i >= 0; i-- {
+		k := sorted[i]
 		lm.mu.Lock()
-		m := lm.locks[sorted[i]]
+		e := lm.locks[k]
 		lm.mu.Unlock()
-		if m != nil {
-			m.Unlock()
+		if e == nil {
+			continue
 		}
+		e.mu.Unlock()
+		lm.mu.Lock()
+		e.refs--
+		if e.refs == 0 {
+			delete(lm.locks, k)
+		}
+		lm.mu.Unlock()
 	}
 }
 

@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func (db *DB) EnsurePredefinedColumns(ctx context.Context, entities []*metadata.
 // the database. The _predefined_name is used as the conflict target so the UUID
 // never changes on subsequent syncs — only field values are updated.
 //
-// Замечание #14: поддерживаются cross-ref внутри одного справочника
+// поддерживаются cross-ref внутри одного справочника
 // (Розничная.БазовыйТип: Закупочная). Алгоритм:
 //   1. Пре-аллоцировать UUID для каждого item (переиспользуя из БД при upsert).
 //   2. Топологическая сортировка по self-reference полям.

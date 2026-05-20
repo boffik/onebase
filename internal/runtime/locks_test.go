@@ -1,4 +1,4 @@
-package runtime
+﻿package runtime
 
 import (
 	"sync"
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Замечание #2: два параллельных вызова с одним и тем же набором
+// два параллельных вызова с одним и тем же набором
 // ключей должны сериализоваться.
 func TestLockManager_SerializesSameKey(t *testing.T) {
 	mgr := NewLockManager()
@@ -145,4 +145,18 @@ func TestLockObject_ReleaseAllIdempotent(t *testing.T) {
 	lo.CallMethod("заблокировать", nil)
 	lo.ReleaseAll()
 	lo.ReleaseAll() // не должен паниковать
+}
+
+// После Release карта мьютексов должна очищаться — утечки памяти нет.
+func TestLockManager_ReleaseCleansUp(t *testing.T) {
+	mgr := NewLockManager()
+	keys := []string{"reg|номенклатура=Тумбочка", "reg|номенклатура=Стул"}
+	mgr.Acquire(keys)
+	mgr.Release(keys)
+	mgr.mu.Lock()
+	n := len(mgr.locks)
+	mgr.mu.Unlock()
+	if n != 0 {
+		t.Errorf("ожидали пустую карту после Release, осталось %d записей", n)
+	}
 }

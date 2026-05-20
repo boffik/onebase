@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Замечание #7: явный Map имеет приоритет над exact match и fallback.
+// явный Map имеет приоритет над exact match и fallback.
 func TestColExprForDoc_MapWins(t *testing.T) {
 	entity := &metadata.Entity{
 		Name: "ПоступлениеТоваров",
