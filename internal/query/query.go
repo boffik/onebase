@@ -924,7 +924,7 @@ func (tr *translator) genInfoSlice(ir *metadata.InfoRegister, args [][]tok, dire
 
 	var conds []string
 	if ir.Periodic && len(args) > 0 && len(args[0]) > 0 {
-		// #1: МоментВремени для info-регистра — берём только Period,
+		// МоментВремени для info-регистра — берём только Period,
 		// recorder в info-таблицах не используется для исключения.
 		if mt := tr.firstArgMoment(args[0]); mt != nil {
 			d := dialectOrDefault(tr.opts.Dialect)
@@ -1345,7 +1345,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				continue
 			}
 			// Системные колонки регистра — PascalCase русские алиасы
-			// (см. замечание #19а). Работает и с префиксом (Х.Период), и без.
+			// (см. Работает и с префиксом (Х.Период), и без.
 			if col, ok := systemColAlias(t.val); ok {
 				tr.emit(col)
 				continue
@@ -1525,20 +1525,16 @@ func rewriteDateFuncs(tokens []tok, dialect string) []tok {
 	return out
 }
 
-// momentTimeValue — контракт для DSL-значения «момент времени» (см.
-// замечание #1). Реализуется *runtime.MomentTime; здесь объявлен через
-// интерфейс чтобы не тянуть импорт runtime в query.
+// momentTimeValue — контракт для DSL-значения «момент времени».
+// Реализуется *runtime.MomentTime; интерфейс объявлен здесь чтобы не
+// тянуть импорт runtime в query.
 type momentTimeValue interface {
 	PointInTime() (period time.Time, docID string)
 }
 
-// momentTimeCondition строит SQL-условие «строго до момента» — всё что
-// зафиксировано раньше данной точки в хронологическом порядке journal'а.
-// Возвращает SQL-фрагмент с placeholder'ами и добавляет два arg'а к
-// tr.args (период и UUID документа).
+// momentTimeCondition строит SQL-условие «строго до момента»:
 //
-// Для accumulation register условие имеет вид:
-//   (period < $1 OR (period = $1 AND recorder != $2))
+//	(period < $1 OR (period = $1 AND recorder != $2))
 //
 // Логика «recorder != docID» гарантирует, что при перепроведении сам
 // документ исключается из собственной сводки.

@@ -1460,7 +1460,14 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	}
 	queryFactory := interpreter.NewQueryFactory(ctx, s.store, s.reg)
 	predefined := interpreter.NewPredefinedRoot(ctx, s.store)
-	catalogs := interpreter.NewCatalogsRoot(ctx, s.store, s.reg)
+	// TxState несёт «живой» контекст. Транзакционные функции
+	// (НачатьТранзакцию и т.д.) и запись справочников из обработки
+	// (Справочники.X.Создать().Записать()) используют txState.Ctx(),
+	// поэтому запись участвует в открытой DSL-транзакции.
+	txState := interpreter.NewTxState(ctx)
+	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg)
+	// Документы.X.Создать()/.Записать()/.Провести() из обработки.
+	documents := newDocsRoot(s, txState)
 	// #2 managed locks: builtin БлокировкаДанных() возвращает свежий LockObject,
 	// привязанный к глобальному менеджеру server'а.
 	lockFactory := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
@@ -1496,12 +1503,20 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 		"PredefinedValues":          predefined,
 		"Справочники":               catalogs,
 		"Catalogs":                  catalogs,
+		"Документы":                 documents,
+		"Documents":                 documents,
 		"БлокировкаДанных":          lockFactory,
 		"DataLock":                  lockFactory,
 		"ТекущийПользователь":       currentUserFn,
 		"CurrentUser":               currentUserFn,
 		"ИмяПользователя":           userNameFn,
 		"UserName":                  userNameFn,
+	}
+	// транзакции из DSL (обработки/проведение). Раньше NewTxFunctions
+	// использовался только в тестах — отсюда «unknown function
+	// НачатьТранзакцию». Теперь подключаем к реальному рантайму.
+	for k, v := range interpreter.NewTxFunctions(txState, s.store) {
+		vars[k] = v
 	}
 	for k, v := range interpreter.NewHTTPFunctions() {
 		vars[k] = v

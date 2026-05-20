@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func FormatNumber(prefix string, length, number int) string {
 // ComputePeriodKey derives the period key from a document date field and
 // the numerator's Period setting ("year", "month", "none"). Scope (если задан)
 // добавляется к ключу — например, scope: Организация даст у каждой
-// организации свой счётчик (замечание #6). Формат: "<period>|<scopeValue>",
+// организации свой счётчик ( Формат: "<period>|<scopeValue>",
 // либо просто "<period>" если scope не задан.
 func ComputePeriodKey(num *metadata.Numerator, fields map[string]any) string {
 	var periodPart string

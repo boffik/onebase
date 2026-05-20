@@ -1,4 +1,4 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 // gender: 0 — мужской (рубль, тысяча → доллар), 1 — женский (тысяча, копейка).
 // Поддерживает диапазон до 999_999_999_999 (~трлн).
 //
-// Используется в builtin ЧислоПрописью для ПКО/РКО и т.п. (замечание #8).
+// Используется в builtin ЧислоПрописью для ПКО/РКО и т.п. (
 func numberToWords(n int64, gender int) string {
 	if n == 0 {
 		return "ноль"

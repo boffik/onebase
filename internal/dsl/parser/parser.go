@@ -1,4 +1,4 @@
-package parser
+﻿package parser
 
 import (
 	"fmt"
@@ -80,7 +80,7 @@ func (p *Parser) parseProcedure() (*ast.ProcedureDecl, error) {
 			return nil, err
 		}
 		params = append(params, paramTok)
-		// Опциональное значение по умолчанию: ИмяПарам = expr (см. замечание #12).
+		// Опциональное значение по умолчанию: ИмяПарам = expr (см.
 		var def ast.Expr
 		if p.cur.Type == token.ASSIGN {
 			p.advance() // consume =

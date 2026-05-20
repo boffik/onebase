@@ -1,4 +1,4 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"fmt"
@@ -19,6 +19,14 @@ type dslReturn struct{ val any }
 
 // userError — пользовательская ошибка через Error(), перехватывается Попыткой
 type userError struct{ Msg string }
+
+// RaiseUserError panics with a DSL user error. Предназначено для
+// внешних пакетов (например ui), которым нужно прервать выполнение DSL
+// из метода объекта (CallMethod) с осмысленным сообщением — оно
+// перехватывается Run/RunWithResult и Попыткой так же, как Error().
+func RaiseUserError(msg string) {
+	panic(userError{Msg: msg})
+}
 
 // loopBreak — выход из цикла через Прервать
 type loopBreak struct{}
@@ -42,11 +50,11 @@ type Interpreter struct {
 	// LookupSiblingProc resolves a helper procedure defined in the same
 	// source file as the currently-executing statement. Used so that
 	// `.proc.os` / `.posting.os` / `.rep.os` могут содержать вспомогательные
-	// процедуры (см. замечание #13). Optional — может быть nil.
+	// процедуры (см. Optional — может быть nil.
 	LookupSiblingProc func(file, name string) *ast.ProcedureDecl
 	// LookupModuleProc resolves Module.Proc() namespaced calls, например
 	// `Утилиты.ФИФО(...)`. Используется когда object-часть MemberExpr —
-	// идентификатор, не разрешённый в env как переменная. См. замечание #5.
+	// идентификатор, не разрешённый в env как переменная. См.
 	LookupModuleProc func(module, name string) *ast.ProcedureDecl
 	DebugHook        DebugHook // nil = no debugging
 	curFile          string    // last executed statement location (for error reporting)
@@ -471,7 +479,7 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 			}
 		}
 		// Помощник из того же файла (.proc.os / .posting.os / .rep.os),
-		// см. замечание #13.
+		// см.
 		if i.LookupSiblingProc != nil && i.curFile != "" {
 			if proc := i.LookupSiblingProc(i.curFile, fnName); proc != nil {
 				return i.callUserProc(proc, e, args)
@@ -496,7 +504,7 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 			return o.CallMethod(method, args)
 		}
 		// Если object — идентификатор, не разрешившийся в значение,
-		// и это известный модуль — резолвим Module.Proc() (замечание #5).
+		// и это известный модуль — резолвим Module.Proc() (
 		if recv == nil && i.LookupModuleProc != nil {
 			if objIdent, ok := callee.Object.(*ast.Ident); ok {
 				if proc := i.LookupModuleProc(objIdent.Tok.Literal, callee.Field.Literal); proc != nil {
@@ -530,7 +538,7 @@ func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args [
 			child.set(param.Literal, args[idx])
 			continue
 		}
-		// Параметр без переданного значения — пробуем дефолт (замечание #12).
+		// Параметр без переданного значения — пробуем дефолт (
 		// Дефолт вычисляется в callEnv, чтобы видеть глобальные/модульные
 		// идентификаторы. child ещё не имеет других параметров — это
 		// сознательно: не даём дефолтам ссылаться на «соседей» (1С-семантика).
