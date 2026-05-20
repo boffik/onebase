@@ -1618,6 +1618,13 @@ func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runt
 	if proc == nil {
 		return "", nil
 	}
+	// Симметрично табличным частям: ссылки в полях шапки из формы приходят
+	// сырыми UUID — обогащаем до *Ref{UUID,Name}, чтобы string-измерения
+	// (Склад, Касса, Контрагент) фильтровались по имени, как при проведении
+	// из обработки. См. П.37.
+	if entity := s.reg.GetEntity(obj.Type); entity != nil {
+		s.enrichHeaderRefs(ctx, entity, obj)
+	}
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
 	if err := s.interp.Run(proc, obj, vars); err != nil {
@@ -2109,6 +2116,47 @@ func (s *Server) enrichTPRowsWithRefs(ctx context.Context, tp metadata.TablePart
 				}
 			}
 		}
+	}
+}
+
+// enrichHeaderRefs заменяет UUID-строки в ссылочных полях ШАПКИ объекта на
+// *interpreter.Ref{UUID, Name} — симметрично enrichTPRowsWithRefs для строк
+// табличных частей. Без этого ссылки шапки (например Склад) приходят в
+// ОбработкаПроведения сырым UUID, и Строка(this.Склад) даёт UUID; фильтр по
+// string-измерению (ГДЕ Склад = Строка(this.Склад)) не совпадает с движениями,
+// записанными по имени из обработок/сидов. После обогащения шапка ведёт себя
+// как при создании из обработки. Ref-параметры и reference-измерения остаются
+// корректными: unwrapArrayParams приводит *Ref к UUID. См. П.37.
+func (s *Server) enrichHeaderRefs(ctx context.Context, entity *metadata.Entity, obj *runtime.Object) {
+	for _, f := range entity.Fields {
+		if f.RefEntity == "" {
+			continue
+		}
+		refEntity := s.reg.GetEntity(f.RefEntity)
+		if refEntity == nil {
+			continue
+		}
+		v := obj.Get(f.Name)
+		if v == nil {
+			continue
+		}
+		if _, isRef := v.(*interpreter.Ref); isRef {
+			continue
+		}
+		idStr := fmt.Sprintf("%v", v)
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			continue
+		}
+		refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
+		if err != nil {
+			continue
+		}
+		obj.Set(f.Name, &interpreter.Ref{
+			UUID: idStr,
+			Name: firstStringField(refRow, refEntity),
+			Type: refEntity.Name,
+		})
 	}
 }
 
