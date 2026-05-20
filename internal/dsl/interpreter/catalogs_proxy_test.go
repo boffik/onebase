@@ -1,4 +1,4 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func newCatalogsTestEnv() (*CatalogsRoot, *fakeCatalogsDB, *fakeEntityLookup) {
 	return NewCatalogsRoot(context.Background(), db, lookup), db, lookup
 }
 
-// Замечание #20: Справочники.X.ИмяПредопределённой должно возвращать Ref.
+// Справочники.X.ИмяПредопределённой должно возвращать Ref.
 func TestCatalogProxy_PredefinedAccess(t *testing.T) {
 	root, _, _ := newCatalogsTestEnv()
 	proxy := root.Get("ТипЦен")
@@ -103,7 +103,7 @@ func TestCatalogProxy_PredefinedMissing(t *testing.T) {
 	}
 }
 
-// Замечание #21: НайтиПоНаименованию должно искать в catalog по полю Наименование.
+// НайтиПоНаименованию должно искать в catalog по полю Наименование.
 func TestCatalogProxy_FindByName_Found(t *testing.T) {
 	root, _, _ := newCatalogsTestEnv()
 	cp := root.Get("ТипЦен").(*CatalogProxy)

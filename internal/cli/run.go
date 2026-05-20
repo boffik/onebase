@@ -1,4 +1,4 @@
-package cli
+﻿package cli
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func init() {
 	runCmd.Flags().String("sqlite", "", "path to SQLite database file (alternative to --db)")
 	runCmd.Flags().Int("port", 8080, "HTTP server port")
 	runCmd.Flags().String("config-source", "file", "configuration source: file or database")
-	// Замечание #16: hot reload .os/.yaml без перезапуска. По умолчанию off,
+	// hot reload .os/.yaml без перезапуска. По умолчанию off,
 	// для прода обычно не нужен. Включается флагом --watch.
 	runCmd.Flags().Bool("watch", false, "reload project metadata when files change (.os/.yaml)")
 }
@@ -195,7 +195,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 
 	if appCfg != nil && appCfg.Demo != nil && appCfg.Demo.Enabled {
-		// Замечание #11: защита от случайной активации демо-режима на проде.
+		// защита от случайной активации демо-режима на проде.
 		if err := checkDemoEnv(os.Getenv("ONEBASE_ENV")); err != nil {
 			return err
 		}
@@ -240,7 +240,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 
 	srv := api.New(reg, db, interp, authRepo, port, uiCfg, sched)
 
-	// Замечание #16: опциональный hot reload (см. --watch).
+	// опциональный hot reload (см. --watch).
 	// Перечитываем только метаданные (reg.Load*), миграции не повторяем —
 	// они единоразовы и потенциально опасны. Срабатывает только для
 	// file-based конфигов (configdb не имеет смысла отслеживать).

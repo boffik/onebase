@@ -1,8 +1,8 @@
-package metadata
+﻿package metadata
 
 import "testing"
 
-// Замечание #15: события табличных частей определены как well-known
+// события табличных частей определены как well-known
 // константы, чтобы YAML-конфиг мог их декларировать единым именованием.
 func TestFormEventTypes_RowEvents(t *testing.T) {
 	cases := []struct {

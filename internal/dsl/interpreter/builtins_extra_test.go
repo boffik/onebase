@@ -1,8 +1,8 @@
-package interpreter
+﻿package interpreter
 
 import "testing"
 
-// Замечание #3: ПустаяСсылка — узкий предикат именно для ссылочных значений.
+// ПустаяСсылка — узкий предикат именно для ссылочных значений.
 func TestPustayaSsylka_Nil(t *testing.T) {
 	if !isEmptyRefVal(nil) {
 		t.Error("nil должен быть пустой ссылкой")

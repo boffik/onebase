@@ -1,4 +1,4 @@
-package metadata
+﻿package metadata
 
 import "strings"
 
@@ -51,7 +51,7 @@ type Numerator struct {
 	Period string // "year" | "month" | "none"
 	// Scope — имя поля документа, значение которого включается в ключ
 	// нумерации. Например, scope: "Организация" даст отдельные счётчики
-	// для каждой организации. Замечание #6.
+	// для каждой организации.
 	Scope string
 }
 

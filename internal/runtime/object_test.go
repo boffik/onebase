@@ -1,4 +1,4 @@
-package runtime
+﻿package runtime
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Замечание #17: *Object должен реализовывать тот же контракт, что и *Ref —
+// *Object должен реализовывать тот же контракт, что и *Ref —
 // GetRefUUID() и String(). Это позволяет storage.normalizeRegArg
 // одинаково обрабатывать оба типа при записи движений регистра.
 func TestObject_GetRefUUID(t *testing.T) {

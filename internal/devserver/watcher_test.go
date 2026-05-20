@@ -1,4 +1,4 @@
-package devserver
+﻿package devserver
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Замечание #16: Watch() должен вызывать onChange при изменении файла.
+// Watch() должен вызывать onChange при изменении файла.
 func TestWatch_TriggersOnFileChange(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "x.os")

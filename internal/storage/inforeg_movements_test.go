@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Замечание #23: Движения.X.Добавить() для periodic info-регистра
+// Движения.X.Добавить() для periodic info-регистра
 // раньше тихо терялся. После фикса WriteInfoMovements должен пройти
 // и в БД появиться запись с recorder/recorder_type.
 func TestWriteInfoMovements_Periodic(t *testing.T) {

@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import "testing"
 
@@ -13,7 +13,7 @@ type fakeRef struct {
 func (r *fakeRef) GetRefUUID() string { return r.uuid }
 func (r *fakeRef) String() string     { return r.name }
 
-// Замечание #17: writeMovements должен правильно нормализовать Ref-значение
+// writeMovements должен правильно нормализовать Ref-значение
 // для reference:*-измерения (→ UUID).
 func TestNormalizeRegArg_RefField_UUID(t *testing.T) {
 	d := SQLiteDialect{}
@@ -29,7 +29,7 @@ func TestNormalizeRegArg_RefField_UUID(t *testing.T) {
 	}
 }
 
-// Замечание #17: writeMovements не должен падать на *Ref в string-измерении —
+// writeMovements не должен падать на *Ref в string-измерении —
 // падает в pgx «unsupported type interpreter.Ref, a struct». Должен
 // сериализоваться через display-имя.
 func TestNormalizeRegArg_StringField_DisplayName(t *testing.T) {

@@ -1,4 +1,4 @@
-package runtime
+﻿package runtime
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/ivantit66/onebase/internal/printform"
 )
 
-// Замечание #10: при коллизии YAML/.os одноимённой печатной формы
+// при коллизии YAML/.os одноимённой печатной формы
 // .os должна перебивать, YAML — удаляться из реестра, в лог идёт warning.
 func TestLoadDSLPrintForms_OverridesYAML(t *testing.T) {
 	r := NewRegistry()

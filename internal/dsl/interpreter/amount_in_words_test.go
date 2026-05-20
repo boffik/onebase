@@ -1,8 +1,8 @@
-package interpreter
+﻿package interpreter
 
 import "testing"
 
-// Замечание #8: ЧислоПрописью должно правильно склонять рубли и копейки.
+// ЧислоПрописью должно правильно склонять рубли и копейки.
 func TestAmountInWords_Basic(t *testing.T) {
 	cases := []struct {
 		amount float64
@@ -34,7 +34,7 @@ func TestAmountInWords_Basic(t *testing.T) {
 	}
 }
 
-// Замечание #8: округление копеек должно вести себя устойчиво к float-погрешности.
+// округление копеек должно вести себя устойчиво к float-погрешности.
 func TestAmountInWords_KopeckRounding(t *testing.T) {
 	cases := []struct {
 		amount float64

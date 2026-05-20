@@ -1,4 +1,4 @@
-package query
+﻿package query
 
 import (
 	"fmt"
@@ -718,7 +718,7 @@ func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string,
 		cols = append(cols,
 			"SUM(CASE WHEN вид_движения = 'Приход' THEN "+col+" ELSE -"+col+" END) AS "+col+"остаток")
 	}
-	// Замечание #4: атрибуты — не часть ключа измерения, но должны быть
+	// атрибуты — не часть ключа измерения, но должны быть
 	// доступны в outer SELECT/WHERE. Берём MIN(col) — детерминированно
 	// и работает в обоих диалектах (TEXT/UUID сравнимы лексикографически).
 	cols = append(cols, attributeAggCols(reg.Attributes)...)

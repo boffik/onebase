@@ -1,4 +1,4 @@
-package storage
+﻿package storage
 
 import (
 	"context"
@@ -142,7 +142,7 @@ func CreateInfoRegisterSQL(d Dialect, ir *metadata.InfoRegister) string {
 		cols = append(cols, metadata.ColumnName(f)+" "+fieldType(d, f))
 	}
 	// recorder/recorder_type — для записи из проведения документа.
-	// Замечание #23: без этих колонок Движения.X.Добавить() в info-регистр
+	// без этих колонок Движения.X.Добавить() в info-регистр
 	// негде «зацепиться» при перепроведении. NULL допускается — записи
 	// могут быть и не от документа (миграция, seed, ручной ввод).
 	cols = append(cols, "recorder "+d.TypeUUID(), "recorder_type "+d.TypeText())

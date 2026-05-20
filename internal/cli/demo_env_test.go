@@ -1,11 +1,11 @@
-package cli
+﻿package cli
 
 import (
 	"strings"
 	"testing"
 )
 
-// Замечание #11: защита от случайной активации demo на проде.
+// защита от случайной активации demo на проде.
 func TestCheckDemoEnv_Allowed(t *testing.T) {
 	if err := checkDemoEnv("demo"); err != nil {
 		t.Errorf("ONEBASE_ENV=demo должен пропускать, получили: %v", err)

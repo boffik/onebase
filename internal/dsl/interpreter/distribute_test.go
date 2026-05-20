@@ -1,11 +1,11 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"math"
 	"testing"
 )
 
-// Замечание #9: распределение должно гарантировать, что сумма долей == total.
+// распределение должно гарантировать, что сумма долей == total.
 func TestDistribute_SumMatchesTotal(t *testing.T) {
 	cases := []struct {
 		total   float64

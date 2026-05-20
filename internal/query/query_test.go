@@ -1,4 +1,4 @@
-package query_test
+﻿package query_test
 
 import (
 	"strings"
@@ -332,7 +332,7 @@ func TestCompile_DateFuncs_EnglishAliases(t *testing.T) {
 	}
 }
 
-// Замечание #4: вариант 1 — внешний ГДЕ на атрибут поверх .Остатки().
+// вариант 1 — внешний ГДЕ на атрибут поверх .Остатки().
 // Inner subquery должен экспортировать атрибут, чтобы outer WHERE сработал.
 func TestCompile_Balances_OuterWhereOnAttribute(t *testing.T) {
 	src := `ВЫБРАТЬ Контрагент, СуммаОстаток ИЗ РегистрНакопления.Взаиморасчёты.Остатки() ГДЕ ТипКонтрагента = &ТипК`
@@ -389,7 +389,7 @@ func TestCompile_Balances_OuterSelectOnAttribute(t *testing.T) {
 	}
 }
 
-// Замечание #4: атрибуты регистров должны быть доступны в фильтрах .Остатки().
+// атрибуты регистров должны быть доступны в фильтрах .Остатки().
 func TestCompile_Balances_FilterByAttribute(t *testing.T) {
 	src := `ВЫБРАТЬ * ИЗ РегистрНакопления.Взаиморасчёты.Остатки(, ТипКонтрагента = &ТипК)`
 	reg := &metadata.Register{

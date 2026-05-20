@@ -1,4 +1,4 @@
-package interpreter
+﻿package interpreter
 
 import (
 	"testing"
@@ -85,7 +85,7 @@ func TestIfElseScope_InsideForEach(t *testing.T) {
 	}
 }
 
-// Замечание #12: параметры по умолчанию.
+// параметры по умолчанию.
 func TestDefaultParam_UsedWhenOmitted(t *testing.T) {
 	code := `Функция Тест()
   Возврат Сумма(10);

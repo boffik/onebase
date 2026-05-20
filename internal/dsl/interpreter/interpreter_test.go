@@ -1,4 +1,4 @@
-package interpreter_test
+﻿package interpreter_test
 
 import (
 	"strings"
@@ -142,7 +142,7 @@ func TestInterpreter_SiblingProcResolution(t *testing.T) {
 	}
 }
 
-// Замечание #5: Module.Proc() namespaced calls.
+// Module.Proc() namespaced calls.
 func TestInterpreter_NamespacedModuleProc(t *testing.T) {
 	helperSrc := `Функция Удвоить(Х)
   Возврат Х * 2;

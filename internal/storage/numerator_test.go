@@ -1,4 +1,4 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"testing"
@@ -72,7 +72,7 @@ func TestComputePeriodKey_NoDateField(t *testing.T) {
 	}
 }
 
-// Замечание #6: scope: Организация — отдельный счётчик у каждой организации.
+// scope: Организация — отдельный счётчик у каждой организации.
 func TestComputePeriodKey_ScopeWithYear(t *testing.T) {
 	num := &metadata.Numerator{Period: "year", Scope: "Организация"}
 	fields := map[string]any{

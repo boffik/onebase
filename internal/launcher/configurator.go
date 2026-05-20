@@ -516,7 +516,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	// load print forms and link to entities
 	pfSources := readPrintFormSources(proj.Dir)
 
-	// Замечание #10: индекс «(doc,name)→true» по .os формам, чтобы пометить
+	// индекс «(doc,name)→true» по .os формам, чтобы пометить
 	// YAML-формы, которые runtime тихо игнорирует.
 	dslIndex := make(map[string]bool, len(proj.DSLPrintForms))
 	for _, df := range proj.DSLPrintForms {

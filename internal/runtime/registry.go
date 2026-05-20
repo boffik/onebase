@@ -1,4 +1,4 @@
-package runtime
+﻿package runtime
 
 import (
 	"fmt"
@@ -172,7 +172,7 @@ func (r *Registry) GetPrintForms(entityName string) []*printform.PrintForm {
 }
 
 // LoadDSLPrintForms registers DSL (.os) print forms indexed by entity name.
-// Замечание #10: при коллизии «один и тот же name для одного и того же
+// при коллизии «один и тот же name для одного и того же
 // document» с YAML-формой .os перебивает YAML, а YAML удаляется из реестра.
 // В лог печатается warning, чтобы автор конфигурации понимал, что
 // дубликат игнорируется. Должен вызываться ПОСЛЕ Load (где регистрируются
