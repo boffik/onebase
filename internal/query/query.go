@@ -1552,6 +1552,13 @@ func (tr *translator) momentTimeCondition(mt momentTimeValue) string {
 		// docID — невалидный UUID, безопасный fallback: только по периоду.
 		return "period <= " + periodPH
 	}
+	// period используется в SQL дважды (period < ... OR period = ...).
+	// SQLite-плейсхолдеры анонимные ('?') — каждый '?' это отдельный
+	// позиционный аргумент, поэтому period нужно добавить ВТОРЫМ аргументом
+	// под второй плейсхолдер, иначе аргументы съезжают («missing argument»).
+	// Для нумерованных диалектов ($n) лишний дубль period безвреден.
+	tr.args = append(tr.args, period)
+	periodPH2 := d.Placeholder(len(tr.args))
 	if d.Name() == "sqlite" {
 		tr.args = append(tr.args, id.String())
 	} else {
@@ -1559,7 +1566,7 @@ func (tr *translator) momentTimeCondition(mt momentTimeValue) string {
 	}
 	docPH := d.Placeholder(len(tr.args))
 	return fmt.Sprintf("(period < %s OR (period = %s AND recorder != %s))",
-		periodPH, periodPH, docPH)
+		periodPH, periodPH2, docPH)
 }
 
 // firstArgMoment возвращает *MomentTime если первый аргумент VT —
