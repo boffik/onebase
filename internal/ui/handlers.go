@@ -1530,6 +1530,13 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 		return curUserLogin, nil
 	})
 
+	// ЗначениеРеквизитаОбъекта(Ссылка, "Реквизит") — чтение реквизита по
+	// ссылке (ссылка несёт лишь UUID/наименование). Использует txState.Ctx(),
+	// поэтому видит данные открытой DSL-транзакции.
+	attrValueFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+		return s.objectAttributeValue(txState.Ctx(), args)
+	})
+
 	vars := map[string]any{
 		"Движения":                  mc,
 		"Перечисления":              &interpreter.MapThis{M: enumsMap},
@@ -1548,6 +1555,8 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 		"CurrentUser":               currentUserFn,
 		"ИмяПользователя":           userNameFn,
 		"UserName":                  userNameFn,
+		"ЗначениеРеквизитаОбъекта":   attrValueFn,
+		"ObjectAttributeValue":      attrValueFn,
 	}
 	// транзакции из DSL (обработки/проведение). Раньше NewTxFunctions
 	// использовался только в тестах — отсюда «unknown function
