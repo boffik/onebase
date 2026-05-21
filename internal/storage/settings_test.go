@@ -75,6 +75,50 @@ func TestAudit_AnonymousCreateIsLogged(t *testing.T) {
 	}
 }
 
+// Чтение журнала: SQLite хранит колонку at как TEXT — scanAuditRows должен
+// её разобрать. Иначе AuditSearch падает на Scan и /ui/admin/audit пуст.
+func TestAuditSearch_RoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.EnsureAuditSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := uuid.New()
+	if err := db.Log(ctx, &AuditEntry{
+		Action: "create", EntityKind: "catalog", EntityName: "Товар",
+		RecordID: rec.String(), UserLogin: "tester",
+	}); err != nil {
+		t.Fatalf("Log: %v", err)
+	}
+
+	entries, err := db.AuditSearch(ctx, AuditFilter{}, 50, 0)
+	if err != nil {
+		t.Fatalf("AuditSearch: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("ожидалась 1 запись, получили %d", len(entries))
+	}
+	if entries[0].At.IsZero() {
+		t.Error("колонка at не разобрана — время записи нулевое")
+	}
+	if entries[0].Action != "create" {
+		t.Errorf("action = %q, ожидалось create", entries[0].Action)
+	}
+
+	byRec, err := db.AuditByRecord(ctx, "Товар", rec)
+	if err != nil {
+		t.Fatalf("AuditByRecord: %v", err)
+	}
+	if len(byRec) != 1 {
+		t.Errorf("AuditByRecord: ожидалась 1 запись, получили %d", len(byRec))
+	}
+}
+
 // При выключенном журнале аудит не пишется.
 func TestAudit_DisabledNoWrite(t *testing.T) {
 	ctx := context.Background()
