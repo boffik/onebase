@@ -1603,6 +1603,12 @@ func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *run
 	if proc == nil {
 		return "", nil
 	}
+	// Симметрично runOnPostCtx: ссылки в полях шапки из формы приходят
+	// сырыми UUID — обогащаем до *Ref{UUID,Name}, чтобы ЗначениеРеквизитаОбъекта
+	// и Строка(ref) работали в ПриЗаписи так же, как при проведении.
+	if entity := s.reg.GetEntity(obj.Type); entity != nil {
+		s.enrichHeaderRefs(ctx, entity, obj)
+	}
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
 	if err := s.interp.Run(proc, obj, vars); err != nil {
@@ -1827,37 +1833,72 @@ func (s *Server) resolveRegisterRows(ctx context.Context, rows []map[string]any,
 	// Резолвим UUID и в измерениях, и в атрибутах: reference-атрибут
 	// (например Организация) тоже хранит UUID и должен показываться именем.
 	refFields := append(append([]metadata.Field{}, reg.Dimensions...), reg.Attributes...)
-	// collect all UUID-looking strings in dimension/attribute fields
-	uuidToLabel := make(map[string]string)
+
+	// Build lookup: RefEntity → set of UUIDs to resolve
+	entityUUIDs := make(map[string]map[string]string) // entityName → {uuid: label}
 	for _, row := range rows {
 		for _, f := range refFields {
-			if v, ok := row[f.Name].(string); ok {
-				if _, err := uuid.Parse(v); err == nil {
-					uuidToLabel[v] = "" // mark for lookup
+			if f.RefEntity == "" {
+				// Для не-reference полей тоже проверим — вдруг там UUID
+				// (legacy string-измерения, хранящие UUID).
+				v := asString(row[f.Name])
+				if v != "" {
+					if _, err := uuid.Parse(v); err == nil {
+						if entityUUIDs[""] == nil {
+							entityUUIDs[""] = make(map[string]string)
+						}
+						entityUUIDs[""][v] = ""
+					}
 				}
+				continue
 			}
+			v := asString(row[f.Name])
+			if v == "" {
+				continue
+			}
+			if _, err := uuid.Parse(v); err != nil {
+				continue
+			}
+			entName := f.RefEntity
+			if entityUUIDs[entName] == nil {
+				entityUUIDs[entName] = make(map[string]string)
+			}
+			entityUUIDs[entName][v] = ""
 		}
 	}
-	// resolve UUIDs by scanning all entities
-	if len(uuidToLabel) > 0 {
-		for _, entity := range s.reg.Entities() {
-			for idStr, label := range uuidToLabel {
-				if label != "" {
-					continue // already resolved
-				}
-				id, _ := uuid.Parse(idStr)
+
+	// Resolve UUIDs: for known RefEntity — targeted lookup; for unknown — scan all.
+	uuidToLabel := make(map[string]string)
+	for entName, uuids := range entityUUIDs {
+		var entities []*metadata.Entity
+		if entName != "" {
+			if e := s.reg.GetEntity(entName); e != nil {
+				entities = []*metadata.Entity{e}
+			}
+		}
+		if len(entities) == 0 {
+			entities = s.reg.Entities()
+		}
+		for idStr := range uuids {
+			if _, done := uuidToLabel[idStr]; done {
+				continue
+			}
+			id, _ := uuid.Parse(idStr)
+			for _, entity := range entities {
 				refRow, err := s.store.GetByID(ctx, entity.Name, id, entity)
 				if err == nil {
 					uuidToLabel[idStr] = firstStringField(refRow, entity)
+					break
 				}
 			}
 		}
 	}
+
 	// enrich each row
 	for _, row := range rows {
 		// recorder label
 		recType, _ := row["recorder_type"].(string)
-		recIDStr, _ := row["recorder"].(string)
+		recIDStr := asString(row["recorder"])
 		if recType != "" && recIDStr != "" {
 			if recID, err := uuid.Parse(recIDStr); err == nil {
 				if entity := s.reg.GetEntityBySlug(recType); entity != nil {
@@ -1871,13 +1912,27 @@ func (s *Server) resolveRegisterRows(ctx context.Context, rows []map[string]any,
 		}
 		// dimension/attribute UUID → name
 		for _, f := range refFields {
-			if v, ok := row[f.Name].(string); ok {
-				if label, found := uuidToLabel[v]; found && label != "" {
-					row[f.Name] = label
-				}
+			v := asString(row[f.Name])
+			if v == "" {
+				continue
+			}
+			if label, found := uuidToLabel[v]; found && label != "" {
+				row[f.Name] = label
 			}
 		}
 	}
+}
+
+// asString returns a string from row values that may be string or []byte
+// (SQLite drivers differ in what they return for TEXT columns).
+func asString(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	}
+	return ""
 }
 
 func regFmtDate(v any) string {

@@ -283,28 +283,6 @@ type auditRowsScanner interface {
 	Close()
 }
 
-// parseAuditTime приводит значение колонки at к time.Time. PostgreSQL
-// отдаёт time.Time напрямую; SQLite хранит at как TEXT (datetime('now') →
-// "YYYY-MM-DD HH:MM:SS") и драйвер возвращает строку — её нужно разобрать.
-func parseAuditTime(v any) time.Time {
-	switch t := v.(type) {
-	case time.Time:
-		return t
-	case []byte:
-		return parseAuditTime(string(t))
-	case string:
-		for _, layout := range []string{
-			"2006-01-02 15:04:05", time.RFC3339,
-			"2006-01-02T15:04:05", "2006-01-02 15:04:05.999999999-07:00",
-		} {
-			if pt, err := time.Parse(layout, t); err == nil {
-				return pt
-			}
-		}
-	}
-	return time.Time{}
-}
-
 func scanAuditRows(rows auditRowsScanner) ([]*AuditEntry, error) {
 	defer rows.Close()
 	var entries []*AuditEntry
@@ -313,15 +291,19 @@ func scanAuditRows(rows auditRowsScanner) ([]*AuditEntry, error) {
 		var userID, recordID *uuid.UUID
 		var auditID uuid.UUID
 		var oldVal, newVal []byte
-		var atVal any
+		// at сканируем в any: PostgreSQL (TIMESTAMPTZ) отдаёт time.Time,
+		// SQLite хранит timestamp как TEXT (ISO 8601) и драйвер не
+		// конвертирует строку → time.Time автоматически. Раньше прямое
+		// сканирование в time.Time падало/давало нулевое время на SQLite.
+		var at any
 		if err := rows.Scan(
 			&auditID, &userID, &e.UserLogin, &e.Action,
 			&e.EntityKind, &e.EntityName, &recordID,
-			&e.Field, &oldVal, &newVal, &e.IP, &atVal,
+			&e.Field, &oldVal, &newVal, &e.IP, &at,
 		); err != nil {
 			return nil, err
 		}
-		e.At = parseAuditTime(atVal)
+		e.At = parseAuditTime(at)
 		e.ID = auditID.String()
 		if userID != nil {
 			e.UserID = userID.String()
@@ -338,6 +320,40 @@ func scanAuditRows(rows auditRowsScanner) ([]*AuditEntry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// parseAuditTime нормализует значение колонки at к time.Time независимо
+// от диалекта: PostgreSQL отдаёт time.Time, SQLite — строку (или []byte)
+// в формате ISO 8601 / "2006-01-02 15:04:05" (как datetime('now')).
+func parseAuditTime(v any) time.Time {
+	switch t := v.(type) {
+	case time.Time:
+		return t
+	case string:
+		return parseTimeStr(t)
+	case []byte:
+		return parseTimeStr(string(t))
+	}
+	return time.Time{}
+}
+
+func parseTimeStr(s string) time.Time {
+	for _, layout := range []string{
+		time.RFC3339Nano, time.RFC3339,
+		// pg text-формат timestamptz: смещение как ±NN (часто) или ±NN:NN
+		"2006-01-02 15:04:05.999999999-07",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05-07",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05", // SQLite datetime('now')
+		"2006-01-02T15:04:05",
+		"2006-01-02",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 // execAudit runs a statement on the pool directly (audit inserts bypass tx).
