@@ -454,8 +454,12 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	// Popup-режим (создание из iframe в родительской форме): не редиректим,
 	// а отдаём страничку, которая через postMessage сообщает родителю id
 	// и подпись только что созданного объекта, после чего модалка закрывается.
+	//
+	// Важно: используем локальную fields (ключи в оригинальном регистре
+	// после formToFields), а не obj.Fields — Object.Set приводит ключи к
+	// нижнему регистру, и firstStringField не находит "Наименование".
 	if r.FormValue("_popup") == "1" {
-		s.renderPopupSaved(w, obj.ID.String(), firstStringField(obj.Fields, entity))
+		s.renderPopupSaved(w, obj.ID.String(), firstStringField(fields, entity))
 		return
 	}
 
