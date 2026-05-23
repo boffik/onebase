@@ -788,14 +788,19 @@ document.addEventListener('keydown',function(e){
 
 const tplForm = `
 {{define "page-form"}}
-{{template "head" .}}{{template "nav" .}}
+{{template "head" .}}{{if not .IsPopup}}{{template "nav" .}}{{end}}
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:900px">
   <h2 style="margin-bottom:0">{{if .IsNew}}Создать{{else}}Редактировать{{end}} — {{.Entity.DisplayName}}</h2>
+  {{if .IsPopup}}
+  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  {{else}}
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  {{end}}
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
+{{if not .IsPopup}}
 {{/* Top toolbar */}}
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
   {{if .Entity.Posting}}
@@ -871,10 +876,12 @@ const tplForm = `
   {{end}}
 </div>
 {{end}}
+{{end}}{{/* end if not .IsPopup */}}
 
 <div class="card">
 <form id="main-form" method="POST">
 {{if and (not .IsNew) (index .Values "_version")}}<input type="hidden" name="_version" value="{{index .Values "_version"}}">{{end}}
+{{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}
 {{if .Entity.Hierarchical}}
 <div class="form-group">
   <label>Тип</label>
@@ -905,6 +912,7 @@ const tplForm = `
         {{end}}
       </select>
       <button type="button" onclick="openRefPicker('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="Выбрать из списка">...</button>
+      <button type="button" onclick="openRefCreate(document.getElementById('ref-{{$fn}}'), '{{.RefEntity}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;font-weight:600;color:#16a34a" title="Создать новый">+</button>
     </div>
   {{else if isEnum (str .Type)}}
     <select name="{{$fn}}">
@@ -948,6 +956,7 @@ const tplForm = `
               {{end}}
             </select>
             <button type="button" onclick="openRefPicker(this.parentElement.querySelector('select'))" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="Выбрать из списка">...</button>
+            <button type="button" onclick="openRefCreate(this.parentElement.querySelector('select'), '{{.RefEntity}}')" style="padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0;font-weight:600;color:#16a34a" title="Создать новый">+</button>
           </div>
         {{else if eq (str .Type) "number"}}
           <input type="number" name="tp.{{$tpName}}.{{$i}}.{{$fn}}" value="{{index $row $fn}}"
@@ -970,8 +979,13 @@ const tplForm = `
 {{end}}
 
 <div style="margin-top:16px">
+  {{if .IsPopup}}
+  <button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">Записать и выбрать</button>
+  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" class="btn btn-cancel">Отмена</a>
+  {{else}}
   <button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" class="btn btn-cancel">Отмена</a>
+  {{end}}
 </div>
 </form>
 {{if and (not .IsNew) .Entity.Posting}}
@@ -979,7 +993,7 @@ const tplForm = `
 <form id="form-unpost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/unpost"></form>
 {{end}}
 {{end}}
-{{if not .IsNew}}
+{{if and (not .IsNew) (not .IsPopup)}}
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h3 style="margin:0;font-size:14px;font-weight:600;color:#374151">Вложения</h3>
@@ -1028,10 +1042,12 @@ const tplForm = `
 </div>
 <script>
 window._tpRefOpts = {{jsJSON .TPRefOptions}};
+window._tpRefMeta = {{jsJSON .TPRefMeta}};
 function addTpRow(tpName, fields, numFields, idx) {
   var tbody = document.getElementById('tp-body-' + tpName);
   var tr = document.createElement('tr');
   var refOpts = (window._tpRefOpts && window._tpRefOpts[tpName]) || {};
+  var refMeta = (window._tpRefMeta && window._tpRefMeta[tpName]) || {};
   fields.forEach(function(fn) {
     var td = document.createElement('td');
     if (refOpts[fn] !== undefined) {
@@ -1055,6 +1071,17 @@ function addTpRow(tpName, fields, numFields, idx) {
       (function(s){ pickBtn.onclick = function(){ openRefPicker(s); }; })(sel);
       wrapper.appendChild(sel);
       wrapper.appendChild(pickBtn);
+      // Кнопка «+» — создать новый элемент справочника не покидая формы.
+      // refMeta[fn] содержит имя справочника, на который ссылается поле.
+      var refEntity = refMeta[fn];
+      if (refEntity) {
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button'; createBtn.textContent = '+';
+        createBtn.title = 'Создать новый';
+        createBtn.style.cssText = 'padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0;font-weight:600;color:#16a34a';
+        (function(s, re){ createBtn.onclick = function(){ openRefCreate(s, re); }; })(sel, refEntity);
+        wrapper.appendChild(createBtn);
+      }
       td.appendChild(wrapper);
     } else {
       var inp = document.createElement('input');
@@ -1136,6 +1163,56 @@ function openRefPicker(selOrId) {
   });
   document.getElementById('_rp-cancel').addEventListener('click', function() { modal.remove(); });
   modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+// openRefCreate — открывает модалку с iframe для inline-создания элемента
+// справочника, не покидая текущей формы (паттерн 1С «+» рядом с ссылочным
+// полем). После сохранения iframe шлёт postMessage с id и подписью —
+// родительская страница добавляет option в target select и закрывает модалку.
+function openRefCreate(targetSelect, refEntity) {
+  if (!targetSelect || !refEntity) return;
+  var old = document.getElementById('_ref-create-modal');
+  if (old) old.remove();
+  var modal = document.createElement('div');
+  modal.id = '_ref-create-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:10px;width:780px;max-width:95vw;height:78vh;max-height:680px;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.22);overflow:hidden';
+  var iframe = document.createElement('iframe');
+  iframe.src = '/ui/_ref-create/' + encodeURIComponent(refEntity);
+  iframe.style.cssText = 'flex:1;border:0;width:100%';
+  box.appendChild(iframe);
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  function handler(ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.source === 'obRefCreate' && d.id) {
+      // Добавляем option если такого ещё нет, и выбираем его.
+      var exists = false;
+      for (var i = 0; i < targetSelect.options.length; i++) {
+        if (targetSelect.options[i].value === d.id) { exists = true; break; }
+      }
+      if (!exists) {
+        var o = document.createElement('option');
+        o.value = d.id; o.textContent = d.label || d.id;
+        targetSelect.appendChild(o);
+      }
+      targetSelect.value = d.id;
+      // Триггерим change на случай зависимых полей (recalcTpRow и т.п.).
+      try { targetSelect.dispatchEvent(new Event('change', {bubbles:true})); } catch(e) {}
+      cleanup();
+    } else if (d.source === 'obRefCancel') {
+      cleanup();
+    }
+  }
+  function cleanup() {
+    window.removeEventListener('message', handler);
+    modal.remove();
+  }
+  window.addEventListener('message', handler);
+  modal.addEventListener('click', function(e) { if (e.target === modal) cleanup(); });
 }
 </script>
 </main></div></body></html>

@@ -73,6 +73,11 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/{kind}/{entity}", s.list)
 	r.Get("/ui/{kind}/{entity}/new", s.form)
 	r.Post("/ui/{kind}/{entity}/new", s.submit)
+	// Inline-создание элемента справочника из ссылочного поля документа
+	// (как в 1С: «+» рядом с полем выбора). JS-клиент не знает kind целевой
+	// сущности — этот маршрут резолвит kind по имени и редиректит на форму
+	// создания в popup-режиме.
+	r.Get("/ui/_ref-create/{entity}", s.refCreateRedirect)
 	r.Get("/ui/{kind}/{entity}/{id}", s.formEdit)
 	r.Post("/ui/{kind}/{entity}/{id}", s.submitEdit)
 	r.Get("/ui/register/{name}", s.registerMovements)

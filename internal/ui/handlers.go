@@ -340,8 +340,13 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 		"RefOptions":    refOptions,
 		"EnumOptions":   enumOpts,
 		"TPRefOptions":  tpRefOpts,
+		"TPRefMeta":     tpRefMeta(entity),
 		"TablePartRows": map[string][]map[string]any{},
 		"FolderOptions": folderOpts,
+		// IsPopup — форма открыта в iframe для inline-создания из другой
+		// формы (как «новый элемент справочника» из поля документа в 1С).
+		// Шаблон скрывает nav/тулбар и меняет кнопку на «Записать и выбрать».
+		"IsPopup": r.URL.Query().Get("_popup") == "1",
 	})
 }
 
@@ -415,8 +420,10 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			"RefOptions":    refOptions,
 			"EnumOptions":   s.loadEnumOptions(entity),
 			"TPRefOptions":  tpRefOpts,
+			"TPRefMeta":     tpRefMeta(entity),
 			"TablePartRows": tpRows,
 			"FolderOptions": fOpts,
+			"IsPopup":       r.FormValue("_popup") == "1",
 		})
 		return
 	}
@@ -444,12 +451,50 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Popup-режим (создание из iframe в родительской форме): не редиректим,
+	// а отдаём страничку, которая через postMessage сообщает родителю id
+	// и подпись только что созданного объекта, после чего модалка закрывается.
+	if r.FormValue("_popup") == "1" {
+		s.renderPopupSaved(w, obj.ID.String(), firstStringField(obj.Fields, entity))
+		return
+	}
+
 	if action == "post_and_close" {
 		http.Redirect(w, r, listURL(entity), http.StatusSeeOther)
 		return
 	}
 	// "post" / "Записать" — остаёмся на форме
 	http.Redirect(w, r, "/ui/"+strings.ToLower(string(entity.Kind))+"/"+entity.Name+"/"+obj.ID.String(), http.StatusSeeOther)
+}
+
+// refCreateRedirect — точка входа для JS-кнопки «+ Создать» рядом с
+// ссылочным полем. Клиент не знает kind целевой сущности (catalog/document)
+// — резолвим по имени и редиректим на /ui/<kind>/<name>/new?_popup=1.
+func (s *Server) refCreateRedirect(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "entity")
+	ent := s.reg.GetEntity(name)
+	if ent == nil {
+		http.Error(w, "Сущность не найдена: "+name, http.StatusNotFound)
+		return
+	}
+	kind := strings.ToLower(string(ent.Kind))
+	http.Redirect(w, r, "/ui/"+kind+"/"+ent.Name+"/new?_popup=1", http.StatusFound)
+}
+
+// renderPopupSaved отдаёт минимальную HTML-страницу, которая через
+// postMessage передаёт родительскому окну id и подпись созданного объекта.
+// Родитель (см. openRefCreate в шаблоне) подставит значение в свой select
+// и закроет модалку. Подпись экранируется через encoding/json — то же
+// делает шаблон, но здесь без шаблона короче.
+func (s *Server) renderPopupSaved(w http.ResponseWriter, id, label string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	idJSON, _ := json.Marshal(id)
+	labelJSON, _ := json.Marshal(label)
+	fmt.Fprintf(w, `<!doctype html><html><body><script>
+try {
+  window.parent.postMessage({source:"obRefCreate", id:%s, label:%s}, "*");
+} catch (e) {}
+</script>Готово.</body></html>`, idJSON, labelJSON)
 }
 
 func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
@@ -564,6 +609,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"RefOptions":    refOptions,
 		"EnumOptions":   enumOpts,
 		"TPRefOptions":  tpRefOpts,
+		"TPRefMeta":     tpRefMeta(entity),
 		"TablePartRows": tpRows,
 		"ID":            id.String(),
 		"IsAdmin":       editIsAdmin,
@@ -653,6 +699,7 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 			"RefOptions":    refOptions,
 			"EnumOptions":   s.loadEnumOptions(entity),
 			"TPRefOptions":  tpRefOpts2,
+			"TPRefMeta":     tpRefMeta(entity),
 			"TablePartRows": tpRows,
 		})
 		return
@@ -2049,6 +2096,23 @@ func (s *Server) allFunctions(w http.ResponseWriter, r *http.Request) {
 		"Processors":    s.reg.Processors(),
 		"Constants":     s.reg.Constants(),
 	})
+}
+
+// tpRefMeta строит карту tpName → fieldName → имяСправочника для JS-помощника
+// addTpRow, чтобы динамически добавленные строки табчасти умели рендерить
+// кнопку «+ Создать» с правильным целевым справочником.
+func tpRefMeta(entity *metadata.Entity) map[string]map[string]string {
+	out := make(map[string]map[string]string, len(entity.TableParts))
+	for _, tp := range entity.TableParts {
+		m := map[string]string{}
+		for _, f := range tp.Fields {
+			if f.RefEntity != "" {
+				m[f.Name] = f.RefEntity
+			}
+		}
+		out[tp.Name] = m
+	}
+	return out
 }
 
 // asBool converts DB boolean values to Go bool.
