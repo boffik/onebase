@@ -42,6 +42,17 @@ var formsConvertFromCmd = &cobra.Command{
 	RunE: runFormsConvertFrom,
 }
 
+var formsValidateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Проверка корректности .form.yaml",
+	Long: `Проверяет схему onebase.form/v1, обязательные поля и согласованность.
+Выходной код 1 при наличии error-предупреждений, 0 иначе.
+
+Пример:
+  onebase forms validate --src C:\Projects\my-project\forms\контрагент\объекта.form.yaml`,
+	RunE: runFormsValidate,
+}
+
 var formsConvertToCmd = &cobra.Command{
 	Use:   "convert-to-1c",
 	Short: "Экспорт управляемой формы OneBase в Form.xml + Module.bsl + Items/",
@@ -70,9 +81,37 @@ func init() {
 	formsConvertToCmd.MarkFlagRequired("src")
 	formsConvertToCmd.MarkFlagRequired("dst")
 
+	formsValidateCmd.Flags().String("src", "", "путь к .form.yaml")
+	formsValidateCmd.MarkFlagRequired("src")
+
 	formsCmd.AddCommand(formsConvertFromCmd)
 	formsCmd.AddCommand(formsConvertToCmd)
+	formsCmd.AddCommand(formsValidateCmd)
 	rootCmd.AddCommand(formsCmd)
+}
+
+func runFormsValidate(cmd *cobra.Command, _ []string) error {
+	src, _ := cmd.Flags().GetString("src")
+	warns, err := onec_forms.Validate(src)
+	if err != nil {
+		return err
+	}
+	totals := map[onec_forms.Severity]int{}
+	for _, w := range warns {
+		totals[w.Severity]++
+	}
+	fmt.Fprintf(os.Stdout, "Проверка %s\n", src)
+	fmt.Fprintf(os.Stdout, "  Errors: %d, Warnings: %d, Info: %d\n",
+		totals[onec_forms.SeverityError], totals[onec_forms.SeverityWarn], totals[onec_forms.SeverityInfo])
+	for _, w := range warns {
+		fmt.Fprintf(os.Stdout, "  %s\n", w)
+	}
+	if totals[onec_forms.SeverityError] > 0 {
+		// cobra превратит non-nil error в exit code 1.
+		return fmt.Errorf("обнаружены ошибки в форме (%d)", totals[onec_forms.SeverityError])
+	}
+	fmt.Fprintln(os.Stdout, "✓ Форма прошла валидацию.")
+	return nil
 }
 
 func runFormsConvertTo(cmd *cobra.Command, _ []string) error {

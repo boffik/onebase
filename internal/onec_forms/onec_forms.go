@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ErrNotImplemented возвращается фасадными функциями до реализации
@@ -239,11 +240,104 @@ func exportResources(srcDir, dstDir string) error {
 	return nil
 }
 
-// Validate проверяет корректность .form.yaml: схема, типы реквизитов,
-// существование data_path, наличие процедур-обработчиков в .form.os.
-// Возвращает список предупреждений (даже при отсутствии ошибок).
+// Validate проверяет корректность .form.yaml: схема, тип FormElement.Kind,
+// data_path (обязателен у полей ввода и чекбоксов), уникальность имён в дереве.
+// Возвращает список предупреждений (всех уровней). Если есть error-warnings —
+// форма не считается валидной.
 //
-// Реализуется в этапе 6 плана 37.
+// Этого достаточно для CLI/UI проверки «без запуска проекта». Полноценная
+// валидация data_path против реального metadata.Entity делается отдельно
+// (handler /forms/validate в этапе 4 умеет только базовый YAML-парсинг).
 func Validate(yamlPath string) ([]Warning, error) {
-	return nil, ErrNotImplemented
+	form, err := ReadFormYAML(yamlPath)
+	if err != nil {
+		return []Warning{{Severity: SeverityError, Code: W003_InvalidYAML, Message: err.Error()}}, nil
+	}
+
+	var warns Warnings
+
+	// 1. Имена и Kind элементов: пустые имена, неизвестные Kind.
+	seenNames := map[string]int{}
+	var walk func(*IRElement, []string)
+	walk = func(el *IRElement, path []string) {
+		if el == nil {
+			return
+		}
+		full := append(path, el.Name)
+		if el.Name == "" {
+			warns.Add(Warning{Severity: SeverityWarn, Code: W050_NeedsReview, Element: strings.Join(full, "/"), Message: "элемент без имени"})
+		}
+		if el.Kind == "" {
+			warns.Add(Warning{Severity: SeverityError, Code: W010_UnknownElement, Element: el.Name, Message: "не указан kind"})
+		} else if !knownKind(el.Kind) {
+			warns.Add(Warning{Severity: SeverityWarn, Code: W010_UnknownElement, Element: el.Name, Field: el.Kind, Message: "неизвестный kind"})
+		}
+		if el.Name != "" {
+			seenNames[el.Name]++
+			if seenNames[el.Name] == 2 {
+				warns.Add(Warning{Severity: SeverityWarn, Code: W050_NeedsReview, Element: el.Name, Message: "имя встречается у нескольких элементов формы"})
+			}
+		}
+		// data_path обязателен для полей ввода и флажков.
+		if requiresDataPath(el.Kind) && el.DataPath == "" {
+			warns.Add(Warning{Severity: SeverityError, Code: W012_MissingDataPath, Element: el.Name, Field: el.Kind, Message: "data_path обязателен для этого типа элемента"})
+		}
+		for _, c := range el.Children {
+			walk(c, full)
+		}
+	}
+	for _, el := range form.Elements {
+		walk(el, nil)
+	}
+
+	// 2. Реквизиты: непустые имена и типы.
+	for i, a := range form.Attributes {
+		if a.Name == "" {
+			warns.Add(Warning{Severity: SeverityError, Code: W050_NeedsReview, Field: "attributes", Message: fmt.Sprintf("реквизит[%d] без имени", i)})
+		}
+		if a.TypeRef == "" {
+			warns.Add(Warning{Severity: SeverityError, Code: W022_UnknownType, Element: a.Name, Message: "не указан type"})
+		}
+	}
+	for _, a := range form.Attributes {
+		if a.TypeRef == "ValueTable" && len(a.Columns) == 0 {
+			warns.Add(Warning{Severity: SeverityInfo, Code: W050_NeedsReview, Element: a.Name, Message: "ValueTable без колонок"})
+		}
+	}
+
+	return []Warning(warns), nil
+}
+
+// knownKind возвращает true если el.Kind — известный нам тип элемента
+// (любой OneBase-канон или 1С-имя из elements_map).
+func knownKind(kind string) bool {
+	if _, ok := Element1CToOneBase(kind); ok {
+		return true
+	}
+	// OneBase-имя — ищем как значение в карте.
+	for _, v := range elementMap {
+		if string(v) == kind {
+			return true
+		}
+	}
+	// Дополнительные OneBase-Kinds, не имеющие прямого 1С-аналога.
+	switch kind {
+	case "ПолеВвода", "Надпись", "Кнопка", "Таблица", "ГруппаФормы",
+		"Страница", "СтраницыФормы", "Флажок", "Переключатель",
+		"ПолеСписка", "ПолеДаты", "ПолеФормы", "ТабличнаяЧасть",
+		"Колонка", "КоманднаяПанель", "ПолеКартинки", "КнопкаКП":
+		return true
+	}
+	return false
+}
+
+// requiresDataPath возвращает true для элементов, у которых отсутствие
+// data_path — это ошибка (нельзя привязать поле к данным).
+func requiresDataPath(kind string) bool {
+	switch kind {
+	case "ПолеВвода", "Флажок", "Переключатель", "ПолеДаты", "ПолеСписка",
+		"InputField", "CheckBoxField", "RadioButtonField", "PictureField":
+		return true
+	}
+	return false
 }
