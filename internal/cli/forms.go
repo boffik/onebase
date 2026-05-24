@@ -42,6 +42,19 @@ var formsConvertFromCmd = &cobra.Command{
 	RunE: runFormsConvertFrom,
 }
 
+var formsConvertToCmd = &cobra.Command{
+	Use:   "convert-to-1c",
+	Short: "Экспорт управляемой формы OneBase в Form.xml + Module.bsl + Items/",
+	Long: `Читает .form.yaml + .form.os + _resources/ из проекта OneBase и
+создаёт Form.xml, Form/Module.bsl, Form/Items/* в каталоге выгрузки 1С.
+
+Пример:
+  onebase forms convert-to-1c \
+    --src C:\Projects\my-project\forms\контрагент\объекта.form.yaml \
+    --dst C:\Projects\my-1c-config\Forms\ФормаКонтрагента\Ext`,
+	RunE: runFormsConvertTo,
+}
+
 func init() {
 	formsConvertFromCmd.Flags().String("src", "", "путь к Forms/<FormName> в выгрузке 1С (содержит Ext/Form.xml)")
 	formsConvertFromCmd.Flags().String("entity", "", "имя сущности OneBase, к которой привязывается форма")
@@ -52,8 +65,79 @@ func init() {
 	formsConvertFromCmd.MarkFlagRequired("entity")
 	formsConvertFromCmd.MarkFlagRequired("dst")
 
+	formsConvertToCmd.Flags().String("src", "", "путь к .form.yaml в проекте OneBase")
+	formsConvertToCmd.Flags().String("dst", "", "целевой каталог Forms/<X>/Ext в выгрузке 1С")
+	formsConvertToCmd.MarkFlagRequired("src")
+	formsConvertToCmd.MarkFlagRequired("dst")
+
 	formsCmd.AddCommand(formsConvertFromCmd)
+	formsCmd.AddCommand(formsConvertToCmd)
 	rootCmd.AddCommand(formsCmd)
+}
+
+func runFormsConvertTo(cmd *cobra.Command, _ []string) error {
+	src, _ := cmd.Flags().GetString("src")
+	dst, _ := cmd.Flags().GetString("dst")
+
+	// Соседний .form.os и _resources рассчитываем по соглашению:
+	//   <name>.form.yaml + <name>.form.os + <name>/_resources/...
+	srcDir := filepath.Dir(src)
+	base := strings.TrimSuffix(filepath.Base(src), ".form.yaml")
+	osPath := filepath.Join(srcDir, base+".form.os")
+	if _, err := os.Stat(osPath); err != nil {
+		osPath = ""
+	}
+	resourcesDir := filepath.Join(srcDir, base, "_resources")
+	if _, err := os.Stat(resourcesDir); err != nil {
+		resourcesDir = ""
+	}
+
+	fmt.Fprintf(os.Stdout, "Экспорт формы OneBase → 1С\n")
+	fmt.Fprintf(os.Stdout, "  YAML: %s\n", src)
+	if osPath != "" {
+		fmt.Fprintf(os.Stdout, "  Модуль: %s\n", osPath)
+	}
+	if resourcesDir != "" {
+		fmt.Fprintf(os.Stdout, "  Ресурсы: %s\n", resourcesDir)
+	}
+	fmt.Fprintf(os.Stdout, "  → %s\n", dst)
+
+	report, err := onec_forms.ExportToOneC(onec_forms.ExportOptions{
+		YAMLPath:     src,
+		OSPath:       osPath,
+		ResourcesDir: resourcesDir,
+		DstFormDir:   dst,
+	})
+	if err != nil {
+		return err
+	}
+
+	totals := map[onec_forms.Severity]int{}
+	byCode := map[string]int{}
+	for _, w := range report.Warnings {
+		totals[w.Severity]++
+		byCode[w.Code]++
+	}
+	fmt.Fprintln(os.Stdout, "\nГотово.")
+	fmt.Fprintf(os.Stdout, "  Каталог: %s\n", report.FormDir)
+	fmt.Fprintf(os.Stdout, "\nПредупреждения: info=%d, warn=%d, error=%d\n",
+		totals[onec_forms.SeverityInfo], totals[onec_forms.SeverityWarn], totals[onec_forms.SeverityError])
+	for code, count := range byCode {
+		fmt.Fprintf(os.Stdout, "  %s: %d\n", code, count)
+	}
+	shown := 0
+	for _, w := range report.Warnings {
+		if w.Severity == onec_forms.SeverityInfo {
+			continue
+		}
+		if shown >= 10 {
+			fmt.Fprintf(os.Stdout, "  ... (ещё %d, см. полный отчёт)\n", len(report.Warnings)-10)
+			break
+		}
+		fmt.Fprintf(os.Stdout, "  %s\n", w)
+		shown++
+	}
+	return nil
 }
 
 func runFormsConvertFrom(cmd *cobra.Command, _ []string) error {
