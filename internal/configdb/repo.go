@@ -107,6 +107,35 @@ func (r *Repo) ExportToDir(ctx context.Context, dir string) error {
 	return rows.Err()
 }
 
+// ConfigFile — путь и содержимое одной записи в _onebase_config.
+// Возвращается ListByPrefix; используется, например, редактором
+// управляемых форм (план 37, этап 4) для пакетной выборки forms/<entity>/*.
+type ConfigFile struct {
+	Path    string
+	Content []byte
+}
+
+// ListByPrefix возвращает все файлы конфигурации, чьи path начинаются
+// с указанного префикса. Префикс может быть пустым — тогда возвращается
+// всё содержимое.
+func (r *Repo) ListByPrefix(ctx context.Context, prefix string) ([]ConfigFile, error) {
+	ph := r.db.Dialect().Placeholder(1)
+	rows, err := r.db.Query(ctx, `SELECT path, content FROM _onebase_config WHERE path LIKE `+ph+` ORDER BY path`, prefix+"%")
+	if err != nil {
+		return nil, fmt.Errorf("configdb: list: %w", err)
+	}
+	defer rows.Close()
+	var out []ConfigFile
+	for rows.Next() {
+		var cf ConfigFile
+		if err := rows.Scan(&cf.Path, &cf.Content); err != nil {
+			return nil, err
+		}
+		out = append(out, cf)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repo) IsEmpty(ctx context.Context) (bool, error) {
 	var count int
 	err := r.db.QueryRow(ctx, `SELECT count(*) FROM _onebase_config`).Scan(&count)

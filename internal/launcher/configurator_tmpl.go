@@ -2838,6 +2838,19 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
+  <details open class="cfg-tree">
+    <summary class="cfg-group cfg-group-hd">
+      <span><a href="/bases/{{.Base.ID}}/configurator/forms" style="color:inherit;text-decoration:none" title="Все управляемые формы">◇ Управляемые формы</a></span>
+    </summary>
+    {{range .ManagedForms}}
+    <div class="cfg-item">
+      <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}" style="color:inherit;text-decoration:none;display:block">
+        <span class="ic">◇</span>{{.Entity}}.{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">{{.Kind}}</span>
+      </a>
+    </div>
+    {{end}}
+  </details>
+
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Подсистемы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="Добавить подсистему">+</span></summary>
   {{range .Subsystems}}
   <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">

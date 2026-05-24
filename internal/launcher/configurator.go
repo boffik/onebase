@@ -227,6 +227,9 @@ type configuratorData struct {
 	Processors []cfgProcessor
 	PrintForms    []cfgPrintForm
 	DSLPrintForms []cfgDSLPrintForm
+	// План 37, этап 4: управляемые формы.
+	ManagedForms []cfgManagedForm
+	EditingForm  *cfgManagedForm
 	Subsystems []cfgSubsystem
 	Widgets    []cfgWidget
 	HomePageYAML string
@@ -743,7 +746,80 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 		}
 	}
 
+	// Управляемые формы (план 37, этап 4): подгружаем для бокового дерева.
+	// listManagedForms требует http.Request только для DB-режима; в file-mode
+	// nil-Request не используется. В случае ошибки оставляем срез пустым —
+	// дерево просто не покажет раздел.
+	if forms, err := listManagedFormsFromFS(b); err == nil {
+		data.ManagedForms = forms
+	}
+	if b.ConfigSource == "database" {
+		if forms, err := h.listManagedFormsFromDBNoRequest(ctx, b); err == nil {
+			data.ManagedForms = forms
+		}
+	}
+
 	return data
+}
+
+// listManagedFormsFromDBNoRequest — версия для loadCfgData, где нет
+// http.Request. Использует ctx напрямую вместо r.Context().
+func (h *handler) listManagedFormsFromDBNoRequest(ctx context.Context, b *Base) ([]cfgManagedForm, error) {
+	db, err := OpenDB(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	repo := configdb.New(db)
+	files, err := repo.ListByPrefix(ctx, "forms/")
+	if err != nil {
+		return nil, err
+	}
+	type pair struct{ yaml, os string }
+	groups := map[string]*cfgManagedForm{}
+	for _, f := range files {
+		parts := strings.Split(strings.TrimPrefix(f.Path, "forms/"), "/")
+		if len(parts) < 2 {
+			continue
+		}
+		entityLower := parts[0]
+		base := parts[1]
+		var name string
+		var isYAML, isOS bool
+		if strings.HasSuffix(base, ".form.yaml") {
+			name = strings.TrimSuffix(base, ".form.yaml")
+			isYAML = true
+		} else if strings.HasSuffix(base, ".form.os") {
+			name = strings.TrimSuffix(base, ".form.os")
+			isOS = true
+		} else {
+			continue
+		}
+		key := entityLower + "/" + name
+		g, ok := groups[key]
+		if !ok {
+			g = &cfgManagedForm{
+				Entity:   entityLower,
+				Name:     name,
+				YAMLPath: "forms/" + entityLower + "/" + name + ".form.yaml",
+				OSPath:   "forms/" + entityLower + "/" + name + ".form.os",
+			}
+			groups[key] = g
+		}
+		if isYAML {
+			g.YAML = string(f.Content)
+			g.Kind = extractFormKindFromYAML(g.YAML)
+		}
+		if isOS {
+			g.OS = string(f.Content)
+			g.HasOS = true
+		}
+	}
+	out := make([]cfgManagedForm, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, *g)
+	}
+	return out, nil
 }
 
 // ── query builder schema ────────────────────────────────────────────────────
