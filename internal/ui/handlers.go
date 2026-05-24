@@ -333,7 +333,7 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 			values["is_folder"] = "false"
 		}
 	}
-	s.render(w, r, "page-form", map[string]any{
+	s.renderEntityForm(w, r, "object", map[string]any{
 		"Entity":        entity,
 		"IsNew":         true,
 		"Values":        values,
@@ -411,7 +411,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		if entity.Hierarchical {
 			fOpts = s.loadFolderOptions(r.Context(), entity)
 		}
-		s.render(w, r, "page-form", map[string]any{
+		s.renderEntityForm(w, r, "object", map[string]any{
 			"Entity":        entity,
 			"IsNew":         true,
 			"Error":         dslErrMsg,
@@ -606,7 +606,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.render(w, r, "page-form", map[string]any{
+	s.renderEntityForm(w, r, "object", map[string]any{
 		"Entity":        entity,
 		"IsNew":         false,
 		"Values":        vals,
@@ -695,7 +695,7 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 	if dslErr2 != "" {
 		refOptions, _ := s.loadRefOptions(r.Context(), entity)
 		tpRefOpts2, _ := s.loadTPRefOptions(r.Context(), entity)
-		s.render(w, r, "page-form", map[string]any{
+		s.renderEntityForm(w, r, "object", map[string]any{
 			"Entity":        entity,
 			"IsNew":         false,
 			"Error":         dslErr2,

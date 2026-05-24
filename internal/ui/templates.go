@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
@@ -30,6 +31,67 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	},
 	"isRef":  func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
+	// dpField извлекает имя поля из data_path вида "Объект.Контрагент"
+	// (план 37, managed-формы). Если префикса нет — возвращает строку как есть.
+	"dpField": func(s string) string {
+		if i := strings.LastIndex(s, "."); i >= 0 {
+			return s[i+1:]
+		}
+		return s
+	},
+	// dpRoot — корневой компонент data_path: "Объект.Товары.Цена" → "Объект".
+	"dpRoot": func(s string) string {
+		if i := strings.Index(s, "."); i >= 0 {
+			return s[:i]
+		}
+		return s
+	},
+	// fieldByName ищет metadata.Field в entity.Fields по имени;
+	// нужен managed-шаблону чтобы определить тип ввода (ref/enum/date/bool).
+	"fieldByName": func(entity *metadata.Entity, name string) *metadata.Field {
+		if entity == nil {
+			return nil
+		}
+		for i := range entity.Fields {
+			if entity.Fields[i].Name == name {
+				return &entity.Fields[i]
+			}
+		}
+		return nil
+	},
+	// fieldTitleRU достаёт ru-вариант из map[string]string или возвращает fallback.
+	"fieldTitleRU": func(m map[string]string, fallback string) string {
+		if v, ok := m["ru"]; ok && v != "" {
+			return v
+		}
+		for _, v := range m {
+			if v != "" {
+				return v
+			}
+		}
+		return fallback
+	},
+	// hasChildren — удобство для шаблона: проверка на пустой Children.
+	"hasChildren": func(el *metadata.FormElement) bool {
+		return el != nil && len(el.Children) > 0
+	},
+	// dict собирает map[string]any из чередующихся ключей и значений —
+	// стандартный приём передать несколько аргументов в подшаблон
+	// (Go template принимает только один параметр).
+	"dict": func(values ...any) (map[string]any, error) {
+		if len(values)%2 != 0 {
+			return nil, fmt.Errorf("dict требует чётное число аргументов")
+		}
+		m := make(map[string]any, len(values)/2)
+		for i := 0; i < len(values); i += 2 {
+			k, ok := values[i].(string)
+			if !ok {
+				return nil, fmt.Errorf("dict: ключ #%d не string", i)
+			}
+			m[k] = values[i+1]
+		}
+		return m, nil
+	},
 	// navLabel вставляет zero-width space на границах слов PascalCase-имени
 	// (перед заглавной после строчной), чтобы длинные имена объектов
 	// переносились по словам в боковой панели, а не обрезались.
@@ -189,7 +251,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"echartsJSON":  echartsJSON,
 	"splitCamel":   splitCamel,
 	"fmtCell":      fmtReportCell,
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplForbidden))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplForbidden))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>

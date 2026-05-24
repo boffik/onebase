@@ -1,0 +1,28 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Контрагент
+  title:
+    ru: "Карточка контрагента"
+
+elements:
+  - kind: ГруппаФормы
+    name: Реквизиты
+    title:
+      ru: "Реквизиты"
+    children:
+      - kind: ПолеВвода
+        name: ПолеНаименование
+        title:
+          ru: "Наименование"
+        data_path: Объект.Наименование
+        required: true
+        hint: "Полное наименование контрагента, как в учредительных документах"
+
+      - kind: ПолеВвода
+        name: ПолеИНН
+        title:
+          ru: "ИНН"
+        data_path: Объект.ИНН
+        hint: "10 цифр для юр. лица, 12 для ИП"
