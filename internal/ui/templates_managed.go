@@ -201,23 +201,25 @@ const tplManagedForm = `
       {{end}}
     {{end}}
   {{end}}
-  <button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>
+  {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>{{end}}
   {{if .Entity.Posting}}
-    <button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>
+    {{if .CanPost}}<button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>{{end}}
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
-        <button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">Перепровести</button>
+        {{if .CanPost}}<button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">Перепровести</button>{{end}}
       {{else}}
-        <button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>
+        {{if .CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>{{end}}
       {{end}}
     {{end}}
   {{end}}
   {{if not .IsNew}}
     <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">История</a>
+    {{if .CanDelete}}
     <form method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/delete"
           onsubmit="return confirm('{{if .IsAdmin}}Удалить запись навсегда?{{else}}Пометить запись на удаление?{{end}}')" style="margin-left:auto">
       <button class="btn btn-danger btn-sm" type="submit">{{if .IsAdmin}}Удалить{{else}}Пометить на удаление{{end}}</button>
     </form>
+    {{end}}
   {{end}}
 </div>
 {{end}}{{/* end if not .IsPopup */}}
@@ -261,10 +263,10 @@ const tplManagedForm = `
 
 <div style="margin-top:16px">
   {{if .IsPopup}}
-  <button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">Записать и выбрать</button>
+  {{if .CanWrite}}<button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">Записать и выбрать</button>{{end}}
   <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" class="btn btn-cancel">Отмена</a>
   {{else}}
-  <button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>
+  {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>{{end}}
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" class="btn btn-cancel">Отмена</a>
   {{end}}
 </div>

@@ -193,6 +193,9 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
+		return
+	}
 	params := parseListParams(r, entity)
 
 	treeView := entity.Hierarchical && r.URL.Query().Get("view") == "tree"
@@ -310,6 +313,9 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "write") {
+		return
+	}
 	refOptions, _ := s.loadRefOptions(r.Context(), entity)
 	tpRefOpts, _ := s.loadTPRefOptions(r.Context(), entity)
 	enumOpts := s.loadEnumOptions(entity)
@@ -355,6 +361,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "write") {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -390,6 +399,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 
 	action := r.FormValue("_action")
 	isPosting := entity.Posting && (action == "post" || action == "post_and_close")
+	if isPosting && !s.requirePerm(w, r, string(entity.Kind), entity.Name, "post") {
+		return
+	}
 
 	for _, tp := range entity.TableParts {
 		if rows, ok := obj.TablePartRows[tp.Name]; ok {
@@ -504,6 +516,9 @@ try {
 func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
+		return
+	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -650,6 +665,9 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "write") {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", 400)
@@ -679,6 +697,9 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 
 	action := r.FormValue("_action")
 	isPostingAct := entity.Posting && (action == "post" || action == "post_and_close")
+	if isPostingAct && !s.requirePerm(w, r, string(entity.Kind), entity.Name, "post") {
+		return
+	}
 
 	for _, tp := range entity.TableParts {
 		if rows, ok := obj.TablePartRows[tp.Name]; ok {
@@ -767,6 +788,9 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "post") {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", 400)
@@ -818,6 +842,9 @@ func (s *Server) unpostDocument(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "unpost") {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", 400)
@@ -842,6 +869,9 @@ func (s *Server) unpostDocument(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
+		return
+	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "delete") {
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -1083,6 +1113,9 @@ func (s *Server) registerMovements(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown register: "+name, 404)
 		return
 	}
+	if !s.requirePerm(w, r, "register", reg.Name, "read") {
+		return
+	}
 	rows, err := s.store.GetMovements(r.Context(), name, reg)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -1102,6 +1135,9 @@ func (s *Server) registerBalances(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown register: "+name, 404)
 		return
 	}
+	if !s.requirePerm(w, r, "register", reg.Name, "read") {
+		return
+	}
 	rows, err := s.store.GetBalances(r.Context(), name, reg)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -1119,6 +1155,9 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 	if rep == nil {
 		return
 	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
+		return
+	}
 	// If report has no params, run immediately.
 	if len(rep.Params) == 0 {
 		s.runReport(w, r, rep, map[string]any{})
@@ -1134,6 +1173,9 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) reportRun(w http.ResponseWriter, r *http.Request) {
 	rep := s.getReport(w, r)
 	if rep == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -2044,6 +2086,27 @@ func (s *Server) renderForbidden(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "page-forbidden", map[string]any{})
 }
 
+// can reports whether the current request may perform op on (kind, entity).
+// A nil user means auth is not configured or no users exist → open access
+// (mirrors the IsAdmin defaulting used elsewhere). Admins pass via User.Has,
+// which returns true for IsAdmin.
+func (s *Server) can(r *http.Request, kind, entity, op string) bool {
+	u := auth.UserFromContext(r.Context())
+	if u == nil {
+		return true
+	}
+	return u.Has(kind, entity, op)
+}
+
+// requirePerm renders the 403 page and returns false when op is not allowed.
+func (s *Server) requirePerm(w http.ResponseWriter, r *http.Request, kind, entity, op string) bool {
+	if s.can(r, kind, entity, op) {
+		return true
+	}
+	s.renderForbidden(w, r)
+	return false
+}
+
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data map[string]any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if data == nil {
@@ -2058,12 +2121,38 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 		if sub == "" && len(subs) > 0 {
 			sub = subs[0].Name
 		}
-		data["Nav"] = s.buildNav(sub)
+		data["Nav"] = s.buildNav(r, sub)
 		data["Subsystems"] = subs
 		data["CurrentSubsystem"] = sub
 	}
 	if _, ok := data["IsAdmin"]; !ok {
 		data["IsAdmin"] = s.isAdmin(r)
+	}
+	// Default per-entity permission flags so partial render paths (e.g. validation
+	// errors) still show the right action buttons.
+	if ent, ok := data["Entity"].(*metadata.Entity); ok {
+		kind := string(ent.Kind)
+		if _, ok := data["CanWrite"]; !ok {
+			data["CanWrite"] = s.can(r, kind, ent.Name, "write")
+		}
+		if _, ok := data["CanDelete"]; !ok {
+			data["CanDelete"] = s.can(r, kind, ent.Name, "delete")
+		}
+		if _, ok := data["CanPost"]; !ok {
+			data["CanPost"] = s.can(r, kind, ent.Name, "post")
+		}
+		if _, ok := data["CanUnpost"]; !ok {
+			data["CanUnpost"] = s.can(r, kind, ent.Name, "unpost")
+		}
+	}
+	// Same for info-register views, which key off "InfoReg" instead of "Entity".
+	if ir, ok := data["InfoReg"].(*metadata.InfoRegister); ok {
+		if _, ok := data["CanWrite"]; !ok {
+			data["CanWrite"] = s.can(r, "inforeg", ir.Name, "write")
+		}
+		if _, ok := data["CanDelete"]; !ok {
+			data["CanDelete"] = s.can(r, "inforeg", ir.Name, "delete")
+		}
 	}
 	if _, ok := data["HasAuth"]; !ok {
 		u := auth.UserFromContext(r.Context())
@@ -2533,6 +2622,9 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", 400)
@@ -2888,6 +2980,9 @@ func (s *Server) infoRegList(w http.ResponseWriter, r *http.Request) {
 	if ir == nil {
 		return
 	}
+	if !s.requirePerm(w, r, "inforeg", ir.Name, "read") {
+		return
+	}
 	rows, err := s.store.InfoRegList(r.Context(), ir)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -2928,6 +3023,9 @@ func (s *Server) infoRegForm(w http.ResponseWriter, r *http.Request) {
 	if ir == nil {
 		return
 	}
+	if !s.requirePerm(w, r, "inforeg", ir.Name, "write") {
+		return
+	}
 	now := time.Now().Format("2006-01-02")
 	s.render(w, r, "page-inforeg-form", map[string]any{
 		"InfoReg": ir,
@@ -2940,6 +3038,9 @@ func (s *Server) infoRegForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 	ir := s.getInfoReg(w, r)
 	if ir == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "inforeg", ir.Name, "write") {
 		return
 	}
 	r.ParseForm()
@@ -2991,6 +3092,9 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) infoRegDelete(w http.ResponseWriter, r *http.Request) {
 	ir := s.getInfoReg(w, r)
 	if ir == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "inforeg", ir.Name, "delete") {
 		return
 	}
 	r.ParseForm()
@@ -3121,6 +3225,9 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", 400)
@@ -3185,6 +3292,9 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
+		return
+	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -3298,6 +3408,9 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 	if entity == nil {
 		return
 	}
+	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
+		return
+	}
 	params := parseListParams(r, entity)
 	rows, err := s.store.List(r.Context(), entity.Name, entity, params)
 	if err != nil {
@@ -3335,6 +3448,9 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 	rep := s.getReport(w, r)
 	if rep == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
 	paramValues := make(map[string]any, len(rep.Params))
