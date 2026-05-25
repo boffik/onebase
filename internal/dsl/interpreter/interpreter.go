@@ -255,6 +255,20 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 					break
 				}
 			}
+		default:
+			// Поддержка прокси-объектов вроде *formTpProxy: если у значения
+			// есть метод IterateRows() — итерируемся по нему. Без этого
+			// `Для Каждого Стр Из Объект.Товары` ничего не делает, когда
+			// `Объект.Товары` возвращает прокси для модификации ТЧ через
+			// .Добавить()/.Очистить().
+			if it, ok := coll.(interface{ IterateRows() []map[string]any }); ok {
+				for _, row := range it.IterateRows() {
+					e.set(v.Var.Literal, &MapThis{M: row})
+					if !i.execLoopBody(v.Body, e) {
+						break
+					}
+				}
+			}
 		}
 	case *ast.AssignStmt:
 		val := i.evalExpr(v.Value, e)

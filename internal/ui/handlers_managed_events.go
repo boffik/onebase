@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -127,18 +128,24 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Сборка vars c builtin Сообщить, копящим сообщения.
+	// Сборка vars c builtin Сообщить, копящим сообщения. Дополнительно
+	// прокидываем «Объект» и «ЭтотОбъект» как formObjectThis — обёртку,
+	// которая возвращает *formTpProxy для табличных частей (чтобы
+	// `Объект.Товары.Добавить()` реально модифицировал obj).
 	mc := runtime.NewMovementsCollector(entity.Name, obj.ID)
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(r.Context(), mc, &msgs)
+	thisObj := &formObjectThis{obj: obj, entity: entity}
+	vars["Объект"] = thisObj
+	vars["ЭтотОбъект"] = thisObj
 
 	// Выполнение процедуры. Ошибка DSL отдаётся в JSON, не как 500 —
 	// клиент покажет красный баннер и не закроет форму.
-	if runErr := s.interp.Run(decl, obj, vars); runErr != nil {
+	if runErr := s.interp.Run(decl, thisObj, vars); runErr != nil {
 		enc.Encode(formEventResponse{
 			OK:         false,
-			Values:     serializeFields(obj.Fields),
-			TableParts: serializeTablePartRows(obj.TablePartRows),
+			Values:     serializeFieldsForEntity(obj.Fields, entity),
+			TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, entity),
 			Messages:   msgs,
 			Error:      runErr.Error(),
 		})
@@ -147,28 +154,63 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 
 	enc.Encode(formEventResponse{
 		OK:         true,
-		Values:     serializeFields(obj.Fields),
-		TableParts: serializeTablePartRows(obj.TablePartRows),
+		Values:     serializeFieldsForEntity(obj.Fields, entity),
+		TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, entity),
 		Messages:   msgs,
 	})
 }
 
-// serializeTablePartRows прогоняет каждое значение каждой строки через
-// serializeValue. Без этого Ref-объекты после enrichTPRowsWithRefs
-// сериализуются как {Name:…, UUID:…} → JS-applyTableParts получает объект
-// без GetRefUUID-метода, не может сопоставить с option.value и select
-// показывает «— выбрать —» вместо реального товара.
-func serializeTablePartRows(tps map[string][]map[string]any) map[string][]map[string]any {
+// serializeFieldsForEntity нормализует имена полей к оригинальному регистру
+// (Object.Set хранит lowercase) и сериализует значения. Без нормализации
+// клиентский applyValues не найдёт input name="Дата" среди ключей "дата".
+func serializeFieldsForEntity(in map[string]any, entity *metadata.Entity) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		outKey := k
+		if entity != nil {
+			for _, f := range entity.Fields {
+				if strings.EqualFold(f.Name, k) {
+					outKey = f.Name
+					break
+				}
+			}
+		}
+		out[outKey] = serializeValue(v)
+	}
+	return out
+}
+
+// serializeTablePartRowsForEntity дополнительно нормализует имена полей
+// в строках ТЧ. Внутри строки ключи тоже могут оказаться lowercase после
+// MapThis.Set, поэтому ищем оригинальный регистр в entity.TableParts.Fields.
+func serializeTablePartRowsForEntity(tps map[string][]map[string]any, entity *metadata.Entity) map[string][]map[string]any {
 	if tps == nil {
 		return nil
 	}
+	tpFields := make(map[string][]metadata.Field)
+	if entity != nil {
+		for _, tp := range entity.TableParts {
+			tpFields[tp.Name] = tp.Fields
+		}
+	}
 	out := make(map[string][]map[string]any, len(tps))
 	for tpName, rows := range tps {
+		fields := tpFields[tpName]
 		outRows := make([]map[string]any, len(rows))
 		for i, row := range rows {
 			outRow := make(map[string]any, len(row))
 			for fk, fv := range row {
-				outRow[fk] = serializeValue(fv)
+				outKey := fk
+				for _, f := range fields {
+					if strings.EqualFold(f.Name, fk) {
+						outKey = f.Name
+						break
+					}
+				}
+				outRow[outKey] = serializeValue(fv)
 			}
 			outRows[i] = outRow
 		}
@@ -222,20 +264,6 @@ func buildObjectFromForm(r *http.Request, entity *metadata.Entity) *runtime.Obje
 	}
 }
 
-// serializeFields подготавливает Fields к JSON-ответу. UUID и refs
-// превращаем в строку, time.Time — в RFC3339, остальное оставляем как есть.
-// Это нужно, чтобы клиент мог напрямую подставить значение в input.
-func serializeFields(in map[string]any) map[string]any {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = serializeValue(v)
-	}
-	return out
-}
-
 func serializeValue(v any) any {
 	if v == nil {
 		return ""
@@ -247,6 +275,17 @@ func serializeValue(v any) any {
 	switch t := v.(type) {
 	case uuid.UUID:
 		return t.String()
+	case time.Time:
+		// input type=datetime-local ожидает ISO 8601 без timezone и без
+		// секунд. Без явного формата time.Time.String() даёт
+		// "2026-05-26 10:00:00 +0300 MSK" — браузер не распознаёт и
+		// очищает значение поля.
+		return t.Format("2006-01-02T15:04")
+	case *time.Time:
+		if t == nil {
+			return ""
+		}
+		return t.Format("2006-01-02T15:04")
 	case fmt.Stringer:
 		return t.String()
 	}

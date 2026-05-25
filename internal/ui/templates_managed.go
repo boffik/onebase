@@ -405,6 +405,18 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
      строку" в ТЧ работали и в managed-форме. */}}
 {{template "form-shared-js" .}}
 
+{{/* Авто-вызов ПриОткрытииФормы при загрузке страницы. Без этого
+     серверный handler на event="ПриОткрытии" никогда не запустится —
+     браузер не генерирует такое событие. План 37, этап 8. */}}
+{{if hasFormHandler .Form "ПриОткрытии"}}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  // setTimeout 0 → даём obFire-IIFE выше зарегистрировать window.obFire.
+  setTimeout(function(){ if (window.obFire) obFire('', 'ПриОткрытии'); }, 0);
+});
+</script>
+{{end}}
+
 {{/* Стиль активной вкладки. Inline-style на кнопке управляет базовым
      видом, а .active переопределяет цвет/border (выше по специфичности
      не получается без !important — поэтому используем именно класс). */}}

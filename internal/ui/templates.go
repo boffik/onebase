@@ -85,6 +85,16 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		_, ok := el.Handlers[metadata.FormEventType(eventName)]
 		return ok
 	},
+	// hasFormHandler — есть ли у формы (а не элемента) обработчик события.
+	// Используется в managed-шаблоне для авто-вызова ПриОткрытииФормы при
+	// загрузке страницы.
+	"hasFormHandler": func(form *metadata.FormModule, eventName string) bool {
+		if form == nil || form.Handlers == nil {
+			return false
+		}
+		_, ok := form.Handlers[metadata.FormEventType(eventName)]
+		return ok
+	},
 	// tablePartByName ищет metadata.TablePart в Entity по имени.
 	// Возвращает указатель на копию (или nil) — нужно managed-шаблону
 	// для рендера ТабличнойЧасти с реальными колонками.
