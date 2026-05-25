@@ -1,0 +1,4 @@
+# Golden-фикстуры для onec_forms — хранятся в LF, бинарное сравнение в
+# тестах. Без -text Windows autocrlf конвертирует в CRLF при checkout и
+# roundtrip-тесты падают на «expected LF, got CRLF».
+internal/onec_forms/fixtures/* -text
