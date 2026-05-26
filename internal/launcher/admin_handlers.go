@@ -112,21 +112,66 @@ function cfgUserCreate(){
       cfgAdmin('users')
     })
 }
+// cfgConfirm — кастомный модал-подтверждение (WebView2 блокирует window.confirm).
+function cfgConfirm(text, onOk){
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:10001;display:flex;align-items:center;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;padding:18px 22px;border-radius:8px;box-shadow:0 6px 28px rgba(0,0,0,.2);min-width:280px;font-size:13px';
+  box.innerHTML='<div style="margin-bottom:14px">'+text+'</div>';
+  var row=document.createElement('div');row.style.cssText='display:flex;gap:8px;justify-content:flex-end';
+  var ok=document.createElement('button');ok.textContent='OK';ok.style.cssText='background:#c00;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer';
+  var cancel=document.createElement('button');cancel.textContent='Отмена';cancel.style.cssText='background:#e2e8f0;color:#333;border:none;padding:5px 12px;border-radius:4px;cursor:pointer';
+  ok.onclick=function(){document.body.removeChild(ov);onOk()};
+  cancel.onclick=function(){document.body.removeChild(ov)};
+  row.appendChild(ok);row.appendChild(cancel);box.appendChild(row);ov.appendChild(box);document.body.appendChild(ov);
+}
+// cfgInfo — кастомный alert (WebView2 блокирует window.alert).
+function cfgInfo(text){
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:10001;display:flex;align-items:center;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;padding:18px 22px;border-radius:8px;box-shadow:0 6px 28px rgba(0,0,0,.2);min-width:240px;font-size:13px';
+  box.innerHTML='<div style="margin-bottom:12px">'+text+'</div>';
+  var ok=document.createElement('button');ok.textContent='OK';ok.style.cssText='background:#1a4a80;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;float:right';
+  ok.onclick=function(){document.body.removeChild(ov)};
+  box.appendChild(ok);ov.appendChild(box);document.body.appendChild(ov);
+}
 function cfgUserDel(id){
-  if(!confirm('Удалить пользователя?'))return;
-  fetch('/bases/` + b.ID + `/configurator/admin/users/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
-    .then(function(){cfgAdmin('users')})
+  cfgConfirm('Удалить пользователя?', function(){
+    fetch('/bases/` + b.ID + `/configurator/admin/users/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+      .then(function(){cfgAdmin('users')})
+  });
 }
 function cfgUserPasswd(id){
-  var pw=prompt('Введите новый пароль:');
-  if(!pw)return;
-  if(pw.length<4){alert('Пароль должен содержать минимум 4 символа');return}
-  var pw2=prompt('Повторите новый пароль:');
-  if(pw!==pw2){alert('Пароли не совпадают');return}
-  fetch('/bases/` + b.ID + `/configurator/admin/users/passwd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,password:pw})})
-    .then(function(r){return r.json()}).then(function(r){
-      if(r.error){alert('Ошибка: '+r.error)}else{alert('Пароль изменён')}
-    })
+  // Кастомный диалог: WebView2 не показывает window.prompt() — отсюда
+  // «нет реакции на кнопку Пароль». HTML-popup отрисуется в любом движке.
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:10001;display:flex;align-items:center;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;padding:18px 22px;border-radius:8px;box-shadow:0 6px 28px rgba(0,0,0,.2);min-width:300px;font-size:13px;display:flex;flex-direction:column;gap:8px';
+  box.innerHTML='<div style="font-weight:600">Новый пароль</div>';
+  var i1=document.createElement('input');i1.type='password';i1.placeholder='Пароль';i1.style.cssText='padding:6px 10px;border:1px solid #c8d0de;border-radius:4px;font-size:13px';
+  var i2=document.createElement('input');i2.type='password';i2.placeholder='Повторите пароль';i2.style.cssText='padding:6px 10px;border:1px solid #c8d0de;border-radius:4px;font-size:13px';
+  var err=document.createElement('div');err.style.cssText='color:#c00;font-size:12px;min-height:1em';
+  var row=document.createElement('div');row.style.cssText='display:flex;gap:8px;justify-content:flex-end;margin-top:4px';
+  var ok=document.createElement('button');ok.textContent='Сохранить';ok.style.cssText='background:#1a4a80;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer';
+  var cancel=document.createElement('button');cancel.textContent='Отмена';cancel.style.cssText='background:#e2e8f0;color:#333;border:none;padding:5px 12px;border-radius:4px;cursor:pointer';
+  cancel.onclick=function(){document.body.removeChild(ov)};
+  ok.onclick=function(){
+    var pw=i1.value, pw2=i2.value;
+    if(pw!==pw2){err.textContent='Пароли не совпадают';return}
+    fetch('/bases/` + b.ID + `/configurator/admin/users/passwd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,password:pw})})
+      .then(function(r){return r.json()}).then(function(r){
+        if(r.error){err.textContent=r.error;return}
+        document.body.removeChild(ov);
+        cfgInfo('Пароль изменён');
+      })
+  };
+  row.appendChild(ok);row.appendChild(cancel);
+  box.appendChild(i1);box.appendChild(i2);box.appendChild(err);box.appendChild(row);
+  ov.appendChild(box);document.body.appendChild(ov);
+  setTimeout(function(){i1.focus()},50);
 }
 function cfgUserDenyPasswd(id,current){
   fetch('/bases/` + b.ID + `/configurator/admin/users/deny-passwd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,deny:!current})})
