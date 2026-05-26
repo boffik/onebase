@@ -66,7 +66,11 @@ type Entity struct {
 	Name string
 	// Title — человекочитаемое представление (аналог «Синонима» в 1С).
 	// Если пусто, в интерфейсе показывается Name.
-	Title      string
+	Title string
+	// Titles — переводы синонима по языкам (lang code → перевод). Если для
+	// активного языка есть запись, используется она; иначе откатываемся на
+	// Title и затем на Name. Пустой map допустим.
+	Titles     map[string]string
 	Kind       Kind
 	Fields     []Field
 	TableParts []TablePart
@@ -108,9 +112,16 @@ func TablePartTableName(entityName, tpName string) string {
 	return strings.ToLower(entityName) + "_" + strings.ToLower(tpName)
 }
 
-// DisplayName возвращает представление объекта для интерфейса: Title, либо
-// Name как запасной вариант. Name всегда остаётся идентификатором (URL, DSL).
-func (e *Entity) DisplayName() string {
+// DisplayName возвращает представление объекта для интерфейса с учётом языка:
+// сначала пробуется Titles[lang], затем Title (синоним по умолчанию), затем
+// Name. Пустой lang пропускает первый шаг — используется как Name всегда
+// остаётся идентификатором (URL, DSL).
+func (e *Entity) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := e.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
 	if e.Title != "" {
 		return e.Title
 	}

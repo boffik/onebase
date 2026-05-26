@@ -538,7 +538,7 @@ const tplList = `
 {{template "head" .}}{{template "nav" .}}
 <main class="main-list">
 <div class="row-top">
-  <h2>{{.Entity.DisplayName}}</h2>
+  <h2>{{.Entity.DisplayName $.Lang}}</h2>
   <div style="display:flex;gap:8px">
     {{if .Entity.Hierarchical}}
       {{if .TreeView}}
@@ -811,7 +811,7 @@ const tplForm = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:900px">
-  <h2 style="margin-bottom:0">{{if .IsNew}}{{t $.Lang "Создать"}}{{else}}{{t $.Lang "Редактировать"}}{{end}} — {{.Entity.DisplayName}}</h2>
+  <h2 style="margin-bottom:0">{{if .IsNew}}{{t $.Lang "Создать"}}{{else}}{{t $.Lang "Редактировать"}}{{end}} — {{.Entity.DisplayName $.Lang}}</h2>
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}

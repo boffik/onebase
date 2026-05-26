@@ -270,9 +270,9 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			}
 			url := "/ui/" + strings.ToLower(string(e.Kind)) + "/" + e.Name + q
 			if e.Kind == metadata.KindCatalog && catSet[e.Name] {
-				catalogs = append(catalogs, navItem{Label: e.DisplayName(), URL: url})
+				catalogs = append(catalogs, navItem{Label: e.DisplayName(lang), URL: url})
 			} else if e.Kind == metadata.KindDocument && docSet[e.Name] {
-				documents = append(documents, navItem{Label: e.DisplayName(), URL: url})
+				documents = append(documents, navItem{Label: e.DisplayName(lang), URL: url})
 			}
 		}
 		if len(catalogs) > 0 {
@@ -409,7 +409,7 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 			continue
 		}
 		url := "/ui/" + strings.ToLower(string(e.Kind)) + "/" + e.Name
-		item := navItem{Label: e.DisplayName(), URL: url}
+		item := navItem{Label: e.DisplayName(lang), URL: url}
 		if e.Kind == metadata.KindCatalog {
 			catalogs = append(catalogs, item)
 		} else {

@@ -31,9 +31,10 @@ type rawPredefined struct {
 }
 
 type rawEntity struct {
-	Name          string          `yaml:"name"`
-	Title         string          `yaml:"title"`
-	Fields        []rawField      `yaml:"fields"`
+	Name          string            `yaml:"name"`
+	Title         string            `yaml:"title"`
+	Titles        map[string]string `yaml:"titles"`
+	Fields        []rawField        `yaml:"fields"`
 	TableParts    []rawTablePart  `yaml:"tableparts"`
 	Posting       bool            `yaml:"posting"`
 	Numerator     *rawNumerator   `yaml:"numerator"`
@@ -56,7 +57,7 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	if raw.Name == "" {
 		return nil, fmt.Errorf("%s: missing name", path)
 	}
-	e := &Entity{Name: raw.Name, Title: raw.Title, Kind: kind, Posting: raw.Posting, Hierarchical: raw.Hierarchical}
+	e := &Entity{Name: raw.Name, Title: raw.Title, Titles: raw.Titles, Kind: kind, Posting: raw.Posting, Hierarchical: raw.Hierarchical}
 	if raw.Hierarchical {
 		e.HierarchyKind = raw.HierarchyKind
 		if e.HierarchyKind == "" {
