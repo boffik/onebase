@@ -92,6 +92,7 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 			bg, escHTML(u.Login), escHTML(u.FullName), admin, u.CreatedAt.Format("02.01.2006"),
 				u.ID, u.Lang, langLabel,
 			u.ID,
+			u.ID,
 			u.ID, u.DenyPasswdChange, denyTitle, denyStyle, denyIcon,
 			u.ID, u.ShowInList, listTitle, listStyle, listIcon,
 			u.ID)
