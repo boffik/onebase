@@ -36,10 +36,16 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 	langOpts := `<option value="">—</option>`
 	langOptsJS := ""
 	if launcherBundle != nil {
+		// jsEscape — экранирует апостроф и обратный слэш, чтобы Native-имя
+		// языка (например узбекское «O'zbekcha» с апострофом) не закрывало
+		// JS-строку и не ломало парсинг всего блока скриптов админки.
+		jsEscape := func(s string) string {
+			s = strings.ReplaceAll(s, `\`, `\\`)
+			return strings.ReplaceAll(s, `'`, `\'`)
+		}
 		for _, l := range launcherBundle.Available() {
 			langOpts += fmt.Sprintf(`<option value="%s">%s</option>`, l.Code, l.Native)
-
-			langOptsJS += fmt.Sprintf(`,{v:'%s',l:'%s'}`, l.Code, l.Native)
+			langOptsJS += fmt.Sprintf(`,{v:'%s',l:'%s'}`, l.Code, jsEscape(l.Native))
 		}
 	}
 	html := `<div style="padding:16px">
