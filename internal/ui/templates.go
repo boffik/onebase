@@ -577,16 +577,16 @@ const tplList = `
   {{range $entity.Fields}}{{$f := .}}
     {{if eq (str .Type) "date"}}
       <div>
-        <label>{{.Name}} {{t $.Lang "с"}}</label>
+        <label>{{.DisplayName $.Lang}} {{t $.Lang "с"}}</label>
         <input type="date" name="f.{{.Name}}.from" value="{{(filterVal $params .Name).From}}">
       </div>
       <div>
-        <label>{{.Name}} {{t $.Lang "по"}}</label>
+        <label>{{.DisplayName $.Lang}} {{t $.Lang "по"}}</label>
         <input type="date" name="f.{{.Name}}.to" value="{{(filterVal $params .Name).To}}">
       </div>
     {{else if isRef (str .Type)}}
       <div>
-        <label>{{.Name}}</label>
+        <label>{{.DisplayName $.Lang}}</label>
         <select name="f.{{.Name}}">
           <option value="">{{t $.Lang "— все —"}}</option>
           {{range index $refOpts .Name}}
@@ -596,7 +596,7 @@ const tplList = `
       </div>
     {{else}}
       <div>
-        <label>{{.Name}}</label>
+        <label>{{.DisplayName $.Lang}}</label>
         <input type="text" name="f.{{.Name}}" value="{{(filterVal $params .Name).Value}}">
       </div>
     {{end}}
@@ -617,7 +617,7 @@ const tplList = `
 {{if .TreeRows}}
 <div style="overflow-x:auto">
 <table><thead><tr>
-  {{range .Entity.Fields}}<th>{{.Name}}</th>{{end}}
+  {{range .Entity.Fields}}<th>{{.DisplayName $.Lang}}</th>{{end}}
   <th style="width:90px"></th>
 </tr></thead><tbody>
 {{range .TreeRows}}{{$row := .}}{{$isFolder := index $row "is_folder"}}{{$depth := index $row "_depth"}}
@@ -669,7 +669,7 @@ const tplList = `
   {{range .Entity.Fields}}
   <th>
     <a href="?sort={{.Name}}&dir={{nextDir $params .Name}}{{filterQuery $params}}">
-      {{.Name}} {{sortIcon $params .Name}}
+      {{.DisplayName $.Lang}} {{sortIcon $params .Name}}
     </a>
   </th>
   {{end}}
@@ -914,9 +914,9 @@ const tplForm = `
   </select>
 </div>
 {{end}}
-{{range .Entity.Fields}}{{$fn := .Name}}
+{{range .Entity.Fields}}{{$fn := .Name}}{{$flabel := .DisplayName $.Lang}}
 <div class="form-group">
-  <label>{{$fn}}</label>
+  <label>{{$flabel}}</label>
   {{if isRef (str .Type)}}
     <div style="display:flex;gap:6px;align-items:center">
       <select id="ref-{{$fn}}" name="{{$fn}}" style="flex:1">
@@ -942,16 +942,16 @@ const tplForm = `
       <option value="true"  {{if eq (index $.Values $fn) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
   {{else}}
-    <input type="text" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$fn}}">
+    <input type="text" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$flabel}}">
   {{end}}
 </div>
 {{end}}
 
 {{range .Entity.TableParts}}{{$tp := .}}{{$tpName := .Name}}{{$tpRef := index $.TPRefOptions $tpName}}
-<h3>{{$tpName}}</h3>
+<h3>{{$tp.DisplayName $.Lang}}</h3>
 <table class="tp-table">
   <thead><tr>
-    {{range .Fields}}<th>{{.Name}}</th>{{end}}
+    {{range .Fields}}<th>{{.DisplayName $.Lang}}</th>{{end}}
     <th style="width:40px"></th>
   </tr></thead>
   <tbody id="tp-body-{{$tpName}}">
@@ -1259,9 +1259,9 @@ const tplRegister = `
 <table><thead><tr>
   <th>{{t $.Lang "Вид движения"}}</th>
   <th>{{t $.Lang "Регистратор"}}</th>
-  {{range .Register.Dimensions}}<th>{{.Name}}</th>{{end}}
-  {{range .Register.Resources}}<th>{{.Name}}</th>{{end}}
-  {{range .Register.Attributes}}<th>{{.Name}}</th>{{end}}
+  {{range .Register.Dimensions}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .Register.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .Register.Attributes}}<th>{{.DisplayName $.Lang}}</th>{{end}}
 </tr></thead><tbody>
 {{range .Rows}}{{$row := .}}<tr>
   <td>{{$v := index $row "вид_движения"}}{{if eq (str $v) "Приход"}}<span style="color:#16a34a;font-weight:600">▲ {{$v}}</span>{{else}}<span style="color:#dc2626;font-weight:600">▼ {{$v}}</span>{{end}}</td>
@@ -1285,8 +1285,8 @@ const tplRegister = `
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  {{range .Register.Dimensions}}<th>{{.Name}}</th>{{end}}
-  {{range .Register.Resources}}<th>{{.Name}}</th>{{end}}
+  {{range .Register.Dimensions}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .Register.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
 </tr></thead><tbody>
 {{range .Rows}}{{$row := .}}<tr>
   {{range $.Register.Dimensions}}<td>{{index $row .Name}}</td>{{end}}
@@ -1455,8 +1455,8 @@ const tplInfoReg = `
 {{if .Rows}}
 <table><thead><tr>
   {{if .InfoReg.Periodic}}<th>{{t $.Lang "Период"}}</th>{{end}}
-  {{range .InfoReg.Dimensions}}<th>{{.Name}}</th>{{end}}
-  {{range .InfoReg.Resources}}<th>{{.Name}}</th>{{end}}
+  {{range .InfoReg.Dimensions}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .InfoReg.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
   {{if .CanDelete}}<th></th>{{end}}
 </tr></thead><tbody>
 {{range .Rows}}{{$row := .}}<tr>
@@ -1493,7 +1493,7 @@ const tplInfoReg = `
   {{range .InfoReg.Dimensions}}
   {{$dn := .Name}}
   <div class="form-row">
-    <label>{{.Name}} <span style="color:#94a3b8;font-size:11px">[{{t $.Lang "измерение"}}]</span></label>
+    <label>{{.DisplayName $.Lang}} <span style="color:#94a3b8;font-size:11px">[{{t $.Lang "измерение"}}]</span></label>
     {{if .RefEntity}}
     <div style="display:flex;gap:4px;align-items:center">
       <select name="{{$dn}}" id="ird-{{$dn}}" style="flex:1;min-width:0">
@@ -1509,7 +1509,7 @@ const tplInfoReg = `
   {{end}}
   {{range .InfoReg.Resources}}
   <div class="form-row">
-    <label>{{.Name}}</label>
+    <label>{{.DisplayName $.Lang}}</label>
     <input type="text" name="{{.Name}}" value="{{index $.Values .Name}}">
   </div>
   {{end}}
@@ -1852,7 +1852,7 @@ const tplAccountReg = `
   <th>{{t $.Lang "Период"}}</th>
   <th>{{t $.Lang "Дт"}}</th>
   <th>{{t $.Lang "Кт"}}</th>
-  {{range .Register.Resources}}<th>{{.Name}}</th>{{end}}
+  {{range .Register.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
   <th>{{t $.Lang "Регистратор"}}</th>
 </tr></thead>
 <tbody>
@@ -1893,8 +1893,8 @@ const tplAccountReg = `
   <th style="width:100px">{{t $.Lang "Счёт"}}</th>
   <th>{{t $.Lang "Наименование"}}</th>
   {{range .Register.Resources}}
-  <th style="text-align:right">{{.Name}} {{t $.Lang "Дт"}}</th>
-  <th style="text-align:right">{{.Name}} {{t $.Lang "Кт"}}</th>
+  <th style="text-align:right">{{.DisplayName $.Lang}} {{t $.Lang "Дт"}}</th>
+  <th style="text-align:right">{{.DisplayName $.Lang}} {{t $.Lang "Кт"}}</th>
   <th style="text-align:right">{{t $.Lang "Сальдо"}}</th>
   {{end}}
 </tr></thead>

@@ -9,13 +9,17 @@ import (
 )
 
 type rawField struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title"`
+	Titles map[string]string `yaml:"titles"`
+	Type   string            `yaml:"type"`
 }
 
 type rawTablePart struct {
-	Name   string     `yaml:"name"`
-	Fields []rawField `yaml:"fields"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title"`
+	Titles map[string]string `yaml:"titles"`
+	Fields []rawField        `yaml:"fields"`
 }
 
 type rawNumerator struct {
@@ -85,7 +89,7 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 		e.Fields = append(e.Fields, parseField(rf))
 	}
 	for _, rtp := range raw.TableParts {
-		tp := TablePart{Name: rtp.Name}
+		tp := TablePart{Name: rtp.Name, Title: rtp.Title, Titles: rtp.Titles}
 		for _, rf := range rtp.Fields {
 			tp.Fields = append(tp.Fields, parseField(rf))
 		}
@@ -221,7 +225,7 @@ func LoadConstantsFile(path string) ([]*Constant, error) {
 }
 
 func parseField(rf rawField) Field {
-	f := Field{Name: rf.Name, Type: FieldType(rf.Type)}
+	f := Field{Name: rf.Name, Title: rf.Title, Titles: rf.Titles, Type: FieldType(rf.Type)}
 	if strings.HasPrefix(rf.Type, "reference:") {
 		f.RefEntity = strings.TrimPrefix(rf.Type, "reference:")
 	} else if strings.HasPrefix(rf.Type, "enum:") {

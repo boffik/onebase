@@ -19,10 +19,29 @@ const (
 )
 
 type Field struct {
-	Name      string
+	Name string
+	// Title — синоним поля по умолчанию (показывается в UI). Пустой Title →
+	// в интерфейсе используется Name.
+	Title string
+	// Titles — переводы синонима по языкам (lang code → перевод).
+	Titles    map[string]string
 	Type      FieldType
 	RefEntity string // non-empty when Type starts with "reference:"
 	EnumName  string // non-empty when Type starts with "enum:"
+}
+
+// DisplayName возвращает представление поля для интерфейса: Titles[lang] →
+// Title → Name. Name всегда остаётся идентификатором (БД, URL, форма).
+func (f Field) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := f.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if f.Title != "" {
+		return f.Title
+	}
+	return f.Name
 }
 
 type Enum struct {
@@ -41,7 +60,22 @@ type Constant struct {
 
 type TablePart struct {
 	Name   string
+	Title  string
+	Titles map[string]string
 	Fields []Field
+}
+
+// DisplayName возвращает представление табличной части для интерфейса.
+func (tp TablePart) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := tp.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if tp.Title != "" {
+		return tp.Title
+	}
+	return tp.Name
 }
 
 // Numerator describes automatic document numbering.
