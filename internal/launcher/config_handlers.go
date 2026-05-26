@@ -1,4 +1,4 @@
-﻿package launcher
+package launcher
 
 import (
 	"archive/zip"
@@ -89,7 +89,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Upload error: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer file.Close()
@@ -98,7 +98,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Read error: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "ZIP error: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Temp dir error: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -146,7 +146,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	if cerr != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "DB error: " + cerr.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer db.Close()
@@ -155,7 +155,7 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	if err := repo.ImportFromDir(r.Context(), tmpDir); err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Import error: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -166,5 +166,5 @@ func (h *handler) configImportZip(w http.ResponseWriter, r *http.Request) {
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = "panel-backup"
 	data.BackupMessage = "Configuration imported from ZIP"
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }

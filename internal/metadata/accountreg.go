@@ -11,19 +11,36 @@ import (
 
 // AccountRegister is a double-entry bookkeeping register linked to a ChartOfAccounts.
 type AccountRegister struct {
-	Name      string  `yaml:"name"`
-	Title     string  `yaml:"title"`
-	Accounts  string  `yaml:"accounts"` // name of the ChartOfAccounts
-	Resources []Field `yaml:"-"`        // parsed from raw
+	Name      string            `yaml:"name"`
+	Title     string            `yaml:"title"`
+	Titles    map[string]string `yaml:"titles"`
+	Accounts  string            `yaml:"accounts"` // name of the ChartOfAccounts
+	Resources []Field           `yaml:"-"`        // parsed from raw
+}
+
+// DisplayName возвращает заголовок регистра бухгалтерии с учётом языка.
+func (ar *AccountRegister) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := ar.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if ar.Title != "" {
+		return ar.Title
+	}
+	return ar.Name
 }
 
 type rawAccountReg struct {
-	Name      string `yaml:"name"`
-	Title     string `yaml:"title"`
-	Accounts  string `yaml:"accounts"`
+	Name      string            `yaml:"name"`
+	Title     string            `yaml:"title"`
+	Titles    map[string]string `yaml:"titles"`
+	Accounts  string            `yaml:"accounts"`
 	Resources []struct {
-		Name string `yaml:"name"`
-		Type string `yaml:"type"`
+		Name   string            `yaml:"name"`
+		Title  string            `yaml:"title"`
+		Titles map[string]string `yaml:"titles"`
+		Type   string            `yaml:"type"`
 	} `yaml:"resources"`
 }
 
@@ -39,13 +56,19 @@ func LoadAccountRegisterFile(path string) (*AccountRegister, error) {
 	ar := &AccountRegister{
 		Name:     raw.Name,
 		Title:    raw.Title,
+		Titles:   raw.Titles,
 		Accounts: raw.Accounts,
 	}
 	if ar.Title == "" {
 		ar.Title = ar.Name
 	}
 	for _, r := range raw.Resources {
-		ar.Resources = append(ar.Resources, parseField(rawField{Name: r.Name, Type: r.Type}))
+		ar.Resources = append(ar.Resources, parseField(rawField{
+			Name:   r.Name,
+			Title:  r.Title,
+			Titles: r.Titles,
+			Type:   r.Type,
+		}))
 	}
 	return ar, nil
 }

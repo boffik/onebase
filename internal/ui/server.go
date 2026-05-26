@@ -7,8 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/debugger"
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -29,6 +30,8 @@ type Config struct {
 	MaxFileSizeMB int // 0 = use default 50
 	DemoMode      bool
 	DemoMessage   string
+	Lang          string       // base language from config
+	Bundle        *i18n.Bundle // translations
 }
 
 type Server struct {
@@ -52,6 +55,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		maxBytes = 50 * 1024 * 1024
 	}
 	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager()}
+	globalBundle = cfg.Bundle
 	if sched != nil {
 		sched.SetMessageSink(func(userID, text string) { s.messages.Push(userID, text) })
 	}
@@ -67,6 +71,14 @@ func (s *Server) InvalidateWidgetCache() { s.widgetCache.Invalidate() }
 
 // GlobalDebug returns the global debug controller for the server.
 func (s *Server) GlobalDebug() *debugger.GlobalDebugController { return s.globalDebug }
+
+// tr translates a key using the resolved language. Falls back to the key itself.
+func (s *Server) tr(lang, key string) string {
+	if s.cfg.Bundle != nil {
+		return s.cfg.Bundle.T(lang, key)
+	}
+	return key
+}
 
 func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui", s.index)
@@ -122,6 +134,8 @@ func (s *Server) Mount(r chi.Router) {
 	// Self-service: change own password
 	r.Get("/ui/profile/passwd", s.selfPasswd)
 	r.Post("/ui/profile/passwd", s.selfPasswd)
+	// Self-service: change language
+	r.Post("/ui/profile/lang", s.setLang)
 
 	// Admin: active sessions
 	r.Get("/ui/admin/sessions", s.adminSessions)
@@ -196,7 +210,6 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/messages/clear", s.messagesClear)
 }
 
-
 // MountDebug registers debug API routes WITHOUT auth middleware.
 // Must be called outside the auth-protected group so the configurator
 // (running on a different port) can reach the endpoints cross-origin.
@@ -213,6 +226,7 @@ func (s *Server) MountDebug(r chi.Router) {
 		r.Post("/evaluate", s.debugGlobalEvaluate)
 	})
 }
+
 type navSection struct {
 	Kind     string
 	Entities []*metadata.Entity
@@ -249,6 +263,7 @@ func strSet(names []string) map[string]bool {
 }
 
 func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, subName string) []navGroup {
+	lang := s.resolveLang(r)
 	q := "?subsystem=" + subName
 	var nav []navGroup
 
@@ -264,16 +279,16 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			}
 			url := "/ui/" + strings.ToLower(string(e.Kind)) + "/" + e.Name + q
 			if e.Kind == metadata.KindCatalog && catSet[e.Name] {
-				catalogs = append(catalogs, navItem{Label: e.DisplayName(), URL: url})
+				catalogs = append(catalogs, navItem{Label: e.DisplayName(lang), URL: url})
 			} else if e.Kind == metadata.KindDocument && docSet[e.Name] {
-				documents = append(documents, navItem{Label: e.DisplayName(), URL: url})
+				documents = append(documents, navItem{Label: e.DisplayName(lang), URL: url})
 			}
 		}
 		if len(catalogs) > 0 {
-			nav = append(nav, navGroup{Kind: "Справочники", Items: catalogs})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Справочники"), Items: catalogs})
 		}
 		if len(documents) > 0 {
-			nav = append(nav, navGroup{Kind: "Документы", Items: documents})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Документы"), Items: documents})
 		}
 	}
 
@@ -290,16 +305,16 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 				continue
 			}
 			regItems = append(regItems, navItem{
-				Label: reg.Name + " (движения)",
+				Label: reg.DisplayName(lang) + " (" + s.tr(lang, "движения") + ")",
 				URL:   "/ui/register/" + strings.ToLower(reg.Name) + q,
 			})
 			regItems = append(regItems, navItem{
-				Label: reg.Name + " (остатки)",
+				Label: reg.DisplayName(lang) + " (" + s.tr(lang, "остатки") + ")",
 				URL:   "/ui/register/" + strings.ToLower(reg.Name) + "/balances" + q,
 			})
 		}
 		if len(regItems) > 0 {
-			nav = append(nav, navGroup{Kind: "Регистры", Items: regItems})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Регистры"), Items: regItems})
 		}
 	}
 
@@ -317,12 +332,12 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			}
 			label := ir.Name
 			if ir.Periodic {
-				label += " (периодический)"
+				label += " (" + s.tr(lang, "периодический") + ")"
 			}
 			irItems = append(irItems, navItem{Label: label, URL: "/ui/inforeg/" + strings.ToLower(ir.Name) + q})
 		}
 		if len(irItems) > 0 {
-			nav = append(nav, navGroup{Kind: "Регистры сведений", Items: irItems})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Регистры сведений"), Items: irItems})
 		}
 	}
 
@@ -345,7 +360,7 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			repItems = append(repItems, navItem{Label: label, URL: "/ui/report/" + strings.ToLower(rep.Name) + q})
 		}
 		if len(repItems) > 0 {
-			nav = append(nav, navGroup{Kind: "Отчёты", Items: repItems})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Отчёты"), Items: repItems})
 		}
 	}
 
@@ -365,7 +380,7 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			procItems = append(procItems, navItem{Label: label, URL: "/ui/processor/" + strings.ToLower(proc.Name) + q})
 		}
 		if len(procItems) > 0 {
-			nav = append(nav, navGroup{Kind: "Обработки", Items: procItems})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Обработки"), Items: procItems})
 		}
 	}
 
@@ -378,14 +393,10 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			if !jSet[j2.Name] {
 				continue
 			}
-			label := j2.Title
-			if label == "" {
-				label = j2.Name
-			}
-			jItems = append(jItems, navItem{Label: label, URL: "/ui/journal/" + strings.ToLower(j2.Name) + q})
+			jItems = append(jItems, navItem{Label: j2.DisplayName(lang), URL: "/ui/journal/" + strings.ToLower(j2.Name) + q})
 		}
 		if len(jItems) > 0 {
-			nav = append(nav, navGroup{Kind: "Журналы", Items: jItems})
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Журналы"), Items: jItems})
 		}
 	}
 
@@ -393,6 +404,7 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 }
 
 func (s *Server) buildFlatNav(r *http.Request) []navGroup {
+	lang := s.resolveLang(r)
 	entities := s.reg.Entities()
 	sort.Slice(entities, func(i, j int) bool { return entities[i].Name < entities[j].Name })
 
@@ -402,7 +414,7 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 			continue
 		}
 		url := "/ui/" + strings.ToLower(string(e.Kind)) + "/" + e.Name
-		item := navItem{Label: e.DisplayName(), URL: url}
+		item := navItem{Label: e.DisplayName(lang), URL: url}
 		if e.Kind == metadata.KindCatalog {
 			catalogs = append(catalogs, item)
 		} else {
@@ -418,24 +430,24 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 			continue
 		}
 		regItems = append(regItems, navItem{
-			Label: reg.Name + " (движения)",
+			Label: reg.DisplayName(lang) + " (" + s.tr(lang, "движения") + ")",
 			URL:   "/ui/register/" + strings.ToLower(reg.Name),
 		})
 		regItems = append(regItems, navItem{
-			Label: reg.Name + " (остатки)",
+			Label: reg.DisplayName(lang) + " (" + s.tr(lang, "остатки") + ")",
 			URL:   "/ui/register/" + strings.ToLower(reg.Name) + "/balances",
 		})
 	}
 
 	var nav []navGroup
 	if len(catalogs) > 0 {
-		nav = append(nav, navGroup{Kind: "Справочники", Items: catalogs})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Справочники"), Items: catalogs})
 	}
 	if len(documents) > 0 {
-		nav = append(nav, navGroup{Kind: "Документы", Items: documents})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Документы"), Items: documents})
 	}
 	if len(regItems) > 0 {
-		nav = append(nav, navGroup{Kind: "Регистры", Items: regItems})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Регистры"), Items: regItems})
 	}
 
 	inforegs := s.reg.InfoRegisters()
@@ -445,9 +457,9 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 		if !s.can(r, "inforeg", ir.Name, "read") {
 			continue
 		}
-		label := ir.Name
+		label := ir.DisplayName(lang)
 		if ir.Periodic {
-			label += " (периодический)"
+			label += " (" + s.tr(lang, "периодический") + ")"
 		}
 		inforegItems = append(inforegItems, navItem{
 			Label: label,
@@ -455,7 +467,7 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 		})
 	}
 	if len(inforegItems) > 0 {
-		nav = append(nav, navGroup{Kind: "Регистры сведений", Items: inforegItems})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Регистры сведений"), Items: inforegItems})
 	}
 
 	reps := s.reg.Reports()
@@ -465,54 +477,71 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 		if !s.can(r, "report", rep.Name, "run") {
 			continue
 		}
-		label := rep.Title
-		if label == "" {
-			label = rep.Name
-		}
+		label := rep.DisplayName(lang)
 		repItems = append(repItems, navItem{
 			Label: label,
 			URL:   "/ui/report/" + strings.ToLower(rep.Name),
 		})
 	}
 	if len(repItems) > 0 {
-		nav = append(nav, navGroup{Kind: "Отчёты", Items: repItems})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Отчёты"), Items: repItems})
 	}
 
 	procs := s.reg.Processors()
 	sort.Slice(procs, func(i, j int) bool { return procs[i].Name < procs[j].Name })
 	var procItems []navItem
 	for _, proc := range procs {
-		label := proc.Title
-		if label == "" {
-			label = proc.Name
-		}
+		label := proc.DisplayName(lang)
 		procItems = append(procItems, navItem{
 			Label: label,
 			URL:   "/ui/processor/" + strings.ToLower(proc.Name),
 		})
 	}
 	if len(procItems) > 0 {
-		nav = append(nav, navGroup{Kind: "Обработки", Items: procItems})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Обработки"), Items: procItems})
 	}
 
 	journals := s.reg.Journals()
 	sort.Slice(journals, func(i, j int) bool { return journals[i].Name < journals[j].Name })
 	var journalItems []navItem
 	for _, j := range journals {
-		label := j.Title
-		if label == "" {
-			label = j.Name
-		}
-		journalItems = append(journalItems, navItem{Label: label, URL: "/ui/journal/" + strings.ToLower(j.Name)})
+		journalItems = append(journalItems, navItem{Label: j.DisplayName(lang), URL: "/ui/journal/" + strings.ToLower(j.Name)})
 	}
 	if len(journalItems) > 0 {
-		nav = append(nav, navGroup{Kind: "Журналы", Items: journalItems})
+		nav = append(nav, navGroup{Kind: s.tr(lang, "Журналы"), Items: journalItems})
 	}
 
 	if len(s.reg.Constants()) > 0 {
 		nav = append(nav, navGroup{Kind: "Настройки", Items: []navItem{
-			{Label: "Константы", URL: "/ui/constants"},
+			{Label: s.tr(lang, "Константы"), URL: "/ui/constants"},
 		}})
 	}
 	return nav
+}
+
+// resolveLang determines the effective UI language for the current request.
+func (s *Server) resolveLang(r *http.Request) string {
+	if s.cfg.Bundle == nil {
+		return "ru"
+	}
+	var userLang string
+	if u := auth.UserFromContext(r.Context()); u != nil {
+		userLang = u.Lang
+	}
+	accept := r.Header.Get("Accept-Language")
+	return i18n.Resolve(userLang, s.cfg.Lang, accept, s.cfg.Bundle)
+}
+
+// setLang saves the user's preferred language.
+func (s *Server) setLang(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	lang := r.FormValue("lang")
+	u := auth.UserFromContext(r.Context())
+	if u != nil && s.authRepo != nil {
+		_ = s.authRepo.SetUserLang(r.Context(), u.ID, lang)
+	}
+	http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
 }

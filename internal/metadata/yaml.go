@@ -9,13 +9,17 @@ import (
 )
 
 type rawField struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title"`
+	Titles map[string]string `yaml:"titles"`
+	Type   string            `yaml:"type"`
 }
 
 type rawTablePart struct {
-	Name   string     `yaml:"name"`
-	Fields []rawField `yaml:"fields"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title"`
+	Titles map[string]string `yaml:"titles"`
+	Fields []rawField        `yaml:"fields"`
 }
 
 type rawNumerator struct {
@@ -31,9 +35,10 @@ type rawPredefined struct {
 }
 
 type rawEntity struct {
-	Name          string          `yaml:"name"`
-	Title         string          `yaml:"title"`
-	Fields        []rawField      `yaml:"fields"`
+	Name          string            `yaml:"name"`
+	Title         string            `yaml:"title"`
+	Titles        map[string]string `yaml:"titles"`
+	Fields        []rawField        `yaml:"fields"`
 	TableParts    []rawTablePart  `yaml:"tableparts"`
 	Posting       bool            `yaml:"posting"`
 	Numerator     *rawNumerator   `yaml:"numerator"`
@@ -56,7 +61,7 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	if raw.Name == "" {
 		return nil, fmt.Errorf("%s: missing name", path)
 	}
-	e := &Entity{Name: raw.Name, Title: raw.Title, Kind: kind, Posting: raw.Posting, Hierarchical: raw.Hierarchical}
+	e := &Entity{Name: raw.Name, Title: raw.Title, Titles: raw.Titles, Kind: kind, Posting: raw.Posting, Hierarchical: raw.Hierarchical}
 	if raw.Hierarchical {
 		e.HierarchyKind = raw.HierarchyKind
 		if e.HierarchyKind == "" {
@@ -84,7 +89,7 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 		e.Fields = append(e.Fields, parseField(rf))
 	}
 	for _, rtp := range raw.TableParts {
-		tp := TablePart{Name: rtp.Name}
+		tp := TablePart{Name: rtp.Name, Title: rtp.Title, Titles: rtp.Titles}
 		for _, rf := range rtp.Fields {
 			tp.Fields = append(tp.Fields, parseField(rf))
 		}
@@ -101,10 +106,12 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 }
 
 type rawRegister struct {
-	Name       string     `yaml:"name"`
-	Dimensions []rawField `yaml:"dimensions"`
-	Resources  []rawField `yaml:"resources"`
-	Attributes []rawField `yaml:"attributes"`
+	Name       string            `yaml:"name"`
+	Title      string            `yaml:"title"`
+	Titles     map[string]string `yaml:"titles"`
+	Dimensions []rawField        `yaml:"dimensions"`
+	Resources  []rawField        `yaml:"resources"`
+	Attributes []rawField        `yaml:"attributes"`
 }
 
 func LoadRegisterFile(path string) (*Register, error) {
@@ -119,7 +126,7 @@ func LoadRegisterFile(path string) (*Register, error) {
 	if raw.Name == "" {
 		return nil, fmt.Errorf("%s: missing name", path)
 	}
-	reg := &Register{Name: raw.Name}
+	reg := &Register{Name: raw.Name, Title: raw.Title, Titles: raw.Titles}
 	for _, rf := range raw.Dimensions {
 		reg.Dimensions = append(reg.Dimensions, parseField(rf))
 	}
@@ -133,10 +140,12 @@ func LoadRegisterFile(path string) (*Register, error) {
 }
 
 type rawInfoRegister struct {
-	Name       string     `yaml:"name"`
-	Periodic   bool       `yaml:"periodic"`
-	Dimensions []rawField `yaml:"dimensions"`
-	Resources  []rawField `yaml:"resources"`
+	Name       string            `yaml:"name"`
+	Title      string            `yaml:"title"`
+	Titles     map[string]string `yaml:"titles"`
+	Periodic   bool              `yaml:"periodic"`
+	Dimensions []rawField        `yaml:"dimensions"`
+	Resources  []rawField        `yaml:"resources"`
 }
 
 func LoadInfoRegisterFile(path string) (*InfoRegister, error) {
@@ -151,7 +160,7 @@ func LoadInfoRegisterFile(path string) (*InfoRegister, error) {
 	if raw.Name == "" {
 		return nil, fmt.Errorf("%s: missing name", path)
 	}
-	ir := &InfoRegister{Name: raw.Name, Periodic: raw.Periodic}
+	ir := &InfoRegister{Name: raw.Name, Title: raw.Title, Titles: raw.Titles, Periodic: raw.Periodic}
 	for _, rf := range raw.Dimensions {
 		ir.Dimensions = append(ir.Dimensions, parseField(rf))
 	}
@@ -182,10 +191,11 @@ func LoadEnumFile(path string) (*Enum, error) {
 }
 
 type rawConstant struct {
-	Name    string `yaml:"name"`
-	Type    string `yaml:"type"`
-	Default string `yaml:"default"`
-	Label   string `yaml:"label"`
+	Name    string            `yaml:"name"`
+	Type    string            `yaml:"type"`
+	Default string            `yaml:"default"`
+	Label   string            `yaml:"label"`
+	Labels  map[string]string `yaml:"labels"`
 }
 
 type rawConstantsFile struct {
@@ -208,6 +218,7 @@ func LoadConstantsFile(path string) ([]*Constant, error) {
 			Type:    FieldType(rc.Type),
 			Default: rc.Default,
 			Label:   rc.Label,
+			Labels:  rc.Labels,
 		}
 		if strings.HasPrefix(rc.Type, "reference:") {
 			c.RefEntity = strings.TrimPrefix(rc.Type, "reference:")
@@ -220,7 +231,7 @@ func LoadConstantsFile(path string) ([]*Constant, error) {
 }
 
 func parseField(rf rawField) Field {
-	f := Field{Name: rf.Name, Type: FieldType(rf.Type)}
+	f := Field{Name: rf.Name, Title: rf.Title, Titles: rf.Titles, Type: FieldType(rf.Type)}
 	if strings.HasPrefix(rf.Type, "reference:") {
 		f.RefEntity = strings.TrimPrefix(rf.Type, "reference:")
 	} else if strings.HasPrefix(rf.Type, "enum:") {

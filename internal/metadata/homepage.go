@@ -20,10 +20,28 @@ type HomePageRow struct {
 
 // HomePage describes the dashboard layout for /ui/.
 type HomePage struct {
-	Title   string           `yaml:"title"`
-	Layout  string           `yaml:"layout"` // grid | rows (default rows)
-	Rows    []HomePageRow    `yaml:"rows"`
-	Widgets []HomePageWidget `yaml:"widgets"` // flat list, used when layout=grid
+	Title   string            `yaml:"title"`
+	Titles  map[string]string `yaml:"titles"`
+	Layout  string            `yaml:"layout"` // grid | rows (default rows)
+	Rows    []HomePageRow     `yaml:"rows"`
+	Widgets []HomePageWidget  `yaml:"widgets"` // flat list, used when layout=grid
+}
+
+// DisplayTitle возвращает заголовок главной страницы с учётом языка.
+// Если ни перевода, ни Title нет — возвращает русский «Главная».
+func (h *HomePage) DisplayTitle(lang string) string {
+	if h == nil {
+		return "Главная"
+	}
+	if lang != "" {
+		if v, ok := h.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if h.Title != "" {
+		return h.Title
+	}
+	return "Главная"
 }
 
 // LoadHomePage reads config/home_page.yaml. Returns nil, nil when file does not exist —

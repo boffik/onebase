@@ -295,13 +295,14 @@ func (h *handler) cfgAdminRoleSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		writeJSON(w, 400, map[string]any{"error": "Укажите имя роли"})
+		writeJSON(w, 400, map[string]any{"error": tr(lang, "Укажите имя роли")})
 		return
 	}
 	origName := strings.TrimSpace(r.FormValue("orig_name"))
@@ -371,7 +372,7 @@ func (h *handler) cfgAdminRoleSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := h.saveConfigFile(r.Context(), b, targetPath, content); err != nil {
-		writeJSON(w, 500, map[string]any{"error": "Ошибка сохранения: " + err.Error()})
+		writeJSON(w, 500, map[string]any{"error": tr(lang, "Ошибка сохранения") + ": " + err.Error()})
 		return
 	}
 
@@ -387,7 +388,7 @@ func (h *handler) cfgAdminRoleSave(w http.ResponseWriter, r *http.Request) {
 		repo.DeleteRoleByName(r.Context(), origName)
 	}
 	if err := repo.SyncRoles(r.Context(), []*auth.Role{role}); err != nil {
-		writeJSON(w, 500, map[string]any{"error": "Ошибка синхронизации: " + err.Error()})
+		writeJSON(w, 500, map[string]any{"error": tr(lang, "Ошибка синхронизации") + ": " + err.Error()})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})

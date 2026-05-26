@@ -93,6 +93,7 @@ func TestPageManagedForm_Renders(t *testing.T) {
 		"EnumOptions":  map[string]any{},
 		"TPRefOptions": map[string]any{},
 		"User":         nil,
+		"Lang":         "ru",
 	}
 
 	var buf bytes.Buffer

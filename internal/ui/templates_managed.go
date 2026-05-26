@@ -179,7 +179,7 @@ const tplManagedForm = `
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:900px">
   <h2 style="margin-bottom:0">
-    {{if .IsNew}}Создать{{else}}Редактировать{{end}} — {{.Entity.DisplayName}}
+    {{if .IsNew}}{{t $.Lang "Создать"}}{{else}}{{t $.Lang "Редактировать"}}{{end}} — {{.Entity.DisplayName $.Lang}}
     <span style="font-size:11px;color:#10b981;background:#d1fae5;padding:2px 8px;border-radius:10px;vertical-align:middle;font-weight:500" title="Управляемая форма из forms/{{lower .Entity.Name}}/">◇ managed</span>
   </h2>
   {{if .IsPopup}}

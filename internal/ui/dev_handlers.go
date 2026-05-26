@@ -190,7 +190,7 @@ func (s *Server) queryConsoleAnalyze(w http.ResponseWriter, r *http.Request) {
 		singleParam[name] = "__DETECT__"
 		sr, err2 := query.Compile(req.Query, query.CompileOpts{
 			Params:      singleParam,
-		Entities:    s.reg.Entities(),
+			Entities:    s.reg.Entities(),
 			Registers:   s.reg.Registers(),
 			InfoRegs:    s.reg.InfoRegisters(),
 			AccountRegs: s.reg.AccountRegisters(),
@@ -450,9 +450,11 @@ func jsonResp(w http.ResponseWriter, status int, data map[string]any) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
 }
+
 // coerceParams converts string values to appropriate types for query parameters:
 //   - "DD.MM.YYYY" or "DD.MM.YYYY HH:MM" → time.Time
 //   - numeric strings → float64
+//
 // This is needed because JSON params arrive as strings from the query console.
 func coerceParams(params map[string]any) {
 	for k, v := range params {
@@ -494,4 +496,3 @@ func coerceParams(params map[string]any) {
 func parseFloat(s string) (float64, error) {
 	return strconv.ParseFloat(strings.TrimSpace(s), 64)
 }
-

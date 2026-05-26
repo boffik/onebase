@@ -4,6 +4,12 @@ import "html/template"
 
 var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"maskDSN": maskDSN,
+	"t": func(lang, key string) string {
+		if launcherBundle != nil {
+			return launcherBundle.T(lang, key)
+		}
+		return key
+	},
 }).Parse(tplLauncherHead + tplIndex + tplForm + tplConfigResult))
 
 const tplLauncherHead = `
@@ -83,34 +89,34 @@ const tplIndex = `
 <div class="toolbar">
   {{if .Selected}}
   <a class="tbtn" href="/bases/{{.Selected.ID}}/start" onclick="return startBase(this,'{{.Selected.ID}}')">
-    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Предприятие
+    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> {{t $.Lang "Предприятие"}}
   </a>
   <a class="tbtn" href="/bases/{{.Selected.ID}}/configurator">
-    <svg viewBox="0 0 24 24"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14z"/><path d="M6 13h5v4H6zm6-6h4v3h-4zm0 4h4v6h-4zM6 7h5v5H6z"/></svg> Конфигуратор
+    <svg viewBox="0 0 24 24"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14z"/><path d="M6 13h5v4H6zm6-6h4v3h-4zm0 4h4v6h-4zM6 7h5v5H6z"/></svg> {{t $.Lang "Конфигуратор"}}
   </a>
   {{if .Selected.Running}}
   <a class="tbtn danger" href="/bases/{{.Selected.ID}}/stop" onclick="return doPost(this)">
-    <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg> Остановить
+    <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg> {{t $.Lang "Остановить"}}
   </a>
   {{end}}
   <div class="tbtn-sep"></div>
   {{end}}
   <a class="tbtn" href="/bases/new">
-    <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Добавить
+    <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> {{t $.Lang "Добавить"}}
   </a>
   <div style="flex:1"></div>
-  <a class="tbtn danger" href="/killall{{if .Selected}}?sel={{.Selected.ID}}{{end}}" onclick="return doPost(this)" title="Остановить все базы">
-    <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg> Стоп всё
+  <a class="tbtn danger" href="/killall{{if .Selected}}?sel={{.Selected.ID}}{{end}}" onclick="return doPost(this)" title="{{t $.Lang "Остановить все базы"}}">
+    <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg> {{t $.Lang "Стоп всё"}}
   </a>
-  <a class="tbtn danger" href="/quit" onclick="return quitLauncher()" title="Завершить лаунчер">
+  <a class="tbtn danger" href="/quit" onclick="return quitLauncher()" title="{{t $.Lang "Завершить лаунчер"}}">
     <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
   </a>
   {{if .Selected}}
   <a class="tbtn" href="/bases/{{.Selected.ID}}/edit">
-    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg> Изменить
+    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg> {{t $.Lang "Изменить"}}
   </a>
   <a class="tbtn danger" href="/bases/{{.Selected.ID}}/delete" onclick="return confirm('Удалить базу «{{.Selected.Name}}»?') && doPost(this)">
-    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Удалить
+    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> {{t $.Lang "Удалить"}}
   </a>
   {{end}}
 </div>
@@ -125,10 +131,10 @@ const tplIndex = `
   <div style="flex:1;min-width:0">
     <div class="base-name">
       <span class="status-dot"></span>{{.Name}}
-      {{if .Running}}<span class="badge badge-run">работает</span>{{else}}<span class="badge badge-stop">остановлена</span>{{end}}
+      {{if .Running}}<span class="badge badge-run">{{t $.Lang "работает"}}</span>{{else}}<span class="badge badge-stop">{{t $.Lang "остановлена"}}</span>{{end}}
     </div>
     <div class="base-sub">
-      {{if eq .ConfigSource "file"}}📁 {{.Path}}{{else}}🗄 В базе данных{{end}}
+      {{if eq .ConfigSource "file"}}📁 {{.Path}}{{else}}🗄 {{t $.Lang "В базе данных"}}{{end}}
     </div>
     <div class="base-sub">{{maskDSN .DB}} · :{{.Port}}</div>
   </div>
@@ -137,8 +143,8 @@ const tplIndex = `
 {{else}}
 <div style="text-align:center;padding:60px 20px;color:#999">
   <div style="font-size:40px;margin-bottom:12px">🗄</div>
-  <div style="font-size:14px;margin-bottom:6px;font-weight:600">Нет информационных баз</div>
-  <div style="font-size:12px">Нажмите «Добавить» для создания первой базы</div>
+  <div style="font-size:14px;margin-bottom:6px;font-weight:600">{{t $.Lang "Нет информационных баз"}}</div>
+  <div style="font-size:12px">{{t $.Lang "Нажмите «Добавить» для создания первой базы"}}</div>
 </div>
 {{end}}
 </div>
@@ -148,19 +154,19 @@ const tplIndex = `
   {{if .Selected.LogoBase64}}<div style="text-align:center;margin-bottom:8px"><img src="{{.Selected.LogoBase64}}" alt="Logo" style="max-height:80px;max-width:220px"></div>{{end}}
   <div style="font-weight:600;margin-bottom:8px;font-size:12px">{{.Selected.Name}}</div>
   <table style="width:100%;border-collapse:collapse">
-  {{if .Selected.AppName}}<tr><td style="color:#888;padding:2px 0;width:90px">Конфигурация</td><td>{{.Selected.AppName}}</td></tr>{{end}}
-  {{if .Selected.AppVersion}}<tr><td style="color:#888;padding:2px 0">Версия</td><td>{{.Selected.AppVersion}}</td></tr>{{end}}
-  <tr><td style="color:#888;padding:2px 0;width:90px">Режим</td><td>{{if eq .Selected.ConfigSource "database"}}База данных{{else}}Файлы{{end}}</td></tr>
+  {{if .Selected.AppName}}<tr><td style="color:#888;padding:2px 0;width:90px">{{t $.Lang "Конфигурация"}}</td><td>{{.Selected.AppName}}</td></tr>{{end}}
+  {{if .Selected.AppVersion}}<tr><td style="color:#888;padding:2px 0">{{t $.Lang "Версия"}}</td><td>{{.Selected.AppVersion}}</td></tr>{{end}}
+  <tr><td style="color:#888;padding:2px 0;width:90px">{{t $.Lang "Режим"}}</td><td>{{if eq .Selected.ConfigSource "database"}}{{t $.Lang "База данных"}}{{else}}{{t $.Lang "Файлы"}}{{end}}</td></tr>
   {{if eq .Selected.ConfigSource "file"}}
-  <tr><td style="color:#888;padding:2px 0">Путь</td><td style="word-break:break-all">{{.Selected.Path}}</td></tr>
+  <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Путь"}}</td><td style="word-break:break-all">{{.Selected.Path}}</td></tr>
   {{end}}
-  <tr><td style="color:#888;padding:2px 0">Порт</td><td>:{{.Selected.Port}}</td></tr>
-  <tr><td style="color:#888;padding:2px 0">Состояние</td><td>{{if .Selected.Running}}<span style="color:#16a34a;font-weight:600">Работает</span>{{else}}<span style="color:#888">Остановлена</span>{{end}}</td></tr>
-  {{if not .Selected.LastOpened.IsZero}}<tr><td style="color:#888;padding:2px 0">Открыта</td><td>{{.Selected.LastOpened.Format "02.01.2006"}}</td></tr>{{end}}
+  <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Порт"}}</td><td>:{{.Selected.Port}}</td></tr>
+  <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Состояние"}}</td><td>{{if .Selected.Running}}<span style="color:#16a34a;font-weight:600">{{t $.Lang "Работает"}}</span>{{else}}<span style="color:#888">{{t $.Lang "Остановлена"}}</span>{{end}}</td></tr>
+  {{if not .Selected.LastOpened.IsZero}}<tr><td style="color:#888;padding:2px 0">{{t $.Lang "Открыта"}}</td><td>{{.Selected.LastOpened.Format "02.01.2006"}}</td></tr>{{end}}
   </table>
   {{if .Selected.Running}}
   <div style="margin-top:12px">
-    <a href="{{.BaseURL}}" target="_blank" style="font-size:12px;color:#1a5fa8">Открыть в браузере ↗</a>
+    <a href="{{.BaseURL}}" target="_blank" style="font-size:12px;color:#1a5fa8">{{t $.Lang "Открыть в браузере"}} ↗</a>
   </div>
   {{end}}
 </div>
@@ -221,66 +227,66 @@ const tplForm = `
 {{define "page-form"}}
 {{template "lhead" .}}
 <div class="form-page">
-  <h2>{{if .IsNew}}Добавить информационную базу{{else}}Изменить — {{.Base.Name}}{{end}}</h2>
+  <h2>{{if .IsNew}}{{t $.Lang "Добавить информационную базу"}}{{else}}{{t $.Lang "Изменить"}} — {{.Base.Name}}{{end}}</h2>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
   <form method="POST" action="{{if .IsNew}}/bases{{else}}/bases/{{.Base.ID}}{{end}}">
     <div class="fg">
-      <label>Наименование</label>
+      <label>{{t $.Lang "Наименование"}}</label>
       <input name="name" value="{{.Base.Name}}" required autofocus>
     </div>
     <div class="fg">
-      <label>Тип хранения конфигурации</label>
+      <label>{{t $.Lang "Тип хранения конфигурации"}}</label>
       <select name="config_source" onchange="togglePath(this.value)">
-        <option value="database" {{if eq .Base.ConfigSource "database"}}selected{{end}}>В базе данных (встроенная)</option>
-        <option value="file" {{if eq .Base.ConfigSource "file"}}selected{{end}}>Файловый (разработка)</option>
+        <option value="database" {{if eq .Base.ConfigSource "database"}}selected{{end}}>{{t $.Lang "В базе данных (1С-режим)"}}</option>
+        <option value="file" {{if eq .Base.ConfigSource "file"}}selected{{end}}>{{t $.Lang "Файловый (разработка)"}}</option>
       </select>
-      <div class="hint">«В базе данных» — конфигурация хранится в БД, редактирование через Выгрузку/Загрузку. «Файловый» — папка на диске под git.</div>
+      <div class="hint">{{t $.Lang "«В базе данных» — конфигурация хранится в БД, редактирование через Выгрузку/Загрузку. «Файловый» — папка на диске под git."}}</div>
     </div>
     <div class="fg" id="path-row" style="{{if ne .Base.ConfigSource "file"}}display:none{{end}}">
-      <label>Путь к папке конфигурации</label>
+      <label>{{t $.Lang "Путь к папке конфигурации"}}</label>
       <div class="input-browse">
         <input id="inp-path" name="path" value="{{.Base.Path}}" placeholder="/home/user/my-app">
         <button type="button" class="btn-browse" onclick="pickDir('inp-path','Выберите папку конфигурации')">📁</button>
       </div>
-      <div class="hint">Папка должна содержать catalogs/, documents/ и т.д.</div>
+      <div class="hint">{{t $.Lang "Папка должна содержать catalogs/, documents/ и т.д."}}</div>
     </div>
     <div class="fg">
-      <label>Тип базы данных</label>
+      <label>{{t $.Lang "Тип базы данных"}}</label>
       <select name="db_type" onchange="toggleDB(this.value)">
-        <option value="postgres" {{if or (eq .Base.DBType "") (eq .Base.DBType "postgres")}}selected{{end}}>Серверная (PostgreSQL)</option>
-        <option value="sqlite" {{if eq .Base.DBType "sqlite"}}selected{{end}}>Файловая (SQLite)</option>
+        <option value="postgres" {{if or (eq .Base.DBType "") (eq .Base.DBType "postgres")}}selected{{end}}>{{t $.Lang "Серверная (PostgreSQL)"}}</option>
+        <option value="sqlite" {{if eq .Base.DBType "sqlite"}}selected{{end}}>{{t $.Lang "Файловая (SQLite)"}}</option>
       </select>
-      <div class="hint">«Файловая» — один файл .db, без установки сервера, идеальна для pet-проектов. «Серверная» — PostgreSQL.</div>
+      <div class="hint">{{t $.Lang "«Файловая» — один файл .db, без установки сервера, идеальна для pet-проектов. «Серверная» — PostgreSQL."}}</div>
     </div>
     <div class="fg" id="dsn-row" style="{{if eq .Base.DBType "sqlite"}}display:none{{end}}">
-      <label>Строка подключения к PostgreSQL</label>
+      <label>{{t $.Lang "Строка подключения к PostgreSQL"}}</label>
       <input name="db" value="{{.Base.DB}}" placeholder="postgres://localhost/mydb?sslmode=disable">
-      <div class="hint">База данных будет создана автоматически, если не существует.</div>
+      <div class="hint">{{t $.Lang "База данных будет создана автоматически, если не существует."}}</div>
     </div>
     <div class="fg" id="dbpath-row" style="{{if ne .Base.DBType "sqlite"}}display:none{{end}}">
-      <label>Путь к файлу SQLite</label>
+      <label>{{t $.Lang "Путь к файлу SQLite"}}</label>
       <div class="input-browse">
         <input id="inp-dbpath" name="db_path" value="{{.Base.DBPath}}" placeholder="C:\onebase\mydb.db" onblur="normalizeDBPath('inp-dbpath')">
         <button type="button" class="btn-browse" onclick="pickSQLiteDir('inp-dbpath')">📁</button>
       </div>
-      <div class="hint">Файл будет создан, если не существует. Расширение .db рекомендуется.</div>
+      <div class="hint">{{t $.Lang "Файл будет создан, если не существует. Расширение .db рекомендуется."}}</div>
     </div>
     <div class="form-row">
       <div class="fg">
-        <label>Порт сервера</label>
+        <label>{{t $.Lang "Порт сервера"}}</label>
         <input name="port" type="number" value="{{if .Base.Port}}{{.Base.Port}}{{else}}8080{{end}}" min="1024" max="65535">
-        <div class="hint">У каждой базы должен быть уникальный порт. Первая база: 8080, вторая: 8081 и т.д.</div>
+        <div class="hint">{{t $.Lang "У каждой базы должен быть уникальный порт. Первая база: 8080, вторая: 8081 и т.д."}}</div>
       </div>
     </div>
     {{if .IsNew}}
     <div class="cbrow" id="scaffold-row">
       <input type="checkbox" name="scaffold" id="scaffold" value="1">
-      <label for="scaffold" id="scaffold-label">Создать пустую конфигурацию (новая база)</label>
+      <label for="scaffold" id="scaffold-label">{{t $.Lang "Создать пустую конфигурацию (новая база)"}}</label>
     </div>
     {{end}}
     <div class="form-btns">
-      <button class="btn-ok" type="submit">{{if .IsNew}}Добавить{{else}}Сохранить{{end}}</button>
-      <a class="btn-cancel" href="/">Отмена</a>
+      <button class="btn-ok" type="submit">{{if .IsNew}}{{t $.Lang "Добавить"}}{{else}}{{t $.Lang "Сохранить"}}{{end}}</button>
+      <a class="btn-cancel" href="/">{{t $.Lang "Отмена"}}</a>
     </div>
   </form>
 </div>
@@ -370,7 +376,7 @@ const tplConfigResult = `
   <h2>{{.Title}}</h2>
   <p style="margin-bottom:12px;font-size:13px;color:#555">{{.Message}}</p>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
-  <div style="margin-top:14px"><a class="btn-cancel" href="/">← Назад</a></div>
+  <div style="margin-top:14px"><a class="btn-cancel" href="/">← {{t $.Lang "Назад"}}</a></div>
 </div>
 </body></html>
 {{end}}

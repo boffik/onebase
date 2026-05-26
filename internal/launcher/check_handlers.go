@@ -50,6 +50,7 @@ func (h *handler) configuratorCheck(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
+	lang := resolveLang(r)
 	kind := r.FormValue("kind")
 	source := r.FormValue("source")
 	name := strings.TrimSpace(r.FormValue("name"))
@@ -65,7 +66,7 @@ func (h *handler) configuratorCheck(w http.ResponseWriter, r *http.Request) {
 	case "entity":
 		issues = checkEntityYAML(source, name)
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "неизвестный kind: " + kind})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": tr(lang, "неизвестный kind") + ": " + kind})
 		return
 	}
 	writeJSON(w, http.StatusOK, checkResponse{
@@ -84,6 +85,7 @@ func (h *handler) configuratorCheckAll(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 
 	// Materialise the project into a temp dir (or use the file path directly).
 	dir, cleanup, err := materializeProject(r.Context(), h, b)
@@ -91,7 +93,7 @@ func (h *handler) configuratorCheckAll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, checkResponse{
 			OK:     false,
 			Total:  1,
-			Issues: []checkIssue{{Message: "не удалось получить конфигурацию: " + err.Error()}},
+			Issues: []checkIssue{{Message: tr(lang, "не удалось получить конфигурацию") + ": " + err.Error()}},
 		})
 		return
 	}
@@ -452,4 +454,3 @@ func alreadyReported(issues []checkIssue, msg string) bool {
 	}
 	return false
 }
-

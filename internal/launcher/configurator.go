@@ -1,4 +1,4 @@
-﻿package launcher
+package launcher
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/converter"
+	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -167,10 +168,10 @@ type cfgReport struct {
 // the raw YAML alongside parsed fields so the editor can show "источник YAML"
 // straight away without re-marshalling.
 type cfgWidget struct {
-	Name    string
-	Type    string
-	Title   string
-	YAML    string
+	Name  string
+	Type  string
+	Title string
+	YAML  string
 }
 
 type cfgModule struct {
@@ -239,32 +240,34 @@ type cfgSubsystem struct {
 }
 
 type configuratorData struct {
-	Base       *Base
-	AppName    string
-	AppVersion string
-	AppLogo    string
-	DSNMasked  string
-	Tab        string // "tree" | "convert" | "files"
-	Entities  []cfgEntity
-	Catalogs  []cfgEntity
-	Docs      []cfgEntity
-	Registers []cfgRegister
+	Base             *Base
+	AppName          string
+	AppVersion       string
+	AppLogo          string
+	AppLang          string
+	AvailableLangs   []i18n.Lang
+	DSNMasked        string
+	Tab              string // "tree" | "convert" | "files"
+	Entities         []cfgEntity
+	Catalogs         []cfgEntity
+	Docs             []cfgEntity
+	Registers        []cfgRegister
 	InfoRegisters    []cfgInfoRegister
 	AccountRegisters []cfgAccountRegister
-	Enums     []cfgEnum
-	Constants []cfgConstant
-	Reports   []cfgReport
-	Modules    []cfgModule
-	Processors []cfgProcessor
-	PrintForms    []cfgPrintForm
-	DSLPrintForms []cfgDSLPrintForm
+	Enums            []cfgEnum
+	Constants        []cfgConstant
+	Reports          []cfgReport
+	Modules          []cfgModule
+	Processors       []cfgProcessor
+	PrintForms       []cfgPrintForm
+	DSLPrintForms    []cfgDSLPrintForm
 	// План 37, этап 4: управляемые формы.
 	ManagedForms []cfgManagedForm
 	EditingForm  *cfgManagedForm
-	Subsystems []cfgSubsystem
-	Widgets    []cfgWidget
+	Subsystems   []cfgSubsystem
+	Widgets      []cfgWidget
 	HomePageYAML string
-	Error     string
+	Error        string
 	// all entity names for reference picker
 	AllEntityNames []string
 	// all enum names for enum-type field picker
@@ -298,6 +301,7 @@ type configuratorData struct {
 	// ConfigDirty: на диске есть изменения конфигурации новее, чем запуск базы
 	// — пользователю нужно перезапустить базу, чтобы применить.
 	ConfigDirty bool
+	Lang        string
 }
 
 type backupFile struct {
@@ -329,7 +333,7 @@ func (h *handler) configuratorPage(w http.ResponseWriter, r *http.Request) {
 	if cookie, cerr := r.Cookie("onebase_session"); cerr == nil {
 		data.SessionToken = cookie.Value
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
@@ -338,6 +342,7 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	srcDir := strings.TrimSpace(r.FormValue("src_dir"))
 	apply := r.FormValue("apply") == "1"
@@ -346,15 +351,15 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 	data.ConvertSrcDir = srcDir
 
 	if srcDir == "" {
-		data.Error = "Укажите путь к папке XML-выгрузки конфигурации"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Укажите путь к папке XML-выгрузки конфигурации")
+		renderCfg(w, r, data)
 		return
 	}
 
 	outDir, err := workspacePath(b.ID + "-convert")
 	if err != nil {
 		data.Error = err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	// clean previous conversion
@@ -362,8 +367,8 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 
 	rep, err := converter.Convert(converter.Options{SourceDir: srcDir, OutDir: outDir})
 	if err != nil {
-		data.Error = "Ошибка конвертации: " + err.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка конвертации") + ": " + err.Error()
+		renderCfg(w, r, data)
 		return
 	}
 	data.ConvertResult = rep.String()
@@ -372,23 +377,23 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 		if b.ConfigSource == "database" {
 			db, cerr := OpenDB(r.Context(), b)
 			if cerr != nil {
-				data.Error = "Ошибка подключения к БД: " + cerr.Error()
-				renderCfg(w, data)
+				data.Error = tr(lang, "Ошибка подключения к БД") + ": " + cerr.Error()
+				renderCfg(w, r, data)
 				return
 			}
 			defer db.Close()
 			repo := configdb.New(db)
 			repo.EnsureSchema(r.Context())
 			if cerr := repo.ImportFromDir(r.Context(), outDir); cerr != nil {
-				data.Error = "Ошибка импорта: " + cerr.Error()
-				renderCfg(w, data)
+				data.Error = tr(lang, "Ошибка импорта") + ": " + cerr.Error()
+				renderCfg(w, r, data)
 				return
 			}
 		} else {
 			// file mode — copy files into base path
 			if cerr := copyDir(outDir, b.Path); cerr != nil {
-				data.Error = "Ошибка копирования: " + cerr.Error()
-				renderCfg(w, data)
+				data.Error = tr(lang, "Ошибка копирования") + ": " + cerr.Error()
+				renderCfg(w, r, data)
 				return
 			}
 		}
@@ -401,7 +406,7 @@ func (h *handler) configuratorConvert(w http.ResponseWriter, r *http.Request) {
 		data = fresh
 	}
 
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── data loading ──────────────────────────────────────────────────────────────
@@ -439,7 +444,11 @@ func configDirtyAfter(rootDir string, threshold time.Time) bool {
 	return dirty
 }
 
-func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configuratorData {
+func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...string) *configuratorData {
+	l := "ru"
+	if len(lang) > 0 {
+		l = lang[0]
+	}
 	data := &configuratorData{Base: b, Tab: tab, PlatformVer: version.String(), UIServerURL: fmt.Sprintf("http://localhost:%d", b.Port), DSNMasked: maskDSN(b.DB), InlineJSYaml: InlineJSYaml}
 
 	if startedAt, ok := h.runner.StartedAt(b.ID); ok {
@@ -455,7 +464,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	if b.ConfigSource == "database" {
 		db, cerr := OpenDB(ctx, b)
 		if cerr != nil {
-			data.Error = "Нет подключения к БД: " + cerr.Error()
+			data.Error = tr(l, "Нет подключения к БД") + ": " + cerr.Error()
 			return data
 		}
 		defer db.Close()
@@ -466,7 +475,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 		}
 		empty, _ := repo.IsEmpty(ctx)
 		if empty {
-			data.Error = "Конфигурация не загружена в базу данных. Воспользуйтесь вкладкой «Файлы»."
+			data.Error = tr(l, "Конфигурация не загружена в базу данных. Воспользуйтесь вкладкой «Файлы».")
 			return data
 		}
 		proj, err = project.LoadFromDB(ctx, repo)
@@ -475,7 +484,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 	}
 
 	if err != nil {
-		data.Error = "Ошибка загрузки конфигурации: " + err.Error()
+		data.Error = tr(l, "Ошибка загрузки конфигурации") + ": " + err.Error()
 		return data
 	}
 	defer proj.Close()
@@ -484,6 +493,10 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 		data.AppName = appCfg.Name
 		data.AppVersion = appCfg.Version
 		data.AppLogo = appCfg.Logo
+		data.AppLang = appCfg.Lang
+	}
+	if launcherBundle != nil {
+		data.AvailableLangs = launcherBundle.Available()
 	}
 
 	sources, postingSources := readOSSources(proj.Dir)
@@ -576,26 +589,26 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string) *configu
 		pfByDoc[strings.ToLower(pf.Document)] = append(pfByDoc[strings.ToLower(pf.Document)], cpf)
 	}
 
-		// load DSL print forms (.os)
-		for _, df := range proj.DSLPrintForms {
-			cpf := cfgDSLPrintForm{
-				Name:      df.Name,
-				Document:  df.Document,
-				Source:    df.Source,
-				FileName:  df.Name + ".os",
-				Overrides: yamlIndex[strings.ToLower(df.Document)+"|"+strings.ToLower(df.Name)],
-			}
-			if df.Layout != nil {
-				cpf.HasLayout = true
-				cpf.LayoutPreview = template.HTML(df.Layout.PreviewHTML())
-				if df.LayoutPath != "" {
-					if raw, err := os.ReadFile(df.LayoutPath); err == nil {
-						cpf.LayoutYAML = string(raw)
-					}
+	// load DSL print forms (.os)
+	for _, df := range proj.DSLPrintForms {
+		cpf := cfgDSLPrintForm{
+			Name:      df.Name,
+			Document:  df.Document,
+			Source:    df.Source,
+			FileName:  df.Name + ".os",
+			Overrides: yamlIndex[strings.ToLower(df.Document)+"|"+strings.ToLower(df.Name)],
+		}
+		if df.Layout != nil {
+			cpf.HasLayout = true
+			cpf.LayoutPreview = template.HTML(df.Layout.PreviewHTML())
+			if df.LayoutPath != "" {
+				if raw, err := os.ReadFile(df.LayoutPath); err == nil {
+					cpf.LayoutYAML = string(raw)
 				}
 			}
-			data.DSLPrintForms = append(data.DSLPrintForms, cpf)
 		}
+		data.DSLPrintForms = append(data.DSLPrintForms, cpf)
+	}
 	for _, e := range data.Entities {
 		data.AllEntityNames = append(data.AllEntityNames, e.Name)
 		e.LinkedPrintForms = pfByDoc[strings.ToLower(e.Name)]
@@ -862,11 +875,11 @@ type cfgQBField struct {
 }
 
 type cfgQBSource struct {
-	ID      string        `json:"id"`
-	Label   string        `json:"label"`
-	Group   string        `json:"group"`
-	VTParam string        `json:"vtParam,omitempty"`
-	Fields  []cfgQBField  `json:"fields"`
+	ID      string       `json:"id"`
+	Label   string       `json:"label"`
+	Group   string       `json:"group"`
+	VTParam string       `json:"vtParam,omitempty"`
+	Fields  []cfgQBField `json:"fields"`
 }
 
 func cfgQBFieldType(t string) string {
@@ -1150,6 +1163,7 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	entityName := r.FormValue("entity")
 	moduleType := r.FormValue("module_type")
@@ -1183,12 +1197,12 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.ModuleSaved = true
 		data.ModuleSavedEntity = entityName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // entityToFilename converts "ПоступлениеТоваров" → "поступлениеТоваров.os"
@@ -1333,6 +1347,7 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -1359,8 +1374,8 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if entityDir == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Файл сущности не найден: " + entityName
-		renderCfg(w, data)
+		data.Error = tr(lang, "Файл сущности не найден") + ": " + entityName
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -1368,8 +1383,8 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	raw, err := os.ReadFile(filePath)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Ошибка чтения: " + err.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка чтения") + ": " + err.Error()
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -1377,8 +1392,8 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	var doc map[string]any
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Ошибка YAML: " + err.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка YAML") + ": " + err.Error()
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -1446,22 +1461,22 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	out, err := yaml.Marshal(doc)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Ошибка сериализации: " + err.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка сериализации") + ": " + err.Error()
+		renderCfg(w, r, data)
 		return
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if err := os.WriteFile(filePath, out, 0o644); err != nil {
-		data.Error = "Ошибка сохранения: " + err.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + err.Error()
+		renderCfg(w, r, data)
 		return
 	}
 
 	fresh := h.loadCfgData(r.Context(), b, "tree")
 	fresh.FieldsSaved = true
 	fresh.FieldsSavedEntity = entityName
-	renderCfg(w, fresh)
+	renderCfg(w, r, fresh)
 }
 
 func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request) {
@@ -1470,6 +1485,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -1508,8 +1524,8 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 				if typ == "enum" {
 					kind = "перечисление"
 				}
-				data.Error = fmt.Sprintf("Поле «%s»: выберите %s", name, kind)
-				renderCfg(w, data)
+				data.Error = fmt.Sprintf(tr(lang, "Поле «%s»: выберите %s"), name, kind)
+				renderCfg(w, r, data)
 				return
 			}
 			typ = typ + ":" + ref
@@ -1531,8 +1547,8 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 				if typ == "enum" {
 					kind = "перечисление"
 				}
-				data.Error = fmt.Sprintf("Поле «%s»: выберите %s", name, kind)
-				renderCfg(w, data)
+				data.Error = fmt.Sprintf(tr(lang, "Поле «%s»: выберите %s"), name, kind)
+				renderCfg(w, r, data)
 				return
 			}
 			typ = typ + ":" + ref
@@ -1557,8 +1573,8 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 					if typ == "enum" {
 						kind = "перечисление"
 					}
-					data.Error = fmt.Sprintf("Поле «%s.%s»: выберите %s", tpName, name, kind)
-					renderCfg(w, data)
+					data.Error = fmt.Sprintf(tr(lang, "Поле «%s.%s»: выберите %s"), tpName, name, kind)
+					renderCfg(w, r, data)
 					return
 				}
 				typ = typ + ":" + ref
@@ -1595,8 +1611,8 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 					if typ == "enum" {
 						kind = "перечисление"
 					}
-					data.Error = fmt.Sprintf("Поле «%s.%s»: выберите %s", tpKey, name, kind)
-					renderCfg(w, data)
+					data.Error = fmt.Sprintf(tr(lang, "Поле «%s.%s»: выберите %s"), tpKey, name, kind)
+					renderCfg(w, r, data)
 					return
 				}
 				typ = typ + ":" + ref
@@ -1615,12 +1631,12 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = entityName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) configuratorDeleteEntity(w http.ResponseWriter, r *http.Request) {
@@ -1629,6 +1645,7 @@ func (h *handler) configuratorDeleteEntity(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -1648,11 +1665,11 @@ func (h *handler) configuratorDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if delErr != nil {
-		data.Error = "Ошибка удаления: " + delErr.Error()
+		data.Error = tr(lang, "Ошибка удаления") + ": " + delErr.Error()
 	} else {
-		data.Error = "Сущность «" + entityName + "» удалена"
+		data.Error = tr(lang, "Сущность «") + entityName + tr(lang, "» удалена")
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func deleteEntityFromFile(dir, entityName string) error {
@@ -1694,7 +1711,10 @@ func (h *handler) deleteEntityFromDB(ctx context.Context, b *Base, entityName st
 	return fmt.Errorf("сущность %q не найдена", entityName)
 }
 
-func renderCfg(w http.ResponseWriter, data *configuratorData) {
+func renderCfg(w http.ResponseWriter, r *http.Request, data *configuratorData) {
+	if data.Lang == "" {
+		data.Lang = resolveLang(r)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := cfgTmpl.ExecuteTemplate(w, "cfg-main", data); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -1802,6 +1822,7 @@ func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -1838,12 +1859,12 @@ func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = regName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── New object creation ───────────────────────────────────────────────────────
@@ -1854,6 +1875,7 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -1864,16 +1886,16 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 
 	if name == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Укажите имя объекта"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Укажите имя объекта")
+		renderCfg(w, r, data)
 		return
 	}
 
 	subdir, content := newObjectContent(kind, name)
 	if subdir == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Неизвестный тип объекта: " + kind
-		renderCfg(w, data)
+		data.Error = tr(lang, "Неизвестный тип объекта") + ": " + kind
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -1903,14 +1925,14 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 
 	if saveErr != nil {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Ошибка создания: " + saveErr.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка создания") + ": " + saveErr.Error()
+		renderCfg(w, r, data)
 		return
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	data.FieldsSavedEntity = name
 	data.FieldsSaved = true
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func newObjectContent(kind, name string) (subdir, content string) {
@@ -1947,6 +1969,7 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	enumName := r.FormValue("enum_name")
 	rawValues := r.FormValue("values")
@@ -1991,7 +2014,9 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 			}
 			p := filepath.Join(dir, f.Name())
 			raw, _ := os.ReadFile(p)
-			var hdr struct{ Name string `yaml:"name"` }
+			var hdr struct {
+				Name string `yaml:"name"`
+			}
 			if yaml.Unmarshal(raw, &hdr) == nil && hdr.Name == enumName {
 				targetFile = p
 				break
@@ -2002,12 +2027,12 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = enumName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── Constant save ─────────────────────────────────────────────────────────────
@@ -2018,6 +2043,7 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	constName := r.FormValue("const_name")
 	label := strings.TrimSpace(r.FormValue("label"))
@@ -2129,12 +2155,12 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = constName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── Report save ───────────────────────────────────────────────────────────────
@@ -2145,6 +2171,7 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	repName := r.FormValue("report_name")
 	query := r.FormValue("query")
@@ -2158,10 +2185,10 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 		Label string `yaml:"label,omitempty"`
 	}
 	type saveReport struct {
-		Name   string      `yaml:"name"`
-		Title  string      `yaml:"title,omitempty"`
-		Params []saveParam `yaml:"params,omitempty"`
-		Query  string      `yaml:"query"`
+		Name      string      `yaml:"name"`
+		Title     string      `yaml:"title,omitempty"`
+		Params    []saveParam `yaml:"params,omitempty"`
+		Query     string      `yaml:"query"`
 		ChartProc string      `yaml:"chart_proc,omitempty"`
 	}
 
@@ -2255,12 +2282,12 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = repName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── Common module save ────────────────────────────────────────────────────────
@@ -2271,6 +2298,7 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	moduleName := r.FormValue("module_name")
 	source := r.FormValue("source")
@@ -2298,12 +2326,12 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.ModuleSaved = true
 		data.ModuleSavedEntity = moduleName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func moduleNameToFilename(name string) string {
@@ -2323,6 +2351,7 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	procName := r.FormValue("processor_name")
 	title := strings.TrimSpace(r.FormValue("title"))
@@ -2391,12 +2420,12 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = procName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func processorSrcFilename(name string) string {
@@ -2416,14 +2445,15 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	filename := strings.TrimSpace(r.FormValue("printform_filename"))
 	source := r.FormValue("source")
 
 	if filename == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Имя файла печатной формы не указано"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Имя файла печатной формы не указано")
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -2460,12 +2490,12 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = pfName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Request) {
@@ -2474,14 +2504,15 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	name := strings.TrimSpace(r.FormValue("name"))
 	document := strings.TrimSpace(r.FormValue("document"))
 
 	if name == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Имя печатной формы обязательно"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Имя печатной формы обязательно")
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -2515,12 +2546,12 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка создания: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка создания") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = name
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request) {
@@ -2529,6 +2560,7 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	layoutName := strings.TrimSpace(r.FormValue("layout_name"))
 	source := r.FormValue("source")
@@ -2584,15 +2616,14 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения макета: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения макета") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = layoutName
 		data.SelectedTreeID = "mkt-" + layoutName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
-
 
 // ── Subsystem save ──────────────────────────────────────────────────────────
 
@@ -2602,6 +2633,7 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -2666,19 +2698,19 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if err := os.WriteFile(targetFile, out, 0o644); err != nil {
-		data.Error = "Ошибка сохранения: " + err.Error()
-		renderCfg(w, data)
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + err.Error()
+		renderCfg(w, r, data)
 		return
 	}
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = subName
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 
 	// reload tree to reflect changes
 	fresh := h.loadCfgData(r.Context(), b, "tree")
 	fresh.FieldsSaved = true
 	fresh.FieldsSavedEntity = subName
-	renderCfg(w, fresh)
+	renderCfg(w, r, fresh)
 }
 
 // ── App config save ───────────────────────────────────────────────────────────
@@ -2690,16 +2722,18 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Parse multipart form (up to 2MB for logo)
+	lang := resolveLang(r)
 	r.ParseMultipartForm(2 << 20)
 	newName := strings.TrimSpace(r.FormValue("app_name"))
 	newVersion := strings.TrimSpace(r.FormValue("app_version"))
+	newLang := strings.TrimSpace(r.FormValue("app_lang"))
 	existingLogo := strings.TrimSpace(r.FormValue("app_logo_existing"))
 	removeLogo := r.FormValue("app_logo_remove") == "1"
 
 	if newName == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Имя конфигурации не может быть пустым"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Имя конфигурации не может быть пустым")
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -2717,14 +2751,14 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 		logoData, rerr := io.ReadAll(file)
 		if rerr != nil {
 			data := h.loadCfgData(r.Context(), b, "tree")
-			data.Error = "Ошибка чтения логотипа: " + rerr.Error()
-			renderCfg(w, data)
+			data.Error = tr(lang, "Ошибка чтения логотипа") + ": " + rerr.Error()
+			renderCfg(w, r, data)
 			return
 		}
 		if len(logoData) > 2<<20 {
 			data := h.loadCfgData(r.Context(), b, "tree")
-			data.Error = "Логотип слишком большой (максимум 2 МБ)"
-			renderCfg(w, data)
+			data.Error = tr(lang, "Логотип слишком большой (максимум 2 МБ)")
+			renderCfg(w, r, data)
 			return
 		}
 		// Determine storage path
@@ -2767,9 +2801,10 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	type saveAppConfig struct {
 		Name    string `yaml:"name"`
 		Version string `yaml:"version,omitempty"`
+		Lang    string `yaml:"lang,omitempty"`
 		Logo    string `yaml:"logo,omitempty"`
 	}
-	out, _ := yaml.Marshal(saveAppConfig{Name: newName, Version: newVersion, Logo: logoPath})
+	out, _ := yaml.Marshal(saveAppConfig{Name: newName, Version: newVersion, Lang: newLang, Logo: logoPath})
 
 	var saveErr error
 	if b.ConfigSource == "database" {
@@ -2792,12 +2827,12 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "__app__"
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── InfoRegister field save ───────────────────────────────────────────────────
@@ -2813,7 +2848,9 @@ func findInfoRegFilePath(dir, name string) (string, error) {
 		}
 		p := filepath.Join(dir, "inforegs", e.Name())
 		raw, _ := os.ReadFile(p)
-		var tmp struct{ Name string `yaml:"name"` }
+		var tmp struct {
+			Name string `yaml:"name"`
+		}
 		if yaml.Unmarshal(raw, &tmp) == nil && tmp.Name == name {
 			return p, nil
 		}
@@ -2851,7 +2888,9 @@ func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg)
 		if err := rows.Scan(&p, &content); err != nil {
 			continue
 		}
-		var tmp struct{ Name string `yaml:"name"` }
+		var tmp struct {
+			Name string `yaml:"name"`
+		}
 		if yaml.Unmarshal(content, &tmp) == nil && tmp.Name == reg.Name {
 			targetPath = p
 			break
@@ -2879,6 +2918,7 @@ func (h *handler) configuratorSaveInfoRegFields(w http.ResponseWriter, r *http.R
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -2913,12 +2953,12 @@ func (h *handler) configuratorSaveInfoRegFields(w http.ResponseWriter, r *http.R
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = reg.Name
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── AccountRegister save ───────────────────────────────────────────────────────
@@ -2934,7 +2974,9 @@ func findAccountRegFilePath(dir, name string) (string, error) {
 		}
 		p := filepath.Join(dir, "accountregs", e.Name())
 		raw, _ := os.ReadFile(p)
-		var tmp struct{ Name string `yaml:"name"` }
+		var tmp struct {
+			Name string `yaml:"name"`
+		}
 		if yaml.Unmarshal(raw, &tmp) == nil && tmp.Name == name {
 			return p, nil
 		}
@@ -2974,7 +3016,9 @@ func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccou
 		if err := rows.Scan(&p, &content); err != nil {
 			continue
 		}
-		var tmp struct{ Name string `yaml:"name"` }
+		var tmp struct {
+			Name string `yaml:"name"`
+		}
 		if yaml.Unmarshal(content, &tmp) == nil && tmp.Name == reg.Name {
 			targetPath = p
 			break
@@ -2999,6 +3043,7 @@ func (h *handler) configuratorSaveAccountRegister(w http.ResponseWriter, r *http
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -3029,12 +3074,12 @@ func (h *handler) configuratorSaveAccountRegister(w http.ResponseWriter, r *http
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = reg.Name
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // ── Predefined items save ─────────────────────────────────────────────────────
@@ -3045,6 +3090,7 @@ func (h *handler) configuratorSavePredefined(w http.ResponseWriter, r *http.Requ
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -3083,12 +3129,12 @@ func (h *handler) configuratorSavePredefined(w http.ResponseWriter, r *http.Requ
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = entityName
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func savePredefinedToFile(dir, entityName string, predefined interface{}) error {
@@ -3104,7 +3150,9 @@ func savePredefinedToFile(dir, entityName string, predefined interface{}) error 
 			if err != nil {
 				continue
 			}
-			var top struct{ Name string `yaml:"name"` }
+			var top struct {
+				Name string `yaml:"name"`
+			}
 			if yaml.Unmarshal(raw, &top) != nil || top.Name != entityName {
 				continue
 			}
@@ -3146,7 +3194,9 @@ func (h *handler) savePredefinedToDB(ctx context.Context, b *Base, entityName st
 		if err := rows.Scan(&p, &content); err != nil {
 			continue
 		}
-		var top struct{ Name string `yaml:"name"` }
+		var top struct {
+			Name string `yaml:"name"`
+		}
 		if yaml.Unmarshal(content, &top) == nil && top.Name == entityName {
 			targetPath = p
 			rawContent = content

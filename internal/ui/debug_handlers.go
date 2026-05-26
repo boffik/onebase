@@ -51,11 +51,11 @@ func (s *Server) debugGlobalEnable(w http.ResponseWriter, r *http.Request) {
 	s.interp.DebugHook = sess
 	log.Printf("[DEBUG] enable done, session=%p enabled=%v", sess, s.globalDebug.IsEnabled())
 	writeJSON(w, 200, map[string]any{
-		"status":       "enabled",
-		"session":      "global",
-		"dbg_ptr":      fmt.Sprintf("%p", s.globalDebug),
-		"sess_ptr":     fmt.Sprintf("%p", sess),
-		"interp_ptr":   fmt.Sprintf("%p", s.interp),
+		"status":     "enabled",
+		"session":    "global",
+		"dbg_ptr":    fmt.Sprintf("%p", s.globalDebug),
+		"sess_ptr":   fmt.Sprintf("%p", sess),
+		"interp_ptr": fmt.Sprintf("%p", s.interp),
 	})
 }
 
@@ -242,4 +242,3 @@ func standaloneEval(s *Server, expr string) (any, error) {
 	result := tmpInterp.EvalExpr(parsed, nil)
 	return result, nil
 }
-

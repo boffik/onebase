@@ -15,11 +15,11 @@ type qbField struct {
 }
 
 type qbSource struct {
-	ID     string    `json:"id"`
-	Label  string    `json:"label"`
-	Group  string    `json:"group"`
-	VTParam string   `json:"vtParam,omitempty"` // e.g. "&НаДату" or "&Начало,&Конец"
-	Fields []qbField `json:"fields"`
+	ID      string    `json:"id"`
+	Label   string    `json:"label"`
+	Group   string    `json:"group"`
+	VTParam string    `json:"vtParam,omitempty"` // e.g. "&НаДату" or "&Начало,&Конец"
+	Fields  []qbField `json:"fields"`
 }
 
 func (s *Server) queryBuilder(w http.ResponseWriter, r *http.Request) {

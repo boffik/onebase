@@ -9,14 +9,29 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
+// globalBundle is set by Server at init time so the template FuncMap can access it.
+var globalBundle *i18n.Bundle
+
 var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"lower": strings.ToLower,
-	"str":   func(v any) string { if v == nil { return "" }; return fmt.Sprintf("%v", v) },
-	"add":   func(a, b int) int { return a + b },
+	"str": func(v any) string {
+		if v == nil {
+			return ""
+		}
+		return fmt.Sprintf("%v", v)
+	},
+	"add": func(a, b int) int { return a + b },
+	"t": func(lang, key string) string {
+		if globalBundle != nil {
+			return globalBundle.T(lang, key)
+		}
+		return key
+	},
 	// refID extracts UUID from a *Ref (implements GetRefUUID), otherwise returns fmt.Sprintf.
 	// Used in TP row templates so the "selected" comparison works after enrichTPRowsWithRefs.
 	"refID": func(v any) string {
@@ -281,10 +296,10 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return template.JS(b)
 	},
-	"wcell":        widgetCell,
-	"echartsJSON":  echartsJSON,
-	"splitCamel":   splitCamel,
-	"fmtCell":      fmtReportCell,
+	"wcell":       widgetCell,
+	"echartsJSON": echartsJSON,
+	"splitCamel":  splitCamel,
+	"fmtCell":     fmtReportCell,
 }).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplForbidden))
 
 const tplHead = `
@@ -433,41 +448,41 @@ const tplNav = `
 <header class="topbar">
   <span class="topbar-title">{{if .Cfg.Logo}}<img src="/ui/logo" alt="" style="height:22px;max-width:90px;vertical-align:middle;margin-right:6px;border-radius:2px">{{end}}⚡ {{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</span>
   <div class="sys-menu">
-    <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; Система &#9660;</button>
+    <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; {{t $.Lang "Система"}} &#9660;</button>
     <div class="sys-drop" id="sysd">
-      <a href="/ui/about">О программе</a>
-      <a href="/ui/admin/users">Пользователи</a>
-      <a href="/ui/admin/roles">Роли и права</a>
-      <a href="/ui/admin/sessions">Активные пользователи</a>
-      <a href="/ui/admin/audit">Журнал изменений</a>
-      <a href="/ui/admin/scheduled">Регламентные задания</a>
-      <a href="/ui/delete-marked">Удалить помеченные</a>
-      <a href="/ui/admin/cleanup">Очистка регистров</a>
-      {{if .IsAdmin}}<a href="/ui/all-functions">Все функции</a>{{end}}
-      {{if .IsAdmin}}<div class="sys-sub"><a href="#" onclick="event.preventDefault()">Инструменты разработчика &#9654;</a>
+      <a href="/ui/about">{{t $.Lang "О программе"}}</a>
+      <a href="/ui/admin/users">{{t $.Lang "Пользователи"}}</a>
+      <a href="/ui/admin/roles">{{t $.Lang "Роли и права"}}</a>
+      <a href="/ui/admin/sessions">{{t $.Lang "Активные пользователи"}}</a>
+      <a href="/ui/admin/audit">{{t $.Lang "Журнал изменений"}}</a>
+      <a href="/ui/admin/scheduled">{{t $.Lang "Регламентные задания"}}</a>
+      <a href="/ui/delete-marked">{{t $.Lang "Удалить помеченные"}}</a>
+      <a href="/ui/admin/cleanup">{{t $.Lang "Очистка регистров"}}</a>
+      {{if .IsAdmin}}<a href="/ui/all-functions">{{t $.Lang "Все функции"}}</a>{{end}}
+      {{if .IsAdmin}}<div class="sys-sub"><a href="#" onclick="event.preventDefault()">{{t $.Lang "Инструменты разработчика"}} &#9654;</a>
       <div class="sys-submenu">
-        <a href="/ui/dev/query-console">Консоль запросов</a>
-        <a href="/ui/dev/code-console">Консоль кода</a>
+        <a href="/ui/dev/query-console">{{t $.Lang "Консоль запросов"}}</a>
+        <a href="/ui/dev/code-console">{{t $.Lang "Консоль кода"}}</a>
       </div>
     </div>{{end}}
-      {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">Сменить пароль</a>{{end}}{{end}}
-      <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">Выйти</button></form>
+      {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">{{t $.Lang "Сменить пароль"}}</a>{{end}}{{end}}
+      <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">{{t $.Lang "Выйти"}}</button></form>
     </div>
   </div>
 </header>
 {{if .Cfg.DemoMode}}
 <div style="background:#f59e0b;color:#fff;text-align:center;padding:6px 16px;font-size:13px;font-weight:600;letter-spacing:.02em">
-  ⚠️ ДЕМО-РЕЖИМ{{if .Cfg.DemoMessage}} — {{.Cfg.DemoMessage}}{{end}}
+  ⚠️ {{t $.Lang "ДЕМО-РЕЖИМ"}}{{if .Cfg.DemoMessage}} — {{.Cfg.DemoMessage}}{{end}}
 </div>
 {{end}}
 {{if .Subsystems}}
 <nav class="subsys-bar">
-  {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{.Title}}</a>{{end}}
+  {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{.DisplayName $.Lang}}</a>{{end}}
 </nav>
 {{end}}
 <div class="app-body">
 <aside>
-  <a href="/ui{{if .CurrentSubsystem}}/?subsystem={{.CurrentSubsystem}}{{end}}" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">Главная</a>
+  <a href="/ui{{if .CurrentSubsystem}}/?subsystem={{.CurrentSubsystem}}{{end}}" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">{{t $.Lang "Главная"}}</a>
   {{range .Nav}}
   <div class="sec">{{.Kind}}</div>
   {{range .Items}}<a href="{{.URL}}" title="{{.Label}}">{{navLabel .Label}}</a>
@@ -619,57 +634,57 @@ const tplList = `
 {{template "head" .}}{{template "nav" .}}
 <main class="main-list">
 <div class="row-top">
-  <h2>{{.Entity.DisplayName}}</h2>
+  <h2>{{.Entity.DisplayName $.Lang}}</h2>
   <div style="display:flex;gap:8px">
     {{if .Entity.Hierarchical}}
       {{if .TreeView}}
-        <a class="btn btn-secondary btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">☰ Список</a>
+        <a class="btn btn-secondary btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "☰ Список"}}</a>
       {{else}}
-        <a class="btn btn-secondary btn-sm" href="?view=tree{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">📂 Дерево</a>
+        <a class="btn btn-secondary btn-sm" href="?view=tree{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "📂 Дерево"}}</a>
       {{end}}
-      {{if .UpURL}}<a class="btn btn-secondary btn-sm" href="{{.UpURL}}">↑ Наверх</a>{{end}}
+      {{if .UpURL}}<a class="btn btn-secondary btn-sm" href="{{.UpURL}}">{{t $.Lang "↑ Наверх"}}</a>{{end}}
       {{if .CanWrite}}
-      <a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?{{if .ParentStr}}parent={{.ParentStr}}&{{end}}subsystem={{$.CurrentSubsystem}}">+ Элемент</a>
-      <a class="btn btn-secondary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?is_folder=true{{if .ParentStr}}&parent={{.ParentStr}}{{end}}">📁 Группа</a>
+      <a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?{{if .ParentStr}}parent={{.ParentStr}}&{{end}}subsystem={{$.CurrentSubsystem}}">{{t $.Lang "+ Элемент"}}</a>
+      <a class="btn btn-secondary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?is_folder=true{{if .ParentStr}}&parent={{.ParentStr}}{{end}}">{{t $.Lang "📁 Группа"}}</a>
       {{end}}
     {{else}}
-      {{if .CanWrite}}<a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">+ Создать</a>{{end}}
+      {{if .CanWrite}}<a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "+ Создать"}}</a>{{end}}
     {{end}}
-    <a class="btn btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/excel{{filterQuery .Params}}" style="background:#16a34a;color:#fff" title="Скачать Excel">Excel ↓</a>
+    <a class="btn btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/excel{{filterQuery .Params}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
   </div>
 </div>
 <form method="GET" style="display:flex;gap:8px;margin-bottom:12px;max-width:460px">
-  <input type="text" name="q" value="{{.Params.Search}}" placeholder="Поиск..." style="flex:1;padding:7px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px" oninput="clearTimeout(window._srch);window._srch=setTimeout(()=>this.form.submit(),320)">
+  <input type="text" name="q" value="{{.Params.Search}}" placeholder="{{t $.Lang "Поиск..."}}" style="flex:1;padding:7px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px" oninput="clearTimeout(window._srch);window._srch=setTimeout(()=>this.form.submit(),320)">
   {{if .Params.Search}}<a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569;align-self:center">✕</a>{{end}}
   {{if $.CurrentSubsystem}}<input type="hidden" name="subsystem" value="{{$.CurrentSubsystem}}">{{end}}
 </form>
 {{if .Breadcrumbs}}
 <nav class="breadcrumb">
-  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">Корень</a>
+  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Корень"}}</a>
   {{range .Breadcrumbs}}<span>›</span><a href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{.ID}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{.Label}}</a>{{end}}
 </nav>
 {{end}}
 
 {{$entity := .Entity}}{{$params := .Params}}{{$refOpts := .RefFilterOptions}}
 <details{{if hasFilter $params}} open{{end}}>
-  <summary>Отбор</summary>
+  <summary>{{t $.Lang "Отбор"}}</summary>
   <form method="GET" action="">
   <div class="filter-body">
   {{range $entity.Fields}}{{$f := .}}
     {{if eq (str .Type) "date"}}
       <div>
-        <label>{{.Name}} с</label>
+        <label>{{.DisplayName $.Lang}} {{t $.Lang "с"}}</label>
         <input type="date" name="f.{{.Name}}.from" value="{{(filterVal $params .Name).From}}">
       </div>
       <div>
-        <label>{{.Name}} по</label>
+        <label>{{.DisplayName $.Lang}} {{t $.Lang "по"}}</label>
         <input type="date" name="f.{{.Name}}.to" value="{{(filterVal $params .Name).To}}">
       </div>
     {{else if isRef (str .Type)}}
       <div>
-        <label>{{.Name}}</label>
+        <label>{{.DisplayName $.Lang}}</label>
         <select name="f.{{.Name}}">
-          <option value="">— все —</option>
+          <option value="">{{t $.Lang "— все —"}}</option>
           {{range index $refOpts .Name}}
           <option value="{{index . "id"}}" {{if eq (index . "id") (filterVal $params $f.Name).Value}}selected{{end}}>{{index . "_label"}}</option>
           {{end}}
@@ -677,15 +692,15 @@ const tplList = `
       </div>
     {{else}}
       <div>
-        <label>{{.Name}}</label>
+        <label>{{.DisplayName $.Lang}}</label>
         <input type="text" name="f.{{.Name}}" value="{{(filterVal $params .Name).Value}}">
       </div>
     {{end}}
   {{end}}
   </div>
   <div class="filter-actions">
-    <button class="btn btn-primary btn-sm" type="submit">Применить</button>
-    <a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569">Сбросить</a>
+    <button class="btn btn-primary btn-sm" type="submit">{{t $.Lang "Применить"}}</button>
+    <a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569">{{t $.Lang "Сбросить"}}</a>
   </div>
   {{if $params.Sort}}<input type="hidden" name="sort" value="{{$params.Sort}}"><input type="hidden" name="dir" value="{{$params.Dir}}">{{end}}
   {{if $.CurrentSubsystem}}<input type="hidden" name="subsystem" value="{{$.CurrentSubsystem}}">{{end}}
@@ -698,7 +713,7 @@ const tplList = `
 {{if .TreeRows}}
 <div style="overflow-x:auto">
 <table><thead><tr>
-  {{range .Entity.Fields}}<th>{{.Name}}</th>{{end}}
+  {{range .Entity.Fields}}<th>{{.DisplayName $.Lang}}</th>{{end}}
   <th style="width:90px"></th>
 </tr></thead><tbody>
 {{range .TreeRows}}{{$row := .}}{{$isFolder := index $row "is_folder"}}{{$depth := index $row "_depth"}}
@@ -719,27 +734,27 @@ const tplList = `
       <td>
         <span style="display:inline-block;width:{{mul (int $depth) 20}}px"></span>
         {{if $isFolder}}
-          <button type="button" class="tree-toggle" data-folder-id="{{index $row "id"}}" title="Свернуть/Развернуть"
+          <button type="button" class="tree-toggle" data-folder-id="{{index $row "id"}}" title="{{t $.Lang "Свернуть/Развернуть"}}"
             style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px">▼</button>
           📁
         {{else}}📄{{end}}
-        {{index $row .Name}}{{if index $row "_is_predefined"}} <span title="Предопределённый" style="color:#f59e0b;font-size:11px">★</span>{{end}}
+        {{index $row .Name}}{{if index $row "_is_predefined"}} <span title="{{t $.Lang "Предопределённый"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}
       </td>
     {{else if eq (str .Type) "date"}}<td>{{fmtDate (index $row .Name)}}</td>
     {{else}}<td>{{fmtCell (index $row .Name)}}</td>{{end}}
   {{end}}
   <td>
     {{if $isFolder}}
-      <a class="btn btn-sm btn-secondary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">▶ Войти</a>
+      <a class="btn btn-sm btn-secondary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "▶ Войти"}}</a>
     {{else}}
-      <a class="btn btn-sm btn-primary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">Открыть</a>
+      <a class="btn btn-sm btn-primary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Открыть"}}</a>
     {{end}}
   </td>
 </tr>{{end}}
 </tbody></table>
 </div>
 {{else}}
-<p class="empty">Записей нет — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">создать первую</a></p>
+<p class="empty">{{t $.Lang "Записей нет"}} — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">{{t $.Lang "создать первую"}}</a></p>
 {{end}}
 {{else}}
 {{/* ===== LIST VIEW (default) ===== */}}
@@ -750,7 +765,7 @@ const tplList = `
   {{range .Entity.Fields}}
   <th>
     <a href="?sort={{.Name}}&dir={{nextDir $params .Name}}{{filterQuery $params}}">
-      {{.Name}} {{sortIcon $params .Name}}
+      {{.DisplayName $.Lang}} {{sortIcon $params .Name}}
     </a>
   </th>
   {{end}}
@@ -769,36 +784,36 @@ const tplList = `
   data-open-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">
   {{if eq (str $.Entity.Kind) "document"}}
     <td style="text-align:center">
-      {{if index $row "posted"}}<span style="color:#16a34a;font-weight:700" title="Проведён">✓</span>{{else}}<span style="color:#94a3b8" title="Не проведён">—</span>{{end}}
+      {{if index $row "posted"}}<span style="color:#16a34a;font-weight:700" title="{{t $.Lang "Проведён"}}">✓</span>{{else}}<span style="color:#94a3b8" title="{{t $.Lang "Не проведён"}}">—</span>{{end}}
     </td>
   {{end}}
   {{range $.Entity.Fields}}
     {{if eq (str .Type) "date"}}<td style="white-space:nowrap">{{fmtDate (index $row .Name)}}</td>
-    {{else}}<td style="white-space:nowrap">{{if and (eq .Name "Наименование") $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row .Name)}}{{if and (eq .Name "Наименование") (index $row "_is_predefined")}} <span title="Предопределённый элемент" style="color:#f59e0b;font-size:11px">★</span>{{end}}</td>{{end}}
+    {{else}}<td style="white-space:nowrap">{{if and (eq .Name "Наименование") $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row .Name)}}{{if and (eq .Name "Наименование") (index $row "_is_predefined")}} <span title="{{t $.Lang "Предопределённый элемент"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}</td>{{end}}
   {{end}}
   <td>
     {{if and $isFolder $.Entity.Hierarchical}}
-      <a class="btn btn-sm btn-secondary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">▶ Войти</a>
+      <a class="btn btn-sm btn-secondary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "▶ Войти"}}</a>
     {{else}}
-      <a class="btn btn-sm btn-primary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">Открыть</a>
+      <a class="btn btn-sm btn-primary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Открыть"}}</a>
     {{end}}
   </td>
 </tr>{{end}}
 </tbody></table>
 </div>
 {{else}}
-<p class="empty">{{if .Params.Search}}Ничего не найдено по запросу «{{.Params.Search}}» — <a href="?">сбросить поиск</a>{{else}}Записей нет — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">создать первую</a>{{end}}</p>
+<p class="empty">{{if .Params.Search}}{{t $.Lang "Ничего не найдено по запросу"}} «{{.Params.Search}}» — <a href="?">{{t $.Lang "сбросить поиск"}}</a>{{else}}{{t $.Lang "Записей нет"}} — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">{{t $.Lang "создать первую"}}</a>{{end}}</p>
 {{end}}
 {{end}}
 </div>
 {{if gt .TotalPages 1}}
 <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
-  {{if .HasPrev}}<a class="btn btn-secondary btn-sm" href="?page={{.PrevPage}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">← Назад</a>{{end}}
-  <span style="color:#64748b;font-size:13px">Стр. {{.Page}} из {{.TotalPages}} ({{.Total}} записей)</span>
-  {{if .HasNext}}<a class="btn btn-secondary btn-sm" href="?page={{.NextPage}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">Вперёд →</a>{{end}}
+  {{if .HasPrev}}<a class="btn btn-secondary btn-sm" href="?page={{.PrevPage}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "← Назад"}}</a>{{end}}
+  <span style="color:#64748b;font-size:13px">{{t $.Lang "Стр."}} {{.Page}} {{t $.Lang "из"}} {{.TotalPages}} ({{.Total}} {{t $.Lang "записей"}})</span>
+  {{if .HasNext}}<a class="btn btn-secondary btn-sm" href="?page={{.NextPage}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Вперёд →"}}</a>{{end}}
 </div>
 {{else if gt .Total 0}}
-<div style="color:#94a3b8;font-size:12px;margin-top:8px">Всего: {{.Total}}</div>
+<div style="color:#94a3b8;font-size:12px;margin-top:8px">{{t $.Lang "Всего:"}} {{.Total}}</div>
 {{end}}
 </main>
 <script>
@@ -847,16 +862,16 @@ function listCtxMenu(e,tr){
   var isFolder=tr.dataset.isFolder==='1';
   var items=[];
   if(isFolder){
-    items.push({label:'▶ Войти в группу',fn:function(){window.location.href=tr.dataset.folderUrl;}});
-    items.push({label:'Редактировать',fn:function(){window.location.href=tr.dataset.openUrl;}});
+    items.push({label:'{{t $.Lang "▶ Войти в группу"}}',fn:function(){window.location.href=tr.dataset.folderUrl;}});
+    items.push({label:'{{t $.Lang "Редактировать"}}',fn:function(){window.location.href=tr.dataset.openUrl;}});
   } else {
-    items.push({label:'Открыть',fn:function(){window.location.href=tr.dataset.openUrl;}});
+    items.push({label:'{{t $.Lang "Открыть"}}',fn:function(){window.location.href=tr.dataset.openUrl;}});
   }
   if(_canDelete){
-    if(!isPredefined)items.push({label:'Пометить на удаление',danger:true,fn:function(){listSubmit(tr.dataset.markUrl,'Пометить на удаление?');}});
-    else items.push({label:'Предопределённый — нельзя удалить',disabled:true});
+    if(!isPredefined)items.push({label:'{{t $.Lang "Пометить на удаление"}}',danger:true,fn:function(){listSubmit(tr.dataset.markUrl,'Пометить на удаление?');}});
+    else items.push({label:'{{t $.Lang "Предопределённый — нельзя удалить"}}',disabled:true});
   }
-  if(_isAdmin&&!isPredefined)items.push({label:'Удалить навсегда',danger:true,fn:function(){listSubmit(tr.dataset.delUrl,'Удалить запись навсегда?');}});
+  if(_isAdmin&&!isPredefined)items.push({label:'{{t $.Lang "Удалить навсегда"}}',danger:true,fn:function(){listSubmit(tr.dataset.delUrl,'Удалить запись навсегда?');}});
   items.forEach(function(item){
     var mi=document.createElement('div');
     mi.textContent=item.label;
@@ -892,11 +907,11 @@ const tplForm = `
 {{template "head" .}}{{if not .IsPopup}}{{template "nav" .}}{{end}}
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:900px">
-  <h2 style="margin-bottom:0">{{if .IsNew}}Создать{{else}}Редактировать{{end}} — {{.Entity.DisplayName}}</h2>
+  <h2 style="margin-bottom:0">{{if .IsNew}}{{t $.Lang "Создать"}}{{else}}{{t $.Lang "Редактировать"}}{{end}} — {{.Entity.DisplayName $.Lang}}</h2>
   {{if .IsPopup}}
-  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{else}}
-  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{end}}
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
@@ -907,29 +922,29 @@ const tplForm = `
   {{if .Entity.Posting}}
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
-        <span style="color:#16a34a;font-weight:600;font-size:13px">✓ Проведён</span>
+        <span style="color:#16a34a;font-weight:600;font-size:13px">✓ {{t $.Lang "Проведён"}}</span>
       {{else}}
-        <span style="color:#94a3b8;font-size:13px">Не проведён</span>
+        <span style="color:#94a3b8;font-size:13px">{{t $.Lang "Не проведён"}}</span>
       {{end}}
     {{end}}
   {{end}}
-  {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>{{end}}
+  {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">{{t $.Lang "Записать"}}</button>{{end}}
   {{if .Entity.Posting}}
-    {{if $.CanPost}}<button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>{{end}}
+    {{if $.CanPost}}<button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">{{t $.Lang "Провести и закрыть"}}</button>{{end}}
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
-        {{if $.CanPost}}<button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">Перепровести</button>{{end}}
-        {{if $.CanUnpost}}<button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">Отменить проведение</button>{{end}}
+        {{if $.CanPost}}<button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">{{t $.Lang "Перепровести"}}</button>{{end}}
+        {{if $.CanUnpost}}<button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">{{t $.Lang "Отменить проведение"}}</button>{{end}}
       {{else}}
-        {{if $.CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>{{end}}
+        {{if $.CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">{{t $.Lang "Провести"}}</button>{{end}}
       {{end}}
     {{end}}
   {{end}}
   {{if not .IsNew}}
-    <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">История</a>
+    <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">{{t $.Lang "История"}}</a>
     {{if or .PrintForms .DSLPrintForms .HasPrintProc}}
     <div style="position:relative">
-      <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">Печать ▾</button>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">{{t $.Lang "Печать"}} ▾</button>
       <div style="display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);min-width:160px;z-index:50;margin-top:4px">
         {{range .PrintForms}}
         <a href="/ui/{{lower (str $.Entity.Kind)}}/{{$.Entity.Name}}/{{$.ID}}/print/{{.Name}}" target="_blank"
@@ -941,15 +956,15 @@ const tplForm = `
         {{end}}
         {{if .HasPrintProc}}
         <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/print-dsl/_module" target="_blank"
-           style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">📋 Печать (модуль)</a>
+           style="display:block;padding:9px 16px;color:#334155;text-decoration:none;font-size:13px;border-bottom:1px solid #f1f5f9">📋 {{t $.Lang "Печать (модуль)"}}</a>
         {{end}}
       </div>
     </div>
     {{end}}
     {{if .CanDelete}}
     <form method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/delete"
-          onsubmit="return confirm('{{if .IsAdmin}}Удалить запись навсегда?{{else}}Пометить запись на удаление?{{end}}')" style="margin-left:auto">
-      <button class="btn btn-danger btn-sm" type="submit">{{if .IsAdmin}}Удалить{{else}}Пометить на удаление{{end}}</button>
+          onsubmit="return confirm('{{if .IsAdmin}}{{t $.Lang "Удалить запись навсегда?"}}{{else}}{{t $.Lang "Пометить запись на удаление?"}}{{end}}')" style="margin-left:auto">
+      <button class="btn btn-danger btn-sm" type="submit">{{if .IsAdmin}}{{t $.Lang "Удалить"}}{{else}}{{t $.Lang "Пометить на удаление"}}{{end}}</button>
     </form>
     {{end}}
   {{end}}
@@ -965,7 +980,7 @@ const tplForm = `
     </summary>
     <div style="position:absolute;z-index:100;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:4px;min-width:300px;max-height:300px;overflow:auto">
       <table class="list-tbl" style="font-size:12px;margin:0">
-        <tr><th>№</th><th>Вид</th>{{$first := index $rows 0}}{{range $k, $v := $first}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<th>{{$k}}</th>{{end}}{{end}}</tr>
+        <tr><th>{{t $.Lang "№"}}</th><th>{{t $.Lang "Вид"}}</th>{{$first := index $rows 0}}{{range $k, $v := $first}}{{if and (ne $k "line_number") (ne $k "вид_движения")}}<th>{{$k}}</th>{{end}}{{end}}</tr>
         {{range $i, $row := $rows}}
         <tr>
           <td>{{add $i 1}}</td>
@@ -987,39 +1002,39 @@ const tplForm = `
 {{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}
 {{if .Entity.Hierarchical}}
 <div class="form-group">
-  <label>Тип</label>
+  <label>{{t $.Lang "Тип"}}</label>
   <select name="is_folder">
-    <option value="false" {{if ne (index $.Values "is_folder") "true"}}selected{{end}}>Элемент</option>
-    <option value="true" {{if eq (index $.Values "is_folder") "true"}}selected{{end}}>Группа</option>
+    <option value="false" {{if ne (index $.Values "is_folder") "true"}}selected{{end}}>{{t $.Lang "Элемент"}}</option>
+    <option value="true" {{if eq (index $.Values "is_folder") "true"}}selected{{end}}>{{t $.Lang "Группа"}}</option>
   </select>
 </div>
 <div class="form-group">
-  <label>Родительская группа</label>
+  <label>{{t $.Lang "Родительская группа"}}</label>
   <select name="parent_id">
-    <option value="">— корень —</option>
+    <option value="">{{t $.Lang "— корень —"}}</option>
     {{range .FolderOptions}}
     <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values "parent_id")}}selected{{end}}>{{index . "_label"}}</option>
     {{end}}
   </select>
 </div>
 {{end}}
-{{range .Entity.Fields}}{{$fn := .Name}}
+{{range .Entity.Fields}}{{$fn := .Name}}{{$flabel := .DisplayName $.Lang}}
 <div class="form-group">
-  <label>{{$fn}}</label>
+  <label>{{$flabel}}</label>
   {{if isRef (str .Type)}}
     <div style="display:flex;gap:6px;align-items:center">
       <select id="ref-{{$fn}}" name="{{$fn}}" style="flex:1">
-        <option value="">— выбрать —</option>
+        <option value="">{{t $.Lang "— выбрать —"}}</option>
         {{range index $.RefOptions $fn}}
         <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
         {{end}}
       </select>
-      <button type="button" onclick="openRefPicker('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="Выбрать из списка">...</button>
-      <button type="button" onclick="openRefCreate(document.getElementById('ref-{{$fn}}'), '{{.RefEntity}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;font-weight:600;color:#16a34a" title="Создать новый">+</button>
+      <button type="button" onclick="openRefPicker('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+      <button type="button" onclick="openRefCreate(document.getElementById('ref-{{$fn}}'), '{{.RefEntity}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;font-weight:600;color:#16a34a" title="{{t $.Lang "Создать новый"}}">+</button>
     </div>
   {{else if isEnum (str .Type)}}
     <select name="{{$fn}}">
-      <option value="">— выбрать —</option>
+      <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{range index $.EnumOptions $fn}}
       <option value="{{.}}" {{if eq . (index $.Values $fn)}}selected{{end}}>{{.}}</option>
       {{end}}
@@ -1028,20 +1043,20 @@ const tplForm = `
     <input type="datetime-local" name="{{$fn}}" value="{{index $.Values $fn}}">
   {{else if eq (str .Type) "bool"}}
     <select name="{{$fn}}">
-      <option value="false" {{if eq (index $.Values $fn) "false"}}selected{{end}}>Нет</option>
-      <option value="true"  {{if eq (index $.Values $fn) "true"}}selected{{end}}>Да</option>
+      <option value="false" {{if eq (index $.Values $fn) "false"}}selected{{end}}>{{t $.Lang "Нет"}}</option>
+      <option value="true"  {{if eq (index $.Values $fn) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
   {{else}}
-    <input type="text" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$fn}}">
+    <input type="text" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$flabel}}">
   {{end}}
 </div>
 {{end}}
 
 {{range .Entity.TableParts}}{{$tp := .}}{{$tpName := .Name}}{{$tpRef := index $.TPRefOptions $tpName}}
-<h3>{{$tpName}}</h3>
+<h3>{{$tp.DisplayName $.Lang}}</h3>
 <table class="tp-table">
   <thead><tr>
-    {{range .Fields}}<th>{{.Name}}</th>{{end}}
+    {{range .Fields}}<th>{{.DisplayName $.Lang}}</th>{{end}}
     <th style="width:40px"></th>
   </tr></thead>
   <tbody id="tp-body-{{$tpName}}">
@@ -1053,13 +1068,17 @@ const tplForm = `
         {{if isRef (str .Type)}}
           <div style="display:flex;gap:4px;align-items:center">
             <select name="tp.{{$tpName}}.{{$i}}.{{$fn}}" style="flex:1">
-              <option value="">— выбрать —</option>
+              <option value="">{{t $.Lang "— выбрать —"}}</option>
               {{range index $tpRef $fn}}
               <option value="{{index . "id"}}" {{if eq (str (index . "id")) (refID (index $row $fn))}}selected{{end}}>{{index . "_label"}}</option>
               {{end}}
             </select>
+<<<<<<< HEAD
             <button type="button" onclick="openRefPicker(this.parentElement.querySelector('select'))" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="Выбрать из списка">...</button>
             <button type="button" onclick="openRefCreate(this.parentElement.querySelector('select'), '{{.RefEntity}}')" style="padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0;font-weight:600;color:#16a34a" title="Создать новый">+</button>
+=======
+            <button type="button" onclick="openRefPicker(this.parentElement.querySelector('select'))" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+>>>>>>> pr-10
           </div>
         {{else if eq (str .Type) "number"}}
           <input type="number" name="tp.{{$tpName}}.{{$i}}.{{$fn}}" value="{{index $row $fn}}"
@@ -1077,17 +1096,17 @@ const tplForm = `
 </table>
 <button type="button" class="btn btn-sm" style="background:#e2e8f0;color:#475569;margin-bottom:8px"
   onclick="addTpRow('{{$tpName}}', [{{range .Fields}}'{{.Name}}',{{end}}], [{{range .Fields}}{{if eq (str .Type) "number"}}'{{.Name}}',{{end}}{{end}}], document.getElementById('tp-body-{{$tpName}}').rows.length)">
-  + Добавить строку
+  + {{t $.Lang "Добавить строку"}}
 </button>
 {{end}}
 
 <div style="margin-top:16px">
   {{if .IsPopup}}
-  {{if .CanWrite}}<button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">Записать и выбрать</button>{{end}}
-  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" class="btn btn-cancel">Отмена</a>
+  {{if .CanWrite}}<button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">{{t $.Lang "Записать и выбрать"}}</button>{{end}}
+  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" class="btn btn-cancel">{{t $.Lang "Отмена"}}</a>
   {{else}}
-  {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>{{end}}
-  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" class="btn btn-cancel">Отмена</a>
+  {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">{{t $.Lang "Записать"}}</button>{{end}}
+  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" class="btn btn-cancel">{{t $.Lang "Отмена"}}</a>
   {{end}}
 </div>
 </form>
@@ -1099,7 +1118,7 @@ const tplForm = `
 {{if and (not .IsNew) (not .IsPopup)}}
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h3 style="margin:0;font-size:14px;font-weight:600;color:#374151">Вложения</h3>
+    <h3 style="margin:0;font-size:14px;font-weight:600;color:#374151">{{t $.Lang "Вложения"}}</h3>
     <span id="att-count" style="color:#94a3b8;font-size:12px"></span>
   </div>
   <div id="att-list" style="margin-bottom:12px"></div>
@@ -1107,7 +1126,7 @@ const tplForm = `
         action="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/attachments">
     <input type="file" name="file" id="att-file-input" style="display:none" onchange="document.getElementById('att-upload-form').submit()">
     <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('att-file-input').click()">
-      + Прикрепить файл
+      + {{t $.Lang "Прикрепить файл"}}
     </button>
   </form>
 </div>
@@ -1333,7 +1352,7 @@ const tplReport = `
 {{define "page-report"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
-<h2>{{if .Report.Title}}{{.Report.Title}}{{else}}{{.Report.Name}}{{end}}</h2>
+<h2>{{.Report.DisplayName $.Lang}}</h2>
 {{if .ReportParams}}
 <div class="card" style="margin-bottom:16px">
 <form method="POST">
@@ -1355,17 +1374,17 @@ const tplReport = `
         <input type="number" name="{{$pname}}" value="{{$pval}}">
       {{else if $p.IsSel}}
         <select name="{{$pname}}">
-          {{range $p.Options}}<option value="{{.}}" {{if eq . $pval}}selected{{end}}>{{if .}}{{.}}{{else}}— все —{{end}}</option>{{end}}
+          {{range $p.Options}}<option value="{{.}}" {{if eq . $pval}}selected{{end}}>{{if .}}{{.}}{{else}}{{t $.Lang "— все —"}}{{end}}</option>{{end}}
         </select>
       {{else if $p.IsRef}}
         <div style="display:flex;gap:4px;align-items:center">
           <select name="{{$pname}}" id="rp-{{$pname}}" style="flex:1;min-width:0">
-            <option value="">— все —</option>
+            <option value="">{{t $.Lang "— все —"}}</option>
             {{range $p.Opts}}
               <option value="{{index . "id"}}" {{if eq $pval (str (index . "id"))}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
-          <button type="button" onclick="openRefPicker('rp-{{$pname}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="Выбрать из списка">...</button>
+          <button type="button" onclick="openRefPicker('rp-{{$pname}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
         </div>
       {{else}}
         <input type="text" name="{{$pname}}" value="{{$pval}}">
@@ -1374,11 +1393,11 @@ const tplReport = `
     {{end}}
   {{end}}
   </div>
-  <button class="btn btn-primary" type="submit">Сформировать</button>
+  <button class="btn btn-primary" type="submit">{{t $.Lang "Сформировать"}}</button>
 </form>
 </div>
 {{end}}
-{{if .QueryError}}<div class="error">Ошибка запроса: {{.QueryError}}</div>{{end}}
+{{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
 {{if .ChartOption}}
 <div class="card" style="margin-bottom:16px">
   <div id="ob-chart" style="width:100%;min-height:400px"></div>
@@ -1395,7 +1414,7 @@ const tplReport = `
 {{end}}
 {{if .Cols}}
 <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="Скачать Excel">Excel ↓</a>
+  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
 </div>
 <div class="card">
 {{if .Rows}}
@@ -1405,7 +1424,7 @@ const tplReport = `
   {{range $.Cols}}<td>{{fmtCell (index $row .)}}</td>{{end}}
 </tr>{{end}}
 </tbody></table>
-{{else}}<p class="empty">Нет данных</p>{{end}}
+{{else}}<p class="empty">{{t $.Lang "Нет данных"}}</p>{{end}}
 </div>
 {{end}}
 </main></div></body></html>
@@ -1417,17 +1436,17 @@ const tplRegister = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Register.Name}} — движения</h2>
-  <a class="btn btn-sm" href="/ui/register/{{lower .Register.Name}}/balances" style="background:#e2e8f0;color:#475569">Остатки →</a>
+  <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "движения"}}</h2>
+  <a class="btn btn-sm" href="/ui/register/{{lower .Register.Name}}/balances" style="background:#e2e8f0;color:#475569">{{t $.Lang "Остатки →"}}</a>
 </div>
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  <th>Вид движения</th>
-  <th>Регистратор</th>
-  {{range .Register.Dimensions}}<th>{{.Name}}</th>{{end}}
-  {{range .Register.Resources}}<th>{{.Name}}</th>{{end}}
-  {{range .Register.Attributes}}<th>{{.Name}}</th>{{end}}
+  <th>{{t $.Lang "Вид движения"}}</th>
+  <th>{{t $.Lang "Регистратор"}}</th>
+  {{range .Register.Dimensions}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .Register.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .Register.Attributes}}<th>{{.DisplayName $.Lang}}</th>{{end}}
 </tr></thead><tbody>
 {{range .Rows}}{{$row := .}}<tr>
   <td>{{$v := index $row "вид_движения"}}{{if eq (str $v) "Приход"}}<span style="color:#16a34a;font-weight:600">▲ {{$v}}</span>{{else}}<span style="color:#dc2626;font-weight:600">▼ {{$v}}</span>{{end}}</td>
@@ -1437,7 +1456,7 @@ const tplRegister = `
   {{range $.Register.Attributes}}<td>{{index $row .Name}}</td>{{end}}
 </tr>{{end}}
 </tbody></table>
-{{else}}<p class="empty">Движений нет</p>{{end}}
+{{else}}<p class="empty">{{t $.Lang "Движений нет"}}</p>{{end}}
 </div></main></div></body></html>
 {{end}}
 
@@ -1445,21 +1464,21 @@ const tplRegister = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Register.Name}} — остатки</h2>
-  <a class="btn btn-sm" href="/ui/register/{{lower .Register.Name}}" style="background:#e2e8f0;color:#475569">← Движения</a>
+  <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "остатки"}}</h2>
+  <a class="btn btn-sm" href="/ui/register/{{lower .Register.Name}}" style="background:#e2e8f0;color:#475569">{{t $.Lang "← Движения"}}</a>
 </div>
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  {{range .Register.Dimensions}}<th>{{.Name}}</th>{{end}}
-  {{range .Register.Resources}}<th>{{.Name}}</th>{{end}}
+  {{range .Register.Dimensions}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .Register.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
 </tr></thead><tbody>
 {{range .Rows}}{{$row := .}}<tr>
   {{range $.Register.Dimensions}}<td>{{index $row .Name}}</td>{{end}}
   {{range $.Register.Resources}}<td style="font-weight:600">{{index $row .Name}}</td>{{end}}
 </tr>{{end}}
 </tbody></table>
-{{else}}<p class="empty">Остатков нет</p>{{end}}
+{{else}}<p class="empty">{{t $.Lang "Остатков нет"}}</p>{{end}}
 </div></main></div></body></html>
 {{end}}
 `
@@ -1468,30 +1487,30 @@ const tplDeleteMarked = `
 {{define "page-delete-marked"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
-<h2>Удалить помеченные</h2>
+<h2>{{t $.Lang "Удалить помеченные"}}</h2>
 {{if .Deleted}}<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px">
-  Удалено: {{.Deleted}}{{if .Skipped}} &nbsp;·&nbsp; Пропущено (есть ссылки): {{.Skipped}}{{end}}
+  {{t $.Lang "Удалено:"}} {{.Deleted}}{{if .Skipped}} &nbsp;·&nbsp; {{t $.Lang "Пропущено (есть ссылки):"}} {{.Skipped}}{{end}}
 </div>{{end}}
 {{if .Entries}}
 <div class="card" style="max-width:900px;margin-bottom:16px">
 <table><thead><tr>
-  <th>Объект</th><th>Наименование</th><th>Статус</th>
+  <th>{{t $.Lang "Объект"}}</th><th>{{t $.Lang "Наименование"}}</th><th>{{t $.Lang "Статус"}}</th>
 </tr></thead><tbody>
 {{range .Entries}}<tr>
   <td><a href="/ui/{{lower .Kind}}/{{lower .EntityName}}/{{.ID}}">{{.EntityName}}</a></td>
   <td>{{.Label}}</td>
-  <td>{{if .HasRefs}}<span style="color:#ef4444">Есть ссылки — не будет удалён</span>{{else}}<span style="color:#16a34a">Будет удалён</span>{{end}}</td>
+  <td>{{if .HasRefs}}<span style="color:#ef4444">{{t $.Lang "Есть ссылки — не будет удалён"}}</span>{{else}}<span style="color:#16a34a">{{t $.Lang "Будет удалён"}}</span>{{end}}</td>
 </tr>{{end}}
 </tbody></table>
 </div>
 <form method="POST" action="/ui/delete-marked"
-      onsubmit="return confirm('Удалить все помеченные записи без ссылок?')">
-  <button class="btn btn-danger" type="submit">Удалить помеченные без ссылок</button>
-  <a class="btn btn-secondary" href="/ui" style="margin-left:8px">Отмена</a>
+      onsubmit="return confirm('{{t $.Lang "Удалить все помеченные записи без ссылок?"}}')">
+  <button class="btn btn-danger" type="submit">{{t $.Lang "Удалить помеченные без ссылок"}}</button>
+  <a class="btn btn-secondary" href="/ui" style="margin-left:8px">{{t $.Lang "Отмена"}}</a>
 </form>
 {{else}}
 <div class="card" style="max-width:600px">
-  <p class="empty">Помеченных на удаление записей нет.</p>
+  <p class="empty">{{t $.Lang "Помеченных на удаление записей нет."}}</p>
 </div>
 {{end}}
 </main></div></body></html>
@@ -1502,7 +1521,7 @@ const tplProcessor = `
 {{define "page-processor"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
-<h2>{{if .Processor.Title}}{{.Processor.Title}}{{else}}{{.Processor.Name}}{{end}}</h2>
+<h2>{{.Processor.DisplayName $.Lang}}</h2>
 {{if .Processor.Params}}
 <div class="card" style="margin-bottom:16px">
 <form method="POST">
@@ -1512,12 +1531,12 @@ const tplProcessor = `
     <div class="form-group" style="margin-bottom:0">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
         <input type="checkbox" name="{{$pname}}" value="true" {{if index $.ParamValues $pname}}checked{{end}}>
-        <span>{{.DisplayLabel}}</span>
+        <span>{{.DisplayLabel $.Lang}}</span>
       </label>
     </div>
     {{else}}
     <div class="form-group" style="margin-bottom:0">
-      <label>{{.DisplayLabel}}</label>
+      <label>{{.DisplayLabel $.Lang}}</label>
       {{if eq .Type "date"}}
         <input type="date" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
       {{else if eq .Type "number"}}
@@ -1529,13 +1548,13 @@ const tplProcessor = `
     {{end}}
   {{end}}
   </div>
-  <button class="btn btn-primary" type="submit">Выполнить</button>
+  <button class="btn btn-primary" type="submit">{{t $.Lang "Выполнить"}}</button>
 </form>
 </div>
 {{else}}
 <div class="card" style="margin-bottom:16px">
 <form method="POST">
-  <button class="btn btn-primary" type="submit">Выполнить</button>
+  <button class="btn btn-primary" type="submit">{{t $.Lang "Выполнить"}}</button>
 </form>
 </div>
 {{end}}
@@ -1548,7 +1567,7 @@ const tplProcessor = `
   {{range .Messages}}<tr><td style="font-family:monospace;font-size:13px;padding:6px 12px;border-bottom:1px solid #f1f5f9">{{.}}</td></tr>{{end}}
   </tbody></table>
 {{else}}
-  <p class="empty">Выполнено без сообщений</p>
+  <p class="empty">{{t $.Lang "Выполнено без сообщений"}}</p>
 {{end}}
 </div>
 {{end}}
@@ -1560,47 +1579,47 @@ const tplAbout = `
 {{define "page-about"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
-<h2>О программе</h2>
+<h2>{{t $.Lang "О программе"}}</h2>
 <div class="card" style="max-width:560px">
   {{if .Cfg.Logo}}<div style="text-align:center;margin-bottom:20px"><img src="/ui/logo" alt="Logo" style="max-height:160px;max-width:360px"></div>{{end}}
   <table style="width:100%;border-collapse:collapse">
     {{if .User}}
     <tr>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">Пользователь</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">{{t $.Lang "Пользователь"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px">
         <span style="font-weight:600">{{.User.Login}}</span>
         {{if .User.FullName}}<span style="color:#64748b;margin-left:8px">{{.User.FullName}}</span>{{end}}
-        {{if .User.IsAdmin}}<span style="margin-left:8px;background:#dbeafe;color:#1d4ed8;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600">Администратор</span>{{end}}
+        {{if .User.IsAdmin}}<span style="margin-left:8px;background:#dbeafe;color:#1d4ed8;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600">{{t $.Lang "Администратор"}}</span>{{end}}
       </td>
     </tr>
     {{end}}
     <tr>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">Версия платформы</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">{{t $.Lang "Версия платформы"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:14px">onebase {{if .Cfg.PlatVersion}}{{.Cfg.PlatVersion}}{{else}}dev{{end}}</td>
     </tr>
     {{if .Cfg.AppName}}
     <tr>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">Конфигурация</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "Конфигурация"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600">{{.Cfg.AppName}}</td>
     </tr>
     {{end}}
     {{if .Cfg.AppVersion}}
     <tr>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">Версия конфигурации</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "Версия конфигурации"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px">{{.Cfg.AppVersion}}</td>
     </tr>
     {{end}}
     <tr>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">База данных</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "База данных"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#475569;word-break:break-all">{{.Cfg.DSN}}</td>
     </tr>
     <tr>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">Метаданные</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "Метаданные"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px">
-        Справочники: {{.Catalogs}} &nbsp;·&nbsp;
-        Документы: {{.Documents}} &nbsp;·&nbsp;
-        Регистры: {{.Registers}} &nbsp;·&nbsp;
-        Отчёты: {{.Reports}}
+        {{t $.Lang "Справочники:"}} {{.Catalogs}} &nbsp;·&nbsp;
+        {{t $.Lang "Документы:"}} {{.Documents}} &nbsp;·&nbsp;
+        {{t $.Lang "Регистры:"}} {{.Registers}} &nbsp;·&nbsp;
+        {{t $.Lang "Отчёты:"}} {{.Reports}}
       </td>
     </tr>
   </table>
@@ -1614,15 +1633,15 @@ const tplInfoReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.InfoReg.Name}}{{if .InfoReg.Periodic}} <span style="font-size:13px;color:#64748b;font-weight:400">(периодический)</span>{{end}}</h2>
-  {{if .CanWrite}}<a class="btn" href="/ui/inforeg/{{lower .InfoReg.Name}}/new">+ Добавить запись</a>{{end}}
+  <h2>{{.InfoReg.DisplayName $.Lang}}{{if .InfoReg.Periodic}} <span style="font-size:13px;color:#64748b;font-weight:400">({{t $.Lang "периодический"}})</span>{{end}}</h2>
+  {{if .CanWrite}}<a class="btn" href="/ui/inforeg/{{lower .InfoReg.Name}}/new">+ {{t $.Lang "Добавить запись"}}</a>{{end}}
 </div>
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  {{if .InfoReg.Periodic}}<th>Период</th>{{end}}
-  {{range .InfoReg.Dimensions}}<th>{{.Name}}</th>{{end}}
-  {{range .InfoReg.Resources}}<th>{{.Name}}</th>{{end}}
+  {{if .InfoReg.Periodic}}<th>{{t $.Lang "Период"}}</th>{{end}}
+  {{range .InfoReg.Dimensions}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  {{range .InfoReg.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
   {{if .CanDelete}}<th></th>{{end}}
 </tr></thead><tbody>
 {{range .Rows}}{{$row := .}}<tr>
@@ -1631,7 +1650,7 @@ const tplInfoReg = `
   {{range $.InfoReg.Resources}}<td style="font-weight:600">{{index $row .Name}}</td>{{end}}
   {{if $.CanDelete}}<td>
     <form method="POST" action="/ui/inforeg/{{lower $.InfoReg.Name}}/delete" style="display:inline"
-          onsubmit="return confirm('Удалить запись?')">
+          onsubmit="return confirm('{{t $.Lang "Удалить запись?"}}')">
       {{if $.InfoReg.Periodic}}<input type="hidden" name="period" value="{{index $row "period"}}">{{end}}
       {{range $.InfoReg.Dimensions}}<input type="hidden" name="{{.Name}}" value="{{index $row .Name}}">{{end}}
       <button class="btn btn-danger btn-sm" type="submit">×</button>
@@ -1639,34 +1658,34 @@ const tplInfoReg = `
   </td>{{end}}
 </tr>{{end}}
 </tbody></table>
-{{else}}<p class="empty">Записей нет</p>{{end}}
+{{else}}<p class="empty">{{t $.Lang "Записей нет"}}</p>{{end}}
 </div></main></div></body></html>
 {{end}}
 
 {{define "page-inforeg-form"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
-<h2>{{.InfoReg.Name}} — новая запись</h2>
+<h2>{{.InfoReg.DisplayName $.Lang}} — {{t $.Lang "новая запись"}}</h2>
 {{if .Error}}<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px">{{.Error}}</div>{{end}}
 <div class="card" style="max-width:560px">
 <form method="POST">
   {{if .InfoReg.Periodic}}
   <div class="form-row">
-    <label>Период</label>
+    <label>{{t $.Lang "Период"}}</label>
     <input type="date" name="period" value="{{index .Values "period"}}" required>
   </div>
   {{end}}
   {{range .InfoReg.Dimensions}}
   {{$dn := .Name}}
   <div class="form-row">
-    <label>{{.Name}} <span style="color:#94a3b8;font-size:11px">[измерение]</span></label>
+    <label>{{.DisplayName $.Lang}} <span style="color:#94a3b8;font-size:11px">[{{t $.Lang "измерение"}}]</span></label>
     {{if .RefEntity}}
     <div style="display:flex;gap:4px;align-items:center">
       <select name="{{$dn}}" id="ird-{{$dn}}" style="flex:1;min-width:0">
-        <option value="">— выбрать —</option>
+        <option value="">{{t $.Lang "— выбрать —"}}</option>
         {{range index $.RefOpts $dn}}<option value="{{index . "id"}}" {{if eq (index $.Values $dn) (index . "id")}}selected{{end}}>{{index . "_label"}}</option>{{end}}
       </select>
-      <button type="button" onclick="openRefPicker('ird-{{$dn}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="Выбрать из списка">...</button>
+      <button type="button" onclick="openRefPicker('ird-{{$dn}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
     </div>
     {{else}}
     <input type="text" name="{{$dn}}" value="{{index $.Values $dn}}">
@@ -1675,13 +1694,13 @@ const tplInfoReg = `
   {{end}}
   {{range .InfoReg.Resources}}
   <div class="form-row">
-    <label>{{.Name}}</label>
+    <label>{{.DisplayName $.Lang}}</label>
     <input type="text" name="{{.Name}}" value="{{index $.Values .Name}}">
   </div>
   {{end}}
   <div style="margin-top:20px;display:flex;gap:8px">
-    <button class="btn" type="submit">Записать</button>
-    <a class="btn btn-secondary" href="/ui/inforeg/{{lower .InfoReg.Name}}">Отмена</a>
+    <button class="btn" type="submit">{{t $.Lang "Записать"}}</button>
+    <a class="btn btn-secondary" href="/ui/inforeg/{{lower .InfoReg.Name}}">{{t $.Lang "Отмена"}}</a>
   </div>
 </form>
 </div>
@@ -1696,16 +1715,16 @@ const tplConstants = `
 {{define "page-constants"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
-<h2>Константы</h2>
-{{if .Saved}}<div style="background:#f0fdf4;border:1px solid #86efac;color:#15803d;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px">✓ Константы сохранены</div>{{end}}
+<h2>{{t $.Lang "Константы"}}</h2>
+{{if .Saved}}<div style="background:#f0fdf4;border:1px solid #86efac;color:#15803d;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px">✓ {{t $.Lang "Константы сохранены"}}</div>{{end}}
 <div class="card" style="max-width:700px">
 <form method="POST" action="/ui/constants">
 {{range .Constants}}{{$c := .}}
 <div class="form-group">
-  <label>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</label>
+  <label>{{.DisplayLabel $.Lang}}</label>
   {{if .RefEntity}}
     <select name="{{.Name}}">
-      <option value="">— не выбрано —</option>
+      <option value="">{{t $.Lang "— не выбрано —"}}</option>
       {{range index $.RefOpts .Name}}
       <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $c.Name)}}selected{{end}}>{{index . "_label"}}</option>
       {{end}}
@@ -1714,8 +1733,8 @@ const tplConstants = `
     <input type="date" name="{{.Name}}" value="{{index $.Values .Name}}">
   {{else if eq (str .Type) "bool"}}
     <select name="{{.Name}}">
-      <option value="false" {{if eq (index $.Values .Name) "false"}}selected{{end}}>Нет</option>
-      <option value="true"  {{if eq (index $.Values .Name) "true"}}selected{{end}}>Да</option>
+      <option value="false" {{if eq (index $.Values .Name) "false"}}selected{{end}}>{{t $.Lang "Нет"}}</option>
+      <option value="true"  {{if eq (index $.Values .Name) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
   {{else}}
     <input type="text" name="{{.Name}}" value="{{index $.Values .Name}}" placeholder="{{.Name}}">
@@ -1723,10 +1742,10 @@ const tplConstants = `
 </div>
 {{end}}
 {{if not .Constants}}
-<p class="empty">Нет констант в конфигурации</p>
+<p class="empty">{{t $.Lang "Нет констант в конфигурации"}}</p>
 {{else}}
 <div style="margin-top:20px">
-  <button class="btn btn-primary" type="submit">Сохранить</button>
+  <button class="btn btn-primary" type="submit">{{t $.Lang "Сохранить"}}</button>
 </div>
 {{end}}
 </form>
@@ -1739,25 +1758,25 @@ const tplJournal = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Journal.Title}}</h2>
+  <h2>{{.Journal.DisplayName $.Lang}}</h2>
   <div style="display:flex;align-items:center;gap:12px">
-    <span style="color:#94a3b8;font-size:13px">Всего: {{.Total}}</span>
-    <a class="btn btn-sm" href="/ui/journal/{{lower .Journal.Name}}/excel{{filterQuery .Params}}" style="background:#16a34a;color:#fff" title="Скачать Excel">Excel ↓</a>
+    <span style="color:#94a3b8;font-size:13px">{{t $.Lang "Всего:"}} {{.Total}}</span>
+    <a class="btn btn-sm" href="/ui/journal/{{lower .Journal.Name}}/excel{{filterQuery .Params}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
   </div>
 </div>
 {{$j := .Journal}}{{$params := .Params}}{{$fmts := .ColFormats}}
 <details{{if hasFilter $params}} open{{end}}>
-  <summary>Отбор</summary>
+  <summary>{{t $.Lang "Отбор"}}</summary>
   <form method="GET" action="">
   <div class="filter-body">
   {{range $j.Filters}}
     {{if eq .Type "date_range"}}
     <div>
-      <label>{{.Field}} с</label>
+      <label>{{.Field}} {{t $.Lang "с"}}</label>
       <input type="date" name="f.{{.Field}}.from" value="{{(filterVal $params .Field).From}}">
     </div>
     <div>
-      <label>{{.Field}} по</label>
+      <label>{{.Field}} {{t $.Lang "по"}}</label>
       <input type="date" name="f.{{.Field}}.to" value="{{(filterVal $params .Field).To}}">
     </div>
     {{else}}
@@ -1765,7 +1784,7 @@ const tplJournal = `
       <label>{{.Field}}</label>
       {{if index $.FilterOptions .Field}}
       <select name="f.{{.Field}}">
-        <option value="">— все —</option>
+        <option value="">{{t $.Lang "— все —"}}</option>
         {{range index $.FilterOptions .Field}}
         <option value="{{index . "id"}}" {{if eq (index . "id") (filterVal $params .Field).Value}}selected{{end}}>{{index . "_label"}}</option>
         {{end}}
@@ -1778,8 +1797,8 @@ const tplJournal = `
   {{end}}
   </div>
   <div class="filter-actions">
-    <button class="btn btn-primary btn-sm" type="submit">Применить</button>
-    <a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569">Сбросить</a>
+    <button class="btn btn-primary btn-sm" type="submit">{{t $.Lang "Применить"}}</button>
+    <a class="btn btn-sm" href="?" style="background:#e2e8f0;color:#475569">{{t $.Lang "Сбросить"}}</a>
   </div>
   {{if $.CurrentSubsystem}}<input type="hidden" name="subsystem" value="{{$.CurrentSubsystem}}">{{end}}
   </form>
@@ -1788,7 +1807,7 @@ const tplJournal = `
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  <th>Документ</th>
+  <th>{{t $.Lang "Документ"}}</th>
   {{range $j.Columns}}<th>{{.Label}}</th>{{end}}
   <th style="width:90px"></th>
 </tr></thead>
@@ -1803,19 +1822,19 @@ const tplJournal = `
     {{if eq (index $fmts .Field) "date"}}<td>{{fmtDate $v}}</td>
     {{else}}<td>{{$v}}</td>{{end}}
   {{end}}
-  <td><a class="btn btn-sm btn-primary" href="/ui/document/{{lower (str (index . "_doc_kind"))}}/{{str (index . "id")}}">Открыть</a></td>
+  <td><a class="btn btn-sm btn-primary" href="/ui/document/{{lower (str (index . "_doc_kind"))}}/{{str (index . "id")}}">{{t $.Lang "Открыть"}}</a></td>
 </tr>
 {{end}}
 </tbody></table>
 {{else}}
-<p class="empty">Документов нет</p>
+<p class="empty">{{t $.Lang "Документов нет"}}</p>
 {{end}}
 </div>
 
 {{if or .HasPrev .HasNext}}
 <div style="display:flex;gap:8px;margin-top:12px">
-  {{if .HasPrev}}<a class="btn btn-secondary" href="?offset={{.PrevOffset}}{{filterQuery $params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">← Назад</a>{{end}}
-  {{if .HasNext}}<a class="btn btn-secondary" href="?offset={{.NextOffset}}{{filterQuery $params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">Вперёд →</a>{{end}}
+  {{if .HasPrev}}<a class="btn btn-secondary" href="?offset={{.PrevOffset}}{{filterQuery $params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "← Назад"}}</a>{{end}}
+  {{if .HasNext}}<a class="btn btn-secondary" href="?offset={{.NextOffset}}{{filterQuery $params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Вперёд →"}}</a>{{end}}
 </div>
 {{end}}
 
@@ -1828,14 +1847,14 @@ const tplHistory = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:900px">
-  <h2 style="margin-bottom:0">История изменений — {{.EntityName}}</h2>
+  <h2 style="margin-bottom:0">{{t $.Lang "История изменений"}} — {{.EntityName}}</h2>
   <a href="{{.BackURL}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
 </div>
 <div class="card" style="max-width:900px">
 {{if .Entries}}
 <table style="font-size:13px">
 <thead><tr>
-  <th>Время</th><th>Пользователь</th><th>Действие</th><th>Поле</th><th>Было</th><th>Стало</th>
+  <th>{{t $.Lang "Время"}}</th><th>{{t $.Lang "Пользователь"}}</th><th>{{t $.Lang "Действие"}}</th><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Было"}}</th><th>{{t $.Lang "Стало"}}</th>
 </tr></thead>
 <tbody>
 {{range .Entries}}<tr>
@@ -1849,31 +1868,30 @@ const tplHistory = `
 </tbody>
 </table>
 {{else}}
-<p class="empty">История изменений пуста.</p>
+<p class="empty">{{t $.Lang "История изменений пуста."}}</p>
 {{end}}
 </div>
 </main></div></body></html>
 {{end}}
 `
 
-
 const tplScheduled = `
 {{define "page-scheduled-list"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>Регламентные задания</h2>
-  <span style="color:#94a3b8;font-size:13px">Всего: {{len .JobRows}}</span>
+  <h2>{{t $.Lang "Регламентные задания"}}</h2>
+  <span style="color:#94a3b8;font-size:13px">{{t $.Lang "Всего:"}} {{len .JobRows}}</span>
 </div>
 <div class="card">
 {{if .JobRows}}
 <table><thead><tr>
-  <th>Название</th>
-  <th>Расписание</th>
-  <th>Обработка</th>
-  <th>Статус</th>
-  <th>Последний запуск</th>
-  <th>Длительность</th>
+  <th>{{t $.Lang "Название"}}</th>
+  <th>{{t $.Lang "Расписание"}}</th>
+  <th>{{t $.Lang "Обработка"}}</th>
+  <th>{{t $.Lang "Статус"}}</th>
+  <th>{{t $.Lang "Последний запуск"}}</th>
+  <th>{{t $.Lang "Длительность"}}</th>
   <th style="width:90px"></th>
 </tr></thead>
 <tbody>
@@ -1883,7 +1901,7 @@ const tplScheduled = `
   <td><strong>{{$job.Title}}</strong><br><small style="color:#94a3b8">{{$job.Name}}</small></td>
   <td><code>{{$job.Schedule}}</code></td>
   <td>{{$job.Processor}}</td>
-  <td>{{if $job.Enabled}}<span style="color:#22c55e">✓ активно</span>{{else}}<span style="color:#94a3b8">— отключено</span>{{end}}</td>
+  <td>{{if $job.Enabled}}<span style="color:#22c55e">{{t $.Lang "✓ активно"}}</span>{{else}}<span style="color:#94a3b8">{{t $.Lang "— отключено"}}</span>{{end}}</td>
   <td>
     {{if .LastRun}}
       {{$r := .LastRun}}
@@ -1894,16 +1912,16 @@ const tplScheduled = `
     {{end}}
   </td>
   <td>
-    {{if .LastRun}}{{.LastRun.DurationMs}} мс{{else}}—{{end}}
+    {{if .LastRun}}{{.LastRun.DurationMs}} {{t $.Lang "мс"}}{{else}}—{{end}}
   </td>
   <td>
-    <a class="btn btn-sm btn-primary" href="/ui/admin/scheduled/{{$job.Name}}">Подробнее</a>
+    <a class="btn btn-sm btn-primary" href="/ui/admin/scheduled/{{$job.Name}}">{{t $.Lang "Подробнее"}}</a>
   </td>
 </tr>
 {{end}}
 </tbody></table>
 {{else}}
-<p class="empty">Регламентных заданий нет. Создайте файлы в папке <code>scheduled/</code> вашей конфигурации.</p>
+<p class="empty">{{t $.Lang "Регламентных заданий нет. Создайте файлы в папке <code>scheduled/</code> вашей конфигурации."}}</p>
 {{end}}
 </div>
 </main></div></body></html>
@@ -1914,7 +1932,7 @@ const tplScheduled = `
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
   <div>
-    <h2 style="margin-bottom:4px">{{.Job.Title}}</h2>
+    <h2 style="margin-bottom:4px">{{.Job.DisplayName $.Lang}}</h2>
     <small style="color:#94a3b8">{{.Job.Name}}</small>
   </div>
   <a href="/ui/admin/scheduled" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9">×</a>
@@ -1922,29 +1940,29 @@ const tplScheduled = `
 
 <div class="card" style="margin-bottom:20px">
 <table style="width:100%;border-collapse:collapse">
-  <tr><td style="padding:6px 12px;color:#64748b;width:160px">Расписание</td><td><code>{{.Job.Schedule}}</code></td></tr>
-  <tr><td style="padding:6px 12px;color:#64748b">Обработка</td><td>{{.Job.Processor}}</td></tr>
-  <tr><td style="padding:6px 12px;color:#64748b">При ошибке</td><td>{{.Job.OnError}}</td></tr>
-  <tr><td style="padding:6px 12px;color:#64748b">Таймаут</td><td>{{.Job.Timeout}} сек.</td></tr>
-  <tr><td style="padding:6px 12px;color:#64748b">Состояние</td><td>
-    {{if .Job.Enabled}}<span style="color:#22c55e">✓ активно</span>{{else}}<span style="color:#94a3b8">— отключено</span>{{end}}
+  <tr><td style="padding:6px 12px;color:#64748b;width:160px">{{t $.Lang "Расписание"}}</td><td><code>{{.Job.Schedule}}</code></td></tr>
+  <tr><td style="padding:6px 12px;color:#64748b">{{t $.Lang "Обработка"}}</td><td>{{.Job.Processor}}</td></tr>
+  <tr><td style="padding:6px 12px;color:#64748b">{{t $.Lang "При ошибке"}}</td><td>{{.Job.OnError}}</td></tr>
+  <tr><td style="padding:6px 12px;color:#64748b">{{t $.Lang "Таймаут"}}</td><td>{{.Job.Timeout}} {{t $.Lang "сек."}}</td></tr>
+  <tr><td style="padding:6px 12px;color:#64748b">{{t $.Lang "Состояние"}}</td><td>
+    {{if .Job.Enabled}}<span style="color:#22c55e">{{t $.Lang "✓ активно"}}</span>{{else}}<span style="color:#94a3b8">{{t $.Lang "— отключено"}}</span>{{end}}
   </td></tr>
 </table>
 </div>
 
 <form method="POST" action="/ui/admin/scheduled/{{.Job.Name}}/run-now" style="margin-bottom:20px">
-  <button class="btn btn-primary" type="submit">▶ Запустить сейчас</button>
+  <button class="btn btn-primary" type="submit">{{t $.Lang "▶ Запустить сейчас"}}</button>
 </form>
 
-<h3>История запусков (последние 50)</h3>
+<h3>{{t $.Lang "История запусков (последние 50)"}}</h3>
 <div class="card">
 {{if .Runs}}
 <table><thead><tr>
-  <th>Начало</th>
-  <th>Статус</th>
-  <th>Длительность</th>
-  <th>Вывод</th>
-  <th>Ошибка</th>
+  <th>{{t $.Lang "Начало"}}</th>
+  <th>{{t $.Lang "Статус"}}</th>
+  <th>{{t $.Lang "Длительность"}}</th>
+  <th>{{t $.Lang "Вывод"}}</th>
+  <th>{{t $.Lang "Ошибка"}}</th>
 </tr></thead>
 <tbody>
 {{range .Runs}}
@@ -1955,14 +1973,14 @@ const tplScheduled = `
       {{.Status}}
     </span>
   </td>
-  <td>{{.DurationMs}} мс</td>
+  <td>{{.DurationMs}} {{t $.Lang "мс"}}</td>
   <td style="max-width:400px;white-space:pre-wrap;font-size:12px;color:#475569">{{.Output}}</td>
   <td style="max-width:300px;white-space:pre-wrap;font-size:12px;color:#ef4444">{{.Error}}</td>
 </tr>
 {{end}}
 </tbody></table>
 {{else}}
-<p class="empty">Запусков ещё не было</p>
+<p class="empty">{{t $.Lang "Запусков ещё не было"}}</p>
 {{end}}
 </div>
 </main></div></body></html>
@@ -1974,16 +1992,16 @@ const tplAccountReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Chart.Title}}</h2>
-  <span style="color:#94a3b8;font-size:13px">{{len .Rows}} счетов</span>
+  <h2>{{.Chart.DisplayName $.Lang}}</h2>
+  <span style="color:#94a3b8;font-size:13px">{{len .Rows}} {{t $.Lang "счетов"}}</span>
 </div>
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  <th style="width:120px">Код</th>
-  <th>Наименование</th>
-  <th style="width:140px">Вид</th>
-  <th style="width:80px">Родитель</th>
+  <th style="width:120px">{{t $.Lang "Код"}}</th>
+  <th>{{t $.Lang "Наименование"}}</th>
+  <th style="width:140px">{{t $.Lang "Вид"}}</th>
+  <th style="width:80px">{{t $.Lang "Родитель"}}</th>
 </tr></thead>
 <tbody>
 {{range .Rows}}
@@ -1991,16 +2009,16 @@ const tplAccountReg = `
   <td><code>{{index . "code"}}</code></td>
   <td>{{index . "name"}}</td>
   <td style="color:#64748b;font-size:13px">
-    {{if eq (str (index . "kind")) "active"}}активный
-    {{else if eq (str (index . "kind")) "passive"}}пассивный
-    {{else}}активно-пассивный{{end}}
+    {{if eq (str (index . "kind")) "active"}}{{t $.Lang "активный"}}
+    {{else if eq (str (index . "kind")) "passive"}}{{t $.Lang "пассивный"}}
+    {{else}}{{t $.Lang "активно-пассивный"}}{{end}}
   </td>
   <td style="color:#94a3b8;font-size:12px">{{index . "parent"}}</td>
 </tr>
 {{end}}
 </tbody></table>
 {{else}}
-<p class="empty">Счетов нет</p>
+<p class="empty">{{t $.Lang "Счетов нет"}}</p>
 {{end}}
 </div>
 </main></div></body></html>
@@ -2010,17 +2028,17 @@ const tplAccountReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Register.Title}} — Проводки</h2>
-  <a class="btn btn-secondary" href="/ui/accountreg/{{lower .Register.Name}}/balances">Остатки</a>
+  <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "Проводки"}}</h2>
+  <a class="btn btn-secondary" href="/ui/accountreg/{{lower .Register.Name}}/balances">{{t $.Lang "Остатки"}}</a>
 </div>
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  <th>Период</th>
-  <th>Дт</th>
-  <th>Кт</th>
-  {{range .Register.Resources}}<th>{{.Name}}</th>{{end}}
-  <th>Регистратор</th>
+  <th>{{t $.Lang "Период"}}</th>
+  <th>{{t $.Lang "Дт"}}</th>
+  <th>{{t $.Lang "Кт"}}</th>
+  {{range .Register.Resources}}<th>{{.DisplayName $.Lang}}</th>{{end}}
+  <th>{{t $.Lang "Регистратор"}}</th>
 </tr></thead>
 <tbody>
 {{range .Rows}}
@@ -2034,7 +2052,7 @@ const tplAccountReg = `
 {{end}}
 </tbody></table>
 {{else}}
-<p class="empty">Проводок нет</p>
+<p class="empty">{{t $.Lang "Проводок нет"}}</p>
 {{end}}
 </div>
 </main></div></body></html>
@@ -2044,25 +2062,25 @@ const tplAccountReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Register.Title}} — Остатки по счетам</h2>
+  <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "Остатки по счетам"}}</h2>
   <div style="display:flex;gap:8px;align-items:center">
     <form method="GET" style="display:flex;gap:8px;align-items:center">
-      <label style="color:#64748b;font-size:13px">На дату:</label>
+      <label style="color:#64748b;font-size:13px">{{t $.Lang "На дату:"}}</label>
       <input type="date" name="date" value="{{.AsOf}}" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px">
-      <button class="btn btn-primary btn-sm" type="submit">Применить</button>
+      <button class="btn btn-primary btn-sm" type="submit">{{t $.Lang "Применить"}}</button>
     </form>
-    <a class="btn btn-secondary" href="/ui/accountreg/{{lower .Register.Name}}">Проводки</a>
+    <a class="btn btn-secondary" href="/ui/accountreg/{{lower .Register.Name}}">{{t $.Lang "Проводки"}}</a>
   </div>
 </div>
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
-  <th style="width:100px">Счёт</th>
-  <th>Наименование</th>
+  <th style="width:100px">{{t $.Lang "Счёт"}}</th>
+  <th>{{t $.Lang "Наименование"}}</th>
   {{range .Register.Resources}}
-  <th style="text-align:right">{{.Name}} Дт</th>
-  <th style="text-align:right">{{.Name}} Кт</th>
-  <th style="text-align:right">Сальдо</th>
+  <th style="text-align:right">{{.DisplayName $.Lang}} {{t $.Lang "Дт"}}</th>
+  <th style="text-align:right">{{.DisplayName $.Lang}} {{t $.Lang "Кт"}}</th>
+  <th style="text-align:right">{{t $.Lang "Сальдо"}}</th>
   {{end}}
 </tr></thead>
 <tbody>
@@ -2081,7 +2099,7 @@ const tplAccountReg = `
 {{end}}
 </tbody></table>
 {{else}}
-<p class="empty">Нет движений на выбранную дату</p>
+<p class="empty">{{t $.Lang "Нет движений на выбранную дату"}}</p>
 {{end}}
 </div>
 </main></div></body></html>

@@ -5,11 +5,11 @@ const tplQueryConsole = `
 {{template "head" .}}{{template "nav" .}}
 <main style="max-width:100%">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-  <h2 style="margin:0">Консоль запросов</h2>
+  <h2 style="margin:0">{{t $.Lang "Консоль запросов"}}</h2>
   <div style="display:flex;gap:8px;align-items:center">
-    <button onclick="qcExec()" class="btn" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">▶ Выполнить</button>
-    <button onclick="qcToggleBuilder()" class="btn" style="background:#e2e8f0;color:#475569;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px" id="qc-builder-btn">Конструктор</button>
-    <button onclick="qcClear()" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;color:#64748b">Очистить</button>
+    <button onclick="qcExec()" class="btn" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">{{t $.Lang "▶ Выполнить"}}</button>
+    <button onclick="qcToggleBuilder()" class="btn" style="background:#e2e8f0;color:#475569;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px" id="qc-builder-btn">{{t $.Lang "Конструктор"}}</button>
+    <button onclick="qcClear()" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;color:#64748b">{{t $.Lang "Очистить"}}</button>
     <span id="qc-status" style="font-size:12px;color:#64748b"></span>
   </div>
 </div>
@@ -21,35 +21,35 @@ const tplQueryConsole = `
 <!-- LEFT: builder panels -->
 <div>
 <div class="card" style="margin-bottom:10px">
-<h3 style="margin-top:0">Источник данных</h3>
+<h3 style="margin-top:0">{{t $.Lang "Источник данных"}}</h3>
 <select id="qb-src" onchange="qbSetSource(this.value)" style="width:100%;margin-bottom:8px">
-  <option value="">— выбрать —</option>
+  <option value="">{{t $.Lang "— выбрать —"}}</option>
 </select>
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-  <span style="font-size:12px;color:#64748b;flex-shrink:0;width:70px">Псевдоним:</span>
-  <input id="qb-main-alias" type="text" placeholder="напр. Прод" oninput="qbRebuildAllFields()"
+  <span style="font-size:12px;color:#64748b;flex-shrink:0;width:70px">{{t $.Lang "Псевдоним:"}}</span>
+  <input id="qb-main-alias" type="text" placeholder="{{t $.Lang "напр. Прод"}}" oninput="qbRebuildAllFields()"
     style="width:110px;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px">
 </div>
 <div id="qb-vt-param" style="display:none;margin-top:4px">
-  <label style="font-size:12px;color:#64748b">Параметры виртуальной таблицы</label>
-  <input id="qb-vt-param-val" type="text" style="width:100%;margin-top:4px" placeholder="например: &amp;НаДату">
+  <label style="font-size:12px;color:#64748b">{{t $.Lang "Параметры виртуальной таблицы"}}</label>
+  <input id="qb-vt-param-val" type="text" style="width:100%;margin-top:4px" placeholder="{{t $.Lang "например: &НаДату"}}">
 </div>
 </div>
 
 <div class="card" style="margin-bottom:10px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Соединения</h3>
-  <button onclick="qbAddJoin()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">+ Добавить</button>
+  <h3 style="margin:0">{{t $.Lang "Соединения"}}</h3>
+  <button onclick="qbAddJoin()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">{{t $.Lang "+ Добавить"}}</button>
 </div>
-<div id="qb-joins"><p style="font-size:12px;color:#94a3b8;margin:0" id="qb-joins-hint">Нет соединений</p></div>
+<div id="qb-joins"><p style="font-size:12px;color:#94a3b8;margin:0" id="qb-joins-hint">{{t $.Lang "Нет соединений"}}</p></div>
 </div>
 
 <div class="card" style="margin-bottom:10px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Поля (ВЫБРАТЬ)</h3>
+  <h3 style="margin:0">{{t $.Lang "Поля (ВЫБРАТЬ)"}}</h3>
   <div style="display:flex;gap:4px">
-    <button onclick="qbAllFields(true)" style="background:#e2e8f0;color:#475569;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">Все</button>
-    <button onclick="qbAllFields(false)" style="background:#e2e8f0;color:#475569;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">Сброс</button>
+    <button onclick="qbAllFields(true)" style="background:#e2e8f0;color:#475569;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">{{t $.Lang "Все"}}</button>
+    <button onclick="qbAllFields(false)" style="background:#e2e8f0;color:#475569;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">{{t $.Lang "Сброс"}}</button>
   </div>
 </div>
 <div id="qb-fields-list" style="max-height:200px;overflow-y:auto"></div>
@@ -57,16 +57,16 @@ const tplQueryConsole = `
 
 <div class="card" style="margin-bottom:10px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Условия (ГДЕ)</h3>
-  <button onclick="qbAddCond()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">+ Условие</button>
+  <h3 style="margin:0">{{t $.Lang "Условия (ГДЕ)"}}</h3>
+  <button onclick="qbAddCond()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">{{t $.Lang "+ Условие"}}</button>
 </div>
 <div id="qb-conds"></div>
 </div>
 
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Сортировка</h3>
-  <button onclick="qbAddOrder()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">+ Поле</button>
+  <h3 style="margin:0">{{t $.Lang "Сортировка"}}</h3>
+  <button onclick="qbAddOrder()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:2px 8px;font-size:12px;cursor:pointer">{{t $.Lang "+ Поле"}}</button>
 </div>
 <div id="qb-orders"></div>
 </div>
@@ -75,11 +75,11 @@ const tplQueryConsole = `
 <!-- RIGHT: params + apply -->
 <div>
 <div class="card">
-<h3 style="margin-top:0">Параметры запроса</h3>
-<p style="font-size:12px;color:#64748b;margin-bottom:8px">Значения &amp;Параметров для выполнения</p>
+<h3 style="margin-top:0">{{t $.Lang "Параметры запроса"}}</h3>
+<p style="font-size:12px;color:#64748b;margin-bottom:8px">{{t $.Lang "Значения &Параметров для выполнения"}}</p>
 <div id="qb-params" style="font-size:13px">—</div>
 <div style="margin-top:12px">
-  <button onclick="qbApplyToEditor()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">Применить к редактору</button>
+  <button onclick="qbApplyToEditor()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">{{t $.Lang "Применить к редактору"}}</button>
 </div>
 </div>
 </div>
@@ -96,16 +96,16 @@ const tplQueryConsole = `
 <!-- Parameters (always visible) -->
 <div class="card" style="margin-bottom:12px" id="qc-params-card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Параметры</h3>
-  <button onclick="qcDetectParams()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px">Заполнить из запроса</button>
+  <h3 style="margin:0">{{t $.Lang "Параметры"}}</h3>
+  <button onclick="qcDetectParams()" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px">{{t $.Lang "Заполнить из запроса"}}</button>
 </div>
-<div id="qc-params" style="font-size:13px"><span style="color:#94a3b8">Нажмите «Заполнить из запроса» или введите вручную</span></div>
+<div id="qc-params" style="font-size:13px"><span style="color:#94a3b8">{{t $.Lang "Нажмите «Заполнить из запроса» или введите вручную"}}</span></div>
 </div>
 
 <!-- Results -->
 <div class="card" id="qc-results-card" style="display:none">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Результат</h3>
+  <h3 style="margin:0">{{t $.Lang "Результат"}}</h3>
   <span id="qc-result-info" style="font-size:12px;color:#64748b"></span>
 </div>
 <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
@@ -944,10 +944,10 @@ const tplCodeConsole = `
 {{template "head" .}}{{template "nav" .}}
 <main style="max-width:100%">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-  <h2 style="margin:0">Консоль кода</h2>
+  <h2 style="margin:0">{{t $.Lang "Консоль кода"}}</h2>
   <div style="display:flex;gap:8px;align-items:center">
-    <button onclick="ccExec()" class="btn" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">▶ Выполнить</button>
-    <button onclick="ccClear()" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;color:#64748b">Очистить</button>
+    <button onclick="ccExec()" class="btn" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:13px">{{t $.Lang "▶ Выполнить"}}</button>
+    <button onclick="ccClear()" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;color:#64748b">{{t $.Lang "Очистить"}}</button>
   </div>
 </div>
 
@@ -960,8 +960,8 @@ const tplCodeConsole = `
 
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Результат</h3>
-  <button onclick="document.getElementById('cc-output').innerHTML=''" style="background:none;border:1px solid #e2e8f0;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;color:#64748b">Очистить</button>
+  <h3 style="margin:0">{{t $.Lang "Результат"}}</h3>
+  <button onclick="document.getElementById('cc-output').innerHTML=''" style="background:none;border:1px solid #e2e8f0;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;color:#64748b">{{t $.Lang "Очистить"}}</button>
 </div>
 <div id="cc-output" style="background:#1e293b;color:#e2e8f0;font-family:'Cascadia Code',Consolas,monospace;font-size:13px;padding:12px 16px;border-radius:6px;min-height:120px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word"></div>
 </div>

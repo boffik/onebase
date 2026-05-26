@@ -1,4 +1,4 @@
-﻿package ui
+package ui
 
 import (
 	"fmt"
@@ -205,10 +205,11 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, r)
 		return
 	}
+	lang := s.resolveLang(r)
 	userID := chi.URLParam(r, "id")
 	u, err := s.authRepo.GetByID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "Пользователь не найден", 404)
+		http.Error(w, s.tr(lang, "Пользователь не найден"), 404)
 		return
 	}
 	data := map[string]any{"User": u}
@@ -228,7 +229,7 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 				u.IsAdmin = isAdmin
 				u.DenyPasswdChange = denyPasswd
 				u.ShowInList = showInList
-				data["Success"] = "Данные сохранены"
+				data["Success"] = s.tr(lang, "Данные сохранены")
 			}
 		case "passwd":
 			newPwd := r.FormValue("new_password")
@@ -236,11 +237,11 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 			// Пустой пароль допустим — для kiosk/тестового режима.
 			// bcrypt и Authenticate с "" работают корректно.
 			if newPwd != confirm {
-				data["Error"] = "Пароли не совпадают"
+				data["Error"] = s.tr(lang, "Пароли не совпадают")
 			} else if err := s.authRepo.UpdatePassword(r.Context(), userID, newPwd); err != nil {
 				data["Error"] = err.Error()
 			} else {
-				data["Success"] = "Пароль изменён"
+				data["Success"] = s.tr(lang, "Пароль изменён")
 			}
 		}
 	}
@@ -263,6 +264,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, r)
 		return
 	}
+	lang := s.resolveLang(r)
 	r.ParseForm()
 	login := r.FormValue("login")
 	password := r.FormValue("password")
@@ -273,7 +275,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 
 	if login == "" || password == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": "Логин и пароль обязательны"})
+		adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": s.tr(lang, "Логин и пароль обязательны")})
 		return
 	}
 
@@ -312,6 +314,7 @@ func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, r)
 		return
 	}
+	lang := s.resolveLang(r)
 	userID := chi.URLParam(r, "id")
 	users, _ := s.authRepo.List(r.Context())
 	var userLogin string
@@ -333,7 +336,7 @@ func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		// Пустой пароль допустим (kiosk/тестовый режим); проверяем
 		// только совпадение с подтверждением.
 		if newPwd != confirm {
-			data["Error"] = "Пароли не совпадают"
+			data["Error"] = s.tr(lang, "Пароли не совпадают")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 			return
@@ -352,6 +355,7 @@ func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
 
 // selfPasswd lets any authenticated user change their own password.
 func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
+	lang := s.resolveLang(r)
 	u := auth.UserFromContext(r.Context())
 	if u == nil {
 		http.Redirect(w, r, "/login", http.StatusFound)
@@ -373,14 +377,14 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 		confirm := r.FormValue("confirm_password")
 
 		if _, err := s.authRepo.Authenticate(r.Context(), u.Login, oldPwd); err != nil {
-			data["Error"] = "Неверный текущий пароль"
+			data["Error"] = s.tr(lang, "Неверный текущий пароль")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 			return
 		}
 		// Пустой пароль допустим, поэтому валидируем только совпадение.
 		if newPwd != confirm {
-			data["Error"] = "Пароли не совпадают"
+			data["Error"] = s.tr(lang, "Пароли не совпадают")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 			return
@@ -497,9 +501,9 @@ func (s *Server) adminUserRoles(w http.ResponseWriter, r *http.Request) {
 	userRoleIDs, _ := s.authRepo.GetUserRoleIDs(r.Context(), userID)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	adminTmpl.ExecuteTemplate(w, "admin-user-roles", map[string]any{
-		"UserID":     userID,
-		"UserLogin":  userLogin,
-		"AllRoles":   allRoles,
+		"UserID":      userID,
+		"UserLogin":   userLogin,
+		"AllRoles":    allRoles,
 		"UserRoleIDs": userRoleIDs,
 	})
 }
@@ -576,7 +580,7 @@ func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 
 	entries, _ := s.store.AuditSearch(r.Context(), filter, pageSize+1, (page-1)*pageSize)
 
-		s.enrichAuditEntriesGlobal(r.Context(), entries)
+	s.enrichAuditEntriesGlobal(r.Context(), entries)
 	hasNext := len(entries) > pageSize
 	if hasNext {
 		entries = entries[:pageSize]
@@ -902,4 +906,3 @@ const tplAdminCleanup = `{{define "admin-cleanup"}}` + adminHead + `
 {{end}}
 </main></body></html>
 {{end}}`
-

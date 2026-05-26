@@ -32,6 +32,16 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 	repo.EnsureSchema(r.Context())
 	users, _ := repo.List(r.Context())
 
+	// Build language options for the user lang selector
+	langOpts := `<option value="">—</option>`
+	langOptsJS := ""
+	if launcherBundle != nil {
+		for _, l := range launcherBundle.Available() {
+			langOpts += fmt.Sprintf(`<option value="%s">%s</option>`, l.Code, l.Native)
+
+			langOptsJS += fmt.Sprintf(`,{v:'%s',l:'%s'}`, l.Code, l.Native)
+		}
+	}
 	html := `<div style="padding:16px">
 	<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
 	  <h3 style="margin:0;font-size:15px">Пользователи</h3>
@@ -49,7 +59,7 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 	  <div id="cfg-user-err" style="color:#c00;font-size:11px;margin-top:6px;display:none"></div>
 	</div>
 	<table style="width:100%;border-collapse:collapse;font-size:12px">
-	<tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;font-weight:600">Логин</th><th style="text-align:left;padding:6px 8px;font-weight:600">Имя</th><th style="text-align:center;padding:6px 8px;font-weight:600">Админ</th><th style="text-align:left;padding:6px 8px;font-weight:600">Создан</th><th style="padding:6px 8px"></th></tr>`
+	<tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;font-weight:600">Логин</th><th style="text-align:left;padding:6px 8px;font-weight:600">Имя</th><th style="text-align:center;padding:6px 8px;font-weight:600">Админ</th><th style="text-align:left;padding:6px 8px;font-weight:600">Создан</th><th style="text-align:left;padding:6px 8px;font-weight:600">Язык</th><th style="padding:6px 8px"></th></tr>`
 	for i, u := range users {
 		bg := ""
 		if i%2 == 1 {
@@ -74,8 +84,13 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 			listTitle = "Убрать из списка выбора"
 			listStyle = "background:#2563eb;color:#fff"
 		}
-		html += fmt.Sprintf(`<tr%s><td style="padding:5px 8px">%s</td><td style="padding:5px 8px">%s</td><td style="padding:5px 8px;text-align:center">%s</td><td style="padding:5px 8px;color:#888">%s</td><td style="padding:5px 8px;white-space:nowrap"><button onclick="cfgUserRoles('%s')" style="background:#0e7490;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">Роли</button><button onclick="cfgUserPasswd('%s')" style="background:#f59e0b;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">Пароль</button><button onclick="cfgUserDenyPasswd('%s',%v)" title="%s" style="%s;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">%s</button><button onclick="cfgUserShowInList('%s',%v)" title="%s" style="%s;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">%s</button><button onclick="cfgUserDel('%s')" style="color:#c00;background:none;border:none;cursor:pointer;font-size:11px" title="Удалить">✕</button></td></tr>`,
+			langLabel := "—"
+			if u.Lang != "" {
+				langLabel = u.Lang
+			}
+		html += fmt.Sprintf(`<tr%s><td style="padding:5px 8px">%s</td><td style="padding:5px 8px">%s</td><td style="padding:5px 8px;text-align:center">%s</td><td style="padding:5px 8px;color:#888">%s</td><td style="padding:5px 8px"><button onclick="cfgUserLang('%s','%s')" style="background:#7c3aed;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px">%s</button></td><td style="padding:5px 8px;white-space:nowrap"><button onclick="cfgUserRoles('%s')" style="background:#0e7490;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">Роли</button><button onclick="cfgUserPasswd('%s')" style="background:#f59e0b;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">Пароль</button><button onclick="cfgUserDenyPasswd('%s',%v)" title="%s" style="%s;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">%s</button><button onclick="cfgUserShowInList('%s',%v)" title="%s" style="%s;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;margin-right:4px">%s</button><button onclick="cfgUserDel('%s')" style="color:#c00;background:none;border:none;cursor:pointer;font-size:11px" title="Удалить">✕</button></td></tr>`,
 			bg, escHTML(u.Login), escHTML(u.FullName), admin, u.CreatedAt.Format("02.01.2006"),
+				u.ID, u.Lang, langLabel,
 			u.ID,
 			u.ID,
 			u.ID, u.DenyPasswdChange, denyTitle, denyStyle, denyIcon,
@@ -83,7 +98,7 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 			u.ID)
 	}
 	if len(users) == 0 {
-		html += `<tr><td colspan="5" style="padding:20px;text-align:center;color:#999">Нет пользователей</td></tr>`
+		html += `<tr><td colspan="6" style="padding:20px;text-align:center;color:#999">Нет пользователей</td></tr>`
 	}
 	html += `</table></div>
 <script>
@@ -125,6 +140,31 @@ function cfgUserShowInList(id,current){
       if(r.error){alert('Ошибка: '+r.error)}else{cfgAdmin('users')}
     })
 }
+function cfgUserLang(id,current){
+  var sel=document.createElement('select');
+  sel.style.cssText='padding:4px 8px;border:1px solid #c8d0de;border-radius:4px;font-size:12px';
+  var opts=[{v:'',l:'— по умолчанию —'}` + langOptsJS + `];
+  for(var i=0;i<opts.length;i++){var o=document.createElement('option');o.value=opts[i].v;o.textContent=opts[i].l;if(opts[i].v===current)o.selected=true;sel.appendChild(o)}
+  var popup=document.createElement('div');
+  popup.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:16px;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.2);z-index:10001;display:flex;flex-direction:column;gap:8px';
+  popup.innerHTML='<div style="font-weight:600;font-size:13px">Язык пользователя</div>';
+  popup.appendChild(sel);
+  var btns=document.createElement('div');btns.style.cssText='display:flex;gap:6px;justify-content:flex-end';
+  var btnOK=document.createElement('button');btnOK.textContent='OK';btnOK.style.cssText='background:#1a4a80;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px';
+  var btnCancel=document.createElement('button');btnCancel.textContent='Отмена';btnCancel.style.cssText='background:#e2e8f0;color:#333;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px';
+  btns.appendChild(btnOK);btns.appendChild(btnCancel);popup.appendChild(btns);
+  var bg=document.createElement('div');bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:10000';
+  document.body.appendChild(bg);document.body.appendChild(popup);sel.focus();
+  function close(){bg.remove();popup.remove()}
+  btnCancel.onclick=close;bg.onclick=close;
+  btnOK.onclick=function(){
+    var lang=sel.value;close();
+    fetch('/bases/` + b.ID + `/configurator/admin/users/lang',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,lang:lang})})
+      .then(function(r){return r.json()}).then(function(r){
+        if(r.error){alert('Error: '+r.error)}else{cfgAdmin('users')}
+      })
+  }
+}
 </script>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
@@ -136,6 +176,7 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 		return
 	}
+	lang := resolveLang(r)
 	var req struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
@@ -147,7 +188,7 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Login == "" || req.Password == "" {
-		writeJSON(w, 400, map[string]any{"error": "Логин и пароль обязательны"})
+		writeJSON(w, 400, map[string]any{"error": tr(lang, "Логин и пароль обязательны")})
 		return
 	}
 	db, err := getAuthDB(r.Context(), b)
@@ -195,6 +236,7 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 		return
 	}
+	lang := resolveLang(r)
 	var req struct {
 		ID       string `json:"id"`
 		Password string `json:"password"`
@@ -204,7 +246,7 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ID == "" {
-		writeJSON(w, 400, map[string]any{"error": "id обязателен"})
+		writeJSON(w, 400, map[string]any{"error": tr(lang, "id обязателен")})
 		return
 	}
 	// Пустой пароль разрешён сознательно (kiosk/dev/тестовый аккаунт);
@@ -277,6 +319,33 @@ func (h *handler) cfgAdminUserShowInList(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+func (h *handler) cfgAdminUserLang(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	var req struct {
+		ID   string `json:"id"`
+		Lang string `json:"lang"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"error": err.Error()})
+		return
+	}
+	db, err := getAuthDB(r.Context(), b)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	repo := auth.NewRepo(db)
+	if err := repo.SetUserLang(r.Context(), req.ID, req.Lang); err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
 func (h *handler) cfgAdminSessions(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -309,7 +378,7 @@ func (h *handler) cfgAdminSessions(w http.ResponseWriter, r *http.Request) {
 			bg, escHTML(s.Login), escHTML(s.FullName), admin, s.ExpiresAt.Format("02.01.2006 15:04"), escHTML(s.Login))
 	}
 	if len(sessions) == 0 {
-		html += `<tr><td colspan="5" style="padding:20px;text-align:center;color:#999">Нет активных сессий</td></tr>`
+		html += `<tr><td colspan="6" style="padding:20px;text-align:center;color:#999">Нет активных сессий</td></tr>`
 	}
 	html += `</table></div>
 <script>

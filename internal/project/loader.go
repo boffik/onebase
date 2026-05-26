@@ -79,6 +79,7 @@ type DemoConfig struct {
 type AppConfig struct {
 	Name        string             `yaml:"name"`
 	Version     string             `yaml:"version"`
+	Lang        string             `yaml:"lang,omitempty"`
 	Logo        string             `yaml:"logo,omitempty"`
 	Email       *EmailConfig       `yaml:"email,omitempty"`
 	Attachments *AttachmentsConfig `yaml:"attachments,omitempty"`

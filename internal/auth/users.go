@@ -19,7 +19,8 @@ type User struct {
 	FullName         string
 	IsAdmin          bool
 	DenyPasswdChange bool
-	ShowInList       bool // appears in reference pickers when true
+	ShowInList       bool   // appears in reference pickers when true
+	Lang             string // preferred UI language ("" = use base default)
 	CreatedAt        time.Time
 	Roles            []*Role // loaded by middleware after session lookup
 }
@@ -63,6 +64,7 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	// idempotent migrations: add columns if missing
 	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN deny_passwd_change %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
 	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN show_in_list %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
+	r.db.Exec(ctx, `ALTER TABLE _users ADD COLUMN lang TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
@@ -90,7 +92,7 @@ func (r *Repo) ListForSelection(ctx context.Context) ([]*User, error) {
 }
 
 func (r *Repo) listWhere(ctx context.Context, where string) ([]*User, error) {
-	q := `SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, created_at FROM _users ` + where + ` ORDER BY login`
+	q := `SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, lang, created_at FROM _users ` + where + ` ORDER BY login`
 	rows, err := r.db.Query(ctx, q)
 	if err != nil {
 		return nil, err
@@ -100,7 +102,7 @@ func (r *Repo) listWhere(ctx context.Context, where string) ([]*User, error) {
 	for rows.Next() {
 		u := &User{}
 		var isAdmin, denyPasswd, showInList, createdAt any
-		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &createdAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &u.Lang, &createdAt); err != nil {
 			return nil, err
 		}
 		u.IsAdmin = scanBool(isAdmin)
@@ -117,8 +119,8 @@ func (r *Repo) GetByID(ctx context.Context, userID string) (*User, error) {
 	d := r.db.Dialect()
 	u := &User{}
 	var isAdmin, denyPasswd, showInList, createdAt any
-	q := fmt.Sprintf(`SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, created_at FROM _users WHERE id = %s`, d.Placeholder(1))
-	if err := r.db.QueryRow(ctx, q, userID).Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &createdAt); err != nil {
+	q := fmt.Sprintf(`SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, lang, created_at FROM _users WHERE id = %s`, d.Placeholder(1))
+	if err := r.db.QueryRow(ctx, q, userID).Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &u.Lang, &createdAt); err != nil {
 		return nil, err
 	}
 	u.IsAdmin = scanBool(isAdmin)
@@ -142,6 +144,14 @@ func (r *Repo) SetShowInList(ctx context.Context, userID string, show bool) erro
 	d := r.db.Dialect()
 	q := fmt.Sprintf(`UPDATE _users SET show_in_list = %s WHERE id = %s`, d.Placeholder(1), d.Placeholder(2))
 	_, err := r.db.Exec(ctx, q, show, userID)
+	return err
+}
+
+// SetUserLang sets the preferred UI language for a user.
+func (r *Repo) SetUserLang(ctx context.Context, userID, lang string) error {
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`UPDATE _users SET lang = %s WHERE id = %s`, d.Placeholder(1), d.Placeholder(2))
+	_, err := r.db.Exec(ctx, q, lang, userID)
 	return err
 }
 
@@ -231,11 +241,11 @@ func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
 	d := r.db.Dialect()
 	u := &User{}
 	q := fmt.Sprintf(`
-		SELECT u.id, u.login, u.full_name, u.is_admin, u.deny_passwd_change
+		SELECT u.id, u.login, u.full_name, u.is_admin, u.deny_passwd_change, u.lang
 		FROM _sessions s JOIN _users u ON u.id = s.user_id
 		WHERE s.token = %s AND s.expires_at > %s
 	`, d.Placeholder(1), d.Now())
-	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange)
+	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &u.Lang)
 	if err != nil {
 		return nil, err
 	}

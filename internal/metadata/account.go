@@ -11,17 +11,42 @@ import (
 
 // Account represents a single entry in a chart of accounts.
 type Account struct {
-	Code   string `yaml:"code"`
-	Name   string `yaml:"name"`
-	Kind   string `yaml:"kind"`   // active | passive | active_passive
-	Parent string `yaml:"parent"` // parent code for hierarchy
+	Code   string            `yaml:"code"`
+	Name   string            `yaml:"name"`
+	Names  map[string]string `yaml:"names"`  // переводы имени счёта по языкам
+	Kind   string            `yaml:"kind"`   // active | passive | active_passive
+	Parent string            `yaml:"parent"` // parent code for hierarchy
+}
+
+// DisplayName возвращает имя счёта с учётом языка.
+func (a Account) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := a.Names[lang]; ok && v != "" {
+			return v
+		}
+	}
+	return a.Name
 }
 
 // ChartOfAccounts is a named set of accounts loaded from YAML.
 type ChartOfAccounts struct {
-	Name     string    `yaml:"name"`
-	Title    string    `yaml:"title"`
-	Accounts []Account `yaml:"accounts"`
+	Name     string            `yaml:"name"`
+	Title    string            `yaml:"title"`
+	Titles   map[string]string `yaml:"titles"`
+	Accounts []Account         `yaml:"accounts"`
+}
+
+// DisplayName возвращает заголовок плана счетов с учётом языка.
+func (c *ChartOfAccounts) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := c.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if c.Title != "" {
+		return c.Title
+	}
+	return c.Name
 }
 
 func LoadChartOfAccountsFile(path string) (*ChartOfAccounts, error) {

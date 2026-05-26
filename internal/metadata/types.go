@@ -19,10 +19,29 @@ const (
 )
 
 type Field struct {
-	Name      string
+	Name string
+	// Title — синоним поля по умолчанию (показывается в UI). Пустой Title →
+	// в интерфейсе используется Name.
+	Title string
+	// Titles — переводы синонима по языкам (lang code → перевод).
+	Titles    map[string]string
 	Type      FieldType
 	RefEntity string // non-empty when Type starts with "reference:"
 	EnumName  string // non-empty when Type starts with "enum:"
+}
+
+// DisplayName возвращает представление поля для интерфейса: Titles[lang] →
+// Title → Name. Name всегда остаётся идентификатором (БД, URL, форма).
+func (f Field) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := f.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if f.Title != "" {
+		return f.Title
+	}
+	return f.Name
 }
 
 type Enum struct {
@@ -37,11 +56,40 @@ type Constant struct {
 	EnumName  string
 	Default   string
 	Label     string
+	Labels    map[string]string // переводы подписи по языкам
+}
+
+// DisplayLabel возвращает подпись константы с учётом языка.
+func (c *Constant) DisplayLabel(lang string) string {
+	if lang != "" {
+		if v, ok := c.Labels[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if c.Label != "" {
+		return c.Label
+	}
+	return c.Name
 }
 
 type TablePart struct {
 	Name   string
+	Title  string
+	Titles map[string]string
 	Fields []Field
+}
+
+// DisplayName возвращает представление табличной части для интерфейса.
+func (tp TablePart) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := tp.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if tp.Title != "" {
+		return tp.Title
+	}
+	return tp.Name
 }
 
 // Numerator describes automatic document numbering.
@@ -66,7 +114,11 @@ type Entity struct {
 	Name string
 	// Title — человекочитаемое представление (аналог «Синонима» в 1С).
 	// Если пусто, в интерфейсе показывается Name.
-	Title      string
+	Title string
+	// Titles — переводы синонима по языкам (lang code → перевод). Если для
+	// активного языка есть запись, используется она; иначе откатываемся на
+	// Title и затем на Name. Пустой map допустим.
+	Titles     map[string]string
 	Kind       Kind
 	Fields     []Field
 	TableParts []TablePart
@@ -84,16 +136,46 @@ type Entity struct {
 
 type Register struct {
 	Name       string
+	Title      string
+	Titles     map[string]string
 	Dimensions []Field // form the grouping key for balances
 	Resources  []Field // accumulated (summed with sign based on movement type)
 	Attributes []Field // extra data, stored but not aggregated
 }
 
+// DisplayName возвращает заголовок регистра накопления с учётом языка.
+func (r *Register) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := r.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if r.Title != "" {
+		return r.Title
+	}
+	return r.Name
+}
+
 type InfoRegister struct {
 	Name       string
+	Title      string
+	Titles     map[string]string
 	Periodic   bool    // if true, (period, dim...) is PK; otherwise just (dim...)
 	Dimensions []Field // key fields
 	Resources  []Field // value fields
+}
+
+// DisplayName возвращает заголовок регистра сведений с учётом языка.
+func (ir *InfoRegister) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := ir.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if ir.Title != "" {
+		return ir.Title
+	}
+	return ir.Name
 }
 
 func RegisterTableName(regName string) string {
@@ -108,9 +190,16 @@ func TablePartTableName(entityName, tpName string) string {
 	return strings.ToLower(entityName) + "_" + strings.ToLower(tpName)
 }
 
-// DisplayName возвращает представление объекта для интерфейса: Title, либо
-// Name как запасной вариант. Name всегда остаётся идентификатором (URL, DSL).
-func (e *Entity) DisplayName() string {
+// DisplayName возвращает представление объекта для интерфейса с учётом языка:
+// сначала пробуется Titles[lang], затем Title (синоним по умолчанию), затем
+// Name. Пустой lang пропускает первый шаг — используется как Name всегда
+// остаётся идентификатором (URL, DSL).
+func (e *Entity) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := e.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
 	if e.Title != "" {
 		return e.Title
 	}

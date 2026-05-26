@@ -1,11 +1,22 @@
 ﻿package launcher
 
 import (
-	"html/template"
 	"strings"
+	"text/template"
+
+	"github.com/ivantit66/onebase/internal/i18n"
 )
 
+var launcherBundle *i18n.Bundle
+
 var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
+	"t": func(lang, key string) string {
+		if launcherBundle != nil {
+			return launcherBundle.T(lang, key)
+		}
+		return key
+	},
+		"selIf": func(a, b string) string { if a == b { return " selected" }; return "" },
 	"dict": func(pairs ...any) map[string]any {
 		m := make(map[string]any, len(pairs)/2)
 		for i := 0; i+1 < len(pairs); i += 2 {
@@ -333,38 +344,38 @@ const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js" crossorigin="anonymous" onerror="window._monacoLoadErr='loader.js failed'"></script>
 <script>{{.InlineJSYaml}}</script>
-<title>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
+<title>{{t $.Lang "Конфигуратор"}} — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
 {{template "css" .}}
 </head>
 <body>
 <div class="topbar">
   <div class="cfg-menu-wrap">
-    <button class="cfg-menu-btn" onclick="cfgMenuToggle()">Меню &#9662;</button>
+    <button class="cfg-menu-btn" onclick="cfgMenuToggle()">{{t $.Lang "Меню"}} &#9662;</button>
     <div class="cfg-menu-dropdown" id="cfg-menu">
-      <a href="#" onclick="cfgAdmin('about');return false">О программе</a>
-      <a href="#" onclick="cfgAdmin('users');return false">Пользователи</a>
-      <a href="#" onclick="cfgAdmin('roles');return false">Роли и права</a>
-      <a href="#" onclick="cfgAdmin('sessions');return false">Активные пользователи</a>
-      <a href="#" onclick="cfgAdmin('audit');return false">Журнал регистрации</a>
-      <a href="/bases/{{.Base.ID}}/configurator/logout" style="color:#c00;border-top:1px solid #e5e7eb;margin-top:2px">🚪 Выйти</a>
+      <a href="#" onclick="cfgAdmin('about');return false">{{t $.Lang "О программе"}}</a>
+      <a href="#" onclick="cfgAdmin('users');return false">{{t $.Lang "Пользователи"}}</a>
+      <a href="#" onclick="cfgAdmin('roles');return false">{{t $.Lang "Роли и права"}}</a>
+      <a href="#" onclick="cfgAdmin('sessions');return false">{{t $.Lang "Активные пользователи"}}</a>
+      <a href="#" onclick="cfgAdmin('audit');return false">{{t $.Lang "Журнал регистрации"}}</a>
+      <a href="/bases/{{.Base.ID}}/configurator/logout" style="color:#c00;border-top:1px solid #e5e7eb;margin-top:2px">🚪 {{t $.Lang "Выйти"}}</a>
     </div>
   </div>
-  <a href="/?sel={{.Base.ID}}">← Лаунчер</a>
-  <h1>Конфигуратор — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</h1>
-  <span style="font-size:11px;color:#7aa8d8">{{.DSNMasked}} · :{{.Base.Port}} · платформа {{.PlatformVer}}</span>
-  <button onclick="launchEnterprise()" title="Запустить предприятие" class="run-enterprise-btn"><svg viewBox="0 0 24 24" fill="#333"><polygon points="6,3 20,12 6,21"/></svg></button>
-  <button id="dbg-toggle" class="dbg-topbar-btn" onclick="dbgToggle()">&#128027; Отладка: ВЫКЛ</button>
+  <a href="/?sel={{.Base.ID}}">← {{t $.Lang "Лаунчер"}}</a>
+  <h1>{{t $.Lang "Конфигуратор"}} — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</h1>
+  <span style="font-size:11px;color:#7aa8d8">{{.DSNMasked}} · :{{.Base.Port}} · {{t $.Lang "платформа"}} {{.PlatformVer}}</span>
+  <button onclick="launchEnterprise()" title="{{t $.Lang "Запустить предприятие"}}" class="run-enterprise-btn"><svg viewBox="0 0 24 24" fill="#333"><polygon points="6,3 20,12 6,21"/></svg></button>
+  <button id="dbg-toggle" class="dbg-topbar-btn" onclick="dbgToggle()">&#128027; {{t $.Lang "Отладка: ВЫКЛ"}}</button>
   <span id="monaco-status" style="font-size:9px;color:#94a3b8">Monaco:...</span>
 </div>
 <div class="tabs">
-  <a class="tab {{if eq .Tab "tree"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=tree">🌳 Дерево</a>
-  <a class="tab {{if eq .Tab "convert"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=convert">🔄 Импорт конфигурации</a>
-  <a class="tab {{if eq .Tab "files"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=files">📁 Файлы</a>
-  <a class="tab {{if eq .Tab "backup"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=backup">💾 Бэкапы</a>
+  <a class="tab {{if eq .Tab "tree"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=tree">🌳 {{t $.Lang "Дерево"}}</a>
+  <a class="tab {{if eq .Tab "convert"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=convert">🔄 {{t $.Lang "Импорт конфигурации"}}</a>
+  <a class="tab {{if eq .Tab "files"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=files">📁 {{t $.Lang "Файлы"}}</a>
+  <a class="tab {{if eq .Tab "backup"}}active{{end}}" href="/bases/{{.Base.ID}}/configurator?tab=backup">💾 {{t $.Lang "Бэкапы"}}</a>
 </div>
 <div class="cfg-body">
 {{if .Error}}<div class="err-box">{{.Error}}</div>{{end}}
-{{if and .FieldsSaved (ne .FieldsSavedEntity "panel-backup")}}<div class="success-box">✓ Типы полей для «{{.FieldsSavedEntity}}» сохранены. Перезапустите базу, чтобы изменения вступили в силу.</div>{{end}}
+{{if and .FieldsSaved (ne .FieldsSavedEntity "panel-backup")}}<div class="success-box">{{t $.Lang "✓ Типы полей для"}} «{{.FieldsSavedEntity}}» {{t $.Lang "сохранены. Перезапустите базу, чтобы изменения вступили в силу."}}</div>{{end}}
 <div id="dbg-wrapper" style="display:flex;flex:1;overflow:hidden">
 {{end}}`
 
@@ -375,22 +386,22 @@ const cfgAdminOverlay = `
 const cfgFoot = `{{define "cfg-foot"}}
 <!-- debug panel (right sidebar) -->
 <div class="dbg-panel" id="dbg-panel" style="display:none">
-  <div class="dbg-status" id="dbg-status"><span class="dot disabled"></span> Отладка: ВЫКЛ</div>
+  <div class="dbg-status" id="dbg-status"><span class="dot disabled"></span> {{t $.Lang "Отладка: ВЫКЛ"}}</div>
   <div class="dbg-controls" id="dbg-controls" style="display:none">
-    <button onclick="dbgContinue()">&#9654; Продолжить</button>
-    <button onclick="dbgStep('over')" style="font-weight:600">&#10145; Шаг (F10)</button>
-    <button onclick="dbgStep('into')">&#11015; Шаг с заходом (F11)</button>
-    <button onclick="dbgStep('out')">&#11014; Шаг с выходом</button>
-    <button onclick="dbgStop()">&#9209; Стоп</button>
+    <button onclick="dbgContinue()">&#9654; {{t $.Lang "Продолжить"}}</button>
+    <button onclick="dbgStep('over')" style="font-weight:600">&#10145; {{t $.Lang "Шаг (F10)"}}</button>
+    <button onclick="dbgStep('into')">&#11015; {{t $.Lang "Шаг с заходом (F11)"}}</button>
+    <button onclick="dbgStep('out')">&#11014; {{t $.Lang "Шаг с выходом"}}</button>
+    <button onclick="dbgStop()">&#9209; {{t $.Lang "Стоп"}}</button>
   </div>
   <div class="dbg-tabs">
-    <button class="dbg-tab active" onclick="dbgTab('vars')">Переменные</button>
-    <button class="dbg-tab" onclick="dbgTab('watch')">Табло v5</button>
-    <button class="dbg-tab" onclick="dbgTab('bp')">Точки ост.</button>
-    <button class="dbg-tab" onclick="dbgTab('stack')">Стек</button>
-    <button class="dbg-tab" onclick="dbgTab('console')">Консоль</button>
+    <button class="dbg-tab active" onclick="dbgTab('vars')">{{t $.Lang "Переменные"}}</button>
+    <button class="dbg-tab" onclick="dbgTab('watch')">{{t $.Lang "Табло"}}</button>
+    <button class="dbg-tab" onclick="dbgTab('bp')">{{t $.Lang "Точки ост."}}</button>
+    <button class="dbg-tab" onclick="dbgTab('stack')">{{t $.Lang "Стек"}}</button>
+    <button class="dbg-tab" onclick="dbgTab('console')">{{t $.Lang "Консоль"}}</button>
   </div>
-  <div id="dbg-vars" class="dbg-content"><div class="dbg-empty">Включите отладку для просмотра переменных</div></div>
+  <div id="dbg-vars" class="dbg-content"><div class="dbg-empty">{{t $.Lang "Включите отладку для просмотра переменных"}}</div></div>
   <div id="dbg-watch" class="dbg-content" style="display:none;flex-direction:column;padding:0">
     <div style="padding:6px 10px;border-bottom:1px solid #eef0f5;display:flex;gap:4px;flex-shrink:0">
       <input id="dbg-watch-add" type="text" placeholder="Выражение..." onkeydown="if(event.key==='Enter')dbgWatchAdd()" style="flex:1;min-width:0;padding:3px 8px;border:1px solid #d0d7e3;border-radius:4px;font-size:12px;font-family:'Cascadia Code','Fira Code',monospace">
@@ -401,19 +412,19 @@ const cfgFoot = `{{define "cfg-foot"}}
   </div>
   <div id="dbg-bp" class="dbg-content" style="display:none">
     <div style="padding:6px 0;border-bottom:1px solid #eef;display:flex;gap:4px;flex-shrink:0">
-      <input id="dbg-bp-file" type="text" placeholder="Файл (post-...)" style="flex:2;min-width:0;padding:3px 6px;border:1px solid #d0d7e3;border-radius:4px;font-size:11px">
-      <input id="dbg-bp-line" type="number" placeholder="Стр" style="width:50px;padding:3px 6px;border:1px solid #d0d7e3;border-radius:4px;font-size:11px">
+      <input id="dbg-bp-file" type="text" placeholder="{{t $.Lang "Файл"}} (post-...)" style="flex:2;min-width:0;padding:3px 6px;border:1px solid #d0d7e3;border-radius:4px;font-size:11px">
+      <input id="dbg-bp-line" type="number" placeholder="{{t $.Lang "Стр"}}" style="width:50px;padding:3px 6px;border:1px solid #d0d7e3;border-radius:4px;font-size:11px">
       <button onclick="dbgManualBP()" style="background:#1a4a80;color:#fff;border:none;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer">+</button>
     </div>
-    <div id="dbg-bp-list"><div class="dbg-empty">Нет точек останова</div></div>
+    <div id="dbg-bp-list"><div class="dbg-empty">{{t $.Lang "Нет точек останова"}}</div></div>
   </div>
-  <div id="dbg-stack" class="dbg-content" style="display:none"><div class="dbg-empty">Стек вызовов пуст</div></div>
+  <div id="dbg-stack" class="dbg-content" style="display:none"><div class="dbg-empty">{{t $.Lang "Стек вызовов пуст"}}</div></div>
   <div id="dbg-console" class="dbg-content" style="display:none;flex-direction:column;padding:0">
     <div id="dbg-diag" style="background:#1e1e2e;color:#a5b4fc;padding:6px 10px;font-size:10px;font-family:'Cascadia Code','Fira Code',monospace;border-bottom:1px solid #333;max-height:120px;overflow-y:auto"></div>
     <div id="dbg-console-out" class="dbg-console-out" style="background:#1e1e2e;color:#cdd6f4"></div>
     <div class="dbg-console-input">
-      <input id="dbg-expr" type="text" placeholder="Выражение DSL..." onkeydown="if(event.key==='Enter')dbgEval()">
-      <button onclick="dbgEval()">Выполнить</button>
+      <input id="dbg-expr" type="text" placeholder="{{t $.Lang "Выражение DSL"}}..." onkeydown="if(event.key==='Enter')dbgEval()">
+      <button onclick="dbgEval()">{{t $.Lang "Выполнить"}}</button>
     </div>
   </div>
 </div>
@@ -424,9 +435,9 @@ const cfgFoot = `{{define "cfg-foot"}}
 <div class="cfg-modal-overlay" id="dbg-val-modal" onclick="if(event.target===this)dbgValModalClose()">
   <div class="cfg-modal-box" style="max-width:780px">
     <div class="cfg-modal-hd">
-      <h3 id="dbg-val-modal-title">Значение</h3>
+      <h3 id="dbg-val-modal-title">{{t $.Lang "Значение"}}</h3>
       <div style="display:flex;gap:8px;align-items:center">
-        <button onclick="dbgValModalCopy()" style="background:#1a4a80;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer">Копировать</button>
+        <button onclick="dbgValModalCopy()" style="background:#1a4a80;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer">{{t $.Lang "Копировать"}}</button>
         <button class="cfg-modal-close" onclick="dbgValModalClose()">&times;</button>
       </div>
     </div>
@@ -444,7 +455,7 @@ const cfgFoot = `{{define "cfg-foot"}}
       <button class="cfg-modal-close" onclick="cfgModalClose()">&times;</button>
     </div>
     <div class="cfg-modal-body">
-      <div class="cfg-modal-loading" id="cfg-modal-loading">Загрузка...</div>
+      <div class="cfg-modal-loading" id="cfg-modal-loading">{{t $.Lang "Загрузка..."}}</div>
       <iframe id="cfg-modal-iframe" onload="document.getElementById('cfg-modal-loading').style.display='none'"></iframe>
     </div>
   </div>
@@ -454,14 +465,14 @@ const cfgFoot = `{{define "cfg-foot"}}
 <div class="qb-overlay" id="qb-overlay">
 <div class="qb-modal">
   <div class="qb-modal-hd">
-    <h2>Конструктор запроса</h2>
+    <h2>{{t $.Lang "Конструктор запроса"}}</h2>
     <div style="display:flex;gap:6px;align-items:center">
       <select id="qb-mode" style="font-size:12px;border:1px solid #c8d0de;border-radius:4px;padding:4px 6px;background:#fff">
-        <option value="dsl">Полный код</option>
-        <option value="query">Только запрос</option>
+        <option value="dsl">{{t $.Lang "Полный код"}}</option>
+        <option value="query">{{t $.Lang "Только запрос"}}</option>
       </select>
-      <button id="qb-insert" style="background:#1a4a80;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600">Вставить</button>
-      <button id="qb-close" style="background:#e8ecf2;color:#333;border:1px solid #c8d0de;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px">Закрыть</button>
+      <button id="qb-insert" style="background:#1a4a80;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600">{{t $.Lang "Вставить"}}</button>
+      <button id="qb-close" style="background:#e8ecf2;color:#333;border:1px solid #c8d0de;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px">{{t $.Lang "Закрыть"}}</button>
     </div>
   </div>
   <div class="qb-modal-bd">
@@ -469,44 +480,44 @@ const cfgFoot = `{{define "cfg-foot"}}
       <!-- LEFT -->
       <div>
         <div class="qb-card">
-          <h3>Источник данных</h3>
-          <select id="mqb-src" onchange="mqbSetSrc(this.value)" style="width:100%;margin-bottom:6px"><option value="">— выбрать —</option></select>
+          <h3>{{t $.Lang "Источник данных"}}</h3>
+          <select id="mqb-src" onchange="mqbSetSrc(this.value)" style="width:100%;margin-bottom:6px"><option value="">{{t $.Lang "— выбрать —"}}</option></select>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span style="font-size:12px;color:#64748b;flex-shrink:0;width:68px">Псевдоним:</span>
-            <input id="mqb-alias" type="text" placeholder="напр. Т" oninput="mqbRebuild()" style="width:100px;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 5px">
+            <span style="font-size:12px;color:#64748b;flex-shrink:0;width:68px">{{t $.Lang "Псевдоним"}}:</span>
+            <input id="mqb-alias" type="text" placeholder="{{t $.Lang "напр. Т"}}" oninput="mqbRebuild()" style="width:100px;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 5px">
           </div>
           <div id="mqb-vtp" style="display:none;margin-top:4px">
-            <label style="font-size:12px;color:#64748b">Параметры ВТ</label>
+            <label style="font-size:12px;color:#64748b">{{t $.Lang "Параметры ВТ"}}</label>
             <input id="mqb-vtpv" type="text" style="width:100%;margin-top:2px" placeholder="&amp;НаДату" oninput="mqbGen()">
           </div>
         </div>
         <div class="qb-card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <h3 style="margin:0">Соединения</h3>
+            <h3 style="margin:0">{{t $.Lang "Соединения"}}</h3>
             <button onclick="mqbAddJoin()" style="background:#dbeafe;color:#1d4ed8;border:none;padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer">+ JOIN</button>
           </div>
-          <div id="mqb-joins"><p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p></div>
+          <div id="mqb-joins"><p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">{{t $.Lang "Нет"}}</p></div>
         </div>
         <div class="qb-card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <h3 style="margin:0">Поля</h3>
+            <h3 style="margin:0">{{t $.Lang "Поля"}}</h3>
             <div style="display:flex;gap:3px">
-              <button onclick="mqbAll(true)" style="background:#e2e8f0;color:#475569;border:none;padding:2px 6px;font-size:11px;border-radius:3px;cursor:pointer">Все</button>
-              <button onclick="mqbAll(false)" style="background:#e2e8f0;color:#475569;border:none;padding:2px 6px;font-size:11px;border-radius:3px;cursor:pointer">Сброс</button>
+              <button onclick="mqbAll(true)" style="background:#e2e8f0;color:#475569;border:none;padding:2px 6px;font-size:11px;border-radius:3px;cursor:pointer">{{t $.Lang "Все"}}</button>
+              <button onclick="mqbAll(false)" style="background:#e2e8f0;color:#475569;border:none;padding:2px 6px;font-size:11px;border-radius:3px;cursor:pointer">{{t $.Lang "Сброс"}}</button>
             </div>
           </div>
           <div class="qb-fl" id="mqb-fields"></div>
         </div>
         <div class="qb-card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <h3 style="margin:0">Условия (ГДЕ)</h3>
+            <h3 style="margin:0">{{t $.Lang "Условия (ГДЕ)"}}</h3>
             <button onclick="mqbAddCond()" style="background:#dbeafe;color:#1d4ed8;border:none;padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer">+</button>
           </div>
           <div id="mqb-conds"></div>
         </div>
         <div class="qb-card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <h3 style="margin:0">Сортировка</h3>
+            <h3 style="margin:0">{{t $.Lang "Сортировка"}}</h3>
             <button onclick="mqbAddOrd()" style="background:#dbeafe;color:#1d4ed8;border:none;padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer">+</button>
           </div>
           <div id="mqb-ords"></div>
@@ -515,11 +526,11 @@ const cfgFoot = `{{define "cfg-foot"}}
       <!-- RIGHT -->
       <div>
         <div class="qb-card">
-          <h3>DSL-фрагмент</h3>
+          <h3>{{t $.Lang "DSL-фрагмент"}}</h3>
           <textarea id="mqb-dsl" rows="18" readonly style="width:100%;font-family:monospace;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:8px;background:#fff;resize:vertical"></textarea>
         </div>
         <div class="qb-card">
-          <h3>Текст запроса</h3>
+          <h3>{{t $.Lang "Текст запроса"}}</h3>
           <textarea id="mqb-qry" rows="10" readonly style="width:100%;font-family:monospace;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:8px;background:#fff;resize:vertical"></textarea>
         </div>
       </div>
@@ -586,7 +597,7 @@ function cfgToggleRef(sel, refId) {
     var src = sel.value === 'enum' ? _cfgEnumNames : _cfgEntityNames;
     var cur = r.value;
     var keep = false;
-    var html = '<option value="">— выбрать —</option>';
+    var html = '<option value="">{{t $.Lang "— выбрать —"}}</option>';
     for (var i = 0; i < src.length; i++) {
       var n = src[i];
       var sel2 = (n === cur) ? ' selected' : '';
@@ -608,10 +619,10 @@ function cfgAddField(tblId, prefix, entityName) {
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><input name="'+prefix+'.'+_cfgNewFieldIdx+'.name" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="ИмяПоля"></td>'
     +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.type" onchange="cfgToggleRef(this,\''+refId+'\')">'
-    +'<option value="string">строка</option><option value="number">число</option><option value="date">дата</option><option value="bool">булево</option><option value="reference">ссылка →</option><option value="enum">перечисление →</option>'
+    +'<option value="string">{{t $.Lang "строка"}}</option><option value="number">{{t $.Lang "число"}}</option><option value="date">{{t $.Lang "дата"}}</option><option value="bool">{{t $.Lang "булево"}}</option><option value="reference">{{t $.Lang "ссылка →"}}</option><option value="enum">{{t $.Lang "перечисление →"}}</option>'
     +'</select></td>'
     +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.ref" id="'+refId+'" style="display:none">'
-    +'<option value="">— выбрать —</option>'
+    +'<option value="">{{t $.Lang "— выбрать —"}}</option>'
     +'</select></td>';
   tbl.appendChild(tr);
   tr.querySelector('input').focus();
@@ -629,9 +640,9 @@ function cfgAddTP(btn, entityName) {
     +'<input type="hidden" name="new_tp_name" value="'+tpName+'">'
     +'<input type="hidden" name="'+prefix+'.idx" value="'+_cfgNewTpIdx+'">'
     +'<div class="tp-block"><table class="fields-tbl" id="'+tblId+'">'
-    +'<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>'
+    +'<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>'
     +'</table>'
-    +'<button type="button" onclick="cfgAddField(\''+tblId+'\',\'new_tp.'+_cfgNewTpIdx+'.field\',\''+entityName+'\')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить поле</button>'
+    +'<button type="button" onclick="cfgAddField(\''+tblId+'\',\'new_tp.'+_cfgNewTpIdx+'.field\',\''+entityName+'\')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>'
     +'</div>';
   btn.parentNode.insertBefore(wrapper, btn);
   cfgAddField(tblId, 'new_tp.'+_cfgNewTpIdx+'.field', entityName);
@@ -666,7 +677,7 @@ function cfgAddARField(tblId) {
   var idx = tbl.querySelectorAll('tr').length - 1;
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><input type="text" name="res.'+idx+'.name" placeholder="ИмяРесурса" style="width:100%;font-size:12px;padding:2px 4px;border:1px solid #dde;border-radius:3px"></td>'
-    +'<td><select name="res.'+idx+'.type"><option value="number">число</option><option value="string">строка</option><option value="bool">булево</option></select></td>';
+    +'<td><select name="res.'+idx+'.type"><option value="number">{{t $.Lang "число"}}</option><option value="string">{{t $.Lang "строка"}}</option><option value="bool">{{t $.Lang "булево"}}</option></select></td>';
   tbl.appendChild(tr);
   tr.querySelector('input').focus();
 }
@@ -1482,7 +1493,7 @@ function repAddParam(tableId) {
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><input type="text" name="param.' + i + '.name" value="" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="ИмяПараметра"></td>'
     + '<td><select name="param.' + i + '.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">'
-    + '<option value="string">строка</option><option value="date">дата</option><option value="number">число</option><option value="select">список</option>'
+    + '<option value="string">{{t $.Lang "строка"}}</option><option value="date">{{t $.Lang "дата"}}</option><option value="number">{{t $.Lang "число"}}</option><option value="select">{{t $.Lang "список"}}</option>'
     {{range $.AllEntityNames}}+'<option value="reference:{{.}}">ссылка: {{.}}</option>'{{end}}
     + '</select></td>'
     + '<td><input type="text" name="param.' + i + '.label" value="" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="Заголовок"></td>'
@@ -1586,7 +1597,7 @@ function openQBModal(ta,presetSel){
   document.getElementById('mqb-src').value='';
   document.getElementById('mqb-alias').value='';
   document.getElementById('mqb-vtp').style.display='none';
-  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">{{t $.Lang "Нет"}}</p>';
   document.getElementById('mqb-conds').innerHTML='';
   document.getElementById('mqb-ords').innerHTML='';
   document.getElementById('mqb-fields').innerHTML='';
@@ -1611,7 +1622,7 @@ function openQBModalMonaco(editorId,presetSel){
   document.getElementById('mqb-src').value='';
   document.getElementById('mqb-alias').value='';
   document.getElementById('mqb-vtp').style.display='none';
-  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">{{t $.Lang "Нет"}}</p>';
   document.getElementById('mqb-conds').innerHTML='';
   document.getElementById('mqb-ords').innerHTML='';
   document.getElementById('mqb-fields').innerHTML='';
@@ -1801,7 +1812,7 @@ function mqbSetSrc(id){
   var src=_mqbSrcMap[id];_mqbSel={};_mqbJoins=[];
   document.getElementById('mqb-conds').innerHTML='';
   document.getElementById('mqb-ords').innerHTML='';
-  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+  document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">{{t $.Lang "Нет"}}</p>';
   document.getElementById('mqb-alias').value='';
   var vtp=document.getElementById('mqb-vtp');
   if(src&&src.vtParam){vtp.style.display='';document.getElementById('mqb-vtpv').value=src.vtParam;}
@@ -1886,7 +1897,7 @@ function mqbAddJoin(){
   var del=document.createElement('button');del.type='button';del.textContent='×';
   del.style.cssText='background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;line-height:1;padding:0 2px';
   del.onclick=function(){div.remove();_mqbJoins=_mqbJoins.filter(function(j){return j.id!==jid;});
-    if(!_mqbJoins.length)document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">Нет</p>';
+    if(!_mqbJoins.length)document.getElementById('mqb-joins').innerHTML='<p style="font-size:12px;color:#94a3b8;margin:0" id="mqb-joins-hint">{{t $.Lang "Нет"}}</p>';
     mqbRebuild();};
   r1.appendChild(ts);r1.appendChild(ss);r1.appendChild(ai);r1.appendChild(del);
   var r2=document.createElement('div');r2.style.cssText='display:flex;gap:4px;align-items:center';
@@ -2016,7 +2027,7 @@ function cfgAdmin(name) {
   var overlay = document.getElementById('admin-overlay');
   if(!overlay)return;
   overlay.style.display='flex';
-  overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative"><div style="padding:20px;text-align:center;color:#888">Загрузка...</div></div>';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.2);width:90%;max-width:800px;max-height:85vh;overflow-y:auto;position:relative"><div style="padding:20px;text-align:center;color:#888">{{t $.Lang "Загрузка..."}}</div></div>';
   fetch('/bases/' + _dbgBase + '/configurator/admin/' + name)
     .then(function(r){ return r.text(); })
     .then(function(html){
@@ -2751,16 +2762,16 @@ const cfgTabTree = `{{define "tab-tree"}}
 
 {{/* ── Left panel ── */}}
 <div class="cfg-left" id="cfg-sidebar">
-<button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Свернуть дерево">◀</button>
-  <div class="cfg-group">Конфигурация{{if .ConfigDirty}}<span class="cfg-dirty" title="Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились.">*</span>{{end}}</div>
+<button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="{{t $.Lang "Свернуть дерево"}}">◀</button>
+  <div class="cfg-group">{{t $.Lang "Конфигурация"}}{{if .ConfigDirty}}<span class="cfg-dirty" title="{{t $.Lang "Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились."}}">*</span>{{end}}</div>
   <div class="cfg-item" data-id="panel-app" onclick="selItem(this)">
-    <span class="ic">⚙</span>{{if .AppName}}{{.AppName}}{{else}}Без названия{{end}}{{if .ConfigDirty}}<span class="cfg-dirty" title="Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились.">*</span>{{end}}
+    <span class="ic">⚙</span>{{if .AppName}}{{.AppName}}{{else}}{{t $.Lang "Без названия"}}{{end}}{{if .ConfigDirty}}<span class="cfg-dirty" title="{{t $.Lang "Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились."}}">*</span>{{end}}
   </div>
   <div class="cfg-item" data-id="home-page" onclick="selItem(this)">
     <span class="ic">🏠</span>Главная страница
   </div>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Справочники</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="Добавить справочник">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Справочники"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="{{t $.Lang "Добавить справочник"}}">+</span></summary>
   {{range .Catalogs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📄</span>{{.Name}}
@@ -2768,7 +2779,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Документы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="Добавить документ">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Документы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="{{t $.Lang "Добавить документ"}}">+</span></summary>
   {{range .Docs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📃</span>{{.Name}}{{if .Posting}}<span class="bp">✓</span>{{end}}
@@ -2776,7 +2787,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Регистры</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('register')" title="Добавить регистр">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Регистры"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('register')" title="{{t $.Lang "Добавить регистр"}}">+</span></summary>
   {{range .Registers}}
   <div class="cfg-item" data-id="r-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📊</span>{{.Name}}
@@ -2784,7 +2795,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Регистры сведений</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('inforeg')" title="Добавить регистр сведений">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Регистры сведений"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('inforeg')" title="{{t $.Lang "Добавить регистр сведений"}}">+</span></summary>
   {{range .InfoRegisters}}
   <div class="cfg-item" data-id="ir-{{.Name}}" onclick="selItem(this)">
     <span class="ic">{{if .Periodic}}⏱{{else}}📋{{end}}</span>{{.Name}}
@@ -2792,7 +2803,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Регистры бухгалтерии</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('accountreg')" title="Добавить регистр бухгалтерии">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Регистры бухгалтерии"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('accountreg')" title="{{t $.Lang "Добавить регистр бухгалтерии"}}">+</span></summary>
   {{range .AccountRegisters}}
   <div class="cfg-item" data-id="ar-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚖</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2800,7 +2811,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Перечисления</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="Добавить перечисление">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Перечисления"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="{{t $.Lang "Добавить перечисление"}}">+</span></summary>
   {{range .Enums}}
   <div class="cfg-item" data-id="en-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🔢</span>{{.Name}}
@@ -2808,7 +2819,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">Константы</summary>
+  <details open class="cfg-tree"><summary class="cfg-group">{{t $.Lang "Константы"}}</summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
@@ -2816,7 +2827,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">Отчёты</summary>
+  <details open class="cfg-tree"><summary class="cfg-group">{{t $.Lang "Отчёты"}}</summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📈</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2824,7 +2835,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">Общие модули</summary>
+  <details open class="cfg-tree"><summary class="cfg-group">{{t $.Lang "Общие модули"}}</summary>
   {{range .Modules}}
   <div class="cfg-item" data-id="mod-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📦</span>{{.Name}}
@@ -2832,7 +2843,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">Обработки</summary>
+  <details open class="cfg-tree"><summary class="cfg-group">{{t $.Lang "Обработки"}}</summary>
   {{range .Processors}}
   <div class="cfg-item" data-id="proc-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2840,7 +2851,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Печатные формы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="Добавить печатную форму">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Печатные формы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="{{t $.Lang "Добавить печатную форму"}}">+</span></summary>
   {{range .PrintForms}}
   <div class="cfg-item{{if .Shadowed}} cfg-item-shadowed{{end}}" data-id="pf-{{.Name}}" onclick="selItem(this)"{{if .Shadowed}} title="Эту YAML-форму перебивает одноимённая .os — в runtime используется DSL-вариант (см. замечание #10)"{{end}}>
     <span class="ic">🖨</span>{{if .Shadowed}}<span style="color:#d97706" title="Перебивается .os">⚠️ </span>{{end}}{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}{{if .Shadowed}} (скрыта .os){{end}}</span>
@@ -2852,7 +2863,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>
   {{if .HasLayout}}
   <div class="cfg-item cfg-sub" data-id="mkt-{{.Name}}" onclick="selItem(this)" style="padding-left:32px">
-    <span class="ic" style="font-size:12px">&#x1F4D0;</span>Макет {{.Name}}
+    <span class="ic" style="font-size:12px">&#x1F4D0;</span>{{t $.Lang "Макет"}} {{.Name}}
   </div>
   {{end}}
   {{end}}
@@ -2860,7 +2871,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   <details open class="cfg-tree">
     <summary class="cfg-group cfg-group-hd">
-      <span><a href="/bases/{{.Base.ID}}/configurator/forms" style="color:inherit;text-decoration:none" title="Все управляемые формы">◇ Управляемые формы</a></span>
+      <span><a href="/bases/{{.Base.ID}}/configurator/forms" style="color:inherit;text-decoration:none" title="{{t $.Lang "Все управляемые формы"}}">◇ {{t $.Lang "Управляемые формы"}}</a></span>
     </summary>
     {{range .ManagedForms}}
     <div class="cfg-item">
@@ -2871,7 +2882,7 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Подсистемы</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="Добавить подсистему">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Подсистемы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="{{t $.Lang "Добавить подсистему"}}">+</span></summary>
   {{range .Subsystems}}
   <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🗂</span>{{.Title}}
@@ -2879,7 +2890,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>Виджеты</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('widget')" title="Добавить виджет">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Виджеты"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('widget')" title="{{t $.Lang "Добавить виджет"}}">+</span></summary>
   {{range .Widgets}}
   <div class="cfg-item" data-id="wdg-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📊</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}<span style="color:#aaa;font-size:10px;margin-left:4px">[{{.Type}}]</span>
@@ -2891,38 +2902,38 @@ const cfgTabTree = `{{define "tab-tree"}}
     <div id="cfg-new-title" style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px"></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/new">
       <input type="hidden" name="kind" id="cfg-new-kind-inp" value="">
-      <input type="text" name="name" id="cfg-new-name" placeholder="Имя объекта" autocomplete="off">
+      <input type="text" name="name" id="cfg-new-name" placeholder="{{t $.Lang "Имя объекта"}}" autocomplete="off">
       <div class="row">
-        <button type="submit" class="btn-create">Создать</button>
+        <button type="submit" class="btn-create">{{t $.Lang "Создать"}}</button>
         <button type="button" class="btn-cancel" onclick="cfgHideNew()">✕</button>
       </div>
     </form>
   </div>
   <div id="cfg-new-form-pf" class="cfg-new-form" style="display:none">
-    <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">Новая печатная форма</div>
+    <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">{{t $.Lang "Новая печатная форма"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/new-printform">
-      <input type="text" name="name" id="cfg-new-pf-name" placeholder="Имя формы (напр. СчётНаОплату)" autocomplete="off">
+      <input type="text" name="name" id="cfg-new-pf-name" placeholder="{{t $.Lang "Имя формы"}} (напр. СчётНаОплату)" autocomplete="off">
       <select name="document" style="width:100%;padding:5px 6px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px;margin-bottom:6px">
-        <option value="">— документ/справочник —</option>
+        <option value="">{{t $.Lang "— документ/справочник —"}}</option>
         {{range $.AllEntityNames}}<option value="{{.}}">{{.}}</option>{{end}}
       </select>
       <div class="row">
-        <button type="submit" class="btn-create">Создать</button>
+        <button type="submit" class="btn-create">{{t $.Lang "Создать"}}</button>
         <button type="button" class="btn-cancel" onclick="cfgHideNew()">✕</button>
       </div>
     </form>
   </div>
   <div style="margin-top:12px;padding:8px 12px;border-top:1px solid #d8dde8">
-    <button onclick="runCheckAll()" id="btn-check-all" style="width:100%;padding:7px 10px;background:#fff;border:1px solid #1a4a80;color:#1a4a80;border-radius:4px;cursor:pointer;font-size:12px;margin-bottom:6px">Проверить конфигурацию</button>
-    <button onclick="runMigrate()" id="btn-migrate" style="width:100%;padding:7px 10px;background:#1a4a80;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">Обновить БД</button>
+    <button onclick="runCheckAll()" id="btn-check-all" style="width:100%;padding:7px 10px;background:#fff;border:1px solid #1a4a80;color:#1a4a80;border-radius:4px;cursor:pointer;font-size:12px;margin-bottom:6px">{{t $.Lang "Проверить конфигурацию"}}</button>
+    <button onclick="runMigrate()" id="btn-migrate" style="width:100%;padding:7px 10px;background:#1a4a80;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">{{t $.Lang "Обновить БД"}}</button>
     <div id="migrate-result" style="display:none;margin-top:6px;font-size:11px;padding:6px;border-radius:3px;max-height:120px;overflow-y:auto"></div>
   </div>
 </div>
 
 <div id="check-all-panel">
   <header>
-    <span>Проверка конфигурации</span>
-    <button type="button" onclick="closeCheckAll()" title="Закрыть">✕</button>
+    <span>{{t $.Lang "Проверка конфигурации"}}</span>
+    <button type="button" onclick="closeCheckAll()" title="{{t $.Lang "Закрыть"}}">✕</button>
   </header>
   <div id="check-all-body"></div>
 </div>
@@ -2935,20 +2946,28 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   {{/* App config */}}
   <div class="cfg-panel" id="panel-app">
-    <div class="panel-title">⚙ Конфигурация</div>
-    <div class="panel-kind">Общие параметры приложения</div>
+    <div class="panel-title">⚙ {{t $.Lang "Конфигурация"}}</div>
+    <div class="panel-kind">{{t $.Lang "Общие параметры приложения"}}</div>
     <form method="POST" action="/bases/{{.Base.ID}}/configurator/app" enctype="multipart/form-data" style="margin-top:12px">
       <div class="fg">
-        <label>Название конфигурации</label>
-        <input type="text" name="app_name" value="{{.AppName}}" placeholder="Моя конфигурация" autofocus>
-        <div class="hint">Отображается в заголовке окна и навигации пользовательского режима</div>
+        <label>{{t $.Lang "Название конфигурации"}}</label>
+        <input type="text" name="app_name" value="{{.AppName}}" placeholder="{{t $.Lang "Моя конфигурация"}}" autofocus>
+        <div class="hint">{{t $.Lang "Отображается в заголовке окна и навигации пользовательского режима"}}</div>
       </div>
       <div class="fg" style="margin-top:10px">
-        <label>Версия</label>
+        <label>{{t $.Lang "Версия"}}</label>
         <input type="text" name="app_version" value="{{.AppVersion}}" placeholder="1.0">
       </div>
       <div class="fg" style="margin-top:10px">
-        <label>Логотип</label>
+        <label>{{t $.Lang "Язык интерфейса"}}</label>
+        <select name="app_lang" style="padding:6px 8px;border:1px solid #d0d7e3;border-radius:4px;font-size:13px">
+          <option value="">{{t $.Lang "По умолчанию (русский)"}}</option>
+          {{range .AvailableLangs}}<option value="{{.Code}}"{{selIf $.AppLang .Code}}>{{.Native}}</option>{{end}}
+        </select>
+        <div class="hint">{{t $.Lang "Язык по умолчанию для пользователей этой базы"}}</div>
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <label>{{t $.Lang "Логотип"}}</label>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
           <img id="logo-preview" src="{{if .AppLogo}}/bases/{{.Base.ID}}/configurator/logo{{end}}" style="max-height:48px;max-width:120px;border:1px solid #e2e8f0;border-radius:4px;padding:2px;{{if not .AppLogo}}display:none{{end}}">
           <div>
@@ -2956,16 +2975,16 @@ const cfgTabTree = `{{define "tab-tree"}}
               Загрузить
               <input type="file" name="app_logo_file" accept="image/*" style="display:none" onchange="previewLogo(this)">
             </label>
-            {{if .AppLogo}}<button type="button" onclick="removeLogo()" style="margin-left:6px;padding:4px 8px;font-size:12px;background:none;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;color:#ef4444">Удалить</button>{{end}}
+            {{if .AppLogo}}<button type="button" onclick="removeLogo()" style="margin-left:6px;padding:4px 8px;font-size:12px;background:none;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;color:#ef4444">{{t $.Lang "Удалить"}}</button>{{end}}
           </div>
         </div>
         <input type="hidden" name="app_logo_existing" value="{{.AppLogo}}">
         <input type="hidden" name="app_logo_remove" id="logo-remove" value="0">
-        <div class="hint">PNG, SVG, JPG — не более 2 МБ</div>
+        <div class="hint">{{t $.Lang "PNG, SVG, JPG — не более 2 МБ"}}</div>
       </div>
       <div class="module-save-row" style="margin-top:12px">
-        <button class="btn-save" type="submit">Сохранить</button>
-        {{if and .FieldsSaved (eq .FieldsSavedEntity "__app__")}}<span class="save-ok">✓ Сохранено — перезапустите базу</span>{{end}}
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        {{if and .FieldsSaved (eq .FieldsSavedEntity "__app__")}}<span class="save-ok">{{t $.Lang "✓ Сохранено — перезапустите базу"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -2973,7 +2992,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{if not (or .Catalogs .Docs .Registers .InfoRegisters .Enums .Constants .Reports)}}
   <div style="color:#aaa;padding:60px 20px;text-align:center">
     <div style="font-size:36px;margin-bottom:10px">📭</div>
-    <div>Используйте «+» слева для добавления объектов конфигурации.</div>
+    <div>{{t $.Lang "Используйте «+» слева для добавления объектов конфигурации."}}</div>
   </div>
   {{end}}
 
@@ -2981,8 +3000,8 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .Catalogs}}
   <div class="cfg-panel" id="e-{{.Name}}">
     <div class="panel-title">📄 {{.Name}}</div>
-    <div class="panel-kind">Справочник</div>
-    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms)}}
+    <div class="panel-kind">{{t $.Lang "Справочник"}}</div>
+    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms "Lang" $.Lang)}}
   </div>
   {{end}}
 
@@ -2991,10 +3010,10 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-panel" id="e-{{.Name}}">
     <div class="panel-title">
       📃 {{.Name}}
-      {{if .Posting}}<span style="background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">проводится</span>{{end}}
+      {{if .Posting}}<span style="background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">{{t $.Lang "проводится"}}</span>{{end}}
     </div>
-    <div class="panel-kind">Документ</div>
-    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms)}}
+    <div class="panel-kind">{{t $.Lang "Документ"}}</div>
+    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms "Lang" $.Lang)}}
   </div>
   {{end}}
 
@@ -3002,8 +3021,8 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .Registers}}
   <div class="cfg-panel" id="r-{{.Name}}">
     <div class="panel-title">📊 {{.Name}}</div>
-    <div class="panel-kind">Регистр накопления</div>
-    {{template "register-detail" (dict "Register" . "BaseID" $.Base.ID "AllEntityNames" $.AllEntityNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity)}}
+    <div class="panel-kind">{{t $.Lang "Регистр накопления"}}</div>
+    {{template "register-detail" (dict "Register" . "BaseID" $.Base.ID "AllEntityNames" $.AllEntityNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "Lang" $.Lang)}}
   </div>
   {{end}}
 
@@ -3012,79 +3031,79 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{$ir := .}}
   <div class="cfg-panel" id="ir-{{.Name}}">
     <div class="panel-title">{{if .Periodic}}⏱{{else}}📋{{end}} {{.Name}}</div>
-    <div class="panel-kind">Регистр сведений</div>
+    <div class="panel-kind">{{t $.Lang "Регистр сведений"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/inforeg-fields">
     <input type="hidden" name="inforeg" value="{{.Name}}">
     <div style="margin:10px 0 12px">
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-        <input type="radio" name="periodic" value="true" {{if .Periodic}}checked{{end}}> Периодический (ключ включает период)
+        <input type="radio" name="periodic" value="true" {{if .Periodic}}checked{{end}}> {{t $.Lang "Периодический (ключ включает период)"}}
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px">
-        <input type="radio" name="periodic" value="false" {{if not .Periodic}}checked{{end}}> Непериодический
+        <input type="radio" name="periodic" value="false" {{if not .Periodic}}checked{{end}}> {{t $.Lang "Непериодический"}}
       </label>
     </div>
     {{$allEntities := $.AllEntityNames}}
     {{if .Dimensions}}
-    <details open><summary class="section-hd" style="cursor:pointer">Измерения ({{len .Dimensions}})</summary>
+    <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Измерения"}} ({{len .Dimensions}})</summary>
     <table class="fields-tbl" id="ir-dim-{{.Name}}">
-    <tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
     {{range $i, $f := .Dimensions}}
     <input type="hidden" name="dim.{{$i}}.name" value="{{$f.Name}}">
     <tr>
       <td>{{$f.Name}}</td>
       <td>
         <select name="dim.{{$i}}.type" onchange="cfgToggleRef(this,'irdr-{{$ir.Name}}-{{$i}}')">
-          <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-          <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-          <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-          <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-          <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
+          <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+          <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+          <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+          <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+          <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
         </select>
       </td>
       <td>
         <select name="dim.{{$i}}.ref" id="irdr-{{$ir.Name}}-{{$i}}"{{if ne $f.Type "reference"}} style="display:none"{{end}}>
-          <option value="">— выбрать —</option>
+          <option value="">{{t $.Lang "— выбрать —"}}</option>
           {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
         </select>
       </td>
     </tr>
     {{end}}
     </table>
-    <button type="button" onclick="cfgAddField('ir-dim-{{.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить измерение</button>
+    <button type="button" onclick="cfgAddField('ir-dim-{{.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
     </details>
     {{end}}
     {{if .Resources}}
-    <details open><summary class="section-hd" style="cursor:pointer;margin-top:8px">Ресурсы ({{len .Resources}})</summary>
+    <details open><summary class="section-hd" style="cursor:pointer;margin-top:8px">{{t $.Lang "Ресурсы"}} ({{len .Resources}})</summary>
     <table class="fields-tbl" id="ir-res-{{.Name}}">
-    <tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
     {{range $i, $f := .Resources}}
     <input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">
     <tr>
       <td>{{$f.Name}}</td>
       <td>
         <select name="res.{{$i}}.type" onchange="cfgToggleRef(this,'irrr-{{$ir.Name}}-{{$i}}')">
-          <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-          <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-          <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-          <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-          <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
+          <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+          <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+          <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+          <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+          <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
         </select>
       </td>
       <td>
         <select name="res.{{$i}}.ref" id="irrr-{{$ir.Name}}-{{$i}}"{{if ne $f.Type "reference"}} style="display:none"{{end}}>
-          <option value="">— выбрать —</option>
+          <option value="">{{t $.Lang "— выбрать —"}}</option>
           {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
         </select>
       </td>
     </tr>
     {{end}}
     </table>
-    <button type="button" onclick="cfgAddField('ir-res-{{.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить ресурс</button>
+    <button type="button" onclick="cfgAddField('ir-res-{{.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
     </details>
     {{end}}
     <div class="module-save-row" style="margin-bottom:14px;margin-top:10px">
-      <button class="btn-save" type="submit">Сохранить</button>
-      {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+      <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+      {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
     </div>
     </form>
   </div>
@@ -3095,47 +3114,47 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{$ar := .}}
   <div class="cfg-panel" id="ar-{{.Name}}">
     <div class="panel-title">⚖ {{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}</div>
-    <div class="panel-kind">Регистр бухгалтерии</div>
+    <div class="panel-kind">{{t $.Lang "Регистр бухгалтерии"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/account-register">
     <input type="hidden" name="accountreg" value="{{.Name}}">
     <div class="fg" style="margin-bottom:10px">
-      <label>Заголовок</label>
-      <input type="text" name="title" value="{{.Title}}" placeholder="Отображаемое имя">
+      <label>{{t $.Lang "Заголовок"}}</label>
+      <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Отображаемое имя"}}">
     </div>
     <div class="fg" style="margin-bottom:12px">
-      <label>План счетов (имя объекта)</label>
-      <input type="text" name="accounts" value="{{.Accounts}}" placeholder="ПланСчетов">
+      <label>{{t $.Lang "План счетов (имя объекта)"}}</label>
+      <input type="text" name="accounts" value="{{.Accounts}}" placeholder="{{t $.Lang "ПланСчетов"}}">
     </div>
     {{$allEntities := $.AllEntityNames}}
     {{if .Resources}}
-    <details open><summary class="section-hd" style="cursor:pointer">Ресурсы ({{len .Resources}})</summary>
+    <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Ресурсы"}} ({{len .Resources}})</summary>
     <table class="fields-tbl" id="ar-res-{{.Name}}">
-    <tr><th>Поле</th><th>Тип</th></tr>
+    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th></tr>
     {{range $i, $f := .Resources}}
     <input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">
     <tr>
       <td>{{$f.Name}}</td>
       <td>
         <select name="res.{{$i}}.type">
-          <option value="number" {{if eq $f.Type "number"}}selected{{end}}>число</option>
-          <option value="string" {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-          <option value="bool"   {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
+          <option value="number" {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+          <option value="string" {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+          <option value="bool"   {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
         </select>
       </td>
     </tr>
     {{end}}
     </table>
-    <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить ресурс</button>
+    <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
     </details>
     {{else}}
     <div id="ar-res-{{.Name}}-wrap">
-    <table class="fields-tbl" id="ar-res-{{.Name}}" style="display:none"><tr><th>Поле</th><th>Тип</th></tr></table>
+    <table class="fields-tbl" id="ar-res-{{.Name}}" style="display:none"><tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th></tr></table>
     </div>
-    <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить ресурс</button>
+    <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
     {{end}}
     <div class="module-save-row" style="margin-bottom:14px;margin-top:10px">
-      <button class="btn-save" type="submit">Сохранить</button>
-      {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+      <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+      {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
     </div>
     </form>
   </div>
@@ -3145,14 +3164,14 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .Enums}}
   <div class="cfg-panel" id="en-{{.Name}}">
     <div class="panel-title">🔢 {{.Name}}</div>
-    <div class="panel-kind">Перечисление</div>
-    <div class="section-hd">Значения <span class="edit-hint">(каждое значение — отдельная строка)</span></div>
+    <div class="panel-kind">{{t $.Lang "Перечисление"}}</div>
+    <div class="section-hd">{{t $.Lang "Значения"}} <span class="edit-hint">({{t $.Lang "каждое значение — отдельная строка"}})</span></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/enum">
       <input type="hidden" name="enum_name" value="{{.Name}}">
       <textarea name="values" rows="8" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:4px;resize:vertical;font-family:inherit">{{range .Values}}{{.}}&#10;{{end}}</textarea>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3163,37 +3182,37 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{$cn := .}}
   <div class="cfg-panel" id="cn-{{.Name}}">
     <div class="panel-title">⚙ {{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</div>
-    <div class="panel-kind">Константа · <span class="{{fieldTypeClass .Type}}">{{fieldTypeLabel .Type .RefEntity}}</span></div>
+    <div class="panel-kind">{{t $.Lang "Константа"}} · <span class="{{fieldTypeClass .Type}}">{{fieldTypeLabel .Type .RefEntity}}</span></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/constant" style="margin-top:12px">
       <input type="hidden" name="const_name" value="{{.Name}}">
       <div class="fg">
-        <label>Заголовок</label>
-        <input type="text" name="label" value="{{.Label}}" placeholder="Отображаемое имя">
+        <label>{{t $.Lang "Заголовок"}}</label>
+        <input type="text" name="label" value="{{.Label}}" placeholder="{{t $.Lang "Отображаемое имя"}}">
       </div>
       <div class="fg" style="margin-top:8px">
-        <label>Тип</label>
+        <label>{{t $.Lang "Тип"}}</label>
         <select name="type" onchange="cfgToggleRef(this,'cnref-{{.Name}}')">
-          <option value="string" {{if eq .Type "string"}}selected{{end}}>Строка</option>
-          <option value="number" {{if eq .Type "number"}}selected{{end}}>Число</option>
-          <option value="date" {{if eq .Type "date"}}selected{{end}}>Дата</option>
-          <option value="boolean" {{if eq .Type "boolean"}}selected{{end}}>Булево</option>
-          <option value="reference" {{if eq .Type "reference"}}selected{{end}}>Ссылка</option>
+          <option value="string" {{if eq .Type "string"}}selected{{end}}>{{t $.Lang "Строка"}}</option>
+          <option value="number" {{if eq .Type "number"}}selected{{end}}>{{t $.Lang "Число"}}</option>
+          <option value="date" {{if eq .Type "date"}}selected{{end}}>{{t $.Lang "Дата"}}</option>
+          <option value="boolean" {{if eq .Type "boolean"}}selected{{end}}>{{t $.Lang "Булево"}}</option>
+          <option value="reference" {{if eq .Type "reference"}}selected{{end}}>{{t $.Lang "Ссылка"}}</option>
         </select>
       </div>
       <div id="cnref-{{.Name}}" class="fg" style="margin-top:8px;{{if ne .Type "reference"}}display:none{{end}}">
-        <label>Объект</label>
+        <label>{{t $.Lang "Объект"}}</label>
         <select name="ref">
-          <option value="">— выбрать —</option>
+          <option value="">{{t $.Lang "— выбрать —"}}</option>
           {{range $.AllEntityNames}}<option value="{{.}}" {{if eq . $cn.RefEntity}}selected{{end}}>{{.}}</option>{{end}}
         </select>
       </div>
       <div class="fg" style="margin-top:8px">
-        <label>По умолчанию</label>
-        <input type="text" name="default" value="{{.Default}}" placeholder="Значение по умолчанию">
+        <label>{{t $.Lang "По умолчанию"}}</label>
+        <input type="text" name="default" value="{{.Default}}" placeholder="{{t $.Lang "Значение по умолчанию"}}">
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3204,28 +3223,28 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{$rn := .Name}}
   <div class="cfg-panel" id="rep-{{.Name}}">
     <div class="panel-title">📈 {{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}</div>
-    <div class="panel-kind">Отчёт</div>
+    <div class="panel-kind">{{t $.Lang "Отчёт"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/report">
       <input type="hidden" name="report_name" value="{{.Name}}">
       <div class="fg" style="margin-top:8px">
-        <label>Заголовок</label>
-        <input type="text" name="title" value="{{.Title}}" placeholder="Название отчёта">
+        <label>{{t $.Lang "Заголовок"}}</label>
+        <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Название отчёта"}}">
       </div>
       <div class="section-hd" style="margin-top:12px">
         Параметры
         <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('params-{{$rn}}')">+</button>
       </div>
       <table class="fields-tbl" id="params-{{$rn}}">
-        <tr><th>Имя (&amp;Параметр)</th><th>Тип</th><th>Заголовок</th><th></th></tr>
+        <tr><th>{{t $.Lang "Имя"}} (&amp;{{t $.Lang "Параметр"}})</th><th>{{t $.Lang "Тип"}}</th><th>{{t $.Lang "Заголовок"}}</th><th></th></tr>
         {{range $i, $p := .Params}}
         <tr>
           <td><input type="text" name="param.{{$i}}.name" value="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
           <td>
             <select name="param.{{$i}}.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
-              <option value="string" {{if eq $p.Type "string"}}selected{{end}}>строка</option>
-              <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>дата</option>
-              <option value="number" {{if eq $p.Type "number"}}selected{{end}}>число</option>
-              <option value="select" {{if eq $p.Type "select"}}selected{{end}}>список</option>
+              <option value="string" {{if eq $p.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+              <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+              <option value="number" {{if eq $p.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+              <option value="select" {{if eq $p.Type "select"}}selected{{end}}>{{t $.Lang "список"}}</option>
               {{range $.AllEntityNames}}<option value="reference:{{.}}" {{if eq $p.Type (print "reference:" .)}}selected{{end}}>ссылка: {{.}}</option>
               {{end}}
             </select>
@@ -3235,8 +3254,8 @@ const cfgTabTree = `{{define "tab-tree"}}
         </tr>
         {{end}}
       </table>
-      <div class="section-hd" style="margin-top:12px">Запрос</div>
-      <div class="code-wrap" title="Кликните для редактирования">
+      <div class="section-hd" style="margin-top:12px">{{t $.Lang "Запрос"}}</div>
+      <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
         <pre class="os-code clickable-code" id="pre-rep-{{.Name}}"
              onclick="startEdit('rep-{{.Name}}')">{{if .Query}}{{.Query}}{{else}}ВЫБРАТЬ&#10;  *&#10;ИЗ РегистрНакопления.ИмяРегистра{{end}}</pre>
         <textarea class="os-edit" id="ta-rep-{{.Name}}" name="query"
@@ -3244,10 +3263,10 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('rep-{{.Name}}')">{{.Query}}</textarea>
       </div>
       <div class="fg" style="margin-top:12px">
-        <label>Процедура диаграммы (chart_proc)</label>
+        <label>{{t $.Lang "Процедура диаграммы"}} (chart_proc)</label>
         <input type="text" name="chart_proc" value="{{.ChartProc}}" placeholder="СформироватьДиаграмму">
       </div>
-      <div class="section-hd" style="margin-top:8px">Код диаграммы (.rep.os) <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="section-hd" style="margin-top:8px">{{t $.Lang "Код диаграммы"}} (.rep.os) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
       <div class="code-wrap">
         <pre class="os-code clickable-code" id="pre-repchart-{{.Name}}"
              onclick="startEdit('repchart-{{.Name}}')">{{.ChartSource}}</pre>
@@ -3256,10 +3275,10 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('repchart-{{.Name}}')">{{.ChartSource}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','repchart-{{.Name}}','{{.Name}}')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','repchart-{{.Name}}','{{.Name}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-repchart-{{.Name}}"></span>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3270,10 +3289,10 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{$mn := .Name}}
   <div class="cfg-panel" id="mod-{{.Name}}">
     <div class="panel-title">📦 {{.Name}}</div>
-    <div class="panel-kind">Общий модуль</div>
+    <div class="panel-kind">{{t $.Lang "Общий модуль"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/common-module">
       <input type="hidden" name="module_name" value="{{.Name}}">
-      <div class="section-hd">Исходный код <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="section-hd">Исходный код <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
       <div class="module-editor-wrap">
         <div class="code-wrap">
           <pre class="os-code" id="pre-mod-{{$mn}}" onclick="startEdit('mod-{{$mn}}')">{{if .Source}}{{.Source}}{{else}}Функция ИмяФункции(Параметр)&#10;    Возврат Параметр&#10;КонецФункции{{end}}</pre>
@@ -3283,10 +3302,10 @@ const cfgTabTree = `{{define "tab-tree"}}
         </div>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','mod-{{$mn}}','{{$mn}}')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','mod-{{$mn}}','{{$mn}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-mod-{{$mn}}"></span>
-        {{if and $.ModuleSaved (eq $.ModuleSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        {{if and $.ModuleSaved (eq $.ModuleSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3297,27 +3316,27 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{$pn := .Name}}
   <div class="cfg-panel" id="proc-{{.Name}}">
     <div class="panel-title">⚙ {{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}</div>
-    <div class="panel-kind">Обработка</div>
+    <div class="panel-kind">{{t $.Lang "Обработка"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/processor">
       <input type="hidden" name="processor_name" value="{{.Name}}">
       <div class="fg" style="margin-top:8px">
-        <label>Заголовок</label>
-        <input type="text" name="title" value="{{.Title}}" placeholder="Название обработки">
+        <label>{{t $.Lang "Заголовок"}}</label>
+        <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Название обработки"}}">
       </div>
       <div class="section-hd" style="margin-top:12px">
         Параметры
         <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('pparams-{{$pn}}')">+</button>
       </div>
       <table class="fields-tbl" id="pparams-{{$pn}}">
-        <tr><th>Имя (&amp;Параметры.*)</th><th>Тип</th><th>Заголовок</th><th></th></tr>
+        <tr><th>{{t $.Lang "Имя"}} (&amp;{{t $.Lang "Параметры"}}.*)</th><th>{{t $.Lang "Тип"}}</th><th>{{t $.Lang "Заголовок"}}</th><th></th></tr>
         {{range $i, $p := .Params}}
         <tr>
           <td><input type="text" name="param.{{$i}}.name" value="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
           <td>
             <select name="param.{{$i}}.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
-              <option value="string" {{if eq $p.Type "string"}}selected{{end}}>строка</option>
-              <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>дата</option>
-              <option value="number" {{if eq $p.Type "number"}}selected{{end}}>число</option>
+              <option value="string" {{if eq $p.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+              <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+              <option value="number" {{if eq $p.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
             </select>
           </td>
           <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
@@ -3325,7 +3344,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </tr>
         {{end}}
       </table>
-      <div class="section-hd" style="margin-top:12px">Исходный код (Процедура Выполнить()) <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="section-hd" style="margin-top:12px">{{t $.Lang "Исходный код"}} ({{t $.Lang "Процедура Выполнить()"}}) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
       <div class="code-wrap">
         <pre class="os-code" id="pre-proc-{{$pn}}" onclick="startEdit('proc-{{$pn}}')">{{if .Source}}{{.Source}}{{else}}Процедура Выполнить()&#10;    Сообщить("Привет!")&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-proc-{{$pn}}" name="source"
@@ -3333,10 +3352,10 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('proc-{{$pn}}')">{{.Source}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','proc-{{$pn}}','{{$pn}}')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','proc-{{$pn}}','{{$pn}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-proc-{{$pn}}"></span>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3346,10 +3365,10 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .PrintForms}}
   <div class="cfg-panel" id="pf-{{.Name}}">
     <div class="panel-title">🖨 {{.Name}}</div>
-    <div class="panel-kind">Печатная форма · документ: {{.Document}}</div>
+    <div class="panel-kind">{{t $.Lang "Печатная форма"}} · {{t $.Lang "документ"}}: {{.Document}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/printform">
       <input type="hidden" name="printform_filename" value="{{.FileName}}">
-      <div class="section-hd">YAML-описание <span class="edit-hint">(кликните для редактирования)</span></div>
+      <div class="section-hd">YAML-описание <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
       <div class="code-wrap">
         <pre class="os-code" id="pre-pf-{{.Name}}" onclick="startEdit('pf-{{.Name}}')">{{.Source}}</pre>
         <textarea class="os-edit" id="ta-pf-{{.Name}}" name="source"
@@ -3357,8 +3376,8 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('pf-{{.Name}}')">{{.Source}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3368,12 +3387,12 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .DSLPrintForms}}
   <div class="cfg-panel" id="dpf-{{.Name}}">
     <div class="panel-title">📋 {{.Name}}</div>
-    <div class="panel-kind">DSL печатная форма · документ: {{.Document}}</div>
+    <div class="panel-kind">{{t $.Lang "DSL печатная форма"}} · {{t $.Lang "документ"}}: {{.Document}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/printform">
       <input type="hidden" name="printform_filename" value="{{.FileName}}">
       <input type="hidden" name="printform_dsl" value="1">
-      {{if .HasLayout}}<div class="section-hd" style="color:#4a9">Макет привязан (<code>{{.Name}}.layout.yaml</code>)</div>{{end}}
-      <div class="section-hd">Код формы (.os) <span class="edit-hint">(кликните для редактирования)</span></div>
+      {{if .HasLayout}}<div class="section-hd" style="color:#4a9">{{t $.Lang "Макет привязан"}} (<code>{{.Name}}.layout.yaml</code>)</div>{{end}}
+      <div class="section-hd">{{t $.Lang "Код формы"}} (.os) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
       <div class="code-wrap">
         <pre class="os-code" id="pre-dpf-{{.Name}}" onclick="startEdit('dpf-{{.Name}}')">{{.Source}}</pre>
         <textarea class="os-edit" id="ta-dpf-{{.Name}}" name="source"
@@ -3381,10 +3400,10 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('dpf-{{.Name}}')">{{.Source}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','dpf-{{.Name}}','{{.Name}}')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','dpf-{{.Name}}','{{.Name}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-dpf-{{.Name}}"></span>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3394,21 +3413,21 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .DSLPrintForms}}
   {{if .HasLayout}}
   <div class="cfg-panel" id="mkt-{{.Name}}">
-    <div class="panel-title">&#x1F4D0; Макет: {{.Name}}</div>
+    <div class="panel-title">&#x1F4D0; {{t $.Lang "Макет"}}: {{.Name}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/layout" onsubmit="return saveLayoutEditor('{{.Name}}')">
       <input type="hidden" name="layout_name" value="{{.Name}}">
 
       {{/* Toolbar: structural operations */}}
       <div style="display:flex;gap:6px;margin:4px 0 8px;flex-wrap:wrap;align-items:center">
-        <button type="button" class="btn-save" onclick="addLayoutArea('{{.Name}}')" style="font-size:12px;padding:4px 10px">+ Область</button>
+        <button type="button" class="btn-save" onclick="addLayoutArea('{{.Name}}')" style="font-size:12px;padding:4px 10px">+ {{t $.Lang "Область"}}</button>
         <span style="width:1px;background:#d1d5db;align-self:stretch"></span>
-        <button type="button" onclick="ldAddRow('{{.Name}}')"     style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">+ Строка</button>
-        <button type="button" onclick="ldAddColumn('{{.Name}}')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">+ Колонка</button>
-        <button type="button" onclick="ldDelRow('{{.Name}}')"     style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">Удалить строку</button>
-        <button type="button" onclick="ldDelColumn('{{.Name}}')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">Удалить колонку</button>
+        <button type="button" onclick="ldAddRow('{{.Name}}')"     style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">+ {{t $.Lang "Строка"}}</button>
+        <button type="button" onclick="ldAddColumn('{{.Name}}')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">+ {{t $.Lang "Колонка"}}</button>
+        <button type="button" onclick="ldDelRow('{{.Name}}')"     style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">{{t $.Lang "Удалить строку"}}</button>
+        <button type="button" onclick="ldDelColumn('{{.Name}}')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">{{t $.Lang "Удалить колонку"}}</button>
         <span style="width:1px;background:#d1d5db;align-self:stretch"></span>
-        <button type="button" onclick="ldMerge('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">Объединить →</button>
-        <button type="button" onclick="ldSplit('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">Разъединить</button>
+        <button type="button" onclick="ldMerge('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Объединить"}} →</button>
+        <button type="button" onclick="ldSplit('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Разъединить"}}</button>
       </div>
 
       {{/* Split view: YAML editor (left) + visual designer (right) */}}
@@ -3423,55 +3442,55 @@ const cfgTabTree = `{{define "tab-tree"}}
         </div>
         {{/* Right pane: Visual designer */}}
         <div style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
-          <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:3px 10px;font-size:11px;font-weight:600;color:#64748b;flex-shrink:0;letter-spacing:.03em">Конструктор</div>
-          <div id="veditor-{{.Name}}" style="flex:1;padding:8px;overflow:auto;background:#fff">{{if .LayoutPreview}}{{.LayoutPreview}}{{else}}<p style="color:#999;font-size:12px">Нет данных. Нажмите «+ Область» для начала.</p>{{end}}</div>
+          <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:3px 10px;font-size:11px;font-weight:600;color:#64748b;flex-shrink:0;letter-spacing:.03em">{{t $.Lang "Конструктор"}}</div>
+          <div id="veditor-{{.Name}}" style="flex:1;padding:8px;overflow:auto;background:#fff">{{if .LayoutPreview}}{{.LayoutPreview}}{{else}}<p style="color:#999;font-size:12px">{{t $.Lang "Нет данных. Нажмите «+ Область» для начала."}}</p>{{end}}</div>
         </div>
       </div>
 
       {{/* Cell properties panel */}}
       <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
-        <div style="font-weight:bold;margin-bottom:6px;font-size:12px">Свойства ячейки</div>
+        <div style="font-weight:bold;margin-bottom:6px;font-size:12px">{{t $.Lang "Свойства ячейки"}}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px">
-          <div><label>Текст</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
-          <div><label>Параметр</label><br><input id="vp-param-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','parameter',this.value)"></div>
-          <div><label>Шрифт</label><br>
+          <div><label>{{t $.Lang "Текст"}}</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
+          <div><label>{{t $.Lang "Параметр"}}</label><br><input id="vp-param-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','parameter',this.value)"></div>
+          <div><label>{{t $.Lang "Шрифт"}}</label><br>
             <select id="vp-ff-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','fontFamily',this.value)">
-              <option value="">По умолчанию</option>
+              <option value="">{{t $.Lang "По умолчанию"}}</option>
               <option>Arial</option><option>Times New Roman</option><option>Courier New</option><option>Verdana</option><option>Tahoma</option>
             </select>
           </div>
-          <div><label>Размер (pt)</label><br><input type="number" id="vp-fs-{{.Name}}" min="6" max="72" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','fontSize',parseInt(this.value)||0)"></div>
-          <div><label><input type="checkbox" id="vp-bold-{{.Name}}" onchange="updateCellProp('{{.Name}}','bold',this.checked)"> Жирный</label>
-               &nbsp;<label><input type="checkbox" id="vp-italic-{{.Name}}" onchange="updateCellProp('{{.Name}}','italic',this.checked)"> Курсив</label></div>
+          <div><label>{{t $.Lang "Размер"}} (pt)</label><br><input type="number" id="vp-fs-{{.Name}}" min="6" max="72" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','fontSize',parseInt(this.value)||0)"></div>
+          <div><label><input type="checkbox" id="vp-bold-{{.Name}}" onchange="updateCellProp('{{.Name}}','bold',this.checked)"> {{t $.Lang "Жирный"}}</label>
+               &nbsp;<label><input type="checkbox" id="vp-italic-{{.Name}}" onchange="updateCellProp('{{.Name}}','italic',this.checked)"> {{t $.Lang "Курсив"}}</label></div>
           <div></div>
-          <div><label>Гор. выравнивание</label><br>
+          <div><label>{{t $.Lang "Гор. выравнивание"}}</label><br>
             <select id="vp-align-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','align',this.value)">
-              <option value="">—</option><option value="left">Лево</option><option value="center">Центр</option><option value="right">Право</option>
+              <option value="">—</option><option value="left">{{t $.Lang "Лево"}}</option><option value="center">{{t $.Lang "Центр"}}</option><option value="right">{{t $.Lang "Право"}}</option>
             </select>
           </div>
-          <div><label>Верт. выравнивание</label><br>
+          <div><label>{{t $.Lang "Верт. выравнивание"}}</label><br>
             <select id="vp-valign-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','valign',this.value)">
-              <option value="">—</option><option value="top">Верх</option><option value="middle">Середина</option><option value="bottom">Низ</option>
+              <option value="">—</option><option value="top">{{t $.Lang "Верх"}}</option><option value="middle">{{t $.Lang "Середина"}}</option><option value="bottom">{{t $.Lang "Низ"}}</option>
             </select>
           </div>
           <div></div>
-          <div><label>Фон</label><br><input type="color" id="vp-bg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','backColor',this.value)"></div>
-          <div><label>Цвет текста</label><br><input type="color" id="vp-fg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','textColor',this.value)"></div>
+          <div><label>{{t $.Lang "Фон"}}</label><br><input type="color" id="vp-bg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','backColor',this.value)"></div>
+          <div><label>{{t $.Lang "Цвет текста"}}</label><br><input type="color" id="vp-fg-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','textColor',this.value)"></div>
           <div></div>
-          <div><label>Границы</label><br>
+          <div><label>{{t $.Lang "Границы"}}</label><br>
             <select id="vp-border-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','border',this.value)">
-              <option value="">По умолчанию</option><option value="none">Нет</option><option value="thin">Тонкая</option><option value="all">Все</option><option value="thick">Толстая</option>
+              <option value="">{{t $.Lang "По умолчанию"}}</option><option value="none">{{t $.Lang "Нет"}}</option><option value="thin">{{t $.Lang "Тонкая"}}</option><option value="all">{{t $.Lang "Все"}}</option><option value="thick">{{t $.Lang "Толстая"}}</option>
             </select>
           </div>
-          <div><label>Цвет границы</label><br><input type="color" id="vp-bc-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','borderColor',this.value)"></div>
+          <div><label>{{t $.Lang "Цвет границы"}}</label><br><input type="color" id="vp-bc-{{.Name}}" style="width:100%;height:28px" oninput="updateCellProp('{{.Name}}','borderColor',this.value)"></div>
           <div></div>
-          <div><label>Объединить (colspan)</label><br><input type="number" id="vp-colspan-{{.Name}}" min="1" max="20" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','colspan',parseInt(this.value)||0)"></div>
-          <div><label>Объединить (rowspan)</label><br><input type="number" id="vp-rowspan-{{.Name}}" min="1" max="20" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','rowspan',parseInt(this.value)||0)"></div>
+          <div><label>{{t $.Lang "Объединить"}} (colspan)</label><br><input type="number" id="vp-colspan-{{.Name}}" min="1" max="20" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','colspan',parseInt(this.value)||0)"></div>
+          <div><label>{{t $.Lang "Объединить"}} (rowspan)</label><br><input type="number" id="vp-rowspan-{{.Name}}" min="1" max="20" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','rowspan',parseInt(this.value)||0)"></div>
           <div></div>
         </div>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
       </div>
     </form>
   </div>
@@ -3482,25 +3501,25 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range $sub := .Subsystems}}
   <div class="cfg-panel" id="sub-{{$sub.Name}}">
     <div class="panel-title">🗂 {{$sub.Title}}</div>
-    <div class="panel-kind">Подсистема</div>
+    <div class="panel-kind">{{t $.Lang "Подсистема"}}</div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/subsystem">
       <input type="hidden" name="subsystem_name" value="{{$sub.Name}}">
       <div class="fg" style="margin-top:12px">
-        <label>Заголовок</label>
-        <input type="text" name="title" value="{{$sub.Title}}" placeholder="Название подсистемы">
+        <label>{{t $.Lang "Заголовок"}}</label>
+        <input type="text" name="title" value="{{$sub.Title}}" placeholder="{{t $.Lang "Название подсистемы"}}">
       </div>
       <div class="fg" style="margin-top:8px">
-        <label>Иконка</label>
+        <label>{{t $.Lang "Иконка"}}</label>
         <input type="text" name="icon" value="{{$sub.Icon}}" placeholder="shopping-cart">
       </div>
       <div class="fg" style="margin-top:8px">
-        <label>Порядок</label>
+        <label>{{t $.Lang "Порядок"}}</label>
         <input type="number" name="order" value="{{$sub.Order}}" style="width:100px">
       </div>
 
-      <div class="section-hd" style="margin-top:14px">Состав подсистемы</div>
+      <div class="section-hd" style="margin-top:14px">{{t $.Lang "Состав подсистемы"}}</div>
       {{if $.Catalogs}}
-      <div style="margin-top:6px"><span style="font-size:11px;font-weight:700;color:#555">Справочники</span></div>
+      <div style="margin-top:6px"><span style="font-size:11px;font-weight:700;color:#555">{{t $.Lang "Справочники"}}</span></div>
       {{range $e := $.Catalogs}}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
         <input type="checkbox" name="catalogs" value="{{$e.Name}}" {{range $sub.Contents.Catalogs}}{{if eq . $e.Name}}checked{{end}}{{end}}>
@@ -3509,7 +3528,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
       {{end}}
       {{if $.Docs}}
-      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Документы</span></div>
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">{{t $.Lang "Документы"}}</span></div>
       {{range $e := $.Docs}}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
         <input type="checkbox" name="documents" value="{{$e.Name}}" {{range $sub.Contents.Documents}}{{if eq . $e.Name}}checked{{end}}{{end}}>
@@ -3518,7 +3537,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
       {{end}}
       {{if $.Registers}}
-      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Регистры накопления</span></div>
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">{{t $.Lang "Регистры накопления"}}</span></div>
       {{range $r := $.Registers}}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
         <input type="checkbox" name="registers" value="{{$r.Name}}" {{range $sub.Contents.Registers}}{{if eq . $r.Name}}checked{{end}}{{end}}>
@@ -3527,7 +3546,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
       {{end}}
       {{if $.InfoRegisters}}
-      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Регистры сведений</span></div>
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">{{t $.Lang "Регистры сведений"}}</span></div>
       {{range $r := $.InfoRegisters}}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
         <input type="checkbox" name="inforegs" value="{{$r.Name}}" {{range $sub.Contents.InfoRegs}}{{if eq . $r.Name}}checked{{end}}{{end}}>
@@ -3536,7 +3555,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
       {{end}}
       {{if $.Reports}}
-      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Отчёты</span></div>
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">{{t $.Lang "Отчёты"}}</span></div>
       {{range $r := $.Reports}}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
         <input type="checkbox" name="reports" value="{{$r.Name}}" {{range $sub.Contents.Reports}}{{if eq . $r.Name}}checked{{end}}{{end}}>
@@ -3545,7 +3564,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
       {{end}}
       {{if $.Processors}}
-      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">Обработки</span></div>
+      <div style="margin-top:8px"><span style="font-size:11px;font-weight:700;color:#555">{{t $.Lang "Обработки"}}</span></div>
       {{range $p := $.Processors}}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
         <input type="checkbox" name="processors" value="{{$p.Name}}" {{range $sub.Contents.Processors}}{{if eq . $p.Name}}checked{{end}}{{end}}>
@@ -3555,8 +3574,8 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
 
       <div class="module-save-row" style="margin-top:14px">
-        <button class="btn-save" type="submit">Сохранить</button>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity $sub.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity $sub.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3566,34 +3585,34 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .Widgets}}
   <div class="cfg-panel" id="wdg-{{.Name}}">
     <div class="panel-title">📊 {{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}</div>
-    <div class="panel-kind">Виджет дашборда · тип <b>{{.Type}}</b></div>
+    <div class="panel-kind">{{t $.Lang "Виджет дашборда"}} · {{t $.Lang "тип"}} <b>{{.Type}}</b></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/widget">
       <input type="hidden" name="widget_name" value="{{.Name}}">
       <div style="font-size:12px;color:#64748b;margin:6px 0">
-        Поля виджета: <code>name</code>, <code>type</code> (kpi/list/chart/actions/recent), <code>title</code>, <code>query</code>, <code>params</code>.
+        {{t $.Lang "Поля виджета"}}: <code>name</code>, <code>type</code> (kpi/list/chart/actions/recent), <code>title</code>, <code>query</code>, <code>params</code>.
         Шаблоны параметров записывайте как <code>&#123;&#123;today|start_of_month&#125;&#125;</code> или <code>&#123;&#123;today|minus_days:30&#125;&#125;</code>.
       </div>
       <div class="code-wrap">
         <textarea name="yaml" id="ta-wdg-{{.Name}}" style="width:100%;min-height:380px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.YAML}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('widget','wdg-{{.Name}}','{{.Name}}')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('widget','wdg-{{.Name}}','{{.Name}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-wdg-{{.Name}}"></span>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/widget-delete" style="margin-top:8px" onsubmit="return confirm('Удалить виджет {{.Name}}?')">
       <input type="hidden" name="widget_name" value="{{.Name}}">
-      <button type="submit" style="background:none;border:1px solid #d8dde8;color:#c00;padding:4px 10px;font-size:11px;border-radius:3px;cursor:pointer">Удалить виджет</button>
+      <button type="submit" style="background:none;border:1px solid #d8dde8;color:#c00;padding:4px 10px;font-size:11px;border-radius:3px;cursor:pointer">{{t $.Lang "Удалить виджет"}}</button>
     </form>
   </div>
   {{end}}
 
   {{/* Home page */}}
   <div class="cfg-panel" id="home-page">
-    <div class="panel-title">🏠 Главная страница</div>
-    <div class="panel-kind">Раскладка стартового дашборда (<code>config/home_page.yaml</code>)</div>
+    <div class="panel-title">🏠 {{t $.Lang "Главная страница"}}</div>
+    <div class="panel-kind">{{t $.Lang "Раскладка стартового дашборда"}} (<code>config/home_page.yaml</code>)</div>
     <form method="POST" action="/bases/{{.Base.ID}}/configurator/home-page">
       <div style="font-size:12px;color:#64748b;margin:6px 0">
         Опишите порядок и группировку виджетов. Поля: <code>title</code>, <code>layout</code> (<code>rows</code> или <code>grid</code>), <code>rows[].widgets</code>.
@@ -3603,15 +3622,15 @@ const cfgTabTree = `{{define "tab-tree"}}
         <textarea name="yaml" id="ta-home-page" style="width:100%;min-height:300px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.HomePageYAML}}</textarea>
       </div>
       <div style="font-size:11px;color:#94a3b8;margin-top:6px">
-        Доступные виджеты:
+        {{t $.Lang "Доступные виджеты"}}:
         {{range $i, $w := .Widgets}}{{if $i}}, {{end}}<code>{{$w.Name}}</code>{{end}}
-        {{if not .Widgets}}<i>пока ни одного — создайте через «+» в дереве «Виджеты»</i>{{end}}
+        {{if not .Widgets}}<i>{{t $.Lang "пока ни одного — создайте через «+» в дереве «Виджеты»"}}</i>{{end}}
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('home_page','home-page','home_page')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('home_page','home-page','home_page')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-home-page"></span>
-        {{if and .FieldsSaved (eq .FieldsSavedEntity "home-page")}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        {{if and .FieldsSaved (eq .FieldsSavedEntity "home-page")}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
@@ -3629,19 +3648,19 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{$fSavedEnt := .FieldsSavedEntity}}
 
 {{/* Module section — outside the fields form to avoid nested <form> elements */}}
-<details open><summary class="section-hd" style="cursor:pointer">Модули</summary>
+<details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Модули"}}</summary>
 <div class="module-editor-wrap">
   <div class="module-tabs">
-    <div class="module-tab active" onclick="modTab(this,'mp-obj-{{$e.Name}}')">📝 Модуль объекта</div>
-    {{if eq $e.Kind "Документ"}}<div class="module-tab" onclick="modTab(this,'mp-post-{{$e.Name}}')">✅ ОбработкаПроведения</div>{{end}}
-    <div class="module-tab" onclick="modTab(this,'mp-mgr-{{$e.Name}}')">📋 Модуль менеджера</div>
+    <div class="module-tab active" onclick="modTab(this,'mp-obj-{{$e.Name}}')">📝 {{t $.Lang "Модуль объекта"}}</div>
+    {{if eq $e.Kind "Документ"}}<div class="module-tab" onclick="modTab(this,'mp-post-{{$e.Name}}')">✅ {{t $.Lang "ОбработкаПроведения"}}</div>{{end}}
+    <div class="module-tab" onclick="modTab(this,'mp-mgr-{{$e.Name}}')">📋 {{t $.Lang "Модуль менеджера"}}</div>
   </div>
 
   <div class="module-pane active" id="mp-obj-{{$e.Name}}">
     <form method="POST" action="/bases/{{.BaseID}}/configurator/module">
       <input type="hidden" name="entity" value="{{$e.Name}}">
       <input type="hidden" name="module_type" value="object">
-      <div class="code-wrap" title="Кликните для редактирования">
+      <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
         <pre class="os-code clickable-code" id="pre-{{$e.Name}}"
              onclick="startEdit('{{$e.Name}}')">{{if $e.Source}}{{$e.Source}}{{else}}// Кликните для редактирования&#10;Процедура ПриЗаписи()&#10;&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-{{$e.Name}}" name="source"
@@ -3649,22 +3668,22 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('{{$e.Name}}')">{{$e.Source}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','{{$e.Name}}','{{$e.Name}}')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','{{$e.Name}}','{{$e.Name}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-{{$e.Name}}"></span>
-        <span class="edit-hint">✎ кликните на код для редактирования</span>
-        {{if and $.ModuleSaved (eq $.ModuleSavedEntity $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        <span class="edit-hint">✎ {{t $.Lang "кликните на код для редактирования"}}</span>
+        {{if and $.ModuleSaved (eq $.ModuleSavedEntity $e.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
 
   {{if eq $e.Kind "Документ"}}
   <div class="module-pane" id="mp-post-{{$e.Name}}">
-    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Процедура <b>ОбработкаПроведения()</b> — вызывается при нажатии «Провести». Активируется флагом <b>Проводится</b> в свойствах документа. Здесь пишите движения регистров.</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:6px">{{t $.Lang "Процедура"}} <b>{{t $.Lang "ОбработкаПроведения"}}()</b> — {{t $.Lang "вызывается при нажатии «Провести». Активируется флагом"}} <b>{{t $.Lang "Проводится"}}</b> {{t $.Lang "в свойствах документа. Здесь пишите движения регистров."}}</div>
     <form method="POST" action="/bases/{{.BaseID}}/configurator/module">
       <input type="hidden" name="entity" value="{{$e.Name}}">
       <input type="hidden" name="module_type" value="posting">
-      <div class="code-wrap" title="Кликните для редактирования">
+      <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
         <pre class="os-code clickable-code" id="pre-post-{{$e.Name}}"
              onclick="startEdit('post-{{$e.Name}}')">{{if $e.PostingSource}}{{$e.PostingSource}}{{else}}Процедура ОбработкаПроведения()&#10;  // Движения.ИмяРегистра.Очистить()&#10;  // Дв = Движения.ИмяРегистра.Добавить()&#10;  // Дв.ВидДвижения = "Приход"&#10;  // Дв.Номенклатура = Строка.Номенклатура&#10;  // Дв.Количество = Строка.Количество&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-post-{{$e.Name}}" name="source"
@@ -3672,18 +3691,18 @@ const cfgTabTree = `{{define "tab-tree"}}
                   onblur="endEdit('post-{{$e.Name}}')">{{$e.PostingSource}}</textarea>
       </div>
       <div class="module-save-row">
-        <button class="btn-save" type="submit">Сохранить</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','post-{{$e.Name}}','{{$e.Name}}-ОбработкаПроведения')">Проверить</button>
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','post-{{$e.Name}}','{{$e.Name}}-ОбработкаПроведения')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-post-{{$e.Name}}"></span>
-        <span class="edit-hint">✎ кликните на код для редактирования</span>
-        {{if and $.ModuleSaved (eq $.ModuleSavedEntity $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+        <span class="edit-hint">✎ {{t $.Lang "кликните на код для редактирования"}}</span>
+        {{if and $.ModuleSaved (eq $.ModuleSavedEntity $e.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
   </div>
   {{end}}
 
   <div class="module-pane" id="mp-mgr-{{$e.Name}}">
-    <div class="module-empty" style="padding:12px 0">Модуль менеджера — в разработке.</div>
+    <div class="module-empty" style="padding:12px 0">{{t $.Lang "Модуль менеджера — в разработке."}}</div>
   </div>
 </div>
 
@@ -3695,11 +3714,11 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{range $e.TableParts}}<input type="hidden" name="tp_names" value="{{.Name}}">{{end}}
 
 {{if eq $e.Kind "Документ"}}
-<div class="section-hd">Свойства</div>
+<div class="section-hd">{{t $.Lang "Свойства"}}</div>
 <div style="margin-bottom:10px">
   <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
     <input type="checkbox" name="posting" value="true" {{if $e.Posting}}checked{{end}}>
-    <span>Проводится — поддержка кнопки «Провести» и обработки проведения</span>
+    <span>{{t $.Lang "Проводится — поддержка кнопки «Провести» и обработки проведения"}}</span>
   </label>
 </div>
 {{end}}
@@ -3718,26 +3737,26 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{end}}
 
 {{if $e.Fields}}
-<details open><summary class="section-hd" style="cursor:pointer">Реквизиты ({{len $e.Fields}})</summary>
+<details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Реквизиты"}} ({{len $e.Fields}})</summary>
 <table class="fields-tbl" id="ft-{{$e.Name}}">
-<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
 {{range $i, $f := $e.Fields}}
 <input type="hidden" name="field.{{$i}}.name" value="{{$f.Name}}">
 <tr>
   <td>{{$f.Name}}</td>
   <td>
     <select name="field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-f{{$i}}')">
-      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
-      <option value="enum"      {{if eq $f.Type "enum"}}selected{{end}}>перечисление →</option>
+      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
+      <option value="enum"      {{if eq $f.Type "enum"}}selected{{end}}>{{t $.Lang "перечисление →"}}</option>
     </select>
   </td>
   <td>
     <select name="field.{{$i}}.ref" id="cfr-{{$e.Name}}-f{{$i}}"{{if and (ne $f.Type "reference") (ne $f.Type "enum")}} style="display:none"{{end}}>
-      <option value="">— выбрать —</option>
+      <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{if eq $f.Type "enum"}}
         {{range $allEnums}}<option value="{{.}}"{{if eq . $f.EnumName}} selected{{end}}>{{.}}</option>{{end}}
       {{else}}
@@ -3748,7 +3767,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 </tr>
 {{end}}
 </table>
-<button type="button" onclick="cfgAddField('ft-{{$e.Name}}','new_field',{{$e.Name}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить поле</button>
+<button type="button" onclick="cfgAddField('ft-{{$e.Name}}','new_field',{{$e.Name}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>
 </details>
 {{end}}
 
@@ -3756,24 +3775,24 @@ const cfgTabTree = `{{define "tab-tree"}}
 <details open><summary class="section-hd" style="cursor:pointer">📋 {{$tp.Name}} ({{len $tp.Fields}})</summary>
 <div class="tp-block">
 <table class="fields-tbl" id="ft-{{$e.Name}}-tp{{$j}}">
-<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
 {{range $i, $f := $tp.Fields}}
 <input type="hidden" name="tp.{{$tp.Name}}.field.{{$i}}.name" value="{{$f.Name}}">
 <tr>
   <td>{{$f.Name}}</td>
   <td>
     <select name="tp.{{$tp.Name}}.field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-tp{{$j}}f{{$i}}')">
-      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
-      <option value="enum"      {{if eq $f.Type "enum"}}selected{{end}}>перечисление →</option>
+      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
+      <option value="enum"      {{if eq $f.Type "enum"}}selected{{end}}>{{t $.Lang "перечисление →"}}</option>
     </select>
   </td>
   <td>
     <select name="tp.{{$tp.Name}}.field.{{$i}}.ref" id="cfr-{{$e.Name}}-tp{{$j}}f{{$i}}"{{if and (ne $f.Type "reference") (ne $f.Type "enum")}} style="display:none"{{end}}>
-      <option value="">— выбрать —</option>
+      <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{if eq $f.Type "enum"}}
         {{range $allEnums}}<option value="{{.}}"{{if eq . $f.EnumName}} selected{{end}}>{{.}}</option>{{end}}
       {{else}}
@@ -3784,28 +3803,28 @@ const cfgTabTree = `{{define "tab-tree"}}
 </tr>
 {{end}}
 </table>
-<button type="button" onclick="cfgAddField('ft-{{$e.Name}}-tp{{$j}}','new_tp.{{$tp.Name}}.field',{{$e.Name}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить поле</button>
+<button type="button" onclick="cfgAddField('ft-{{$e.Name}}-tp{{$j}}','new_tp.{{$tp.Name}}.field',{{$e.Name}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>
 </div>
 </details>
 {{end}}
 
-<button type="button" onclick="cfgAddTP(this,'{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ Добавить табличную часть</button>
+<button type="button" onclick="cfgAddTP(this,'{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить табличную часть"}}</button>
 
 <div class="module-save-row" style="margin-bottom:14px">
-  <button class="btn-save" type="submit">Сохранить типы полей</button>
-  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+  <button class="btn-save" type="submit">{{t $.Lang "Сохранить типы полей"}}</button>
+  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
 </div>
 </form>
 
 {{/* Predefined items — only for catalogs */}}
 {{if eq $e.Kind "Справочник"}}
-<details style="margin-top:18px"><summary class="section-hd" style="cursor:pointer">Предопределённые элементы ({{len $e.Predefined}})</summary>
+<details style="margin-top:18px"><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Предопределённые элементы"}} ({{len $e.Predefined}})</summary>
 <form method="POST" action="/bases/{{$baseID}}/configurator/predefined">
 <input type="hidden" name="entity" value="{{$e.Name}}">
 {{range $e.Fields}}<input type="hidden" name="pre_field_names" value="{{.Name}}">{{end}}
 <div style="font-size:11px;color:#64748b;margin-bottom:8px">Элементы, которые всегда присутствуют в справочнике. Имя — программный идентификатор (без пробелов).</div>
 <table class="fields-tbl" id="pre-tbl-{{$e.Name}}">
-<tr><th>Имя</th>{{range $e.Fields}}<th>{{.Name}}</th>{{end}}</tr>
+<tr><th>{{t $.Lang "Имя"}}</th>{{range $e.Fields}}<th>{{.Name}}</th>{{end}}</tr>
 {{range $i, $pd := $e.Predefined}}
 <tr>
   <td><input type="text" name="pre.{{$i}}.name" value="{{$pd.Name}}" style="width:100%;font-size:12px;padding:2px 4px;border:1px solid #dde;border-radius:3px"></td>
@@ -3813,10 +3832,10 @@ const cfgTabTree = `{{define "tab-tree"}}
 </tr>
 {{end}}
 </table>
-<button type="button" onclick="cfgAddPreRow('pre-tbl-{{$e.Name}}',{{len $e.Fields}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:6px 0">+ Добавить элемент</button>
+<button type="button" onclick="cfgAddPreRow('pre-tbl-{{$e.Name}}',{{len $e.Fields}})" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:6px 0">+ {{t $.Lang "Добавить элемент"}}</button>
 <div class="module-save-row" style="margin-bottom:8px;margin-top:6px">
-  <button class="btn-save" type="submit">Сохранить предопределённые</button>
-  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+  <button class="btn-save" type="submit">{{t $.Lang "Сохранить предопределённые"}}</button>
+  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
 </div>
 </form>
 </details>
@@ -3824,7 +3843,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 
 {{/* Linked print forms */}}
 {{if $e.LinkedPrintForms}}
-<div class="section-hd" style="margin-top:18px">Печатные формы</div>
+<div class="section-hd" style="margin-top:18px">{{t $.Lang "Печатные формы"}}</div>
 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
   {{range $e.LinkedPrintForms}}
   <a href="#" onclick="cfgSelectPanel('pf-{{.Name}}');return false"
@@ -3836,18 +3855,18 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{end}}
 
 {{/* Forms section */}}
-<div class="section-hd" style="margin-top:18px">Формы</div>
+<div class="section-hd" style="margin-top:18px">{{t $.Lang "Формы"}}</div>
 <form method="POST" action="/bases/{{$baseID}}/configurator/form">
 <input type="hidden" name="entity" value="{{$e.Name}}">
 
 <div class="module-tabs" style="margin-top:8px">
-  <div class="module-tab active" onclick="formTab(this,'fl-{{$e.Name}}','fe-{{$e.Name}}')">📋 Форма списка</div>
-  <div class="module-tab" onclick="formTab(this,'fe-{{$e.Name}}','fl-{{$e.Name}}')">📄 Форма элемента</div>
+  <div class="module-tab active" onclick="formTab(this,'fl-{{$e.Name}}','fe-{{$e.Name}}')">📋 {{t $.Lang "Форма списка"}}</div>
+  <div class="module-tab" onclick="formTab(this,'fe-{{$e.Name}}','fl-{{$e.Name}}')">📄 {{t $.Lang "Форма элемента"}}</div>
 </div>
 
 {{/* List form fields */}}
 <div class="module-pane active" id="fl-{{$e.Name}}" style="padding:10px 0">
-<p style="font-size:11px;color:#64748b;margin-bottom:8px">Выберите поля, отображаемые в списке. Порядок строк = порядок колонок.</p>
+<p style="font-size:11px;color:#64748b;margin-bottom:8px">{{t $.Lang "Выберите поля, отображаемые в списке. Порядок строк = порядок колонок."}}</p>
 <div id="fl-sort-{{$e.Name}}">
 {{range $i, $f := $e.Fields}}
 <div class="form-field-row" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
@@ -3866,7 +3885,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 
 {{/* Element form fields */}}
 <div class="module-pane" id="fe-{{$e.Name}}" style="padding:10px 0">
-<p style="font-size:11px;color:#64748b;margin-bottom:8px">Выберите поля, отображаемые в форме элемента.</p>
+<p style="font-size:11px;color:#64748b;margin-bottom:8px">{{t $.Lang "Выберите поля, отображаемые в форме элемента."}}</p>
 <div id="fe-sort-{{$e.Name}}">
 {{range $i, $f := $e.Fields}}
 <div class="form-field-row" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
@@ -3879,7 +3898,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 </div>
 {{end}}
 {{range $j, $tp := $e.TableParts}}
-<div style="font-size:11px;font-weight:600;color:#7c3aed;margin:8px 0 2px;padding-left:2px">📋 {{$tp.Name}} (табличная часть)</div>
+<div style="font-size:11px;font-weight:600;color:#7c3aed;margin:8px 0 2px;padding-left:2px">📋 {{$tp.Name}} ({{t $.Lang "табличная часть"}})</div>
 {{range $i, $f := $tp.Fields}}
 <div class="form-field-row" style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 16px;font-size:12px">
   <input type="hidden" name="ef.tp{{$j}}.{{$i}}.name" value="tp.{{$tp.Name}}.{{$f.Name}}">
@@ -3895,8 +3914,8 @@ const cfgTabTree = `{{define "tab-tree"}}
 </div>
 
 <div class="module-save-row">
-  <button class="btn-save" type="submit">Сохранить формы</button>
-  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+  <button class="btn-save" type="submit">{{t $.Lang "Сохранить формы"}}</button>
+  {{if and $fSaved (eq $fSavedEnt $e.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
 </div>
 </form>
 
@@ -3970,25 +3989,25 @@ const cfgRegDetail = `{{define "register-detail"}}
 <input type="hidden" name="register" value="{{$rg.Name}}">
 
 {{if $rg.Dimensions}}
-<div class="section-hd">Измерения</div>
+<div class="section-hd">{{t $.Lang "Измерения"}}</div>
 <table class="fields-tbl">
-<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
 {{range $i, $f := $rg.Dimensions}}
 <input type="hidden" name="dim.{{$i}}.name" value="{{$f.Name}}">
 <tr>
   <td>{{$f.Name}}</td>
   <td>
     <select name="dim.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$rg.Name}}-d{{$i}}')">
-      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
+      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
     </select>
   </td>
   <td>
     <select name="dim.{{$i}}.ref" id="cfr-{{$rg.Name}}-d{{$i}}"{{if ne $f.Type "reference"}} style="display:none"{{end}}>
-      <option value="">— выбрать —</option>
+      <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </td>
@@ -3998,25 +4017,25 @@ const cfgRegDetail = `{{define "register-detail"}}
 {{end}}
 
 {{if $rg.Resources}}
-<div class="section-hd">Ресурсы</div>
+<div class="section-hd">{{t $.Lang "Ресурсы"}}</div>
 <table class="fields-tbl">
-<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
 {{range $i, $f := $rg.Resources}}
 <input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">
 <tr>
   <td>{{$f.Name}}</td>
   <td>
     <select name="res.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$rg.Name}}-r{{$i}}')">
-      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
+      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
     </select>
   </td>
   <td>
     <select name="res.{{$i}}.ref" id="cfr-{{$rg.Name}}-r{{$i}}"{{if ne $f.Type "reference"}} style="display:none"{{end}}>
-      <option value="">— выбрать —</option>
+      <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </td>
@@ -4026,25 +4045,25 @@ const cfgRegDetail = `{{define "register-detail"}}
 {{end}}
 
 {{if $rg.Attributes}}
-<div class="section-hd">Реквизиты</div>
+<div class="section-hd">{{t $.Lang "Реквизиты"}}</div>
 <table class="fields-tbl">
-<tr><th>Поле</th><th>Тип</th><th style="min-width:150px">Объект</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
 {{range $i, $f := $rg.Attributes}}
 <input type="hidden" name="attr.{{$i}}.name" value="{{$f.Name}}">
 <tr>
   <td>{{$f.Name}}</td>
   <td>
     <select name="attr.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$rg.Name}}-a{{$i}}')">
-      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>строка</option>
-      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>число</option>
-      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>дата</option>
-      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>булево</option>
-      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>ссылка →</option>
+      <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+      <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+      <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+      <option value="bool"      {{if eq $f.Type "bool"}}selected{{end}}>{{t $.Lang "булево"}}</option>
+      <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
     </select>
   </td>
   <td>
     <select name="attr.{{$i}}.ref" id="cfr-{{$rg.Name}}-a{{$i}}"{{if ne $f.Type "reference"}} style="display:none"{{end}}>
-      <option value="">— выбрать —</option>
+      <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </td>
@@ -4054,8 +4073,8 @@ const cfgRegDetail = `{{define "register-detail"}}
 {{end}}
 
 <div class="module-save-row" style="margin-bottom:14px">
-  <button class="btn-save" type="submit">Сохранить типы полей</button>
-  {{if and $fSaved (eq $fSavedEnt $rg.Name)}}<span class="save-ok">✓ Сохранено</span>{{end}}
+  <button class="btn-save" type="submit">{{t $.Lang "Сохранить типы полей"}}</button>
+  {{if and $fSaved (eq $fSavedEnt $rg.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
 </div>
 </form>
 {{end}}`
@@ -4065,24 +4084,24 @@ const cfgRegDetail = `{{define "register-detail"}}
 const cfgTabConvert = `{{define "tab-convert"}}
 <div class="pad">
 <div class="convert-form">
-  <h3>🔄 Импорт конфигурации из выгрузки 1С:Предприятие 8.3</h3>
+  <h3>🔄 {{t $.Lang "Импорт конфигурации из выгрузки 1С:Предприятие 8.3"}}</h3>
   <form method="POST" action="/bases/{{.Base.ID}}/configurator/convert">
     <div class="fg">
-      <label>Путь к папке XML-выгрузки</label>
+      <label>{{t $.Lang "Путь к папке XML-выгрузки"}}</label>
       <input type="text" name="src_dir" value="{{.ConvertSrcDir}}"
              placeholder="C:\Users\...\export\МояКонфигурация" autofocus>
-      <div class="hint">Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы</div>
+      <div class="hint">{{t $.Lang "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы"}}</div>
     </div>
     <div class="form-btns">
-      <button class="btn-primary" type="submit" name="apply" value="0">Просмотр</button>
-      <button class="btn-secondary" type="submit" name="apply" value="1">Конвертировать и применить</button>
+      <button class="btn-primary" type="submit" name="apply" value="0">{{t $.Lang "Просмотр"}}</button>
+      <button class="btn-secondary" type="submit" name="apply" value="1">{{t $.Lang "Конвертировать и применить"}}</button>
     </div>
   </form>
 </div>
-{{if .ConvertApplied}}<div class="applied">✓ Конфигурация применена к базе</div>{{end}}
+{{if .ConvertApplied}}<div class="applied">{{t $.Lang "✓ Конфигурация применена к базе"}}</div>{{end}}
 {{if .ConvertResult}}
 <div class="convert-result">
-  <h3>Результат</h3>
+  <h3>{{t $.Lang "Результат"}}</h3>
   <pre class="convert-out">{{.ConvertResult}}</pre>
 </div>
 {{end}}
@@ -4095,29 +4114,29 @@ const cfgTabFiles = `{{define "tab-files"}}
 <div class="pad">
 <div class="files-grid">
   <div class="file-card">
-    <h3>📤 Выгрузить конфигурацию</h3>
-    <p>Экспортирует файлы в<br><code>~/.onebase/workspace/{{.Base.ID}}/</code><br>и открывает папку.</p>
+    <h3>📤 {{t $.Lang "Выгрузить конфигурацию"}}</h3>
+    <p>{{t $.Lang "Экспортирует файлы в"}}<br><code>~/.onebase/workspace/{{.Base.ID}}/</code><br>и открывает папку.</p>
     {{if eq .Base.ConfigSource "database"}}
     <form method="POST" action="/bases/{{.Base.ID}}/config/export">
-      <button class="btn-primary" type="submit">Выгрузить</button>
+      <button class="btn-primary" type="submit">{{t $.Lang "Выгрузить"}}</button>
     </form>
     {{else}}
-    <p style="color:#888;font-size:12px">Файловый режим — файлы в:<br><code>{{.Base.Path}}</code></p>
+    <p style="color:#888;font-size:12px">{{t $.Lang "Файловый режим — файлы в:"}}<br><code>{{.Base.Path}}</code></p>
     {{end}}
   </div>
   <div class="file-card">
-    <h3>📥 Загрузить конфигурацию</h3>
-    <p>Загружает файлы из папки в базу данных и применяет миграцию.</p>
+    <h3>📥 {{t $.Lang "Загрузить конфигурацию"}}</h3>
+    <p>{{t $.Lang "Загружает файлы из папки в базу данных и применяет миграцию."}}</p>
     {{if eq .Base.ConfigSource "database"}}
     <form method="POST" action="/bases/{{.Base.ID}}/config/import">
       <div class="fg">
-        <label>Путь к папке</label>
+        <label>{{t $.Lang "Путь к папке"}}</label>
         <input type="text" name="path" placeholder="~/.onebase/workspace/{{.Base.ID}}">
       </div>
-      <button class="btn-primary" type="submit">Загрузить</button>
+      <button class="btn-primary" type="submit">{{t $.Lang "Загрузить"}}</button>
     </form>
     {{else}}
-    <p style="color:#888;font-size:12px">Редактируйте файлы напрямую. Сервер перезагружает конфигурацию автоматически.</p>
+    <p style="color:#888;font-size:12px">{{t $.Lang "Редактируйте файлы напрямую. Сервер перезагружает конфигурацию автоматически."}}</p>
     {{end}}
   </div>
 </div>
@@ -4126,88 +4145,88 @@ const cfgTabFiles = `{{define "tab-files"}}
 
 const cfgTabBackup = `{{define "tab-backup"}}
 <div class="pad">
-  <h2 style="margin:0 0 4px;font-size:18px">💾 Бэкапы</h2>
-  <p style="font-size:12px;color:#64748b;margin:0 0 16px">Резервное копирование и восстановление базы данных</p>
+  <h2 style="margin:0 0 4px;font-size:18px">💾 {{t $.Lang "Бэкапы"}}</h2>
+  <p style="font-size:12px;color:#64748b;margin:0 0 16px">{{t $.Lang "Резервное копирование и восстановление базы данных"}}</p>
   {{if .BackupMessage}}<div class="success-box">{{.BackupMessage}}</div>{{end}}
   <div style="font-size:12px;color:#64748b;margin-bottom:12px;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
-    Папка бэкапов: <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px">{{.BackupDir}}</code>
+    {{t $.Lang "Папка бэкапов"}}: <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px">{{.BackupDir}}</code>
   </div>
   <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/create" style="margin-bottom:16px" onsubmit="cfgBackupStart(this,'⏳ Создаю бэкап...')">
-    <button class="btn-save" type="submit">Создать бэкап сейчас</button>
+    <button class="btn-save" type="submit">{{t $.Lang "Создать бэкап сейчас"}}</button>
   </form>
   <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/upload" enctype="multipart/form-data" style="margin-bottom:16px;display:flex;align-items:center;gap:8px" onsubmit="cfgBackupStart(this,'⏳ Загружаю...')">
     <input type="file" name="backup_file" accept=".sql.gz,.sql" required style="font-size:12px">
-    <button class="btn-save" type="submit">Загрузить файл бэкапа</button>
+    <button class="btn-save" type="submit">{{t $.Lang "Загрузить файл бэкапа"}}</button>
   </form>
-  <h3 style="font-size:13px;margin:0 0 8px;color:#374151">Файлы бэкапов</h3>
+  <h3 style="font-size:13px;margin:0 0 8px;color:#374151">{{t $.Lang "Файлы бэкапов"}}</h3>
   <table class="fields-tbl">
-  <tr><th>Файл</th><th>Размер</th><th>Дата</th><th></th></tr>
+  <tr><th>{{t $.Lang "Файл"}}</th><th>{{t $.Lang "Размер"}}</th><th>{{t $.Lang "Дата"}}</th><th></th></tr>
   {{range .BackupFiles}}
   <tr>
     <td style="font-size:12px">{{.Name}}</td>
     <td style="font-size:12px;color:#64748b">{{.Size}}</td>
     <td style="font-size:12px;color:#64748b">{{.Date}}</td>
     <td style="white-space:nowrap">
-      <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">Скачать</a>
+      <a href="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/download" style="font-size:11px;color:#1a4a80;text-decoration:none">{{t $.Lang "Скачать"}}</a>
       <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/restore" style="display:inline" onsubmit="if(!confirm('Восстановить {{.Name}}? Текущие данные будут заменены!'))return false;cfgBackupStart(this,'⏳ Восстановление...')">
-        <button type="submit" style="font-size:11px;color:#16a34a;background:none;border:none;cursor:pointer;padding:0 4px">Восстановить</button>
+        <button type="submit" style="font-size:11px;color:#16a34a;background:none;border:none;cursor:pointer;padding:0 4px">{{t $.Lang "Восстановить"}}</button>
       </form>
       <form method="POST" action="/bases/{{$.Base.ID}}/configurator/backup/{{.Name}}/delete" style="display:inline" onsubmit="return confirm('Удалить {{.Name}}?')">
-        <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">Удалить</button>
+        <button type="submit" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0 4px">{{t $.Lang "Удалить"}}</button>
       </form>
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="4" style="color:#94a3b8;font-size:12px;padding:8px">Нет бэкапов</td></tr>
+  <tr><td colspan="4" style="color:#94a3b8;font-size:12px;padding:8px">{{t $.Lang "Нет бэкапов"}}</td></tr>
   {{end}}
   </table>
-  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Настройки автобэкапа</summary>
+  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">{{t $.Lang "Настройки автобэкапа"}}</summary>
   <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/settings">
     <div style="margin-bottom:8px">
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
         <input type="checkbox" name="backup_enabled" {{if .BackupSettings.Enabled}}checked{{end}}>
-        Включить автобэкап
+        {{t $.Lang "Включить автобэкап"}}
       </label>
     </div>
     <div style="margin-bottom:8px">
-      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Расписание (cron)</label>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">{{t $.Lang "Расписание"}} (cron)</label>
       <input type="text" name="backup_schedule" value="{{.BackupSettings.Schedule}}" placeholder="0 2 * * *" style="width:200px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
     </div>
     <div style="margin-bottom:8px">
-      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Хранить последних</label>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">{{t $.Lang "Хранить последних"}}</label>
       <input type="number" name="backup_keep" value="{{.BackupSettings.KeepLast}}" placeholder="7" min="1" max="100" style="width:80px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:13px">
     </div>
     <div style="margin-bottom:8px">
-      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">Директория (пусто = по умолчанию)</label>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px">{{t $.Lang "Директория"}} ({{t $.Lang "пусто = по умолчанию"}})</label>
       <input type="text" name="backup_dir" value="{{.BackupSettings.Directory}}" placeholder="{{.BackupDir}}" style="width:100%;max-width:500px;padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:13px;background:#fff">
     </div>
-    <button class="btn-save" type="submit">Сохранить настройки</button>
+    <button class="btn-save" type="submit">{{t $.Lang "Сохранить настройки"}}</button>
   </form>
   </details>
-  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Полная выгрузка (база + конфигурация)</summary>
-  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Выгрузка базы данных и конфигурации в один файл (.obz). Позволяет полностью перенести базу на другой сервер.</p>
+  <details style="margin-top:20px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">{{t $.Lang "Полная выгрузка (база + конфигурация)"}}</summary>
+  <p style="font-size:12px;color:#64748b;margin:0 0 12px">{{t $.Lang "Выгрузка базы данных и конфигурации в один файл (.obz). Позволяет полностью перенести базу на другой сервер."}}</p>
   <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
     <form method="GET" action="/bases/{{.Base.ID}}/configurator/backup/full-export" style="display:flex;flex-direction:column;gap:6px">
       <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:#374151">
         <input type="checkbox" name="compatible" value="true" checked>
-        <span>Совместимый формат (PostgreSQL ↔ SQLite)</span>
+        <span>{{t $.Lang "Совместимый формат (PostgreSQL ↔ SQLite)"}}</span>
       </label>
-      <div style="font-size:11px;color:#64748b;margin-left:22px">Без галки — быстрый бинарный дамп, только для той же СУБД</div>
-      <button class="btn-save" type="submit" style="width:fit-content">Выгрузить всё в .obz</button>
+      <div style="font-size:11px;color:#64748b;margin-left:22px">{{t $.Lang "Без галки — быстрый бинарный дамп, только для той же СУБД"}}</div>
+      <button class="btn-save" type="submit" style="width:fit-content">{{t $.Lang "Выгрузить всё в .obz"}}</button>
     </form>
     <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="if(!confirm('Восстановить из .obz файла? Все текущие данные будут заменены!'))return false;cfgBackupStart(this,'⏳ Восстановление из .obz...')">
       <input type="file" name="obz_file" accept=".obz" required style="font-size:12px">
-      <button class="btn-save" type="submit" style="background:#dc2626">Загрузить из .obz</button>
+      <button class="btn-save" type="submit" style="background:#dc2626">{{t $.Lang "Загрузить из .obz"}}</button>
     </form>
   </div>
   </details>
-  <details style="margin-top:12px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">Перенос конфигурации (только метаданные)</summary>
-  <p style="font-size:12px;color:#64748b;margin:0 0 12px">Экспортируйте конфигурацию в ZIP для переноса на другой сервер или импортируйте из архива.</p>
+  <details style="margin-top:12px"><summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;margin-bottom:8px">{{t $.Lang "Перенос конфигурации (только метаданные)"}}</summary>
+  <p style="font-size:12px;color:#64748b;margin:0 0 12px">{{t $.Lang "Экспортируйте конфигурацию в ZIP для переноса на другой сервер или импортируйте из архива."}}</p>
   <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
-    <a href="/bases/{{.Base.ID}}/configurator/config/export-zip" class="btn-save" style="text-decoration:none;display:inline-block">Экспорт в ZIP</a>
+    <a href="/bases/{{.Base.ID}}/configurator/config/export-zip" class="btn-save" style="text-decoration:none;display:inline-block">{{t $.Lang "Экспорт в ZIP"}}</a>
     <form method="POST" action="/bases/{{.Base.ID}}/configurator/config/import-zip" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px">
       <input type="file" name="config_zip" accept=".zip" required style="font-size:12px">
-      <button class="btn-save" type="submit">Импорт из ZIP</button>
+      <button class="btn-save" type="submit">{{t $.Lang "Импорт из ZIP"}}</button>
     </form>
   </div>
   </details>

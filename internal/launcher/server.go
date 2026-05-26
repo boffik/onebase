@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/ivantit66/onebase/internal/i18n"
 )
 
 //go:embed static
@@ -22,9 +23,9 @@ var staticHTTP http.Handler
 
 // Server is the launcher HTTP server (list of registered bases).
 type Server struct {
-	h      *handler
-	ln     net.Listener
-	quit   chan struct{}
+	h       *handler
+	ln      net.Listener
+	quit    chan struct{}
 	httpSrv *http.Server
 }
 
@@ -35,6 +36,9 @@ func NewServer(store *Store, runner *Runner) (*Server, error) {
 		return nil, err
 	}
 	h := &handler{store: store, runner: runner}
+	if b, err := i18n.Load(i18n.EmbeddedLocales, ""); err == nil {
+		launcherBundle = b
+	}
 	return &Server{h: h, ln: ln, quit: make(chan struct{})}, nil
 }
 
@@ -99,7 +103,7 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/convert", s.h.configuratorConvert)
 		r.Post("/bases/{id}/configurator/module", s.h.configuratorSaveModule)
 		r.Post("/bases/{id}/configurator/fields", s.h.configuratorSaveFields)
-			r.Post("/bases/{id}/configurator/entity-delete", s.h.configuratorDeleteEntity)
+		r.Post("/bases/{id}/configurator/entity-delete", s.h.configuratorDeleteEntity)
 		r.Post("/bases/{id}/configurator/form", s.h.configuratorSaveForm)
 		r.Post("/bases/{id}/configurator/register-fields", s.h.configuratorSaveRegisterFields)
 		r.Post("/bases/{id}/configurator/inforeg-fields", s.h.configuratorSaveInfoRegFields)
@@ -130,14 +134,15 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/check", s.h.configuratorCheck)
 		r.Post("/bases/{id}/configurator/check-all", s.h.configuratorCheckAll)
 		r.Post("/bases/{id}/configurator/migrate", s.h.configuratorMigrate)
-			r.Get("/bases/{id}/configurator/config/export-zip", s.h.configExportZip)
-			r.Post("/bases/{id}/configurator/config/import-zip", s.h.configImportZip)
+		r.Get("/bases/{id}/configurator/config/export-zip", s.h.configExportZip)
+		r.Post("/bases/{id}/configurator/config/import-zip", s.h.configImportZip)
 		r.Get("/bases/{id}/configurator/admin/users", s.h.cfgAdminUsers)
 		r.Post("/bases/{id}/configurator/admin/users/create", s.h.cfgAdminUserCreate)
 		r.Post("/bases/{id}/configurator/admin/users/delete", s.h.cfgAdminUserDelete)
 		r.Post("/bases/{id}/configurator/admin/users/passwd", s.h.cfgAdminUserPasswd)
 		r.Post("/bases/{id}/configurator/admin/users/deny-passwd", s.h.cfgAdminUserDenyPasswd)
 		r.Post("/bases/{id}/configurator/admin/users/show-in-list", s.h.cfgAdminUserShowInList)
+		r.Post("/bases/{id}/configurator/admin/users/lang", s.h.cfgAdminUserLang)
 		r.Get("/bases/{id}/configurator/admin/sessions", s.h.cfgAdminSessions)
 		r.Post("/bases/{id}/configurator/admin/sessions/kick", s.h.cfgAdminSessionKick)
 		r.Get("/bases/{id}/configurator/admin/audit", s.h.cfgAdminAudit)
@@ -152,10 +157,10 @@ func (s *Server) ListenAndServe() error {
 		r.Get("/bases/{id}/configurator/backup/{file}/download", s.h.backupDownload)
 		r.Post("/bases/{id}/configurator/backup/{file}/delete", s.h.backupDelete)
 		r.Post("/bases/{id}/configurator/backup/settings", s.h.backupSettings)
-			r.Post("/bases/{id}/configurator/backup/upload", s.h.backupUpload)
-			r.Post("/bases/{id}/configurator/backup/{file}/restore", s.h.backupRestore)
-			r.Get("/bases/{id}/configurator/backup/full-export", s.h.backupFullExport)
-			r.Post("/bases/{id}/configurator/backup/full-import", s.h.backupFullImport)
+		r.Post("/bases/{id}/configurator/backup/upload", s.h.backupUpload)
+		r.Post("/bases/{id}/configurator/backup/{file}/restore", s.h.backupRestore)
+		r.Get("/bases/{id}/configurator/backup/full-export", s.h.backupFullExport)
+		r.Post("/bases/{id}/configurator/backup/full-import", s.h.backupFullImport)
 	})
 
 	// Debug proxy — outside auth group: debug endpoints on UI server are already unprotected.

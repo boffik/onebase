@@ -12,9 +12,23 @@ import (
 type Subsystem struct {
 	Name     string
 	Title    string
+	Titles   map[string]string
 	Icon     string
 	Order    int
 	Contents SubsystemContents
+}
+
+// DisplayName возвращает заголовок подсистемы с учётом языка.
+func (s *Subsystem) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := s.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if s.Title != "" {
+		return s.Title
+	}
+	return s.Name
 }
 
 type SubsystemContents struct {
@@ -28,10 +42,11 @@ type SubsystemContents struct {
 }
 
 type rawSubsystem struct {
-	Name     string `yaml:"name"`
-	Title    string `yaml:"title"`
-	Icon     string `yaml:"icon"`
-	Order    int    `yaml:"order"`
+	Name     string            `yaml:"name"`
+	Title    string            `yaml:"title"`
+	Titles   map[string]string `yaml:"titles"`
+	Icon     string            `yaml:"icon"`
+	Order    int               `yaml:"order"`
 	Contents struct {
 		Documents  []string `yaml:"documents"`
 		Catalogs   []string `yaml:"catalogs"`
@@ -59,10 +74,11 @@ func LoadSubsystemFile(path string) (*Subsystem, error) {
 		raw.Title = raw.Name
 	}
 	return &Subsystem{
-		Name:  raw.Name,
-		Title: raw.Title,
-		Icon:  raw.Icon,
-		Order: raw.Order,
+		Name:   raw.Name,
+		Title:  raw.Title,
+		Titles: raw.Titles,
+		Icon:   raw.Icon,
+		Order:  raw.Order,
 		Contents: SubsystemContents{
 			Documents:  raw.Contents.Documents,
 			Catalogs:   raw.Contents.Catalogs,

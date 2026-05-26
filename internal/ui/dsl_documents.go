@@ -1,4 +1,4 @@
-﻿package ui
+package ui
 
 import (
 	"context"
@@ -46,7 +46,7 @@ type docProxy struct {
 	entity *metadata.Entity
 }
 
-func (p *docProxy) Get(_ string) any  { return nil }
+func (p *docProxy) Get(_ string) any    { return nil }
 func (p *docProxy) Set(_ string, _ any) {}
 
 func (p *docProxy) ctx() context.Context {
@@ -240,9 +240,9 @@ func (w *docWriter) post() error {
 // чтобы Ссылка.Удалить() работала.
 func (w *docWriter) ref() *interpreter.Ref {
 	return &interpreter.Ref{
-		UUID: w.obj.ID.String(),
-		Name: w.displayName(),
-		Type: w.entity.Name,
+		UUID:    w.obj.ID.String(),
+		Name:    w.displayName(),
+		Type:    w.entity.Name,
 		Manager: &docProxy{s: w.s, ctxSrc: w.ctxSrc, entity: w.entity},
 	}
 }
@@ -268,7 +268,7 @@ type tpProxy struct {
 	tpName string
 }
 
-func (t *tpProxy) Get(_ string) any  { return nil }
+func (t *tpProxy) Get(_ string) any    { return nil }
 func (t *tpProxy) Set(_ string, _ any) {}
 
 func (t *tpProxy) CallMethod(method string, args []any) any {

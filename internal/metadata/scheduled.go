@@ -10,14 +10,28 @@ import (
 )
 
 type ScheduledJob struct {
-	Name      string         `yaml:"name"`
-	Title     string         `yaml:"title"`
-	Schedule  string         `yaml:"schedule"`
-	Processor string         `yaml:"processor"`
-	Params    map[string]any `yaml:"params"`
-	Enabled   bool           `yaml:"enabled"`
-	OnError   string         `yaml:"on_error"`
-	Timeout   int            `yaml:"timeout"` // seconds
+	Name      string            `yaml:"name"`
+	Title     string            `yaml:"title"`
+	Titles    map[string]string `yaml:"titles"`
+	Schedule  string            `yaml:"schedule"`
+	Processor string            `yaml:"processor"`
+	Params    map[string]any    `yaml:"params"`
+	Enabled   bool              `yaml:"enabled"`
+	OnError   string            `yaml:"on_error"`
+	Timeout   int               `yaml:"timeout"` // seconds
+}
+
+// DisplayName возвращает заголовок регламентного задания с учётом языка.
+func (j *ScheduledJob) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := j.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if j.Title != "" {
+		return j.Title
+	}
+	return j.Name
 }
 
 func LoadScheduledFile(path string) (*ScheduledJob, error) {

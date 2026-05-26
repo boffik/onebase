@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
@@ -135,11 +136,11 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 		selected = vms[0]
 	}
 
-	render(w, "page-index", map[string]any{
-		"Title":    "onebase — Информационные базы",
+	render(w, r, "page-index", map[string]any{
+		"Title":    tr(resolveLang(r), "onebase — Информационные базы"),
 		"Bases":    vms,
 		"Selected": selected,
-		"BaseURL":  func() string {
+		"BaseURL": func() string {
 			if selected != nil {
 				return h.runner.BaseURL(selected.Base)
 			}
@@ -149,16 +150,17 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) newForm(w http.ResponseWriter, r *http.Request) {
-	render(w, "page-form", map[string]any{
-		"Title":  "onebase — Добавить базу",
-		"IsNew":  true,
-		"Base":   &Base{ConfigSource: "file", DBType: "sqlite", Port: 8080},
-		"Error":  "",
+	render(w, r, "page-form", map[string]any{
+		"Title": tr(resolveLang(r), "onebase — Добавить базу"),
+		"IsNew": true,
+		"Base":  &Base{ConfigSource: "file", DBType: "sqlite", Port: 8080},
+		"Error": "",
 	})
 }
 
 func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	lang := resolveLang(r)
 	dbType := r.FormValue("db_type")
 	if dbType == "" {
 		dbType = "postgres"
@@ -174,9 +176,9 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if b.Name == "" {
-		render(w, "page-form", map[string]any{
-			"Title": "onebase — Добавить базу",
-			"IsNew": true, "Base": b, "Error": "Наименование обязательно",
+		render(w, r, "page-form", map[string]any{
+			"Title": tr(lang, "onebase — Добавить базу"),
+			"IsNew": true, "Base": b, "Error": tr(lang, "Наименование обязательно"),
 		})
 		return
 	}
@@ -184,16 +186,16 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 		b.DBPath = normalizeSQLitePath(b.DBPath, b.Name)
 	}
 	if b.DBType == "sqlite" && b.DBPath == "" {
-		render(w, "page-form", map[string]any{
-			"Title": "onebase — Добавить базу",
-			"IsNew": true, "Base": b, "Error": "Укажите путь к файлу SQLite",
+		render(w, r, "page-form", map[string]any{
+			"Title": tr(lang, "onebase — Добавить базу"),
+			"IsNew": true, "Base": b, "Error": tr(lang, "Укажите путь к файлу SQLite"),
 		})
 		return
 	}
 	if b.DBType != "sqlite" && b.DB == "" {
-		render(w, "page-form", map[string]any{
-			"Title": "onebase — Добавить базу",
-			"IsNew": true, "Base": b, "Error": "Укажите строку подключения к PostgreSQL",
+		render(w, r, "page-form", map[string]any{
+			"Title": tr(lang, "onebase — Добавить базу"),
+			"IsNew": true, "Base": b, "Error": tr(lang, "Укажите строку подключения к PostgreSQL"),
 		})
 		return
 	}
@@ -202,8 +204,8 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 
 	if b.ConfigSource == "database" {
 		if err := h.initDatabaseBase(r.Context(), b, scaffold); err != nil {
-			render(w, "page-form", map[string]any{
-				"Title": "onebase — Добавить базу",
+			render(w, r, "page-form", map[string]any{
+				"Title": tr(lang, "onebase — Добавить базу"),
 				"IsNew": true, "Base": b, "Error": err.Error(),
 			})
 			return
@@ -211,24 +213,24 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// file mode
 		if b.Path == "" {
-			render(w, "page-form", map[string]any{
-				"Title": "onebase — Добавить базу",
-				"IsNew": true, "Base": b, "Error": "Укажите путь к папке конфигурации",
+			render(w, r, "page-form", map[string]any{
+				"Title": tr(lang, "onebase — Добавить базу"),
+				"IsNew": true, "Base": b, "Error": tr(lang, "Укажите путь к папке конфигурации"),
 			})
 			return
 		}
 		if scaffold {
 			if err := os.MkdirAll(b.Path, 0o755); err != nil {
-				render(w, "page-form", map[string]any{
-					"Title": "onebase — Добавить базу",
-					"IsNew": true, "Base": b, "Error": "Не удалось создать папку: " + err.Error(),
+				render(w, r, "page-form", map[string]any{
+					"Title": tr(lang, "onebase — Добавить базу"),
+					"IsNew": true, "Base": b, "Error": tr(lang, "Не удалось создать папку") + ": " + err.Error(),
 				})
 				return
 			}
 			if err := project.Scaffold(b.Path, b.Name); err != nil {
-				render(w, "page-form", map[string]any{
-					"Title": "onebase — Добавить базу",
-					"IsNew": true, "Base": b, "Error": "Ошибка создания конфигурации: " + err.Error(),
+				render(w, r, "page-form", map[string]any{
+					"Title": tr(lang, "onebase — Добавить базу"),
+					"IsNew": true, "Base": b, "Error": tr(lang, "Ошибка создания конфигурации") + ": " + err.Error(),
 				})
 				return
 			}
@@ -237,9 +239,9 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 		// ConnectSQLite — здесь делать ничего не надо.
 		if b.DBType != "sqlite" {
 			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
-				render(w, "page-form", map[string]any{
-					"Title": "onebase — Добавить базу",
-					"IsNew": true, "Base": b, "Error": "Не удалось создать БД: " + err.Error(),
+				render(w, r, "page-form", map[string]any{
+					"Title": tr(lang, "onebase — Добавить базу"),
+					"IsNew": true, "Base": b, "Error": tr(lang, "Не удалось создать БД") + ": " + err.Error(),
 				})
 				return
 			}
@@ -259,8 +261,8 @@ func (h *handler) editForm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	render(w, "page-form", map[string]any{
-		"Title": "onebase — Изменить базу",
+	render(w, r, "page-form", map[string]any{
+		"Title": tr(resolveLang(r), "onebase — Изменить базу"),
 		"IsNew": false, "Base": b, "Error": "",
 	})
 }
@@ -271,6 +273,7 @@ func (h *handler) update(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	r.ParseForm()
 	b.Name = r.FormValue("name")
 	b.ConfigSource = r.FormValue("config_source")
@@ -283,9 +286,9 @@ func (h *handler) update(w http.ResponseWriter, r *http.Request) {
 	b.Port = parsePort(r.FormValue("port"))
 
 	if b.Name == "" {
-		render(w, "page-form", map[string]any{
-			"Title": "onebase — Изменить базу",
-			"IsNew": false, "Base": b, "Error": "Наименование обязательно",
+		render(w, r, "page-form", map[string]any{
+			"Title": tr(lang, "onebase — Изменить базу"),
+			"IsNew": false, "Base": b, "Error": tr(lang, "Наименование обязательно"),
 		})
 		return
 	}
@@ -293,16 +296,16 @@ func (h *handler) update(w http.ResponseWriter, r *http.Request) {
 		b.DBPath = normalizeSQLitePath(b.DBPath, b.Name)
 	}
 	if b.DBType == "sqlite" && b.DBPath == "" {
-		render(w, "page-form", map[string]any{
-			"Title": "onebase — Изменить базу",
-			"IsNew": false, "Base": b, "Error": "Укажите путь к файлу SQLite",
+		render(w, r, "page-form", map[string]any{
+			"Title": tr(lang, "onebase — Изменить базу"),
+			"IsNew": false, "Base": b, "Error": tr(lang, "Укажите путь к файлу SQLite"),
 		})
 		return
 	}
 	if b.DBType != "sqlite" && b.DB == "" {
-		render(w, "page-form", map[string]any{
-			"Title": "onebase — Изменить базу",
-			"IsNew": false, "Base": b, "Error": "Укажите строку подключения к PostgreSQL",
+		render(w, r, "page-form", map[string]any{
+			"Title": tr(lang, "onebase — Изменить базу"),
+			"IsNew": false, "Base": b, "Error": tr(lang, "Укажите строку подключения к PostgreSQL"),
 		})
 		return
 	}
@@ -326,11 +329,12 @@ func (h *handler) start(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 		return
 	}
+	lang := resolveLang(r)
 
 	if !h.runner.IsRunning(b.ID) {
 		if b.DBType != "sqlite" {
 			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
-				writeJSON(w, 500, map[string]any{"error": "Не удалось создать БД: " + err.Error()})
+				writeJSON(w, 500, map[string]any{"error": tr(lang, "Не удалось создать БД") + ": " + err.Error()})
 				return
 			}
 		}
@@ -397,10 +401,11 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if b.ConfigSource != "database" {
-		render(w, "page-config-result", map[string]any{
-			"Title":   "onebase — Конфигуратор",
-			"Message": "Выгрузка доступна только для баз в режиме «В базе данных».",
+		render(w, r, "page-config-result", map[string]any{
+			"Title":   tr(lang, "onebase — Конфигуратор"),
+			"Message": tr(lang, "Выгрузка доступна только для баз в режиме «В базе данных»."),
 			"Error":   "",
 		})
 		return
@@ -408,9 +413,9 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 
 	db, err := OpenDB(r.Context(), b)
 	if err != nil {
-		render(w, "page-config-result", map[string]any{
-			"Title": "onebase — Конфигуратор", "Message": "",
-			"Error": "Ошибка подключения: " + err.Error(),
+		render(w, r, "page-config-result", map[string]any{
+			"Title": tr(lang, "onebase — Конфигуратор"), "Message": "",
+			"Error": tr(lang, "Ошибка подключения") + ": " + err.Error(),
 		})
 		return
 	}
@@ -424,18 +429,18 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 
 	repo := configdb.New(db)
 	if err := repo.ExportToDir(r.Context(), workDir); err != nil {
-		render(w, "page-config-result", map[string]any{
-			"Title": "onebase — Конфигуратор", "Message": "",
-			"Error": "Ошибка выгрузки: " + err.Error(),
+		render(w, r, "page-config-result", map[string]any{
+			"Title": tr(lang, "onebase — Конфигуратор"), "Message": "",
+			"Error": tr(lang, "Ошибка выгрузки") + ": " + err.Error(),
 		})
 		return
 	}
 
 	OpenPath(workDir)
 
-	render(w, "page-config-result", map[string]any{
-		"Title":   "onebase — Конфигуратор",
-		"Message": fmt.Sprintf("Конфигурация выгружена в папку: %s", workDir),
+	render(w, r, "page-config-result", map[string]any{
+		"Title":   tr(lang, "onebase — Конфигуратор"),
+		"Message": fmt.Sprintf(tr(lang, "Конфигурация выгружена в папку")+": %s", workDir),
 		"Error":   "",
 	})
 }
@@ -446,6 +451,7 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 
 	r.ParseForm()
 	srcDir := r.FormValue("path")
@@ -455,9 +461,9 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 
 	db, err := OpenDB(r.Context(), b)
 	if err != nil {
-		render(w, "page-config-result", map[string]any{
-			"Title": "onebase — Загрузка конфигурации", "Message": "",
-			"Error": "Ошибка подключения: " + err.Error(),
+		render(w, r, "page-config-result", map[string]any{
+			"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
+			"Error": tr(lang, "Ошибка подключения") + ": " + err.Error(),
 		})
 		return
 	}
@@ -465,18 +471,18 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 
 	repo := configdb.New(db)
 	if err := repo.ImportFromDir(r.Context(), srcDir); err != nil {
-		render(w, "page-config-result", map[string]any{
-			"Title": "onebase — Загрузка конфигурации", "Message": "",
-			"Error": "Ошибка загрузки: " + err.Error(),
+		render(w, r, "page-config-result", map[string]any{
+			"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
+			"Error": tr(lang, "Ошибка загрузки") + ": " + err.Error(),
 		})
 		return
 	}
 
 	// Migrate after import
 	out, _ := h.runner.MigrateBase(r.Context(), b)
-	render(w, "page-config-result", map[string]any{
-		"Title":   "onebase — Загрузка конфигурации",
-		"Message": fmt.Sprintf("Конфигурация загружена из: %s\n\nМиграция:\n%s", srcDir, out),
+	render(w, r, "page-config-result", map[string]any{
+		"Title":   tr(lang, "onebase — Загрузка конфигурации"),
+		"Message": fmt.Sprintf(tr(lang, "Конфигурация загружена из")+": %s\n\n"+tr(lang, "Миграция")+":\n%s", srcDir, out),
 		"Error":   "",
 	})
 }
@@ -527,7 +533,24 @@ func workspacePath(baseID string) (string, error) {
 	return p, os.MkdirAll(p, 0o755)
 }
 
-func render(w http.ResponseWriter, name string, data map[string]any) {
+func resolveLang(r *http.Request) string {
+	if launcherBundle != nil {
+		return i18n.Resolve("", "ru", r.Header.Get("Accept-Language"), launcherBundle)
+	}
+	return "ru"
+}
+
+func tr(lang, key string) string {
+	if launcherBundle != nil {
+		return launcherBundle.T(lang, key)
+	}
+	return key
+}
+
+func render(w http.ResponseWriter, r *http.Request, name string, data map[string]any) {
+	if _, ok := data["Lang"]; !ok {
+		data["Lang"] = resolveLang(r)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -543,7 +566,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 func (h *handler) browseDir(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
 	if title == "" {
-		title = "Выберите папку"
+		title = tr(resolveLang(r), "Выберите папку")
 	}
 	initialPath := r.URL.Query().Get("initial_path")
 	path, err := BrowseDir(title, initialPath)
@@ -555,13 +578,14 @@ func (h *handler) browseDir(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) browseFile(w http.ResponseWriter, r *http.Request) {
+	lang := resolveLang(r)
 	title := r.URL.Query().Get("title")
 	if title == "" {
-		title = "Выберите файл"
+		title = tr(lang, "Выберите файл")
 	}
 	filter := r.URL.Query().Get("filter")
 	if filter == "" {
-		filter = "Все файлы (*.*)|*.*"
+		filter = tr(lang, "Все файлы (*.*)|*.*")
 	}
 	path, err := BrowseFile(title, filter)
 	if err != nil {
@@ -578,4 +602,3 @@ func parsePort(s string) int {
 	}
 	return n
 }
-

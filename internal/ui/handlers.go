@@ -1,4 +1,4 @@
-﻿package ui
+package ui
 
 import (
 	"context"
@@ -46,12 +46,12 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 	cfg.DSN = maskDSN(cfg.DSN)
 	user := auth.UserFromContext(r.Context())
 	s.render(w, r, "page-about", map[string]any{
-		"Cfg":        cfg,
-		"Catalogs":   catalogs,
-		"Documents":  docs,
-		"Registers":  len(s.reg.Registers()),
-		"Reports":    len(s.reg.Reports()),
-		"User":       user,
+		"Cfg":       cfg,
+		"Catalogs":  catalogs,
+		"Documents": docs,
+		"Registers": len(s.reg.Registers()),
+		"Reports":   len(s.reg.Reports()),
+		"User":      user,
 	})
 }
 
@@ -117,24 +117,27 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	runner.CurrentUser = login
 	runner.Cache = s.widgetCache
 
+	lang := s.resolveLang(r)
 	results := make([]widget.Result, 0, len(widgets))
 	for _, wMeta := range widgets {
 		if wMeta.Type == "missing" {
 			results = append(results, widget.Result{
 				Name:  wMeta.Name,
-				Title: wMeta.Title,
-				Error: "виджет не найден: " + wMeta.Name,
+				Title: wMeta.DisplayTitle(lang),
+				Error: s.tr(lang, "виджет не найден:") + " " + wMeta.Name,
 			})
 			continue
 		}
-		results = append(results, runner.Run(r.Context(), wMeta))
+		res := runner.Run(r.Context(), wMeta)
+		res.Title = wMeta.DisplayTitle(lang)
+		results = append(results, res)
 	}
 
-	title := "Главная"
+	title := s.tr(lang, "Главная")
 	layout := "rows"
 	if hp != nil {
-		if hp.Title != "" {
-			title = hp.Title
+		if t := hp.DisplayTitle(lang); t != "" && t != "Главная" {
+			title = t
 		}
 		if hp.Layout != "" {
 			layout = hp.Layout
@@ -898,7 +901,8 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 	refs := s.store.CheckRefs(r.Context(), entity.Name, id, s.reg.Entities())
 	if len(refs) > 0 {
 		var msg strings.Builder
-		msg.WriteString("Невозможно удалить: объект используется в:\n")
+		lang := s.resolveLang(r)
+		msg.WriteString(s.tr(lang, "Невозможно удалить: объект используется в:") + "\n")
 		for _, ref := range refs {
 			fmt.Fprintf(&msg, "  • %s.%s (%d записей)\n", ref.EntityName, ref.FieldName, ref.Count)
 		}
@@ -1166,7 +1170,7 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "page-report", map[string]any{
 		"Report":       rep,
 		"ParamValues":  map[string]any{},
-		"ReportParams": s.buildReportParams(r.Context(), rep.Params),
+		"ReportParams": s.buildReportParams(r.Context(), s.resolveLang(r), rep.Params),
 	})
 }
 
@@ -1235,7 +1239,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		AccountRegs: s.reg.AccountRegisters(),
 		Dialect:     s.store.Dialect(),
 	})
-	reportParams := s.buildReportParams(r.Context(), rep.Params)
+	reportParams := s.buildReportParams(r.Context(), s.resolveLang(r), rep.Params)
 	if err != nil {
 		s.render(w, r, "page-report", map[string]any{
 			"Report":       rep,
@@ -1361,7 +1365,7 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "page-processor", map[string]any{
 			"Processor":   proc,
 			"ParamValues": paramValues,
-			"RunError":    "Процедура Выполнить() не найдена в src/" + strings.ToLower(string([]rune(proc.Name)[:1])) + string([]rune(proc.Name)[1:]) + ".proc.os",
+			"RunError":    s.tr(s.resolveLang(r), "Процедура Выполнить() не найдена в src/") + strings.ToLower(string([]rune(proc.Name)[:1])) + string([]rune(proc.Name)[1:]) + ".proc.os",
 		})
 		return
 	}
@@ -1673,25 +1677,25 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	})
 
 	vars := map[string]any{
-		"Движения":                  mc,
-		"Перечисления":              &interpreter.MapThis{M: enumsMap},
-		"Константы":                 &interpreter.MapThis{M: constsMap},
-		"__factory_Запрос":          queryFactory,
-		"__factory_Query":           queryFactory,
+		"Движения":                 mc,
+		"Перечисления":             &interpreter.MapThis{M: enumsMap},
+		"Константы":                &interpreter.MapThis{M: constsMap},
+		"__factory_Запрос":         queryFactory,
+		"__factory_Query":          queryFactory,
 		"ПредопределённыеЗначения": predefined,
-		"PredefinedValues":          predefined,
-		"Справочники":               catalogs,
-		"Catalogs":                  catalogs,
-		"Документы":                 documents,
-		"Documents":                 documents,
-		"БлокировкаДанных":          lockFactory,
-		"DataLock":                  lockFactory,
-		"ТекущийПользователь":       currentUserFn,
-		"CurrentUser":               currentUserFn,
-		"ИмяПользователя":           userNameFn,
-		"UserName":                  userNameFn,
-		"ЗначениеРеквизитаОбъекта":   attrValueFn,
-		"ObjectAttributeValue":      attrValueFn,
+		"PredefinedValues":         predefined,
+		"Справочники":              catalogs,
+		"Catalogs":                 catalogs,
+		"Документы":                documents,
+		"Documents":                documents,
+		"БлокировкаДанных":         lockFactory,
+		"DataLock":                 lockFactory,
+		"ТекущийПользователь":      currentUserFn,
+		"CurrentUser":              currentUserFn,
+		"ИмяПользователя":          userNameFn,
+		"UserName":                 userNameFn,
+		"ЗначениеРеквизитаОбъекта": attrValueFn,
+		"ObjectAttributeValue":     attrValueFn,
 	}
 	// транзакции из DSL (обработки/проведение). Раньше NewTxFunctions
 	// использовался только в тестах — отсюда «unknown function
@@ -1864,17 +1868,17 @@ type reportParamUI struct {
 	IsBool  bool
 	IsSel   bool
 	IsRef   bool
-	Options []string          // for IsSel
-	Opts    []map[string]any  // for IsRef: [{id, _label}]
+	Options []string         // for IsSel
+	Opts    []map[string]any // for IsRef: [{id, _label}]
 }
 
 // buildReportParams builds UI-ready param descriptors, loading reference options inline.
-func (s *Server) buildReportParams(ctx context.Context, params []reportpkg.Param) []reportParamUI {
+func (s *Server) buildReportParams(ctx context.Context, lang string, params []reportpkg.Param) []reportParamUI {
 	out := make([]reportParamUI, 0, len(params))
 	for _, p := range params {
 		ui := reportParamUI{
 			Name:  p.Name,
-			Label: p.DisplayLabel(),
+			Label: p.DisplayLabel(lang),
 			Type:  p.Type,
 		}
 		switch {
@@ -2114,6 +2118,14 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	}
 	if _, ok := data["Cfg"]; !ok {
 		data["Cfg"] = s.cfg
+	}
+	if _, ok := data["Lang"]; !ok {
+		data["Lang"] = s.resolveLang(r)
+	}
+	if _, ok := data["AvailableLangs"]; !ok {
+		if s.cfg.Bundle != nil {
+			data["AvailableLangs"] = s.cfg.Bundle.Available()
+		}
 	}
 	if _, ok := data["Nav"]; !ok {
 		sub := r.URL.Query().Get("subsystem")
@@ -2397,7 +2409,6 @@ func (s *Server) enrichAuditEntries(ctx context.Context, entity *metadata.Entity
 		}
 	}
 }
-
 
 // enrichAuditEntriesGlobal resolves UUIDs in audit entries that span multiple entities
 // (used by the global audit journal). For each entry it looks up the entity by name
@@ -2989,8 +3000,8 @@ func (s *Server) infoRegList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, r, "page-inforeg-list", map[string]any{
-		"InfoReg":  ir,
-		"Rows":     rows,
+		"InfoReg": ir,
+		"Rows":    rows,
 	})
 }
 
@@ -3718,4 +3729,3 @@ func (s *Server) attachmentDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
 }
-

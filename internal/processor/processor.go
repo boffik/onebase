@@ -9,23 +9,44 @@ import (
 )
 
 type Param struct {
-	Name  string `yaml:"name"`
-	Type  string `yaml:"type"`  // string, number, date, bool, reference:Entity
-	Label string `yaml:"label"` // подпись поля; по умолчанию совпадает с Name
+	Name   string            `yaml:"name"`
+	Type   string            `yaml:"type"`   // string, number, date, bool, reference:Entity
+	Label  string            `yaml:"label"`  // подпись поля; по умолчанию совпадает с Name
+	Labels map[string]string `yaml:"labels"` // переводы подписи по языкам (lang code → перевод)
 	// Default — значение по умолчанию, подставляется при первом открытии формы.
 	// Для type: bool допустимы true/false (флажок), для остальных — строка/число.
 	Default any `yaml:"default"`
 }
 
 type Processor struct {
-	Name   string  `yaml:"name"`
-	Title  string  `yaml:"title"`
-	Params []Param `yaml:"params"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title"`
+	Titles map[string]string `yaml:"titles"`
+	Params []Param           `yaml:"params"`
 }
 
-func (p Param) DisplayLabel() string {
+// DisplayLabel возвращает подпись параметра с учётом языка.
+func (p Param) DisplayLabel(lang string) string {
+	if lang != "" {
+		if v, ok := p.Labels[lang]; ok && v != "" {
+			return v
+		}
+	}
 	if p.Label != "" {
 		return p.Label
+	}
+	return p.Name
+}
+
+// DisplayName возвращает заголовок обработки с учётом языка.
+func (p *Processor) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := p.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if p.Title != "" {
+		return p.Title
 	}
 	return p.Name
 }

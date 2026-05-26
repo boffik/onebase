@@ -107,13 +107,13 @@ func (h *handler) backupCreate(w http.ResponseWriter, r *http.Request) {
 	outPath, dumpErr := dumpForBase(r.Context(), b, dir)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if dumpErr != nil {
-		data.Error = "РћС€РёР±РєР° Р±СЌРєР°РїР°: " + dumpErr.Error()
+		data.Error = "Ошибка бэкапа: " + dumpErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
 		data.BackupMessage = "Р‘СЌРєР°Рї СЃРѕР·РґР°РЅ: " + filepath.Base(outPath)
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) backupDownload(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +144,7 @@ func (h *handler) backupDelete(w http.ResponseWriter, r *http.Request) {
 	data := h.loadCfgData(r.Context(), b, "backup")
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = "panel-backup"
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 		data.FieldsSavedEntity = "panel-backup"
 		data.BackupMessage = "РќР°СЃС‚СЂРѕР№РєРё Р±СЌРєР°РїР° СЃРѕС…СЂР°РЅРµРЅС‹"
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +211,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer file.Close()
@@ -222,7 +222,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer f.Close()
@@ -232,7 +232,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = "panel-backup"
 	data.BackupMessage = "Р¤Р°Р№Р» Р·Р°РіСЂСѓР¶РµРЅ: " + name
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
@@ -247,14 +247,14 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(fp); err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Р¤Р°Р№Р» РЅРµ РЅР°Р№РґРµРЅ: " + file
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
 	if err := checkBackupFileMismatch(b, file); err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 		}
 		data.BackupMessage = msg
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // backupFullExport creates a single .obz file containing both database dump and configuration.
@@ -416,7 +416,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё С„Р°Р№Р»Р°: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer file.Close()
@@ -425,7 +425,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "РћС€РёР±РєР° С‡С‚РµРЅРёСЏ С„Р°Р№Р»Р°: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -433,7 +433,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р° .obz: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -441,7 +441,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = "Temp dir error: " + err.Error()
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -484,7 +484,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 		if cerr != nil {
 			data := h.loadCfgData(r.Context(), b, "backup")
 			data.Error = "Ошибка подключения к БД: " + cerr.Error()
-			renderCfg(w, data)
+			renderCfg(w, r, data)
 			return
 		}
 		defer db.Close()
@@ -525,7 +525,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 			}
 			data.BackupMessage = msg
 		}
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -580,7 +580,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 			"Нельзя восстановить %s-бэкап в %s-базу (%s). Создайте новую базу с типом БД %s или используйте совместимый формат (.obz с галочкой).",
 			archiveDBType, targetDBType, filepath.Base(r.FormValue("obz_file")), archiveDBType,
 		)
-		renderCfg(w, data)
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -646,5 +646,5 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 		}
 		data.BackupMessage = msg
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }

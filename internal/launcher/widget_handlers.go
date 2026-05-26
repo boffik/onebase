@@ -21,6 +21,7 @@ func (h *handler) configuratorSaveWidget(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -29,8 +30,8 @@ func (h *handler) configuratorSaveWidget(w http.ResponseWriter, r *http.Request)
 	body := r.FormValue("yaml")
 	if name == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Имя виджета не задано"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Имя виджета не задано")
+		renderCfg(w, r, data)
 		return
 	}
 
@@ -43,8 +44,8 @@ func (h *handler) configuratorSaveWidget(w http.ResponseWriter, r *http.Request)
 		defer os.Remove(tmp.Name())
 		if _, perr := metadata.LoadWidgetFile(tmp.Name()); perr != nil {
 			data := h.loadCfgData(r.Context(), b, "tree")
-			data.Error = "Ошибка YAML: " + perr.Error()
-			renderCfg(w, data)
+			data.Error = tr(lang, "Ошибка YAML") + ": " + perr.Error()
+			renderCfg(w, r, data)
 			return
 		}
 	}
@@ -54,12 +55,12 @@ func (h *handler) configuratorSaveWidget(w http.ResponseWriter, r *http.Request)
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = name
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // configuratorDeleteWidget removes widgets/<name>.yaml from the configuration.
@@ -69,6 +70,7 @@ func (h *handler) configuratorDeleteWidget(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -76,17 +78,17 @@ func (h *handler) configuratorDeleteWidget(w http.ResponseWriter, r *http.Reques
 	name := strings.TrimSpace(r.FormValue("widget_name"))
 	if name == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
-		data.Error = "Имя виджета не задано"
-		renderCfg(w, data)
+		data.Error = tr(lang, "Имя виджета не задано")
+		renderCfg(w, r, data)
 		return
 	}
 	relPath := "widgets/" + nameToFilename(name) + ".yaml"
 	delErr := deleteConfigFile(r, h, b, relPath)
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if delErr != nil {
-		data.Error = "Ошибка удаления: " + delErr.Error()
+		data.Error = tr(lang, "Ошибка удаления") + ": " + delErr.Error()
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // configuratorSaveHomePage writes config/home_page.yaml verbatim. Validation
@@ -98,6 +100,7 @@ func (h *handler) configuratorSaveHomePage(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -108,8 +111,8 @@ func (h *handler) configuratorSaveHomePage(w http.ResponseWriter, r *http.Reques
 		var probe map[string]any
 		if perr := yaml.Unmarshal([]byte(body), &probe); perr != nil {
 			data := h.loadCfgData(r.Context(), b, "tree")
-			data.Error = "Ошибка YAML: " + perr.Error()
-			renderCfg(w, data)
+			data.Error = tr(lang, "Ошибка YAML") + ": " + perr.Error()
+			renderCfg(w, r, data)
 			return
 		}
 	}
@@ -117,12 +120,12 @@ func (h *handler) configuratorSaveHomePage(w http.ResponseWriter, r *http.Reques
 	saveErr := saveConfigFile(r, h, b, "config/home_page.yaml", []byte(body))
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
-		data.Error = "Ошибка сохранения: " + saveErr.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "home-page"
 	}
-	renderCfg(w, data)
+	renderCfg(w, r, data)
 }
 
 // saveConfigFile is a small wrapper used by widget/homepage handlers. It writes

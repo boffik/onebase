@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -16,8 +17,9 @@ import (
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/devserver"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/mailer"
+	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -154,6 +156,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	if appCfg != nil {
 		uiCfg.AppName = appCfg.Name
 		uiCfg.AppVersion = appCfg.Version
+		uiCfg.Lang = appCfg.Lang
 		if appCfg.Attachments != nil && appCfg.Attachments.MaxFileSizeMB > 0 {
 			uiCfg.MaxFileSizeMB = appCfg.Attachments.MaxFileSizeMB
 		}
@@ -170,6 +173,11 @@ func runDev(cmd *cobra.Command, _ []string) error {
 			sched.SetMailer(m)
 		}
 	}
+	bundle, err2 := i18n.Load(i18n.EmbeddedLocales, filepath.Join(dir, "locales"))
+	if err2 != nil {
+		fmt.Fprintf(os.Stderr, "warning: i18n load: %v\n", err2)
+	}
+	uiCfg.Bundle = bundle
 	srv := api.New(reg, db, interp, authRepo, port, uiCfg, sched)
 
 	schedCtx, schedCancel := context.WithCancel(ctx)

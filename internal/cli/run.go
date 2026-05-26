@@ -1,4 +1,4 @@
-﻿package cli
+package cli
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/api"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/backup"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/devserver"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/launcher"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/project"
@@ -25,6 +25,7 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/ui"
 	"github.com/ivantit66/onebase/internal/version"
+	"github.com/spf13/cobra"
 )
 
 var runCmd = &cobra.Command{
@@ -170,6 +171,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	if appCfg != nil {
 		uiCfg.AppName = appCfg.Name
 		uiCfg.AppVersion = appCfg.Version
+		uiCfg.Lang = appCfg.Lang
 		if appCfg.Logo != "" {
 			uiCfg.Logo = filepath.Join(proj.Dir, appCfg.Logo)
 		}
@@ -177,6 +179,12 @@ func runServer(cmd *cobra.Command, _ []string) error {
 			uiCfg.MaxFileSizeMB = appCfg.Attachments.MaxFileSizeMB
 		}
 	}
+
+	bundle, err := i18n.Load(i18n.EmbeddedLocales, filepath.Join(proj.Dir, "locales"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: i18n load: %v\n", err)
+	}
+	uiCfg.Bundle = bundle
 
 	interp := interpreter.New()
 	interp.LookupProc = reg.GetModuleProc

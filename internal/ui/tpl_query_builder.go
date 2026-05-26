@@ -4,7 +4,7 @@ const tplQueryBuilder = `
 {{define "page-query-builder"}}
 {{template "head" .}}{{template "nav" .}}
 <main style="max-width:100%">
-<h2>Конструктор запросов</h2>
+<h2>{{t $.Lang "Конструктор запросов"}}</h2>
 <div style="display:grid;grid-template-columns:400px 1fr;gap:20px;align-items:start">
 
 <!-- LEFT: builder panels -->
@@ -12,41 +12,41 @@ const tplQueryBuilder = `
 
 <!-- Source -->
 <div class="card" style="margin-bottom:12px">
-<h3 style="margin-top:0">Источник данных</h3>
+<h3 style="margin-top:0">{{t $.Lang "Источник данных"}}</h3>
 <select id="qb-src" onchange="qbSetSource(this.value)" style="width:100%;margin-bottom:8px">
-  <option value="">— выбрать —</option>
+  <option value="">{{t $.Lang "— выбрать —"}}</option>
 </select>
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-  <span style="font-size:12px;color:#64748b;flex-shrink:0;width:70px">Псевдоним:</span>
-  <input id="qb-main-alias" type="text" placeholder="напр. Прод" oninput="qbRebuildAllFields()"
+  <span style="font-size:12px;color:#64748b;flex-shrink:0;width:70px">{{t $.Lang "Псевдоним:"}}</span>
+  <input id="qb-main-alias" type="text" placeholder="{{t $.Lang "напр. Прод"}}" oninput="qbRebuildAllFields()"
     style="width:110px;font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px">
-  <span style="font-size:11px;color:#94a3b8">(обязателен при JOIN)</span>
+  <span style="font-size:11px;color:#94a3b8">({{t $.Lang "обязателен при JOIN"}})</span>
 </div>
 <div id="qb-vt-param" style="display:none;margin-top:4px">
-  <label style="font-size:12px;color:#64748b">Параметры виртуальной таблицы</label>
-  <input id="qb-vt-param-val" type="text" style="width:100%;margin-top:4px" placeholder="например: &amp;НаДату">
+  <label style="font-size:12px;color:#64748b">{{t $.Lang "Параметры виртуальной таблицы"}}</label>
+  <input id="qb-vt-param-val" type="text" style="width:100%;margin-top:4px" placeholder="{{t $.Lang "например: &НаДату"}}">
 </div>
 </div>
 
 <!-- Joins -->
 <div class="card" style="margin-bottom:12px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Соединения (JOIN)</h3>
+  <h3 style="margin:0">{{t $.Lang "Соединения (JOIN)"}}</h3>
   <button class="btn btn-sm" onclick="qbAddJoin()"
-    style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;font-size:12px">+ Соединение</button>
+    style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;font-size:12px">{{t $.Lang "+ Соединение"}}</button>
 </div>
 <div id="qb-joins">
-  <p style="font-size:12px;color:#94a3b8;margin:0" id="qb-joins-hint">Нет соединений</p>
+  <p style="font-size:12px;color:#94a3b8;margin:0" id="qb-joins-hint">{{t $.Lang "Нет соединений"}}</p>
 </div>
 </div>
 
 <!-- Fields -->
 <div class="card" style="margin-bottom:12px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Поля (ВЫБРАТЬ)</h3>
+  <h3 style="margin:0">{{t $.Lang "Поля (ВЫБРАТЬ)"}}</h3>
   <div style="display:flex;gap:4px">
-    <button class="btn btn-sm" onclick="qbAllFields(true)"  style="background:#e2e8f0;color:#475569;padding:2px 8px;font-size:12px">Все</button>
-    <button class="btn btn-sm" onclick="qbAllFields(false)" style="background:#e2e8f0;color:#475569;padding:2px 8px;font-size:12px">Сбросить</button>
+    <button class="btn btn-sm" onclick="qbAllFields(true)"  style="background:#e2e8f0;color:#475569;padding:2px 8px;font-size:12px">{{t $.Lang "Все"}}</button>
+    <button class="btn btn-sm" onclick="qbAllFields(false)" style="background:#e2e8f0;color:#475569;padding:2px 8px;font-size:12px">{{t $.Lang "Сбросить"}}</button>
   </div>
 </div>
 <div id="qb-fields-list" style="max-height:260px;overflow-y:auto"></div>
@@ -55,9 +55,9 @@ const tplQueryBuilder = `
 <!-- Where -->
 <div class="card" style="margin-bottom:12px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Условия (ГДЕ)</h3>
+  <h3 style="margin:0">{{t $.Lang "Условия (ГДЕ)"}}</h3>
   <button class="btn btn-sm" onclick="qbAddCond()"
-    style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;font-size:12px">+ Условие</button>
+    style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;font-size:12px">{{t $.Lang "+ Условие"}}</button>
 </div>
 <div id="qb-conds"></div>
 </div>
@@ -65,17 +65,17 @@ const tplQueryBuilder = `
 <!-- Order -->
 <div class="card" style="margin-bottom:12px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Сортировка</h3>
+  <h3 style="margin:0">{{t $.Lang "Сортировка"}}</h3>
   <button class="btn btn-sm" onclick="qbAddOrder()"
-    style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;font-size:12px">+ Поле</button>
+    style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;font-size:12px">{{t $.Lang "+ Поле"}}</button>
 </div>
 <div id="qb-orders"></div>
 </div>
 
 <!-- Params -->
 <div class="card">
-<h3 style="margin-top:0">Параметры</h3>
-<p style="font-size:12px;color:#64748b;margin-bottom:8px">Автообнаружение из условий по &amp;ИмяПараметра</p>
+<h3 style="margin-top:0">{{t $.Lang "Параметры"}}</h3>
+<p style="font-size:12px;color:#64748b;margin-bottom:8px">{{t $.Lang "Автообнаружение из условий по &ИмяПараметра"}}</p>
 <div id="qb-params" style="font-size:13px">—</div>
 </div>
 </div><!-- /LEFT -->
@@ -84,9 +84,9 @@ const tplQueryBuilder = `
 <div>
 <div class="card" style="margin-bottom:12px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">Текст запроса</h3>
+  <h3 style="margin:0">{{t $.Lang "Текст запроса"}}</h3>
   <button onclick="qbCopyQuery()"
-    style="background:#dcfce7;color:#166534;border:none;border-radius:5px;padding:3px 12px;cursor:pointer;font-size:12px">Копировать</button>
+    style="background:#dcfce7;color:#166534;border:none;border-radius:5px;padding:3px 12px;cursor:pointer;font-size:12px">{{t $.Lang "Копировать"}}</button>
 </div>
 <textarea id="qb-query-out" rows="16" readonly
   style="width:100%;font-family:monospace;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:10px;background:#f8fafc;resize:vertical"></textarea>
@@ -94,9 +94,9 @@ const tplQueryBuilder = `
 
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-  <h3 style="margin:0">DSL-фрагмент (вставить в модуль)</h3>
+  <h3 style="margin:0">{{t $.Lang "DSL-фрагмент (вставить в модуль)"}}</h3>
   <button onclick="qbCopyDSL()"
-    style="background:#dcfce7;color:#166534;border:none;border-radius:5px;padding:3px 12px;cursor:pointer;font-size:12px">Копировать</button>
+    style="background:#dcfce7;color:#166534;border:none;border-radius:5px;padding:3px 12px;cursor:pointer;font-size:12px">{{t $.Lang "Копировать"}}</button>
 </div>
 <textarea id="qb-dsl-out" rows="14" readonly
   style="width:100%;font-family:monospace;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:10px;background:#f8fafc;resize:vertical"></textarea>
