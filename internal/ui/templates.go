@@ -1536,7 +1536,7 @@ const tplConstants = `
 <form method="POST" action="/ui/constants">
 {{range .Constants}}{{$c := .}}
 <div class="form-group">
-  <label>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</label>
+  <label>{{.DisplayLabel $.Lang}}</label>
   {{if .RefEntity}}
     <select name="{{.Name}}">
       <option value="">{{t $.Lang "— не выбрано —"}}</option>
@@ -1573,7 +1573,7 @@ const tplJournal = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Journal.Title}}</h2>
+  <h2>{{.Journal.DisplayName $.Lang}}</h2>
   <div style="display:flex;align-items:center;gap:12px">
     <span style="color:#94a3b8;font-size:13px">{{t $.Lang "Всего:"}} {{.Total}}</span>
     <a class="btn btn-sm" href="/ui/journal/{{lower .Journal.Name}}/excel{{filterQuery .Params}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
@@ -1747,7 +1747,7 @@ const tplScheduled = `
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
   <div>
-    <h2 style="margin-bottom:4px">{{.Job.Title}}</h2>
+    <h2 style="margin-bottom:4px">{{.Job.DisplayName $.Lang}}</h2>
     <small style="color:#94a3b8">{{.Job.Name}}</small>
   </div>
   <a href="/ui/admin/scheduled" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9">×</a>
@@ -1807,7 +1807,7 @@ const tplAccountReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Chart.Title}}</h2>
+  <h2>{{.Chart.DisplayName $.Lang}}</h2>
   <span style="color:#94a3b8;font-size:13px">{{len .Rows}} {{t $.Lang "счетов"}}</span>
 </div>
 <div class="card">
@@ -1843,7 +1843,7 @@ const tplAccountReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Register.Title}} — {{t $.Lang "Проводки"}}</h2>
+  <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "Проводки"}}</h2>
   <a class="btn btn-secondary" href="/ui/accountreg/{{lower .Register.Name}}/balances">{{t $.Lang "Остатки"}}</a>
 </div>
 <div class="card">
@@ -1877,7 +1877,7 @@ const tplAccountReg = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <div class="row-top">
-  <h2>{{.Register.Title}} — {{t $.Lang "Остатки по счетам"}}</h2>
+  <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "Остатки по счетам"}}</h2>
   <div style="display:flex;gap:8px;align-items:center">
     <form method="GET" style="display:flex;gap:8px;align-items:center">
       <label style="color:#64748b;font-size:13px">{{t $.Lang "На дату:"}}</label>

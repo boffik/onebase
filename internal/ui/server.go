@@ -384,11 +384,7 @@ func (s *Server) buildNavForSubsystem(r *http.Request, sub *metadata.Subsystem, 
 			if !jSet[j2.Name] {
 				continue
 			}
-			label := j2.Title
-			if label == "" {
-				label = j2.Name
-			}
-			jItems = append(jItems, navItem{Label: label, URL: "/ui/journal/" + strings.ToLower(j2.Name) + q})
+			jItems = append(jItems, navItem{Label: j2.DisplayName(lang), URL: "/ui/journal/" + strings.ToLower(j2.Name) + q})
 		}
 		if len(jItems) > 0 {
 			nav = append(nav, navGroup{Kind: s.tr(lang, "Журналы"), Items: jItems})
@@ -500,11 +496,7 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 	sort.Slice(journals, func(i, j int) bool { return journals[i].Name < journals[j].Name })
 	var journalItems []navItem
 	for _, j := range journals {
-		label := j.Title
-		if label == "" {
-			label = j.Name
-		}
-		journalItems = append(journalItems, navItem{Label: label, URL: "/ui/journal/" + strings.ToLower(j.Name)})
+		journalItems = append(journalItems, navItem{Label: j.DisplayName(lang), URL: "/ui/journal/" + strings.ToLower(j.Name)})
 	}
 	if len(journalItems) > 0 {
 		nav = append(nav, navGroup{Kind: s.tr(lang, "Журналы"), Items: journalItems})

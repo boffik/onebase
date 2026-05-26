@@ -77,7 +77,7 @@ const tplAllFunctions = `
 <div class="af-group" data-group="Константы">
   <div class="af-group-hd" onclick="afToggle(this)">{{t $.Lang "Константы"}} <span class="af-cnt">{{len .Constants}}</span></div>
   <div class="af-group-body">
-  {{range .Constants}}<a class="af-link" href="/ui/constants" data-name="{{.Name}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</a>{{end}}
+  {{range .Constants}}<a class="af-link" href="/ui/constants" data-name="{{.Name}}">{{.DisplayLabel $.Lang}}</a>{{end}}
   </div>
 </div>
 {{end}}

@@ -116,24 +116,27 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	runner.CurrentUser = login
 	runner.Cache = s.widgetCache
 
+	lang := s.resolveLang(r)
 	results := make([]widget.Result, 0, len(widgets))
 	for _, wMeta := range widgets {
 		if wMeta.Type == "missing" {
 			results = append(results, widget.Result{
 				Name:  wMeta.Name,
-				Title: wMeta.Title,
-				Error: s.tr(s.resolveLang(r), "виджет не найден:") + " " + wMeta.Name,
+				Title: wMeta.DisplayTitle(lang),
+				Error: s.tr(lang, "виджет не найден:") + " " + wMeta.Name,
 			})
 			continue
 		}
-		results = append(results, runner.Run(r.Context(), wMeta))
+		res := runner.Run(r.Context(), wMeta)
+		res.Title = wMeta.DisplayTitle(lang)
+		results = append(results, res)
 	}
 
-	title := s.tr(s.resolveLang(r), "Главная")
+	title := s.tr(lang, "Главная")
 	layout := "rows"
 	if hp != nil {
-		if hp.Title != "" {
-			title = hp.Title
+		if t := hp.DisplayTitle(lang); t != "" && t != "Главная" {
+			title = t
 		}
 		if hp.Layout != "" {
 			layout = hp.Layout

@@ -11,14 +11,29 @@ import (
 type Journal struct {
 	Name      string
 	Title     string
+	Titles    map[string]string
 	Documents []string
 	Columns   []JournalColumn
 	Filters   []JournalFilter
 }
 
+// DisplayName возвращает заголовок журнала документов с учётом языка.
+func (j *Journal) DisplayName(lang string) string {
+	if lang != "" {
+		if v, ok := j.Titles[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if j.Title != "" {
+		return j.Title
+	}
+	return j.Name
+}
+
 type JournalColumn struct {
 	Field    string
 	Label    string
+	Labels   map[string]string
 	Fallback []string
 	// Map — явное соответствие docTypeName → fieldName в этом документе.
 	// лучшая альтернатива fallback, потому что:
@@ -32,18 +47,33 @@ type JournalColumn struct {
 	Format   string // "date" | "number" | "" (auto)
 }
 
+// DisplayLabel возвращает подпись колонки журнала с учётом языка.
+func (c JournalColumn) DisplayLabel(lang string) string {
+	if lang != "" {
+		if v, ok := c.Labels[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if c.Label != "" {
+		return c.Label
+	}
+	return c.Field
+}
+
 type JournalFilter struct {
 	Field string
 	Type  string // "date_range" | "reference:X" | "string"
 }
 
 type rawJournal struct {
-	Name      string `yaml:"name"`
-	Title     string `yaml:"title"`
-	Documents []string `yaml:"documents"`
+	Name      string            `yaml:"name"`
+	Title     string            `yaml:"title"`
+	Titles    map[string]string `yaml:"titles"`
+	Documents []string          `yaml:"documents"`
 	Columns   []struct {
 		Field    string            `yaml:"field"`
 		Label    string            `yaml:"label"`
+		Labels   map[string]string `yaml:"labels"`
 		Fallback []string          `yaml:"fallback"`
 		Map      map[string]string `yaml:"map"`
 		Format   string            `yaml:"format"`
@@ -72,6 +102,7 @@ func LoadJournalFile(path string) (*Journal, error) {
 	j := &Journal{
 		Name:      raw.Name,
 		Title:     raw.Title,
+		Titles:    raw.Titles,
 		Documents: raw.Documents,
 	}
 	for _, rc := range raw.Columns {
@@ -82,6 +113,7 @@ func LoadJournalFile(path string) (*Journal, error) {
 		j.Columns = append(j.Columns, JournalColumn{
 			Field:    rc.Field,
 			Label:    label,
+			Labels:   rc.Labels,
 			Fallback: rc.Fallback,
 			Map:      rc.Map,
 			Format:   rc.Format,

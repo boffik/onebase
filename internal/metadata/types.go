@@ -56,6 +56,20 @@ type Constant struct {
 	EnumName  string
 	Default   string
 	Label     string
+	Labels    map[string]string // переводы подписи по языкам
+}
+
+// DisplayLabel возвращает подпись константы с учётом языка.
+func (c *Constant) DisplayLabel(lang string) string {
+	if lang != "" {
+		if v, ok := c.Labels[lang]; ok && v != "" {
+			return v
+		}
+	}
+	if c.Label != "" {
+		return c.Label
+	}
+	return c.Name
 }
 
 type TablePart struct {
