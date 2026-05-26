@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,56 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
 )
+
+// normalizeSQLitePath приводит ввод пути к файлу SQLite к одному виду:
+// если пользователь указал папку (явный слэш на конце, существующий каталог
+// или путь без расширения) — добавляет «<имя базы>.db», как это делает кнопка
+// выбора папки.
+func normalizeSQLitePath(path, name string) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return p
+	}
+	if strings.EqualFold(filepath.Ext(p), ".db") {
+		return p
+	}
+	isDir := false
+	switch {
+	case strings.HasSuffix(p, `\`) || strings.HasSuffix(p, "/"):
+		isDir = true
+		p = strings.TrimRight(p, `\/`)
+	case filepath.Ext(p) == "":
+		isDir = true
+	default:
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			isDir = true
+		}
+	}
+	if !isDir {
+		return p
+	}
+	return filepath.Join(p, sanitizeFileName(name)+".db")
+}
+
+// sanitizeFileName убирает символы, недопустимые в именах файлов Windows.
+// Должен совпадать с регуляркой в pickSQLiteDir() (templates.go).
+func sanitizeFileName(name string) string {
+	name = strings.TrimSpace(name)
+	var b strings.Builder
+	for _, r := range name {
+		switch r {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			b.WriteRune('_')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		out = "database"
+	}
+	return out
+}
 
 type handler struct {
 	store  *Store
@@ -129,6 +180,9 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if b.DBType == "sqlite" {
+		b.DBPath = normalizeSQLitePath(b.DBPath, b.Name)
+	}
 	if b.DBType == "sqlite" && b.DBPath == "" {
 		render(w, "page-form", map[string]any{
 			"Title": "onebase — Добавить базу",
@@ -234,6 +288,9 @@ func (h *handler) update(w http.ResponseWriter, r *http.Request) {
 			"IsNew": false, "Base": b, "Error": "Наименование обязательно",
 		})
 		return
+	}
+	if b.DBType == "sqlite" {
+		b.DBPath = normalizeSQLitePath(b.DBPath, b.Name)
 	}
 	if b.DBType == "sqlite" && b.DBPath == "" {
 		render(w, "page-form", map[string]any{

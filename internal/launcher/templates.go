@@ -260,7 +260,7 @@ const tplForm = `
     <div class="fg" id="dbpath-row" style="{{if ne .Base.DBType "sqlite"}}display:none{{end}}">
       <label>Путь к файлу SQLite</label>
       <div class="input-browse">
-        <input id="inp-dbpath" name="db_path" value="{{.Base.DBPath}}" placeholder="C:\onebase\mydb.db">
+        <input id="inp-dbpath" name="db_path" value="{{.Base.DBPath}}" placeholder="C:\onebase\mydb.db" onblur="normalizeDBPath('inp-dbpath')">
         <button type="button" class="btn-browse" onclick="pickSQLiteDir('inp-dbpath')">📁</button>
       </div>
       <div class="hint">Файл будет создан, если не существует. Расширение .db рекомендуется.</div>
@@ -341,6 +341,22 @@ function pickSQLiteDir(inputId) {
       document.getElementById(inputId).value = d.path + sep + name + '.db';
     })
     .finally(function(){ btn.disabled = false; btn.textContent = '📁'; });
+}
+// При потере фокуса нормализуем путь так же, как делает сервер:
+// если введена папка (без расширения / со слэшем на конце) — добавляем <имя>.db.
+function normalizeDBPath(inputId) {
+  var inp = document.getElementById(inputId);
+  var raw = (inp.value || '').trim();
+  if (!raw) return;
+  if (/\.db$/i.test(raw)) return;
+  var sep = (raw.indexOf('/') >= 0 && raw.indexOf('\\') < 0) ? '/' : '\\';
+  var trimmed = raw.replace(/[\\/]+$/, '');
+  var hasExt = /\.[A-Za-z0-9]+$/.test(trimmed.split(/[\\/]/).pop() || '');
+  var endedWithSep = raw !== trimmed;
+  if (hasExt && !endedWithSep) return;
+  var name = (document.querySelector('input[name=name]').value || 'database')
+    .replace(/[\\/:*?"<>|]/g, '_').trim() || 'database';
+  inp.value = trimmed + sep + name + '.db';
 }
 </script>
 </body></html>
