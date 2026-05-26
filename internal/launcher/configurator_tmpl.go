@@ -1555,6 +1555,7 @@ var _mqbTA=null,_mqbMonacoId=null,_mqbSchema=null,_mqbSrcMap={};
 var _mqbCurFields=[],_mqbSel={},_mqbJoins=[];
 (function(){
 _mqbSchema={{.QBSchema}};
+if(!_mqbSchema)_mqbSchema=[];
 _mqbSchema.forEach(function(s){_mqbSrcMap[s.id]=s;});
 // populate select
 var sel=document.getElementById('mqb-src');

@@ -974,6 +974,9 @@ func buildQBSchema(d *configuratorData) template.JS {
 		}
 	}
 
+	if sources == nil {
+		sources = []cfgQBSource{}
+	}
 	b, _ := json.Marshal(sources)
 	return template.JS(b)
 }
