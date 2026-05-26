@@ -112,6 +112,46 @@ func (p *docProxy) DeleteRef(uuidStr string) error {
 	return p.s.store.Delete(p.ctx(), p.entity.Name, id)
 }
 
+// LoadObject реализует interpreter.RefManager — загружает существующий документ
+// (шапка + табличные части) по UUID и возвращает docWriter, через который
+// Ссылка.ПолучитьОбъект().Поле = … → Записать()/Провести() обновят документ.
+func (p *docProxy) LoadObject(uuidStr string) (any, error) {
+	id, err := uuid.Parse(uuidStr)
+	if err != nil {
+		return nil, fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
+	}
+	row, err := p.s.store.GetByID(p.ctx(), p.entity.Name, id, p.entity)
+	if err != nil {
+		return nil, err
+	}
+	fields := make(map[string]any, len(row))
+	for _, f := range p.entity.Fields {
+		if v, ok := row[f.Name]; ok && v != nil {
+			fields[strings.ToLower(f.Name)] = v
+		}
+	}
+	tpRows := make(map[string][]map[string]any, len(p.entity.TableParts))
+	for _, tp := range p.entity.TableParts {
+		rows, err := p.s.store.GetTablePartRows(p.ctx(), p.entity.Name, tp.Name, id, tp)
+		if err != nil {
+			return nil, fmt.Errorf("табличная часть %s: %w", tp.Name, err)
+		}
+		tpRows[tp.Name] = rows
+	}
+	return &docWriter{
+		s:      p.s,
+		ctxSrc: p.ctxSrc,
+		entity: p.entity,
+		obj: &runtime.Object{
+			ID:            id,
+			Type:          p.entity.Name,
+			Kind:          p.entity.Kind,
+			Fields:        fields,
+			TablePartRows: tpRows,
+		},
+	}, nil
+}
+
 // docWriter — записываемый/проводимый документ.
 //
 //	Док = Документы.ПоступлениеТоваров.Создать();

@@ -19,6 +19,10 @@ type CatalogsDB interface {
 	WriteCatalogRecord(ctx context.Context, entity *metadata.Entity, idStr string, fields map[string]any) (string, error)
 	// Delete удаляет запись справочника/документа по идентификатору.
 	Delete(ctx context.Context, entityName string, id uuid.UUID) error
+	// GetByID загружает запись по UUID. Возвращает поля шапки (включая
+	// id, _version, deletion_mark и т.д.). Используется Ссылка.ПолучитьОбъект()
+	// для редактирования существующих записей справочников.
+	GetByID(ctx context.Context, entityName string, id uuid.UUID, entity *metadata.Entity) (map[string]any, error)
 }
 
 // EntityLookup resolves an entity name (case-insensitive) to its metadata.
@@ -136,6 +140,33 @@ func (p *CatalogProxy) DeleteRef(uuidStr string) error {
 		return fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
 	return p.db.Delete(p.ctx(), p.entity.Name, id)
+}
+
+// LoadObject реализует RefManager — загружает существующую запись справочника
+// по UUID и возвращает CatalogRecordWriter с предзаполненными полями, так что
+// Ссылка.ПолучитьОбъект().Поле = … → Записать() обновит запись по тому же id.
+func (p *CatalogProxy) LoadObject(uuidStr string) (any, error) {
+	id, err := uuid.Parse(uuidStr)
+	if err != nil {
+		return nil, fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
+	}
+	row, err := p.db.GetByID(p.ctx(), p.entity.Name, id, p.entity)
+	if err != nil {
+		return nil, err
+	}
+	fields := make(map[string]any, len(row))
+	for _, f := range p.entity.Fields {
+		if v, ok := row[f.Name]; ok && v != nil {
+			fields[strings.ToLower(f.Name)] = v
+		}
+	}
+	return &CatalogRecordWriter{
+		entity: p.entity,
+		db:     p.db,
+		ctxSrc: p.ctxSrc,
+		idStr:  uuidStr,
+		fields: fields,
+	}, nil
 }
 
 func (p *CatalogProxy) findByField(field string, args []any) any {

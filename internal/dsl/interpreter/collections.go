@@ -10,8 +10,15 @@ import (
 // RefManager — менеджер объекта (справочника/документа), к которому привязана
 // ссылка. Реализуется CatalogProxy и docProxy; позволяет методам ссылки
 // Удалить()/ПолучитьОбъект() работать без явного указания менеджера.
+//
+// LoadObject загружает существующий объект по UUID и возвращает изменяемый
+// writer (*CatalogRecordWriter для справочника, *docWriter для документа).
+// any в сигнатуре — потому что *docWriter живёт в пакете ui и не виден
+// из interpreter; DSL вызывает у возвращённого значения Get/Set/CallMethod
+// через рефлексию, конкретный тип ему не важен.
 type RefManager interface {
 	DeleteRef(uuidStr string) error
+	LoadObject(uuidStr string) (any, error)
 }
 
 // Ref represents a DSL reference value: UUID for identity/SQL, Name for display.
@@ -45,9 +52,18 @@ func (r *Ref) CallMethod(method string, args []any) any {
 		}
 		return nil
 	case "получитьобъект", "getobject":
-		// Ссылка уже является рабочим дескриптором объекта: поддерживает
-		// Удалить() и доступ к Наименование/УникальныйИдентификатор.
-		return r
+		if r.Manager == nil {
+			RaiseUserError("ПолучитьОбъект(): ссылка не привязана к менеджеру объекта — " +
+				"используйте Справочники.Тип.НайтиПо…/Документы.Тип.НайтиПо…, чтобы получить ссылку с менеджером")
+		}
+		if r.UUID == "" {
+			RaiseUserError("ПолучитьОбъект(): пустая ссылка")
+		}
+		obj, err := r.Manager.LoadObject(r.UUID)
+		if err != nil {
+			RaiseUserError("ПолучитьОбъект(" + r.Name + "): " + err.Error())
+		}
+		return obj
 	case "пустая", "isempty":
 		return r.UUID == ""
 	case "уникальныйидентификатор", "uuid":

@@ -13,8 +13,24 @@ import (
 type fakeCatalogsDB struct {
 	predefinedID map[string]string // "Entity/Name" → uuid
 	byField      map[string]map[string]struct{ ID, Display string }
-	written      []map[string]any // запись через WriteCatalogRecord
-	deleted      []string         // UUID, удалённые через Delete
+	stored       map[string]map[string]any // "Entity/uuid" → шапка для GetByID
+	written      []map[string]any          // запись через WriteCatalogRecord
+	deleted      []string                  // UUID, удалённые через Delete
+}
+
+func (f *fakeCatalogsDB) GetByID(_ context.Context, entityName string, id uuid.UUID, _ *metadata.Entity) (map[string]any, error) {
+	if f.stored == nil {
+		return nil, errors.New("not found")
+	}
+	row, ok := f.stored[entityName+"/"+id.String()]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	out := make(map[string]any, len(row))
+	for k, v := range row {
+		out[k] = v
+	}
+	return out, nil
 }
 
 func (f *fakeCatalogsDB) Delete(_ context.Context, _ string, id uuid.UUID) error {
@@ -219,11 +235,63 @@ func TestCatalogProxy_DeleteByRef(t *testing.T) {
 }
 
 // ПолучитьОбъект() возвращает рабочий дескриптор (саму ссылку).
-func TestRef_GetObject(t *testing.T) {
-	ref := &Ref{UUID: "x", Name: "Тест"}
-	if got := ref.CallMethod("получитьобъект", nil); got != ref {
-		t.Errorf("ПолучитьОбъект вернул %v, ожидалась сама ссылка", got)
+// Ссылка.ПолучитьОбъект() для существующей записи возвращает
+// CatalogRecordWriter с предзаполненными полями: можно прочитать
+// текущие значения, изменить и записать обратно по тому же UUID.
+func TestRef_GetObject_LoadsExisting(t *testing.T) {
+	root, db, _ := newCatalogsTestEnv()
+	cp := root.Get("ТипЦен").(*CatalogProxy)
+
+	id := "22222222-2222-2222-2222-222222222222"
+	db.stored = map[string]map[string]any{
+		"ТипЦен/" + id: {"Наименование": "Розничная"},
 	}
+	ref := &Ref{UUID: id, Name: "Розничная", Type: "ТипЦен", Manager: cp}
+
+	got := ref.CallMethod("получитьобъект", nil)
+	w, ok := got.(*CatalogRecordWriter)
+	if !ok {
+		t.Fatalf("ПолучитьОбъект вернул %T, ожидался *CatalogRecordWriter", got)
+	}
+	if w.idStr != id {
+		t.Errorf("writer.idStr = %q, want %q", w.idStr, id)
+	}
+	if v := w.Get("Наименование"); v != "Розничная" {
+		t.Errorf("Get(Наименование) = %v, want \"Розничная\"", v)
+	}
+
+	// Изменение поля и Записать() → WriteCatalogRecord с тем же idStr.
+	w.Set("Наименование", "Розничная (изменено)")
+	w.CallMethod("записать", nil)
+
+	if len(db.written) != 1 {
+		t.Fatalf("written = %d, want 1", len(db.written))
+	}
+	if got := db.written[0]["_id"]; got != id {
+		t.Errorf("WriteCatalogRecord idStr = %v, want %q (UPDATE существующей записи, а не INSERT)", got, id)
+	}
+}
+
+// Ссылка без менеджера → понятная ошибка вместо тихого nil или паники.
+func TestRef_GetObject_NoManager(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("ожидалась ошибка: ссылка без менеджера")
+		}
+	}()
+	(&Ref{UUID: "x", Name: "Тест"}).CallMethod("получитьобъект", nil)
+}
+
+// Пустая ссылка (Создать().Ссылка до Записи) → понятная ошибка.
+func TestRef_GetObject_EmptyUUID(t *testing.T) {
+	root, _, _ := newCatalogsTestEnv()
+	cp := root.Get("ТипЦен").(*CatalogProxy)
+	defer func() {
+		if recover() == nil {
+			t.Error("ожидалась ошибка: пустая ссылка")
+		}
+	}()
+	(&Ref{UUID: "", Name: "", Manager: cp}).CallMethod("получитьобъект", nil)
 }
 
 // Вызов неизвестного метода на ссылке поднимает ошибку, а не молча nil.

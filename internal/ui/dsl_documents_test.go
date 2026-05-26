@@ -217,6 +217,91 @@ func TestDocsRoot_FindByNumberAndDelete(t *testing.T) {
 	}
 }
 
+// Ссылка.ПолучитьОбъект() для существующего документа возвращает docWriter
+// с загруженной шапкой и табличными частями: можно прочитать значения,
+// изменить и Записать() — обновится та же запись по UUID, ТЧ перезапишется.
+func TestDocsRoot_GetObject_UpdateExisting(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	doc := &metadata.Entity{
+		Name: "ВходящееПисьмо",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+			{Name: "Статус", Type: metadata.FieldTypeString},
+		},
+		TableParts: []metadata.TablePart{
+			{Name: "Вложения", Fields: []metadata.Field{
+				{Name: "Имя", Type: metadata.FieldTypeString},
+			}},
+		},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{doc}); err != nil {
+		t.Fatal(err)
+	}
+	registry := runtime.NewRegistry()
+	registry.Load([]*metadata.Entity{doc}, nil, nil, nil, nil, nil, nil)
+	s := &Server{store: db, reg: registry, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
+	root := newDocsRoot(s, interpreter.NewTxState(ctx))
+	dp := root.Get("ВходящееПисьмо").(*docProxy)
+
+	// Создаём документ через Создать().Записать().
+	created := dp.CallMethod("создать", nil).(*docWriter)
+	created.Set("Номер", "ВП-001")
+	created.Set("Статус", "Новое")
+	tp := created.Get("Вложения").(*tpProxy)
+	tp.CallMethod("добавить", nil).(*interpreter.MapThis).M["Имя"] = "scan.pdf"
+	createdRef := created.CallMethod("записать", nil).(*interpreter.Ref)
+	createdID := createdRef.UUID
+
+	// НайтиПоНомеру → Ссылка → ПолучитьОбъект().
+	foundRef := dp.CallMethod("найтипономеру", []any{"ВП-001"}).(*interpreter.Ref)
+	obj := foundRef.CallMethod("получитьобъект", nil)
+	w, ok := obj.(*docWriter)
+	if !ok {
+		t.Fatalf("ПолучитьОбъект вернул %T, ожидался *docWriter", obj)
+	}
+	if w.obj.ID.String() != createdID {
+		t.Errorf("writer.ID = %s, want %s", w.obj.ID, createdID)
+	}
+	// Поле шапки прочиталось.
+	if v := fmt.Sprint(w.Get("Статус")); v != "Новое" {
+		t.Errorf("Get(Статус) = %q, want \"Новое\"", v)
+	}
+	// Табличная часть прочиталась.
+	tpRows := w.obj.TablePartRows["Вложения"]
+	if len(tpRows) != 1 {
+		t.Fatalf("Вложения.количество = %d, want 1", len(tpRows))
+	}
+	if name := fmt.Sprint(tpRows[0]["Имя"]); name != "scan.pdf" {
+		t.Errorf("Вложения[0].Имя = %q, want \"scan.pdf\"", name)
+	}
+
+	// Изменение и запись — обновится та же запись.
+	w.Set("Статус", "Исполнено")
+	w.CallMethod("записать", nil)
+
+	row, err := db.GetByID(ctx, "ВходящееПисьмо", w.obj.ID, doc)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got := fmt.Sprint(row["Статус"]); got != "Исполнено" {
+		t.Errorf("после Записать(): Статус = %q, want \"Исполнено\"", got)
+	}
+
+	// Запись не плодит дублей — это UPDATE, не INSERT.
+	var cnt int
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM входящееписьмо").Scan(&cnt)
+	if cnt != 1 {
+		t.Errorf("после Записать() через ПолучитьОбъект — записей %d, want 1", cnt)
+	}
+}
+
 // ПриЗаписи (OnWrite) вызывается при Записать() из обработки (docWriter):
 // расчётные реквизиты документа вычисляются перед сохранением.
 func TestDocsRoot_OnWriteRunsOnSave(t *testing.T) {
