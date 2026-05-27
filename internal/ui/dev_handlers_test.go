@@ -75,7 +75,7 @@ func TestQueryConsoleAnalyze_SQLiteRefByColumn(t *testing.T) {
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{nom}, nil, []*metadata.Register{reg}, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{nom}, Registers: []*metadata.Register{reg}})
 
 	s := &Server{store: db, reg: registry}
 

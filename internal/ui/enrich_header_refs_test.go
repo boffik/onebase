@@ -46,7 +46,7 @@ func TestEnrichHeaderRefs_UUIDToRef(t *testing.T) {
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{sklad, doc}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{sklad, doc}})
 	s := &Server{store: db, reg: registry}
 
 	// шапка документа: Склад приходит сырым UUID-строкой (как из формы)
@@ -109,7 +109,7 @@ func TestEnrichHeaderRefs_NoDuplicateKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{contr, doc}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{contr, doc}})
 	s := &Server{store: db, reg: registry}
 
 	// Ключ в PascalCase (как кладёт форма) с UUID-строкой.
@@ -162,7 +162,7 @@ func TestEnrichHeaderRefs_SkipsExistingRef(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{sklad, doc}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{sklad, doc}})
 	s := &Server{store: db, reg: registry}
 
 	orig := &interpreter.Ref{UUID: uuid.New().String(), Name: "ИзОбработки", Type: "Склад"}

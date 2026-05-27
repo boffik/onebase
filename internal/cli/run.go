@@ -153,7 +153,16 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 
 	reg := runtime.NewRegistry()
-	reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+	reg.Load(runtime.LoadOptions{
+		Entities:   proj.Entities,
+		Programs:   proj.Programs,
+		Registers:  proj.Registers,
+		InfoRegs:   proj.InfoRegisters,
+		Enums:      proj.Enums,
+		Constants:  proj.Constants,
+		Reports:    proj.Reports,
+		PrintForms: proj.PrintForms,
+	})
 	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	reg.LoadModules(proj.Modules)
 	reg.LoadProcessors(proj.Processors)
@@ -259,7 +268,16 @@ func runServer(cmd *cobra.Command, _ []string) error {
 				fmt.Fprintln(os.Stderr, "[watch] reload error:", err)
 				return
 			}
-			reg.Load(newProj.Entities, newProj.Programs, newProj.Registers, newProj.InfoRegisters, newProj.Enums, newProj.Constants, newProj.Reports, newProj.PrintForms)
+			reg.Load(runtime.LoadOptions{
+				Entities:   newProj.Entities,
+				Programs:   newProj.Programs,
+				Registers:  newProj.Registers,
+				InfoRegs:   newProj.InfoRegisters,
+				Enums:      newProj.Enums,
+				Constants:  newProj.Constants,
+				Reports:    newProj.Reports,
+				PrintForms: newProj.PrintForms,
+			})
 			reg.LoadDSLPrintForms(newProj.DSLPrintForms)
 			reg.LoadModules(newProj.Modules)
 			reg.LoadProcessors(newProj.Processors)

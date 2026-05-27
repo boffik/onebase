@@ -38,7 +38,7 @@ func TestObjectAttributeValue(t *testing.T) {
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{контрагент, номенклатура}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{контрагент, номенклатура}})
 	s := &Server{store: db, reg: registry}
 
 	catalogs := interpreter.NewCatalogsRoot(interpreter.NewStaticCtx(ctx), db, registry)

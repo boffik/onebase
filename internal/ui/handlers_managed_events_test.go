@@ -195,7 +195,7 @@ func setupManagedEventsServer(t *testing.T, formOSSource string, formHandlers ma
 	ent.Forms = []*metadata.FormModule{form}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{ent}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{ent}})
 
 	interp := interpreter.New()
 	interp.LookupProc = registry.GetModuleProc

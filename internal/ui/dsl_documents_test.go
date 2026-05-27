@@ -69,12 +69,11 @@ func TestDocsRoot_CreateWritePost(t *testing.T) {
 	prog := mustParse(t, onPostSrc)
 
 	registry := runtime.NewRegistry()
-	registry.Load(
-		[]*metadata.Entity{doc},
-		map[string]*ast.Program{"ПоступлениеТоваров": prog},
-		[]*metadata.Register{reg},
-		nil, nil, nil, nil,
-	)
+	registry.Load(runtime.LoadOptions{
+		Entities:  []*metadata.Entity{doc},
+		Programs:  map[string]*ast.Program{"ПоступлениеТоваров": prog},
+		Registers: []*metadata.Register{reg},
+	})
 
 	interp := interpreter.New()
 	interp.LookupProc = registry.GetModuleProc
@@ -174,7 +173,7 @@ func TestDocsRoot_FindByNumberAndDelete(t *testing.T) {
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{doc}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{doc}})
 	s := &Server{store: db, reg: registry, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
 	root := newDocsRoot(s, interpreter.NewTxState(ctx))
 	dp := root.Get("ЗаказПокупателя").(*docProxy)
@@ -246,7 +245,7 @@ func TestDocsRoot_GetObject_UpdateExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{doc}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{doc}})
 	s := &Server{store: db, reg: registry, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
 	root := newDocsRoot(s, interpreter.NewTxState(ctx))
 	dp := root.Get("ВходящееПисьмо").(*docProxy)
@@ -336,7 +335,7 @@ func TestRefField_FromHeader_GetObjectWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{inbox, outbox}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{inbox, outbox}})
 	s := &Server{store: db, reg: registry, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
 
 	// Создаём ВходящееПисьмо.
@@ -435,7 +434,10 @@ func TestDocsRoot_OnWriteRunsOnSave(t *testing.T) {
 	prog := mustParse(t, onWriteSrc)
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{doc}, map[string]*ast.Program{"Счёт": prog}, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{
+		Entities: []*metadata.Entity{doc},
+		Programs: map[string]*ast.Program{"Счёт": prog},
+	})
 
 	interp := interpreter.New()
 	interp.LookupProc = registry.GetModuleProc
@@ -520,7 +522,7 @@ func TestDocsRoot_AutoNumberOnWrite(t *testing.T) {
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{doc}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{doc}})
 	s := &Server{store: db, reg: registry, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
 	root := newDocsRoot(s, interpreter.NewTxState(ctx))
 	dp := root.Get("Заявка").(*docProxy)

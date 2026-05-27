@@ -129,7 +129,16 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		if roles, err2 := auth.LoadRolesYAML(proj.Dir + "/roles"); err2 == nil && len(roles) > 0 {
 			_ = authRepo.SyncRoles(ctx, roles)
 		}
-		reg.Load(proj.Entities, proj.Programs, proj.Registers, proj.InfoRegisters, proj.Enums, proj.Constants, proj.Reports, proj.PrintForms)
+		reg.Load(runtime.LoadOptions{
+			Entities:   proj.Entities,
+			Programs:   proj.Programs,
+			Registers:  proj.Registers,
+			InfoRegs:   proj.InfoRegisters,
+			Enums:      proj.Enums,
+			Constants:  proj.Constants,
+			Reports:    proj.Reports,
+			PrintForms: proj.PrintForms,
+		})
 		reg.LoadDSLPrintForms(proj.DSLPrintForms)
 		reg.LoadModules(proj.Modules)
 		reg.LoadProcessors(proj.Processors)

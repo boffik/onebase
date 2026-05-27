@@ -108,35 +108,51 @@ func (r *Registry) HomePage() *metadata.HomePage {
 	return r.homePage
 }
 
-func (r *Registry) Load(entities []*metadata.Entity, programs map[string]*ast.Program, registers []*metadata.Register, inforegs []*metadata.InfoRegister, enums []*metadata.Enum, constants []*metadata.Constant, reports []*report.Report, forms ...[]*printform.PrintForm) {
-	newEntities := make(map[string]*metadata.Entity, len(entities))
-	newSlugs := make(map[string]*metadata.Entity, len(entities))
-	for _, e := range entities {
+// LoadOptions — параметры основного Load. Поля опциональны: nil/пустой slice
+// сбрасывает соответствующую категорию (поведение аналогично прежней
+// позиционной сигнатуре). Заменил собой Load(entities, programs, registers,
+// inforegs, enums, constants, reports, forms...) — позиционные nil'ы стали
+// именованными полями.
+type LoadOptions struct {
+	Entities   []*metadata.Entity
+	Programs   map[string]*ast.Program
+	Registers  []*metadata.Register
+	InfoRegs   []*metadata.InfoRegister
+	Enums      []*metadata.Enum
+	Constants  []*metadata.Constant
+	Reports    []*report.Report
+	PrintForms []*printform.PrintForm
+}
+
+func (r *Registry) Load(opts LoadOptions) {
+	newEntities := make(map[string]*metadata.Entity, len(opts.Entities))
+	newSlugs := make(map[string]*metadata.Entity, len(opts.Entities))
+	for _, e := range opts.Entities {
 		newEntities[e.Name] = e
 		newSlugs[strings.ToLower(e.Name)] = e
 	}
-	newRegs := make(map[string]*metadata.Register, len(registers))
-	for _, reg := range registers {
+	newRegs := make(map[string]*metadata.Register, len(opts.Registers))
+	for _, reg := range opts.Registers {
 		newRegs[reg.Name] = reg
 	}
-	newInfoRegs := make(map[string]*metadata.InfoRegister, len(inforegs))
-	for _, ir := range inforegs {
+	newInfoRegs := make(map[string]*metadata.InfoRegister, len(opts.InfoRegs))
+	for _, ir := range opts.InfoRegs {
 		newInfoRegs[ir.Name] = ir
 	}
-	newEnums := make(map[string]*metadata.Enum, len(enums))
-	for _, e := range enums {
+	newEnums := make(map[string]*metadata.Enum, len(opts.Enums))
+	for _, e := range opts.Enums {
 		newEnums[e.Name] = e
 	}
-	newConsts := make(map[string]*metadata.Constant, len(constants))
-	for _, c := range constants {
+	newConsts := make(map[string]*metadata.Constant, len(opts.Constants))
+	for _, c := range opts.Constants {
 		newConsts[c.Name] = c
 	}
-	newReps := make(map[string]*report.Report, len(reports))
-	for _, rep := range reports {
+	newReps := make(map[string]*report.Report, len(opts.Reports))
+	for _, rep := range opts.Reports {
 		newReps[rep.Name] = rep
 	}
 	newProcs := make(map[string]map[string]*ast.ProcedureDecl)
-	for entityName, prog := range programs {
+	for entityName, prog := range opts.Programs {
 		pm := make(map[string]*ast.ProcedureDecl, len(prog.Procedures))
 		for _, p := range prog.Procedures {
 			pm[strings.ToLower(p.Name.Literal)] = p
@@ -144,11 +160,9 @@ func (r *Registry) Load(entities []*metadata.Entity, programs map[string]*ast.Pr
 		newProcs[entityName] = pm
 	}
 	newPrintForms := make(map[string][]*printform.PrintForm)
-	if len(forms) > 0 {
-		for _, pf := range forms[0] {
-			key := strings.ToLower(pf.Document)
-			newPrintForms[key] = append(newPrintForms[key], pf)
-		}
+	for _, pf := range opts.PrintForms {
+		key := strings.ToLower(pf.Document)
+		newPrintForms[key] = append(newPrintForms[key], pf)
 	}
 
 	r.mu.Lock()

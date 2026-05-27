@@ -59,7 +59,7 @@ func TestResolveRegisterRows_RefAndBytes(t *testing.T) {
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{nom, org}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{nom, org}})
 	s := &Server{store: db, reg: registry}
 
 	reg := &metadata.Register{
@@ -109,7 +109,7 @@ func TestResolveRegisterRows_LegacyStringUUID(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := runtime.NewRegistry()
-	registry.Load([]*metadata.Entity{skl}, nil, nil, nil, nil, nil, nil)
+	registry.Load(runtime.LoadOptions{Entities: []*metadata.Entity{skl}})
 	s := &Server{store: db, reg: registry}
 
 	reg := &metadata.Register{
