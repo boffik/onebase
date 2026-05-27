@@ -3704,7 +3704,25 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
 
   <div class="module-pane" id="mp-mgr-{{$e.Name}}">
-    <div class="module-empty" style="padding:12px 0">{{t $.Lang "Модуль менеджера — в разработке."}}</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:6px">{{t $.Lang "Экспортные процедуры и функции этого модуля вызываются как"}} <b>{{if eq $e.Kind "Документ"}}{{t $.Lang "Документы"}}{{else}}{{t $.Lang "Справочники"}}{{end}}.{{$e.Name}}.{{t $.Lang "Метод"}}(…)</b> — {{t $.Lang "по аналогии с 1С:Предприятие. Здесь размещают функции уровня типа объекта: печать, поиск, сервисные расчёты."}}</div>
+    <form method="POST" action="/bases/{{.BaseID}}/configurator/module">
+      <input type="hidden" name="entity" value="{{$e.Name}}">
+      <input type="hidden" name="module_type" value="manager">
+      <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
+        <pre class="os-code clickable-code" id="pre-mgr-{{$e.Name}}"
+             onclick="startEdit('mgr-{{$e.Name}}')">{{if $e.ManagerSource}}{{$e.ManagerSource}}{{else}}Функция Пример(Параметр)&#10;  Возврат Параметр;&#10;КонецФункции{{end}}</pre>
+        <textarea class="os-edit" id="ta-mgr-{{$e.Name}}" name="source"
+                  style="display:none"
+                  onblur="endEdit('mgr-{{$e.Name}}')">{{$e.ManagerSource}}</textarea>
+      </div>
+      <div class="module-save-row">
+        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="runCheck('dsl','mgr-{{$e.Name}}','{{$e.Name}}-Менеджер')">{{t $.Lang "Проверить"}}</button>
+        <span class="check-result" id="check-mgr-{{$e.Name}}"></span>
+        <span class="edit-hint">✎ {{t $.Lang "кликните на код для редактирования"}}</span>
+        {{if and $.ModuleSaved (eq $.ModuleSavedEntity $e.Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
+      </div>
+    </form>
   </div>
 </div>
 

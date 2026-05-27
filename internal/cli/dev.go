@@ -130,14 +130,15 @@ func runDev(cmd *cobra.Command, _ []string) error {
 			_ = authRepo.SyncRoles(ctx, roles)
 		}
 		reg.Load(runtime.LoadOptions{
-			Entities:   proj.Entities,
-			Programs:   proj.Programs,
-			Registers:  proj.Registers,
-			InfoRegs:   proj.InfoRegisters,
-			Enums:      proj.Enums,
-			Constants:  proj.Constants,
-			Reports:    proj.Reports,
-			PrintForms: proj.PrintForms,
+			Entities:        proj.Entities,
+			Programs:        proj.Programs,
+			ManagerPrograms: proj.ManagerPrograms,
+			Registers:       proj.Registers,
+			InfoRegs:        proj.InfoRegisters,
+			Enums:           proj.Enums,
+			Constants:       proj.Constants,
+			Reports:         proj.Reports,
+			PrintForms:      proj.PrintForms,
 		})
 		reg.LoadDSLPrintForms(proj.DSLPrintForms)
 		reg.LoadModules(proj.Modules)

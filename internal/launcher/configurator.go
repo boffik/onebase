@@ -142,6 +142,7 @@ type cfgEntity struct {
 	TableParts       []cfgTablePart
 	Source           string // raw .os content (object module)
 	PostingSource    string // raw .posting.os content (ОбработкаПроведения)
+	ManagerSource    string // raw .manager.os content (модуль менеджера)
 	LinkedPrintForms []cfgPrintForm
 	Predefined       []cfgPredefined
 }
@@ -503,7 +504,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		data.AvailableLangs = launcherBundle.Available()
 	}
 
-	sources, postingSources := readOSSources(proj.Dir)
+	sources, postingSources, managerSources := readOSSources(proj.Dir)
 
 	for _, e := range proj.Entities {
 		ev := cfgEntity{
@@ -513,6 +514,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 			BasedOn:       append([]string(nil), e.BasedOn...),
 			Source:        sources[strings.ToLower(e.Name)],
 			PostingSource: postingSources[strings.ToLower(e.Name)],
+			ManagerSource: managerSources[strings.ToLower(e.Name)],
 		}
 		if e.Kind == metadata.KindCatalog {
 			ev.Kind = "Справочник"
@@ -1014,9 +1016,10 @@ func toCfgField(f metadata.Field) cfgField {
 	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName}
 }
 
-func readOSSources(dir string) (sources, postingSources map[string]string) {
+func readOSSources(dir string) (sources, postingSources, managerSources map[string]string) {
 	sources = make(map[string]string)
 	postingSources = make(map[string]string)
+	managerSources = make(map[string]string)
 	entries, err := os.ReadDir(filepath.Join(dir, "src"))
 	if err != nil {
 		return
@@ -1030,12 +1033,16 @@ func readOSSources(dir string) (sources, postingSources map[string]string) {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(name, ".posting.os") {
+		switch {
+		case strings.HasSuffix(name, ".posting.os"):
 			base := strings.ToLower(strings.TrimSuffix(name, ".posting.os"))
 			postingSources[base] = string(raw)
-		} else if strings.HasSuffix(name, ".module.os") || strings.HasSuffix(name, ".proc.os") {
-			// skip — handled by readModuleAndProcSources
-		} else {
+		case strings.HasSuffix(name, ".manager.os"):
+			base := strings.ToLower(strings.TrimSuffix(name, ".manager.os"))
+			managerSources[base] = string(raw)
+		case strings.HasSuffix(name, ".module.os"), strings.HasSuffix(name, ".proc.os"), strings.HasSuffix(name, ".rep.os"):
+			// skip — handled by readModuleAndProcSources / report editor
+		default:
 			base := strings.ToLower(strings.TrimSuffix(name, ".os"))
 			sources[base] = string(raw)
 		}
@@ -1194,9 +1201,12 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 	source := r.FormValue("source")
 
 	var filename string
-	if moduleType == "posting" {
+	switch moduleType {
+	case "posting":
 		filename = entityToPostingFilename(entityName)
-	} else {
+	case "manager":
+		filename = entityToManagerFilename(entityName)
+	default:
 		filename = entityToFilename(entityName)
 	}
 
@@ -1247,6 +1257,16 @@ func entityToPostingFilename(name string) string {
 	runes := []rune(name)
 	runes[0] = unicode.ToLower(runes[0])
 	return string(runes) + ".posting.os"
+}
+
+// entityToManagerFilename converts "ПоступлениеТоваров" → "поступлениеТоваров.manager.os"
+func entityToManagerFilename(name string) string {
+	if name == "" {
+		return ".manager.os"
+	}
+	runes := []rune(name)
+	runes[0] = unicode.ToLower(runes[0])
+	return string(runes) + ".manager.os"
 }
 
 // ── field-type save ───────────────────────────────────────────────────────────

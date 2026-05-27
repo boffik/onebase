@@ -154,14 +154,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 
 	reg := runtime.NewRegistry()
 	reg.Load(runtime.LoadOptions{
-		Entities:   proj.Entities,
-		Programs:   proj.Programs,
-		Registers:  proj.Registers,
-		InfoRegs:   proj.InfoRegisters,
-		Enums:      proj.Enums,
-		Constants:  proj.Constants,
-		Reports:    proj.Reports,
-		PrintForms: proj.PrintForms,
+		Entities:        proj.Entities,
+		Programs:        proj.Programs,
+		ManagerPrograms: proj.ManagerPrograms,
+		Registers:       proj.Registers,
+		InfoRegs:        proj.InfoRegisters,
+		Enums:           proj.Enums,
+		Constants:       proj.Constants,
+		Reports:         proj.Reports,
+		PrintForms:      proj.PrintForms,
 	})
 	reg.LoadDSLPrintForms(proj.DSLPrintForms)
 	reg.LoadModules(proj.Modules)
@@ -269,14 +270,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 				return
 			}
 			reg.Load(runtime.LoadOptions{
-				Entities:   newProj.Entities,
-				Programs:   newProj.Programs,
-				Registers:  newProj.Registers,
-				InfoRegs:   newProj.InfoRegisters,
-				Enums:      newProj.Enums,
-				Constants:  newProj.Constants,
-				Reports:    newProj.Reports,
-				PrintForms: newProj.PrintForms,
+				Entities:        newProj.Entities,
+				Programs:        newProj.Programs,
+				ManagerPrograms: newProj.ManagerPrograms,
+				Registers:       newProj.Registers,
+				InfoRegs:        newProj.InfoRegisters,
+				Enums:           newProj.Enums,
+				Constants:       newProj.Constants,
+				Reports:         newProj.Reports,
+				PrintForms:      newProj.PrintForms,
 			})
 			reg.LoadDSLPrintForms(newProj.DSLPrintForms)
 			reg.LoadModules(newProj.Modules)

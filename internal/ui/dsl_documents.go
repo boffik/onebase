@@ -120,6 +120,13 @@ func (p *docProxy) CallMethod(method string, args []any) any {
 		}
 		return nil
 	}
+	// Fallback на модуль менеджера: Документы.X.МойМетод(…).
+	if result, found, err := p.s.callManagerProc(p.ctx(), p.entity.Name, method, args); found {
+		if err != nil {
+			interpreter.RaiseUserError(p.entity.Name + "." + method + ": " + err.Error())
+		}
+		return result
+	}
 	return nil
 }
 

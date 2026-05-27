@@ -30,6 +30,16 @@ type EntityLookup interface {
 	GetEntity(name string) *metadata.Entity
 }
 
+// ManagerCaller — необязательный «вызыватель» процедур модуля менеджера
+// (X.manager.os). Опционально цепляется к CatalogsRoot через
+// WithManagerCaller — если не задан, CatalogProxy остаётся прежним.
+//
+// Семантика found: процедура была найдена в модуле менеджера. Если false —
+// proxy продолжает обработку (например, возвращает nil как раньше).
+type ManagerCaller interface {
+	CallManager(entityName, method string, args []any) (result any, found bool, err error)
+}
+
 // CtxSource предоставляет «живой» контекст. Для обычного запуска это
 // статический контекст; при активной DSL-транзакции — *TxState, чей
 // Ctx() несёт открытую транзакцию — запись справочника
@@ -51,6 +61,7 @@ type CatalogsRoot struct {
 	db     CatalogsDB
 	lookup EntityLookup
 	ctxSrc CtxSource
+	caller ManagerCaller // optional — fallback к модулю менеджера в CallMethod
 }
 
 // NewCatalogsRoot creates the root object for injection as DSL extraVar.
@@ -59,12 +70,19 @@ func NewCatalogsRoot(ctxSrc CtxSource, db CatalogsDB, lookup EntityLookup) *Cata
 	return &CatalogsRoot{db: db, lookup: lookup, ctxSrc: ctxSrc}
 }
 
+// WithManagerCaller подключает обработчик пользовательских методов
+// модуля менеджера. Возвращает себя для цепочки.
+func (r *CatalogsRoot) WithManagerCaller(c ManagerCaller) *CatalogsRoot {
+	r.caller = c
+	return r
+}
+
 func (r *CatalogsRoot) Get(entityName string) any {
 	entity := r.lookup.GetEntity(entityName)
 	if entity == nil {
 		return nil
 	}
-	return &CatalogProxy{entity: entity, db: r.db, ctxSrc: r.ctxSrc}
+	return &CatalogProxy{entity: entity, db: r.db, ctxSrc: r.ctxSrc, caller: r.caller}
 }
 
 func (r *CatalogsRoot) Set(_ string, _ any) {}
@@ -78,6 +96,7 @@ type CatalogProxy struct {
 	entity *metadata.Entity
 	db     CatalogsDB
 	ctxSrc CtxSource
+	caller ManagerCaller // optional — для вызовов методов модуля менеджера
 }
 
 // NewCatalogProxy создаёт менеджера справочника для привязки к ссылкам,
@@ -137,6 +156,16 @@ func (p *CatalogProxy) CallMethod(method string, args []any) any {
 			RaiseUserError("Удалить(" + p.entity.Name + "): " + err.Error())
 		}
 		return nil
+	}
+	// Fallback на модуль менеджера: Справочники.X.МойМетод(…). Если caller не
+	// подключён или процедура не объявлена — ведёт себя как раньше (nil).
+	if p.caller != nil {
+		if result, found, err := p.caller.CallManager(p.entity.Name, method, args); found {
+			if err != nil {
+				RaiseUserError(p.entity.Name + "." + method + ": " + err.Error())
+			}
+			return result
+		}
 	}
 	return nil
 }

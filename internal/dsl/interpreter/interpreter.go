@@ -71,6 +71,33 @@ func (i *Interpreter) EvalExpr(expr ast.Expr, this This) any {
 	return i.evalExpr(expr, e)
 }
 
+// Call executes a procedure with positional arguments and captures the return
+// value. Используется для вызова процедур модуля менеджера через
+// Документы/Справочники.X.Method(args…) — args биндятся на proc.Params
+// через callUserProc (включая обработку дефолтов).
+func (i *Interpreter) Call(proc *ast.ProcedureDecl, this This, args []any, extraVars ...map[string]any) (result any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch s := r.(type) {
+			case dslStop:
+				err = s.err
+			case userError:
+				err = &DSLError{File: i.curFile, Line: i.curLine, Msg: s.Msg}
+			default:
+				panic(r)
+			}
+		}
+	}()
+	e := newEnv(this)
+	for _, m := range extraVars {
+		for k, v := range m {
+			e.set(k, v)
+		}
+	}
+	result = i.callUserProc(proc, e, args)
+	return
+}
+
 // RunWithResult executes a function procedure and captures its return value.
 func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *any, extraVars ...map[string]any) (err error) {
 	defer func() {

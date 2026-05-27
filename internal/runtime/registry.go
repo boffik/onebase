@@ -25,6 +25,7 @@ type Registry struct {
 	printForms      map[string][]*printform.PrintForm   // lowercase entity name → forms
 	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
 	procs           map[string]map[string]*ast.ProcedureDecl
+	managerProcs    map[string]map[string]*ast.ProcedureDecl // lowercase entity → procs модуля менеджера
 	moduleProcs     map[string]*ast.ProcedureDecl // flat: proc name → decl
 	moduleByName    map[string]map[string]*ast.ProcedureDecl // lowercase module → procs in it
 	processors      map[string]*processor.Processor
@@ -54,6 +55,7 @@ func NewRegistry() *Registry {
 		printForms:      make(map[string][]*printform.PrintForm),
 		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
 		procs:           make(map[string]map[string]*ast.ProcedureDecl),
+		managerProcs:    make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),
 		moduleByName:    make(map[string]map[string]*ast.ProcedureDecl),
 		processors:      make(map[string]*processor.Processor),
@@ -119,14 +121,15 @@ func (r *Registry) HomePage() *metadata.HomePage {
 // inforegs, enums, constants, reports, forms...) — позиционные nil'ы стали
 // именованными полями.
 type LoadOptions struct {
-	Entities   []*metadata.Entity
-	Programs   map[string]*ast.Program
-	Registers  []*metadata.Register
-	InfoRegs   []*metadata.InfoRegister
-	Enums      []*metadata.Enum
-	Constants  []*metadata.Constant
-	Reports    []*report.Report
-	PrintForms []*printform.PrintForm
+	Entities        []*metadata.Entity
+	Programs        map[string]*ast.Program
+	ManagerPrograms map[string]*ast.Program // entity name → процедуры модуля менеджера
+	Registers       []*metadata.Register
+	InfoRegs        []*metadata.InfoRegister
+	Enums           []*metadata.Enum
+	Constants       []*metadata.Constant
+	Reports         []*report.Report
+	PrintForms      []*printform.PrintForm
 }
 
 func (r *Registry) Load(opts LoadOptions) {
@@ -171,6 +174,14 @@ func (r *Registry) Load(opts LoadOptions) {
 		}
 		newProcs[entityName] = pm
 	}
+	newManagerProcs := make(map[string]map[string]*ast.ProcedureDecl)
+	for entityName, prog := range opts.ManagerPrograms {
+		pm := make(map[string]*ast.ProcedureDecl, len(prog.Procedures))
+		for _, p := range prog.Procedures {
+			pm[strings.ToLower(p.Name.Literal)] = p
+		}
+		newManagerProcs[strings.ToLower(entityName)] = pm
+	}
 	newPrintForms := make(map[string][]*printform.PrintForm)
 	for _, pf := range opts.PrintForms {
 		key := strings.ToLower(pf.Document)
@@ -187,8 +198,24 @@ func (r *Registry) Load(opts LoadOptions) {
 	r.reports = newReps
 	r.printForms = newPrintForms
 	r.procs = newProcs
+	r.managerProcs = newManagerProcs
 	r.basedOnIndex = newBasedOn
 	r.mu.Unlock()
+}
+
+// GetManagerProc resolves a procedure declared in the manager module
+// (X.manager.os) of the given entity. Case-insensitive on both names.
+// nil — нет такого файла или процедуры. Используется CallMethod
+// прокси Документы/Справочники для fallback на пользовательский метод
+// после встроенных (Создать, НайтиПо…, Удалить).
+func (r *Registry) GetManagerProc(entityName, procName string) *ast.ProcedureDecl {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	pm, ok := r.managerProcs[strings.ToLower(entityName)]
+	if !ok {
+		return nil
+	}
+	return pm[strings.ToLower(procName)]
 }
 
 // ReceiversOf возвращает список сущностей, у которых в `based_on` указан

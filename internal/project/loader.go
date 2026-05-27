@@ -31,7 +31,8 @@ type Project struct {
 	Reports          []*report.Report
 	PrintForms       []*printform.PrintForm
 	DSLPrintForms    []*printform.DSLPrintForm
-	Programs         map[string]*ast.Program  // entity name → parsed DSL
+	Programs         map[string]*ast.Program  // entity name → parsed DSL (модуль объекта)
+	ManagerPrograms  map[string]*ast.Program  // entity name → parsed DSL (модуль менеджера)
 	Processors       []*processor.Processor
 	Modules          map[string]*ast.Program  // module name → parsed procs
 	Subsystems       []*metadata.Subsystem
@@ -124,9 +125,10 @@ func LoadFromDB(ctx context.Context, repo *configdb.Repo) (*Project, error) {
 
 func Load(dir string) (*Project, error) {
 	p := &Project{
-		Dir:      dir,
-		Programs: make(map[string]*ast.Program),
-		Modules:  make(map[string]*ast.Program),
+		Dir:             dir,
+		Programs:        make(map[string]*ast.Program),
+		ManagerPrograms: make(map[string]*ast.Program),
+		Modules:         make(map[string]*ast.Program),
 	}
 	if err := p.loadMetadata(); err != nil {
 		return nil, err
@@ -376,6 +378,7 @@ func (p *Project) loadDSL() error {
 		isProc := strings.HasSuffix(name, ".proc.os")
 		isPosting := strings.HasSuffix(name, ".posting.os")
 		isReport := strings.HasSuffix(name, ".rep.os")
+		isManager := strings.HasSuffix(name, ".manager.os")
 
 		fullPath := filepath.Join(srcDir, name)
 		data, err := os.ReadFile(fullPath)
@@ -393,6 +396,16 @@ func (p *Project) loadDSL() error {
 			base := strings.TrimSuffix(name, ".module.os")
 			moduleName := fileNameToEntityBase(base)
 			p.Modules[moduleName] = prog
+			continue
+		}
+
+		if isManager {
+			base := strings.TrimSuffix(name, ".manager.os")
+			entityName := fileNameToEntityBase(base)
+			if actual := p.findEntityName(entityName); actual != "" {
+				entityName = actual
+			}
+			p.ManagerPrograms[entityName] = prog
 			continue
 		}
 

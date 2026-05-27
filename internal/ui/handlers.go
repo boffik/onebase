@@ -1686,7 +1686,10 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	// (Справочники.X.Создать().Записать()) используют txState.Ctx(),
 	// поэтому запись участвует в открытой DSL-транзакции.
 	txState := interpreter.NewTxState(ctx)
-	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg)
+	// Caller подключается ДО создания CatalogsRoot.WithManagerCaller —
+	// он использует ctx как контекст для вызова процедур менеджера.
+	mgrCaller := &managerCaller{s: s, ctx: ctx}
+	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg).WithManagerCaller(mgrCaller)
 	// Документы.X.Создать()/.Записать()/.Провести() из обработки.
 	documents := newDocsRoot(s, txState)
 	// #2 managed locks: builtin БлокировкаДанных() возвращает свежий LockObject,
@@ -1787,6 +1790,36 @@ func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *run
 		return err.Error(), msgs
 	}
 	return "", msgs
+}
+
+// callManagerProc вызывает процедуру модуля менеджера (X.manager.os) для
+// сущности entityName. found=true если процедура объявлена — независимо от
+// успеха/ошибки. Используется CatalogProxy/docProxy в качестве fallback после
+// встроенных методов (Создать, НайтиПо…, Удалить).
+//
+// MovementsCollector создаётся пустой (UUID.Nil): методы менеджера не привязаны
+// к экземпляру и не пишут движения; если пользователю нужны движения — он
+// должен делать Документы.X.Создать().Записать() явно.
+func (s *Server) callManagerProc(ctx context.Context, entityName, method string, args []any) (any, bool, error) {
+	proc := s.reg.GetManagerProc(entityName, method)
+	if proc == nil {
+		return nil, false, nil
+	}
+	mc := runtime.NewMovementsCollector(entityName, uuid.Nil)
+	vars := s.buildDSLVars(ctx, mc)
+	result, err := s.interp.Call(proc, nil, args, vars)
+	return result, true, err
+}
+
+// managerCaller адаптер для interpreter.ManagerCaller. Используется в
+// buildDSLVars для подключения fallback к CatalogsRoot.
+type managerCaller struct {
+	s   *Server
+	ctx context.Context
+}
+
+func (m *managerCaller) CallManager(entityName, method string, args []any) (any, bool, error) {
+	return m.s.callManagerProc(m.ctx, entityName, method, args)
 }
 
 func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runtime.MovementsCollector) (string, []string) {
