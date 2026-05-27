@@ -27,3 +27,62 @@ type AnalyzeResult struct {
 	Confident bool     // true if a single domain matched clearly
 	Ambiguous []string // tied domain names (when Confident == false)
 }
+
+// ResolvedManifest describes the full set of entities requested by the user.
+// Produced by the analyzer (Stage 1) or LLM (Stage 2).
+type ResolvedManifest struct {
+	Domain    string
+	Catalogs  []EntitySpec
+	Documents []EntitySpec
+	Registers []EntitySpec
+	Enums     []EnumSpec
+	DSLFiles  map[string]string // relative path → content
+}
+
+// EntitySpec describes a single entity (catalog, document, register).
+type EntitySpec struct {
+	Name       string
+	Kind       string // "catalog", "document", "register"
+	Fields     []FieldSpec
+	TableParts []TablePartSpec
+	Posting    bool
+}
+
+// FieldSpec describes a single field in an entity.
+type FieldSpec struct {
+	Name      string
+	Type      string // "string", "date", "number", "bool", "reference:X", "enum:X"
+	RefEntity string // non-empty when Type is "reference:X"
+	EnumName  string // non-empty when Type is "enum:X"
+}
+
+// TablePartSpec describes a table part (ТЧ) in an entity.
+type TablePartSpec struct {
+	Name   string
+	Fields []FieldSpec
+}
+
+// EnumSpec describes an enumeration.
+type EnumSpec struct {
+	Name   string
+	Values []string
+}
+
+// DeltaManifest describes the difference between requested and existing manifests.
+type DeltaManifest struct {
+	NewCatalogs   []EntitySpec             // entities that don't exist yet
+	NewDocuments  []EntitySpec
+	NewRegisters  []EntitySpec
+	NewEnums      []EnumSpec
+	NewFields     map[string][]FieldSpec   // entity name → new fields to add
+	NewTableParts map[string][]TablePartSpec // entity name → new table parts
+	NewDSLFiles   map[string]string        // relative path → content
+	Conflicts     []Conflict               // name collisions
+}
+
+// Conflict describes a name collision between requested and existing.
+type Conflict struct {
+	Kind    string // "catalog", "document", "enum", "register"
+	Name    string
+	Message string // e.g. "Контрагент already exists, use --add-fields instead"
+}

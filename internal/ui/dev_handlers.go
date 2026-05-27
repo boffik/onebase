@@ -630,6 +630,164 @@ func (s *Server) gengenGenerate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) gengenMerge(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	var req struct {
+		Prompt    string   `json:"prompt"`
+		Domain    string   `json:"domain"`
+		Addons    []string `json:"addons"`
+		OutputDir string   `json:"output_dir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]any{"error": "Некорректный запрос"})
+		return
+	}
+
+	if req.OutputDir == "" {
+		jsonResp(w, 400, map[string]any{"error": "Укажите output_dir — путь к существующему проекту"})
+		return
+	}
+
+	// 1. Analyze
+	var result *gengen.AnalyzeResult
+	if req.Domain != "" {
+		result = &gengen.AnalyzeResult{Domain: req.Domain, Confident: true}
+	} else {
+		result = gengen.Analyze(req.Prompt)
+	}
+
+	if result.Domain == "unknown" {
+		jsonResp(w, 400, map[string]any{"error": "Домен не определён"})
+		return
+	}
+
+	// 2. Resolve template
+	if result.Template == "" {
+		candidates := []string{"examples/" + result.Domain, "templates/" + result.Domain}
+		for _, t := range candidates {
+			if dirExists(t) {
+				result.Template = t
+				break
+			}
+		}
+	}
+
+	if result.Template == "" {
+		jsonResp(w, 400, map[string]any{"error": "Нет шаблона для домена: " + result.Domain})
+		return
+	}
+
+	// 3. Scan existing
+	before, err := gengen.ScanProjectFromFiles(req.OutputDir)
+	if err != nil {
+		jsonResp(w, 500, map[string]any{"error": "Сканирование проекта: " + err.Error()})
+		return
+	}
+
+	// 4. Generate (copyDir skips existing files)
+	gen := &gengen.Generator{OutputDir: req.OutputDir}
+	if err := gen.Generate(result.Template, req.Addons); err != nil {
+		jsonResp(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// 5. Scan after
+	after, err := gengen.ScanProjectFromFiles(req.OutputDir)
+	if err != nil {
+		jsonResp(w, 500, map[string]any{"error": "Сканирование после генерации: " + err.Error()})
+		return
+	}
+
+	// 6. Compute diff
+	diff := map[string]any{
+		"new_catalogs":  diffKeys(before.Catalogs, after.Catalogs),
+		"new_documents": diffKeys(before.Documents, after.Documents),
+		"new_enums":     diffKeysEnum(before.Enums, after.Enums),
+		"new_dsl":       diffKeysStr(before.DSLFiles, after.DSLFiles),
+		"new_fields":    diffFields(before, after),
+	}
+
+	jsonResp(w, 200, map[string]any{
+		"domain":   result.Domain,
+		"template": result.Template,
+		"diff":     diff,
+	})
+}
+
+// diffKeys returns keys in after that are not in before (for map[string]T).
+func diffKeys[T any](before, after map[string]T) []string {
+	var result []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+func diffKeysEnum(before, after map[string]gengen.EnumInfo) []string {
+	var result []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+func diffKeysStr(before, after map[string]string) []string {
+	var result []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+func diffFields(before, after *gengen.ExistingManifest) map[string][]string {
+	result := make(map[string][]string)
+
+	// Catalogs
+	for name, afterCat := range after.Catalogs {
+		beforeCat, ok := before.Catalogs[name]
+		if !ok {
+			continue
+		}
+		beforeFields := make(map[string]bool)
+		for _, f := range beforeCat.Fields {
+			beforeFields[f.Name] = true
+		}
+		for _, f := range afterCat.Fields {
+			if !beforeFields[f.Name] {
+				result[name] = append(result[name], f.Name)
+			}
+		}
+	}
+
+	// Documents
+	for name, afterDoc := range after.Documents {
+		beforeDoc, ok := before.Documents[name]
+		if !ok {
+			continue
+		}
+		beforeFields := make(map[string]bool)
+		for _, f := range beforeDoc.Fields {
+			beforeFields[f.Name] = true
+		}
+		for _, f := range afterDoc.Fields {
+			if !beforeFields[f.Name] {
+				result[name] = append(result[name], f.Name)
+			}
+		}
+	}
+
+	return result
+}
+
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {

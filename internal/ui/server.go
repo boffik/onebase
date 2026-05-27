@@ -214,6 +214,7 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/dev/gengen", s.gengenPage)
 	r.Post("/ui/dev/gengen/analyze", s.gengenAnalyze)
 	r.Post("/ui/dev/gengen/generate", s.gengenGenerate)
+	r.Post("/ui/dev/gengen/merge", s.gengenMerge)
 
 	// All functions (admin only)
 	r.Get("/ui/all-functions", s.allFunctions)

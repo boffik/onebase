@@ -63,7 +63,7 @@ const tplGengen = `
 </div>
 
 <!-- Available domains reference -->
-<div class="card">
+<div class="card" style="margin-bottom:16px">
   <h3 style="margin-top:0">Доступные домены</h3>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px">
     {{range .Domains}}
@@ -72,6 +72,21 @@ const tplGengen = `
       <div style="font-size:12px;color:#64748b;margin-top:4px">{{.Keywords}}</div>
     </div>
     {{end}}
+  </div>
+</div>
+
+<!-- Merge section -->
+<div class="card" style="margin-bottom:16px">
+  <h3 style="margin-top:0">Добавить в существующий проект</h3>
+  <p style="font-size:13px;color:#64748b;margin-bottom:10px">Добавляет сущности из шаблона в существующий проект, не затирая файлы</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <input id="gg-merge-dir" type="text" style="flex:1;font-size:14px;border:1px solid #e2e8f0;border-radius:6px;padding:8px"
+      placeholder="Путь к проекту, напр. /home/dev/projects/trade">
+    <button onclick="ggMerge()" class="btn" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:14px">Добавить</button>
+  </div>
+  <div id="gg-merge-result" style="display:none">
+    <h4 style="margin:10px 0 6px">Результат:</h4>
+    <div id="gg-merge-diff" style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;max-height:300px;overflow-y:auto"></div>
   </div>
 </div>
 </main>
@@ -213,6 +228,59 @@ function ggCopyPath() {
     btn.textContent = 'Скопировано!';
     setTimeout(() => btn.textContent = orig, 1500);
   });
+}
+
+function ggMerge() {
+  const prompt = document.getElementById('gg-prompt').value.trim();
+  const domain = document.getElementById('gg-domain').textContent || '';
+  const outputDir = document.getElementById('gg-merge-dir').value.trim();
+
+  if (!outputDir) { alert('Укажите путь к проекту'); return; }
+  if (!domain && !prompt) { alert('Сначала проанализируйте промпт или укажите домен'); return; }
+
+  fetch('/ui/dev/gengen/merge', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({prompt, domain, output_dir: outputDir})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { alert(data.error); return; }
+
+    const diff = data.diff || {};
+    const lines = [];
+
+    if (diff.new_catalogs && diff.new_catalogs.length > 0) {
+      lines.push('<strong>Новые справочники:</strong>');
+      diff.new_catalogs.forEach(n => lines.push('  + ' + n));
+    }
+    if (diff.new_documents && diff.new_documents.length > 0) {
+      lines.push('<strong>Новые документы:</strong>');
+      diff.new_documents.forEach(n => lines.push('  + ' + n));
+    }
+    if (diff.new_enums && diff.new_enums.length > 0) {
+      lines.push('<strong>Новые перечисления:</strong>');
+      diff.new_enums.forEach(n => lines.push('  + ' + n));
+    }
+    if (diff.new_dsl && diff.new_dsl.length > 0) {
+      lines.push('<strong>Новые DSL-файлы:</strong>');
+      diff.new_dsl.forEach(n => lines.push('  + ' + n));
+    }
+    if (diff.new_fields && Object.keys(diff.new_fields).length > 0) {
+      lines.push('<strong>Новые поля:</strong>');
+      for (const [entity, fields] of Object.entries(diff.new_fields)) {
+        fields.forEach(f => lines.push('  + ' + entity + ' → ' + f));
+      }
+    }
+
+    if (lines.length === 0) {
+      lines.push('Нет изменений — всё уже существует');
+    }
+
+    document.getElementById('gg-merge-diff').innerHTML = lines.join('<br>');
+    document.getElementById('gg-merge-result').style.display = 'block';
+  })
+  .catch(err => { alert('Ошибка: ' + err); });
 }
 </script>
 {{end}}

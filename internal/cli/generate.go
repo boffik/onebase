@@ -15,6 +15,7 @@ var (
 	genDomain   string
 	genList     bool
 	genAddons   []string
+	genMerge    bool
 )
 
 var generateCmd = &cobra.Command{
@@ -26,6 +27,7 @@ var generateCmd = &cobra.Command{
   onebase generate --prompt "оптовые продажи, склад, контрагенты"
   onebase generate --prompt "учёт задач и проектов" --output ./my-tasks
   onebase generate --prompt "тексты и переводы" --domain texts
+  onebase generate --prompt "добавить документ Сделка" --merge --output ./trade
   onebase generate --list   # показать доступные домены`,
 	RunE: runGenerate,
 }
@@ -36,6 +38,7 @@ func init() {
 	generateCmd.Flags().StringVar(&genDomain, "domain", "", "явно указать домен (trade, crm, tasks, ...)")
 	generateCmd.Flags().StringSliceVar(&genAddons, "addon", nil, "дополнительные модули (через запятую)")
 	generateCmd.Flags().BoolVar(&genList, "list", false, "показать доступные домены и выйти")
+	generateCmd.Flags().BoolVar(&genMerge, "merge", false, "добавить сущности в существующий проект (не затирать)")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -110,7 +113,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 4. Generate
+	// 4. Generate (with or without merge)
+	if genMerge {
+		return runGenerateMerge(outDir, result)
+	}
+
+	// Normal: create new project
 	gen := &gengen.Generator{OutputDir: outDir}
 	if err := gen.Generate(result.Template, genAddons); err != nil {
 		return err
@@ -128,6 +136,110 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stdout, "  onebase run --project %s --sqlite %s.db\n", absPath, result.Domain)
 
 	return nil
+}
+
+// runGenerateMerge adds entities from a template to an existing project.
+func runGenerateMerge(outDir string, result *gengen.AnalyzeResult) error {
+	// Check that the project directory exists
+	if !dirExists(outDir) {
+		return fmt.Errorf("проект %q не найден — нельзя добавить в несуществующий проект\nСоздайте проект: onebase generate --prompt \"...\" --output %s", outDir, outDir)
+	}
+
+	// 1. Scan existing project
+	existing, err := gengen.ScanProjectFromFiles(outDir)
+	if err != nil {
+		return fmt.Errorf("сканирование проекта: %w", err)
+	}
+
+	// 2. Generate (copyDir skips existing files — merge-safe by design)
+	gen := &gengen.Generator{OutputDir: outDir}
+	if err := gen.Generate(result.Template, genAddons); err != nil {
+		return err
+	}
+
+	// 3. Scan again to see what was added
+	after, err := gengen.ScanProjectFromFiles(outDir)
+	if err != nil {
+		return fmt.Errorf("сканирование после генерации: %w", err)
+	}
+
+	// 4. Build a ResolvedManifest from the "after" state and compute delta
+	//    This is a simplified approach — we compare before vs after
+	//    to show what was actually added.
+	reportMergeDiff(existing, after, result, outDir)
+
+	return nil
+}
+
+// reportMergeDiff compares two manifests and prints what was added.
+func reportMergeDiff(before, after *gengen.ExistingManifest, result *gengen.AnalyzeResult, outDir string) {
+	fmt.Fprintf(os.Stdout, "✓ Сущности добавлены в %s\n", result.Domain)
+	fmt.Fprintf(os.Stdout, "  Домен: %s\n\n", result.Domain)
+
+	// New catalogs
+	for name := range after.Catalogs {
+		if _, ok := before.Catalogs[name]; !ok {
+			fmt.Fprintf(os.Stdout, "  + Справочник: %s\n", name)
+		}
+	}
+
+	// New documents
+	for name := range after.Documents {
+		if _, ok := before.Documents[name]; !ok {
+			fmt.Fprintf(os.Stdout, "  + Документ: %s\n", name)
+		}
+	}
+
+	// New enums
+	for name := range after.Enums {
+		if _, ok := before.Enums[name]; !ok {
+			fmt.Fprintf(os.Stdout, "  + Перечисление: %s\n", name)
+		}
+	}
+
+	// New DSL files
+	for path := range after.DSLFiles {
+		if _, ok := before.DSLFiles[path]; !ok {
+			fmt.Fprintf(os.Stdout, "  + DSL: %s\n", path)
+		}
+	}
+
+	// New fields in existing entities
+	for catName, afterCat := range after.Catalogs {
+		beforeCat, ok := before.Catalogs[catName]
+		if !ok {
+			continue
+		}
+		beforeFields := make(map[string]bool)
+		for _, f := range beforeCat.Fields {
+			beforeFields[f.Name] = true
+		}
+		for _, f := range afterCat.Fields {
+			if !beforeFields[f.Name] {
+				fmt.Fprintf(os.Stdout, "  + Поле %s → %s\n", catName, f.Name)
+			}
+		}
+	}
+
+	for docName, afterDoc := range after.Documents {
+		beforeDoc, ok := before.Documents[docName]
+		if !ok {
+			continue
+		}
+		beforeFields := make(map[string]bool)
+		for _, f := range beforeDoc.Fields {
+			beforeFields[f.Name] = true
+		}
+		for _, f := range afterDoc.Fields {
+			if !beforeFields[f.Name] {
+				fmt.Fprintf(os.Stdout, "  + Поле %s → %s\n", docName, f.Name)
+			}
+		}
+	}
+
+	fmt.Fprintf(os.Stdout, "\nЗапуск:\n")
+	absPath, _ := filepath.Abs(outDir)
+	fmt.Fprintf(os.Stdout, "  onebase run --project %s\n", absPath)
 }
 
 func dirExists(path string) bool {
