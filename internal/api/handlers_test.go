@@ -1,0 +1,310 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/ivantit66/onebase/internal/dslvars"
+	"github.com/ivantit66/onebase/internal/entityservice"
+	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
+)
+
+// Тесты подтверждают что новый код API действительно закрывает дыры из
+// FUNCTIONAL_GAPS секции коммита: OnWrite получает DSL-vars, ТЧ передаются
+// через JSON, optimistic locking через If-Match, проведение через /post.
+
+func newAPITestHandler(t *testing.T, entities []*metadata.Entity, programs map[string]*ast.Program) (*handler, context.Context) {
+	t.Helper()
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	if err := db.Migrate(ctx, entities); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{Entities: entities, Programs: programs})
+
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+
+	// API-вариант BuildVars: используем dslvars.Common — даёт OnWrite доступ
+	// к Перечислениям/Константам/Запрос/Предопределённым + HTTP/Email/Движения.
+	// Полный UI-вариант (locks/users/Сообщить-store/Документы) для API избыточен.
+	buildVars := func(c context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any {
+		vars := dslvars.Common{Ctx: c, Reg: registry, Store: db, Movements: mc}.Build()
+		// Минимальная реализация Сообщить — кладёт в msgs slice. Для теста этого достаточно.
+		vars["Сообщить"] = interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+			if len(args) > 0 && msgs != nil {
+				*msgs = append(*msgs, toString(args[0]))
+			}
+			return nil, nil
+		})
+		vars["Message"] = vars["Сообщить"]
+		return vars
+	}
+
+	svc := &entityservice.Service{
+		Store:     db,
+		Reg:       registry,
+		Interp:    interp,
+		BuildVars: buildVars,
+	}
+	h := &handler{reg: registry, store: db, interp: interp, entitySvc: svc}
+	return h, ctx
+}
+
+func toString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func mustParseProgram(t *testing.T, src string) *ast.Program {
+	t.Helper()
+	l := lexer.New(src, "test.os")
+	p := parser.New(l)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prog
+}
+
+// reqWithEntity создаёт chi-aware request с URL-параметрами {entity, id}.
+func reqWithEntity(method, target string, body []byte, params map[string]string, headers map[string]string) *http.Request {
+	var reader *bytes.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	} else {
+		reader = bytes.NewReader(nil)
+	}
+	r := httptest.NewRequest(method, target, reader)
+	r.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		r.Header.Set(k, v)
+	}
+	rctx := chi.NewRouteContext()
+	for k, v := range params {
+		rctx.URLParams.Add(k, v)
+	}
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+}
+
+// БЫЛО (до миграции): POST /catalogs/X с OnWrite, который зовёт Сообщить(),
+// падал с 422 «неизвестная функция Сообщить». СТАЛО: success + сообщение
+// возвращается в JSON.
+func TestAPI_Create_OnWriteHasDSLVars(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	prog := mustParseProgram(t, `Процедура OnWrite()
+  Сообщить("сохранён: " + ЭтотОбъект.Наименование);
+КонецПроцедуры`)
+	h, _ := newAPITestHandler(t, []*metadata.Entity{cat}, map[string]*ast.Program{"Товар": prog})
+
+	body := []byte(`{"Наименование": "Молоток"}`)
+	r := reqWithEntity("POST", "/catalogs/Товар", body, map[string]string{"entity": "Товар"}, nil)
+	w := httptest.NewRecorder()
+	h.createObject(metadata.KindCatalog).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		ID       string   `json:"id"`
+		Messages []string `json:"messages"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.ID == "" {
+		t.Error("ID не вернулся")
+	}
+	if len(resp.Messages) != 1 || !strings.Contains(resp.Messages[0], "Молоток") {
+		t.Errorf("Сообщения не вернулись: %v", resp.Messages)
+	}
+}
+
+// БЫЛО: ТЧ через API передать было нельзя — поле игнорировалось.
+// СТАЛО: __tableparts в JSON → ТЧ реально сохраняются.
+func TestAPI_Create_WithTableParts(t *testing.T) {
+	doc := &metadata.Entity{
+		Name: "Поступление",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+		},
+		TableParts: []metadata.TablePart{
+			{Name: "Товары", Fields: []metadata.Field{
+				{Name: "Номенклатура", Type: metadata.FieldTypeString},
+				{Name: "Количество", Type: metadata.FieldTypeNumber},
+			}},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{doc}, nil)
+
+	body := []byte(`{"Номер":"1","__tableparts":{"Товары":[{"Номенклатура":"Гвоздь","Количество":100}]}}`)
+	r := reqWithEntity("POST", "/documents/Поступление", body, map[string]string{"entity": "Поступление"}, nil)
+	w := httptest.NewRecorder()
+	h.createObject(metadata.KindDocument).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	docID, _ := uuid.Parse(resp.ID)
+
+	tpRows, err := h.store.GetTablePartRows(ctx, "Поступление", "Товары", docID, doc.TableParts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tpRows) != 1 {
+		t.Fatalf("ожидалась 1 строка ТЧ, получено %d: %v", len(tpRows), tpRows)
+	}
+	nom, _ := tpRows[0]["Номенклатура"].(string)
+	if nom == "" {
+		nom, _ = tpRows[0]["номенклатура"].(string)
+	}
+	if nom != "Гвоздь" {
+		t.Errorf("Номенклатура = %q, ожидался «Гвоздь»", nom)
+	}
+}
+
+// БЫЛО: lost updates через API — два клиента POST одинаковым PUT'ом,
+// последний выигрывал тихо. СТАЛО: If-Match со stale-версией → 409.
+func TestAPI_Update_IfMatchVersionConflict(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, "Товар", id, map[string]any{"Наименование": "v1"}, cat); err != nil {
+		t.Fatal(err)
+	}
+	// Имитируем чужое обновление: версия в БД продвинулась.
+	if err := h.store.UpsertVersioned(ctx, "Товар", id, map[string]any{"Наименование": "v2"}, cat, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	body := []byte(`{"Наименование":"my-edit"}`)
+	// Клиент шлёт If-Match с устаревшей версией 0
+	r := reqWithEntity("PUT", "/catalogs/Товар/"+id.String(), body,
+		map[string]string{"entity": "Товар", "id": id.String()},
+		map[string]string{"If-Match": "0"})
+	w := httptest.NewRecorder()
+	h.updateObject(metadata.KindCatalog).ServeHTTP(w, r)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// БЫЛО: провести документ через REST было нельзя (только UI-кнопка).
+// СТАЛО: POST /documents/{name}/{id}/post запускает OnPost и пишет движения.
+func TestAPI_PostDocument_WritesMovements(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+		},
+	}
+	reg := &metadata.Register{
+		Name:       "Остатки",
+		Dimensions: []metadata.Field{{Name: "Товар", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+	}
+	// OnPost добавляет приход на склад.
+	prog := mustParseProgram(t, `Процедура ОбработкаПроведения()
+  Дв = Движения.Остатки.Добавить();
+  Дв.ВидДвижения = "Приход";
+  Дв.Товар = "Молоток";
+  Дв.Количество = 5;
+КонецПроцедуры`)
+
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.Migrate(ctx, []*metadata.Entity{doc}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{
+		Entities:  []*metadata.Entity{doc},
+		Registers: []*metadata.Register{reg},
+		Programs:  map[string]*ast.Program{"Поступление": prog},
+	})
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+
+	buildVars := func(c context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any {
+		return dslvars.Common{Ctx: c, Reg: registry, Store: db, Movements: mc}.Build()
+	}
+	svc := &entityservice.Service{Store: db, Reg: registry, Interp: interp, BuildVars: buildVars}
+	h := &handler{reg: registry, store: db, interp: interp, entitySvc: svc}
+
+	// Сначала создаём документ (без проведения).
+	docID := uuid.New()
+	if err := db.Upsert(ctx, "Поступление", docID, map[string]any{"Номер": "1"}, doc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Затем POST /post — должно провестись и записать движения.
+	r := reqWithEntity("POST", "/documents/Поступление/"+docID.String()+"/post", nil,
+		map[string]string{"entity": "Поступление", "id": docID.String()}, nil)
+	w := httptest.NewRecorder()
+	h.postDocument().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Проверим что движения реально записались.
+	rows, err := db.GetMovements(ctx, "Остатки", reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ожидалось 1 движение, получено %d: %v", len(rows), rows)
+	}
+}
