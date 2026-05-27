@@ -45,7 +45,7 @@ func TestRepo_IsEmpty(t *testing.T) {
 	ctx := context.Background()
 	repo := configdb.New(db)
 	repo.EnsureSchema(ctx)
-	db.Pool().Exec(ctx, `DELETE FROM _onebase_config`)
+	db.Exec(ctx, `DELETE FROM _onebase_config`)
 
 	empty, err := repo.IsEmpty(ctx)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestRepo_ImportExportRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	repo := configdb.New(db)
 	repo.EnsureSchema(ctx)
-	db.Pool().Exec(ctx, `DELETE FROM _onebase_config`)
+	db.Exec(ctx, `DELETE FROM _onebase_config`)
 
 	// Build a small project directory
 	srcDir := t.TempDir()
@@ -111,7 +111,7 @@ func TestRepo_ImportReplacesPrevious(t *testing.T) {
 	ctx := context.Background()
 	repo := configdb.New(db)
 	repo.EnsureSchema(ctx)
-	db.Pool().Exec(ctx, `DELETE FROM _onebase_config`)
+	db.Exec(ctx, `DELETE FROM _onebase_config`)
 
 	// First import
 	dir1 := t.TempDir()

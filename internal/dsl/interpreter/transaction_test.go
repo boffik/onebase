@@ -27,16 +27,16 @@ func openTxTestDB(t *testing.T) (*storage.DB, context.Context) {
 	require.NoError(t, err)
 	t.Cleanup(db.Close)
 
-	_, err = db.Pool().Exec(ctx, `
+	_, err = db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS _tx_test_items (
 			id   SERIAL PRIMARY KEY,
 			name TEXT NOT NULL
 		)`)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		db.Pool().Exec(context.Background(), `DROP TABLE IF EXISTS _tx_test_items`) //nolint:errcheck
+		db.Exec(context.Background(), `DROP TABLE IF EXISTS _tx_test_items`) //nolint:errcheck
 	})
-	_, err = db.Pool().Exec(ctx, `TRUNCATE _tx_test_items`)
+	_, err = db.Exec(ctx, `TRUNCATE _tx_test_items`)
 	require.NoError(t, err)
 
 	return db, ctx
@@ -56,7 +56,7 @@ func runTxProc(t *testing.T, db *storage.DB, state *interpreter.TxState, src str
 			return nil, fmt.Errorf("Создать: нужны 2 аргумента")
 		}
 		name := fmt.Sprintf("%v", args[1])
-		if _, execErr := db.Pool().Exec(state.Ctx(),
+		if _, execErr := db.Exec(state.Ctx(),
 			`INSERT INTO _tx_test_items(name) VALUES ($1)`, name); execErr != nil {
 			return nil, fmt.Errorf("Создать: %w", execErr)
 		}
@@ -73,7 +73,7 @@ func runTxProc(t *testing.T, db *storage.DB, state *interpreter.TxState, src str
 func countTxItems(t *testing.T, db *storage.DB, ctx context.Context) int {
 	t.Helper()
 	var n int
-	require.NoError(t, db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM _tx_test_items`).Scan(&n))
+	require.NoError(t, db.QueryRow(ctx, `SELECT COUNT(*) FROM _tx_test_items`).Scan(&n))
 	return n
 }
 

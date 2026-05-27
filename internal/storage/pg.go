@@ -64,18 +64,6 @@ func (db *DB) Close() {
 	}
 }
 
-// Pool returns the underlying pgxpool.Pool. Panics if called on a SQLite
-// connection. New code should use db.Exec/Query/QueryRow/BeginTx instead —
-// Pool() is kept only for the legacy launcher/configurator paths that still
-// build SQL inline against pgx; those will move to the abstract API in later
-// rework.
-func (db *DB) Pool() *pgxpool.Pool {
-	if db.pool == nil {
-		panic("storage.DB.Pool() called on SQLite connection — use db.Exec/Query instead")
-	}
-	return db.pool
-}
-
 // DisableFKForImport disables foreign-key constraint enforcement for the
 // duration of a bulk import and returns a cleanup function that re-enables it.
 //

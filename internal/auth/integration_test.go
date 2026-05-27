@@ -37,8 +37,8 @@ func TestRepo_CreateAndAuthenticate(t *testing.T) {
 	}
 
 	// Clean up
-	db.Pool().Exec(ctx, `DELETE FROM _sessions`)
-	db.Pool().Exec(ctx, `DELETE FROM _users WHERE login = 'testuser'`)
+	db.Exec(ctx, `DELETE FROM _sessions`)
+	db.Exec(ctx, `DELETE FROM _users WHERE login = 'testuser'`)
 
 	user, err := repo.Create(ctx, "testuser", "secret123", "Тестовый Юзер", false)
 	if err != nil {
@@ -77,8 +77,8 @@ func TestRepo_Sessions(t *testing.T) {
 	repo := auth.NewRepo(db)
 	repo.EnsureSchema(ctx)
 
-	db.Pool().Exec(ctx, `DELETE FROM _sessions`)
-	db.Pool().Exec(ctx, `DELETE FROM _users WHERE login = 'sesstest'`)
+	db.Exec(ctx, `DELETE FROM _sessions`)
+	db.Exec(ctx, `DELETE FROM _users WHERE login = 'sesstest'`)
 
 	user, _ := repo.Create(ctx, "sesstest", "pass", "", false)
 
@@ -116,8 +116,8 @@ func TestMiddleware_NoUsers_PassThrough(t *testing.T) {
 	repo := auth.NewRepo(db)
 	repo.EnsureSchema(ctx)
 	// Ensure empty _users
-	db.Pool().Exec(ctx, `DELETE FROM _sessions`)
-	db.Pool().Exec(ctx, `DELETE FROM _users`)
+	db.Exec(ctx, `DELETE FROM _sessions`)
+	db.Exec(ctx, `DELETE FROM _users`)
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -142,8 +142,8 @@ func TestMiddleware_WithUsers_RequiresSession(t *testing.T) {
 	repo := auth.NewRepo(db)
 	repo.EnsureSchema(ctx)
 
-	db.Pool().Exec(ctx, `DELETE FROM _sessions`)
-	db.Pool().Exec(ctx, `DELETE FROM _users WHERE login = 'mwtest'`)
+	db.Exec(ctx, `DELETE FROM _sessions`)
+	db.Exec(ctx, `DELETE FROM _users WHERE login = 'mwtest'`)
 	repo.Create(ctx, "mwtest", "pass", "", false)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
