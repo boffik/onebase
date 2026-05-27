@@ -126,12 +126,18 @@ func TestFill_OnFillHook_CopiesFieldsAndTablePart(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("ТЧ.количество = %d, want 2", len(rows))
 	}
-	// MapThis.Set нормализует ключи в lower-case при заполнении из DSL.
-	if got := mapValue(rows[0], "Номенклатура"); got != "Стул" {
-		t.Errorf("ТЧ[0].Номенклатура = %v, want \"Стул\"", got)
+	// MapThis.Set нормализует ключи в lower-case при заполнении из DSL —
+	// Service.Fill приводит их обратно в PascalCase metadata, чтобы шаблон
+	// формы (строгое {{index $row $fn}}) находил значения.
+	if got := rows[0]["Номенклатура"]; got != "Стул" {
+		t.Errorf("ТЧ[0].Номенклатура = %v, want \"Стул\" (ключ должен быть PascalCase)", got)
 	}
-	if qty := toFloat(mapValue(rows[1], "Количество")); qty != 1 {
-		t.Errorf("ТЧ[1].Количество = %v, want 1", mapValue(rows[1], "Количество"))
+	if qty := toFloat(rows[1]["Количество"]); qty != 1 {
+		t.Errorf("ТЧ[1].Количество = %v, want 1 (ключ должен быть PascalCase)", rows[1]["Количество"])
+	}
+	// И никаких lowercase-дублей не должно остаться.
+	if _, has := rows[0]["номенклатура"]; has {
+		t.Errorf("дублирующий lowercase-ключ остался в ТЧ: %v", rows[0])
 	}
 }
 

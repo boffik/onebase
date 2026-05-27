@@ -346,12 +346,49 @@ func (s *Service) Fill(ctx context.Context, req FillRequest) (FillResult, error)
 		thisVal = s.MakeThis(recvObj, req.Receiver)
 	}
 	if err := s.Interp.Run(proc, thisVal, vars); err != nil {
+		normalizeTPRowKeys(recvObj.TablePartRows, req.Receiver)
 		if dslErr, ok := err.(*interpreter.DSLError); ok {
 			return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: dslErr.Error(), DSLMessages: msgs}, nil
 		}
 		return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: err.Error(), DSLMessages: msgs}, nil
 	}
+	normalizeTPRowKeys(recvObj.TablePartRows, req.Receiver)
 	return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLMessages: msgs}, nil
+}
+
+// normalizeTPRowKeys приводит ключи строк ТЧ к PascalCase из metadata (как в
+// Entity.TableParts[].Fields[].Name). Хук ОбработкаЗаполнения через
+// MapThis.Set записывает ключи в lowercase — это удобно для DSL (case-
+// insensitive чтение), но шаблон формы делает строгое {{index $row $fn}} по
+// PascalCase, и значения «теряются» в UI: ссылочные поля не selected,
+// number-поля показываются пустыми. Эта функция переименовывает ключи
+// in-place, не трогая значения. Ключи, которых нет в metadata (мусор от
+// DSL), остаются как есть.
+func normalizeTPRowKeys(tpRows map[string][]map[string]any, recv *metadata.Entity) {
+	if tpRows == nil || recv == nil {
+		return
+	}
+	for _, tp := range recv.TableParts {
+		rows := tpRows[tp.Name]
+		if rows == nil {
+			continue
+		}
+		for _, row := range rows {
+			for _, f := range tp.Fields {
+				if _, ok := row[f.Name]; ok {
+					continue
+				}
+				low := strings.ToLower(f.Name)
+				for k, v := range row {
+					if k != f.Name && strings.ToLower(k) == low {
+						row[f.Name] = v
+						delete(row, k)
+						break
+					}
+				}
+			}
+		}
+	}
 }
 
 // errBadRequest — простая ошибка-маркер для невалидных запросов Fill.
