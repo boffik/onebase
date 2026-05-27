@@ -103,10 +103,28 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
+      # checkout нужен чтобы `git log` дал subject последнего коммита для
+      # <!-- summary --> маркера. Сайт onabase.site берёт текст из этого
+      # маркера для карточки релиза — без него попадает дефолтный «Автосборка…».
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      - name: Compute commit subject
+        id: subj
+        # heredoc-форма GH_OUTPUT — корректно переживает спецсимволы
+        # (кавычки, обратные апострофы, эмодзи) в subject коммита.
+        run: |
+          {
+            echo "subject<<EOF"
+            git log -1 --format=%s
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create Pre-Release
         uses: softprops/action-gh-release@v2
@@ -116,6 +134,14 @@ jobs:
           prerelease: true
           files: dist/*
           body: |
+            <!-- summary: ${{ steps.subj.outputs.subject }} -->
+
+            ## Что нового
+
+            ${{ steps.subj.outputs.subject }}
+
+            ## Сборка
+
             Автосборка из ветки `main`.
             Коммит: `${{ github.sha }}`
             Версия платформы: `build-${{ github.run_number }}`
