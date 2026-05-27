@@ -72,6 +72,7 @@ type saveEntity struct {
 	Hierarchical  bool             `yaml:"hierarchical,omitempty"`
 	HierarchyKind string           `yaml:"hierarchy_kind,omitempty"`
 	Posting       bool             `yaml:"posting,omitempty"`
+	BasedOn       []string         `yaml:"based_on,omitempty"`
 	Numerator     *saveNumerator   `yaml:"numerator,omitempty"`
 	Predefined    []savePredefined `yaml:"predefined,omitempty"`
 	ListForm      []string         `yaml:"list_form,omitempty"`
@@ -135,6 +136,8 @@ type cfgEntity struct {
 	Kind             string // "Справочник" / "Документ"
 	Posting          bool
 	Hierarchical     bool
+	BasedOn          []string // источники для ввода на основании (Plan 38)
+	Receivers        []string // обратный список: куда вводится на основании текущего объекта
 	Fields           []cfgField
 	TableParts       []cfgTablePart
 	Source           string // raw .os content (object module)
@@ -507,6 +510,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 			Name:          e.Name,
 			Posting:       e.Posting,
 			Hierarchical:  e.Hierarchical,
+			BasedOn:       append([]string(nil), e.BasedOn...),
 			Source:        sources[strings.ToLower(e.Name)],
 			PostingSource: postingSources[strings.ToLower(e.Name)],
 		}
@@ -561,6 +565,21 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	sort.Slice(data.Entities, func(i, j int) bool {
 		return data.Entities[i].Name < data.Entities[j].Name
 	})
+
+	// Обратный индекс: какие документы/справочники вводятся НА ОСНОВАНИИ
+	// текущего объекта. Показывается на форме источника как read-only —
+	// аналог одноимённой вкладки в 1С:Конфигураторе.
+	for i := range data.Entities {
+		src := data.Entities[i].Name
+		for j := range data.Entities {
+			for _, b := range data.Entities[j].BasedOn {
+				if strings.EqualFold(b, src) {
+					data.Entities[i].Receivers = append(data.Entities[i].Receivers, data.Entities[j].Name)
+					break
+				}
+			}
+		}
+	}
 
 	// load print forms and link to entities
 	pfSources := readPrintFormSources(proj.Dir)
@@ -1255,7 +1274,7 @@ func findEntityFilePath(dir, entityName string) (string, error) {
 	return "", fmt.Errorf("entity %q not found", entityName)
 }
 
-func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool) {
+func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string) {
 	ent.Fields = fields
 	for i, tp := range ent.TableParts {
 		if f, ok := tpFields[tp.Name]; ok {
@@ -1273,9 +1292,18 @@ func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]
 			ent.HierarchyKind = ""
 		}
 	}
+	if basedOn != nil {
+		// nil-slice → based_on удаляется из YAML (omitempty); пустой
+		// явный slice трактуем так же.
+		if len(*basedOn) == 0 {
+			ent.BasedOn = nil
+		} else {
+			ent.BasedOn = append([]string(nil), (*basedOn)...)
+		}
+	}
 }
 
-func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool) error {
+func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string) error {
 	filePath, err := findEntityFilePath(dir, entityName)
 	if err != nil {
 		return err
@@ -1288,7 +1316,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	if err := yaml.Unmarshal(raw, &ent); err != nil {
 		return err
 	}
-	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical)
+	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn)
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -1296,7 +1324,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	return os.WriteFile(filePath, out, 0o644)
 }
 
-func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool) error {
+func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -1333,7 +1361,7 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 		return fmt.Errorf("entity %q not found in DB config", entityName)
 	}
 
-	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical)
+	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn)
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -1513,6 +1541,24 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		v := r.FormValue("hierarchical") == "true"
 		hierarchical = &v
 	}
+	// Ввод на основании (Plan 38): список источников приходит как
+	// based_on[] = ИмяСущности — multi-select на форме. Маркер «based_on_present»
+	// отличает «поле не было на форме» (не трогать YAML) от «оба чекбокса
+	// сняты» (очистить based_on). Без маркера было бы невозможно очистить
+	// based_on через UI — пустой slice выглядел бы так же, как отсутствующее
+	// поле.
+	var basedOn *[]string
+	if r.FormValue("based_on_present") == "1" {
+		vals := r.Form["based_on"]
+		clean := make([]string, 0, len(vals))
+		for _, v := range vals {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				clean = append(clean, v)
+			}
+		}
+		basedOn = &clean
+	}
 
 	var fields []saveField
 	for i := 0; i < 500; i++ {
@@ -1629,9 +1675,9 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting, hierarchical)
+		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting, hierarchical, basedOn)
 	} else {
-		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting, hierarchical)
+		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting, hierarchical, basedOn)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")

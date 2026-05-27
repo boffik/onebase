@@ -20,6 +20,11 @@ func Validate(entities []*Entity, enums []*Enum) error {
 				return fmt.Errorf("entity %s: field %s references unknown enum %s", e.Name, f.Name, f.EnumName)
 			}
 		}
+		for _, src := range e.BasedOn {
+			if !entityNames[src] {
+				return fmt.Errorf("entity %s: based_on references unknown entity %s", e.Name, src)
+			}
+		}
 	}
 	return nil
 }

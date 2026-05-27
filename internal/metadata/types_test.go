@@ -108,3 +108,48 @@ fields:
 		t.Errorf("DisplayName(en) = %q, want %q", got, "Counterparties")
 	}
 }
+
+func TestLoadFile_BasedOn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.yaml")
+	yaml := `name: ВозвратОтПокупателя
+based_on:
+  - РеализацияТоваров
+  - Контрагент
+fields:
+  - name: Сумма
+    type: number
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, err := LoadFile(path, KindDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.BasedOn) != 2 {
+		t.Fatalf("BasedOn len = %d, want 2", len(e.BasedOn))
+	}
+	if e.BasedOn[0] != "РеализацияТоваров" || e.BasedOn[1] != "Контрагент" {
+		t.Errorf("BasedOn = %v, want [РеализацияТоваров Контрагент]", e.BasedOn)
+	}
+}
+
+func TestValidate_BasedOnUnknown(t *testing.T) {
+	entities := []*Entity{
+		{Name: "ВозвратОтПокупателя", Kind: KindDocument, BasedOn: []string{"НесуществующийТип"}},
+	}
+	if err := Validate(entities, nil); err == nil {
+		t.Fatal("Validate должен был отклонить based_on с неизвестным типом")
+	}
+}
+
+func TestValidate_BasedOnKnown(t *testing.T) {
+	entities := []*Entity{
+		{Name: "РеализацияТоваров", Kind: KindDocument},
+		{Name: "ВозвратОтПокупателя", Kind: KindDocument, BasedOn: []string{"РеализацияТоваров"}},
+	}
+	if err := Validate(entities, nil); err != nil {
+		t.Fatalf("Validate с корректным based_on не должен возвращать ошибку: %v", err)
+	}
+}

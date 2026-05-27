@@ -23,6 +23,7 @@
 | 06 | [06-hierarchical-catalogs.md](06-hierarchical-catalogs.md) | Иерархические справочники | ✅ Реализовано |
 | 17 | [17-scheduled-jobs.md](17-scheduled-jobs.md) | Фоновые / регламентные задания | ✅ Реализовано |
 | 11 | [11-account-register.md](11-account-register.md) | Регистр бухгалтерии (план счетов + проводки) | ✅ Реализовано |
+| 38 | [38-fill-on-based.md](38-fill-on-based.md) | Ввод на основании (ОбработкаЗаполнения) | ✅ Реализовано |
 
 ## Планы развития (roadmap)
 

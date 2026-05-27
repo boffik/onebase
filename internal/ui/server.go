@@ -69,6 +69,12 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		// BuildVars — полный набор с locks/users/документами + Сообщить с
 		// захватом и в message store, и в локальный slice msgs (для SaveResult).
 		BuildVars: s.buildDSLVarsWithMessages,
+		// MakeThis — обёртка над *runtime.Object с поддержкой методов ТЧ
+		// (this.Товары.Добавить() и т.п.). Без неё ОбработкаЗаполнения не
+		// смогла бы построить строки табличной части в приёмнике.
+		MakeThis: func(obj *runtime.Object, e *metadata.Entity) interpreter.This {
+			return &formObjectThis{obj: obj, entity: e}
+		},
 	}
 	globalBundle = cfg.Bundle
 	if sched != nil {

@@ -132,6 +132,11 @@ type Entity struct {
 	ListForm      []string          // visible fields in list form (nil = all)
 	ItemForm      []string          // visible fields in item form (nil = all)
 	Forms         []*FormModule     // form modules (object form, list form, custom forms)
+	// BasedOn — типы источников, на основании которых разрешено вводить эту
+	// сущность (аналог «Вводится на основании» в 1С). Имена сущностей —
+	// catalog или document. Проверяются Validate. Пустой/nil — ввод на
+	// основании запрещён.
+	BasedOn []string
 }
 
 type Register struct {

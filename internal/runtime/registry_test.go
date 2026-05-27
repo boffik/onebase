@@ -3,6 +3,7 @@
 import (
 	"testing"
 
+	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
 )
 
@@ -57,6 +58,41 @@ func TestLoadDSLPrintForms_NoCollision(t *testing.T) {
 	}
 	if len(r.GetDSLPrintForms("РеализацияТоваров")) != 1 {
 		t.Error(".os должна остаться")
+	}
+}
+
+// ReceiversOf возвращает все entity, у которых текущий объект указан в
+// based_on. Это инверсия данных, которую UI использует для рендеринга
+// меню «Ввести на основании ▾» на форме источника.
+func TestReceiversOf(t *testing.T) {
+	r := NewRegistry()
+	src := &metadata.Entity{Name: "РеализацияТоваров", Kind: metadata.KindDocument}
+	recv1 := &metadata.Entity{Name: "ВозвратОтПокупателя", Kind: metadata.KindDocument, BasedOn: []string{"РеализацияТоваров"}}
+	recv2 := &metadata.Entity{Name: "Счёт", Kind: metadata.KindDocument, BasedOn: []string{"РеализацияТоваров", "Контрагент"}}
+	unrelated := &metadata.Entity{Name: "Поступление", Kind: metadata.KindDocument}
+
+	r.Load(LoadOptions{Entities: []*metadata.Entity{src, recv1, recv2, unrelated}})
+
+	got := r.ReceiversOf("РеализацияТоваров")
+	if len(got) != 2 {
+		t.Fatalf("ReceiversOf вернул %d сущностей, ожидалось 2", len(got))
+	}
+	names := map[string]bool{}
+	for _, e := range got {
+		names[e.Name] = true
+	}
+	if !names["ВозвратОтПокупателя"] || !names["Счёт"] {
+		t.Errorf("ReceiversOf вернул %v, ожидались ВозвратОтПокупателя и Счёт", names)
+	}
+
+	// Регистронезависимый поиск.
+	if r.ReceiversOf("реализациятоваров") == nil {
+		t.Error("ReceiversOf должен быть регистронезависимым")
+	}
+
+	// Нет приёмников — nil.
+	if got := r.ReceiversOf("Поступление"); got != nil {
+		t.Errorf("Для сущности без приёмников ожидался nil, получили %v", got)
 	}
 }
 

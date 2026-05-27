@@ -3725,6 +3725,32 @@ const cfgTabTree = `{{define "tab-tree"}}
 </div>
 {{end}}
 
+{{/* Ввод на основании (Plan 38): доступен и для документов, и для
+     справочников. Маркер based_on_present=1 нужен, чтобы POST-handler мог
+     отличить «секция вообще не пришла» от «все чекбоксы сняты» — без него
+     based_on невозможно было бы очистить через UI. */}}
+<details {{if $e.BasedOn}}open{{end}} style="margin-bottom:10px">
+<summary class="section-hd" style="cursor:pointer">{{t $.Lang "Ввод на основании"}}{{if $e.BasedOn}} ({{len $e.BasedOn}}){{end}}</summary>
+<input type="hidden" name="based_on_present" value="1">
+<div style="font-size:12px;color:#475569;margin:6px 0">{{t $.Lang "Объекты, на основании которых можно вводить эту сущность. При создании появится кнопка «Ввести на основании ▾» в форме источника."}}</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px">
+  {{range $allEntities}}{{if ne . $e.Name}}
+  <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+    <input type="checkbox" name="based_on" value="{{.}}"
+      {{range $b := $e.BasedOn}}{{if eq $b .}}checked{{end}}{{end}}>
+    <span>{{.}}</span>
+  </label>
+  {{end}}{{end}}
+</div>
+{{if $e.Receivers}}
+<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0">
+  <div style="font-size:12px;color:#475569;margin-bottom:4px">{{t $.Lang "На основании этой сущности вводятся:"}}</div>
+  <div style="font-size:13px">{{range $i, $r := $e.Receivers}}{{if $i}}, {{end}}<code>{{$r}}</code>{{end}}</div>
+  <div style="font-size:11px;color:#94a3b8;margin-top:4px">{{t $.Lang "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект."}}</div>
+</div>
+{{end}}
+</details>
+
 {{if eq $e.Kind "Справочник"}}
 <div class="section-hd">Свойства</div>
 <div style="margin-bottom:10px">

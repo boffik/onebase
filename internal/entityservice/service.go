@@ -68,6 +68,13 @@ type Service struct {
 	// Может быть nil — DSL-хук запустится без extraVars (тогда Сообщить, HTTP,
 	// Справочники и т.п. в нём не будут работать).
 	BuildVars func(ctx context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any
+
+	// MakeThis оборачивает (obj, entity) в this для интерпретатора так, чтобы
+	// внутри DSL-хука работали методы табличных частей: this.Товары.Добавить(),
+	// this.Товары.Количество(), `Для Каждого Стр Из this.Товары`. Реализация
+	// живёт в ui-слое (formObjectThis), здесь только хук. Если nil — Run
+	// получает obj напрямую, что для документов без ТЧ тоже работает.
+	MakeThis func(obj *runtime.Object, entity *metadata.Entity) interpreter.This
 }
 
 // SaveRequest — входной DTO для Service.Save.
@@ -199,6 +206,166 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 	}
 
 	return SaveResult{ID: req.ID, DSLMessages: msgs, Movements: mc}, nil
+}
+
+// FillRequest — входной DTO для Service.Fill (ввод на основании).
+type FillRequest struct {
+	// Receiver — сущность-приёмник (создаваемый объект). Должна содержать
+	// SourceType в Receiver.BasedOn, иначе Fill вернёт ошибку.
+	Receiver *metadata.Entity
+	// SourceType — имя сущности-источника (тип объекта-основания).
+	SourceType string
+	// SourceID — идентификатор существующего объекта-источника в БД.
+	SourceID uuid.UUID
+}
+
+// FillResult — результат Service.Fill: заполненные значения шапки и
+// табличных частей приёмника. Caller использует их для рендеринга формы
+// (UI) или передачи в Service.Save (программный сценарий).
+type FillResult struct {
+	Fields        map[string]any
+	TablePartRows map[string][]map[string]any
+	// DSLError != "" — хук ОбработкаЗаполнения вернул ошибку, см. Save.
+	DSLError    string
+	DSLMessages []string
+}
+
+// Fill реализует «Ввод на основании»: загружает объект-источник, запускает
+// у приёмника DSL-хук ОбработкаЗаполнения(ДанныеЗаполнения) и возвращает
+// заполненные поля + строки ТЧ.
+//
+// Источник передаётся в хук как *runtime.Object (Type/Fields/TablePartRows
+// заполнены). Имя первого параметра процедуры берётся из её декларации —
+// пользователь сам выбирает идентификатор (ДанныеЗаполнения, Основание и т.п.).
+//
+// Если у приёмника не объявлен хук — возвращается пустой результат без
+// ошибки (поле может быть заполнено вручную через UI). Это симметрично
+// поведению Save при отсутствии OnWrite.
+//
+// Проверка SourceType ∈ Receiver.BasedOn выполняется до загрузки — если
+// связь не разрешена в YAML, возвращается ошибка.
+func (s *Service) Fill(ctx context.Context, req FillRequest) (FillResult, error) {
+	if req.Receiver == nil {
+		return FillResult{}, errBadRequest("receiver is nil")
+	}
+	allowed := false
+	for _, src := range req.Receiver.BasedOn {
+		if strings.EqualFold(src, req.SourceType) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return FillResult{}, errBadRequest("entity " + req.Receiver.Name + " не вводится на основании " + req.SourceType)
+	}
+	src := s.Reg.GetEntity(req.SourceType)
+	if src == nil {
+		return FillResult{}, errBadRequest("неизвестный тип источника: " + req.SourceType)
+	}
+
+	row, err := s.Store.GetByID(ctx, src.Name, req.SourceID, src)
+	if err != nil {
+		return FillResult{}, err
+	}
+	srcFields := make(map[string]any, len(row))
+	for _, f := range src.Fields {
+		if v, ok := row[f.Name]; ok && v != nil {
+			srcFields[strings.ToLower(f.Name)] = v
+		}
+	}
+	srcTP := make(map[string][]map[string]any, len(src.TableParts))
+	for _, tp := range src.TableParts {
+		rows, err := s.Store.GetTablePartRows(ctx, src.Name, tp.Name, req.SourceID, tp)
+		if err != nil {
+			return FillResult{}, err
+		}
+		srcTP[tp.Name] = rows
+	}
+	srcObj := &runtime.Object{
+		Type:          src.Name,
+		Kind:          src.Kind,
+		ID:            req.SourceID,
+		Fields:        srcFields,
+		TablePartRows: srcTP,
+	}
+	// Псевдо-реквизит «Ссылка» — аналог одноимённого в 1С. Позволяет хуку
+	// записать ссылку на сам источник в поле приёмника:
+	//   this.Основание = ДанныеЗаполнения.Ссылка
+	// Менеджер не привязан (Manager=nil) — для записи UUID в reference-
+	// колонку этого достаточно; полные операции через ссылку (Удалить,
+	// ПолучитьОбъект) из хука обычно не нужны.
+	srcObj.Fields["ссылка"] = &interpreter.Ref{UUID: req.SourceID.String(), Type: src.Name}
+	srcObj.Fields["reference"] = srcObj.Fields["ссылка"]
+
+	// Обогащаем UUID-строки в ссылочных полях источника до *Ref{…,Manager} —
+	// иначе из хука ОбработкаЗаполнения нельзя было бы писать
+	// this.Покупатель = ДанныеЗаполнения.Покупатель и попадать в выпадающий
+	// список выбора у формы приёмника (он хранит UUID, а enrich-хук
+	// возвращает Ref c UUID-полем).
+	if s.PrepareHook != nil {
+		s.PrepareHook(ctx, src, srcObj)
+	}
+	if s.EnrichTPRows != nil {
+		for _, tp := range src.TableParts {
+			if rows, ok := srcObj.TablePartRows[tp.Name]; ok {
+				s.EnrichTPRows(ctx, tp, rows)
+			}
+		}
+	}
+
+	// Подготовка приёмника: пустой Object с инициализированными ТЧ.
+	recvObj := runtime.NewObject(req.Receiver.Name, req.Receiver.Kind)
+	for _, tp := range req.Receiver.TableParts {
+		recvObj.TablePartRows[tp.Name] = []map[string]any{}
+	}
+
+	proc := s.Reg.GetProcedure(req.Receiver.Name, "OnFill")
+	if proc == nil {
+		// Нет хука — отдаём пустой объект, пользователь заполнит руками.
+		return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows}, nil
+	}
+
+	var msgs []string
+	var vars map[string]any
+	if s.BuildVars != nil {
+		vars = s.BuildVars(ctx, runtime.NewMovementsCollector(req.Receiver.Name, recvObj.ID), &msgs)
+	} else {
+		vars = make(map[string]any)
+	}
+	// Имя параметра процедуры — как объявил пользователь (ДанныеЗаполнения,
+	// Основание, Src и т.п.). Если параметров нет — хук вызывается без
+	// источника (странный случай, но не ошибка).
+	if len(proc.Params) > 0 {
+		vars[proc.Params[0].Literal] = srcObj
+	}
+
+	// this для хука: обёртка с поддержкой методов ТЧ, если caller предоставил
+	// фабрику; иначе — голый *Object (для документов без ТЧ всё равно работает).
+	var thisVal interpreter.This = recvObj
+	if s.MakeThis != nil {
+		thisVal = s.MakeThis(recvObj, req.Receiver)
+	}
+	if err := s.Interp.Run(proc, thisVal, vars); err != nil {
+		if dslErr, ok := err.(*interpreter.DSLError); ok {
+			return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: dslErr.Error(), DSLMessages: msgs}, nil
+		}
+		return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: err.Error(), DSLMessages: msgs}, nil
+	}
+	return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLMessages: msgs}, nil
+}
+
+// errBadRequest — простая ошибка-маркер для невалидных запросов Fill.
+// Caller (UI/DSL) различает её по тексту для подбора HTTP-кода.
+type fillBadRequest struct{ msg string }
+
+func (e *fillBadRequest) Error() string { return e.msg }
+
+func errBadRequest(msg string) error { return &fillBadRequest{msg: msg} }
+
+// IsBadRequest сообщает, является ли err клиентской ошибкой Fill (HTTP 400).
+func IsBadRequest(err error) bool {
+	_, ok := err.(*fillBadRequest)
+	return ok
 }
 
 // writeMovements распределяет накопленные в mc движения по нужным типам

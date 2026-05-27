@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 )
@@ -230,11 +231,68 @@ func (w *docWriter) CallMethod(method string, args []any) any {
 			interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
 		}
 		return w.ref()
+	case "заполнить", "fill":
+		if len(args) == 0 {
+			interpreter.RaiseUserError("Заполнить(" + w.entity.Name + "): не передано основание")
+		}
+		if err := w.fill(args[0]); err != nil {
+			interpreter.RaiseUserError("Заполнить(" + w.entity.Name + "): " + err.Error())
+		}
+		return nil
 	case "установитьзначение", "setvalue":
 		if len(args) >= 2 {
 			if n, ok := args[0].(string); ok {
 				w.Set(n, args[1])
 			}
+		}
+	}
+	return nil
+}
+
+// fill реализует Документы.X.СоздатьДокумент().Заполнить(Источник): запускает
+// ОбработкаЗаполнения у приёмника, переносит результат в obj.Fields/TablePartRows.
+// Источник — *interpreter.Ref или *runtime.Object. Делегирует entityservice.Fill,
+// единая точка вызова OnFill вместе с UI-handler'ом.
+func (w *docWriter) fill(src any) error {
+	var srcType string
+	var srcID uuid.UUID
+	switch v := src.(type) {
+	case *interpreter.Ref:
+		if v == nil {
+			return fmt.Errorf("ссылка пустая")
+		}
+		srcType = v.Type
+		id, err := uuid.Parse(v.UUID)
+		if err != nil {
+			return fmt.Errorf("неверный UUID ссылки: %s", v.UUID)
+		}
+		srcID = id
+	case *runtime.Object:
+		if v == nil {
+			return fmt.Errorf("объект-основание пустой")
+		}
+		srcType = v.Type
+		srcID = v.ID
+	default:
+		return fmt.Errorf("ожидается ссылка или объект, получено %T", src)
+	}
+	result, err := w.s.entitySvc.Fill(w.ctx(), entityservice.FillRequest{
+		Receiver:   w.entity,
+		SourceType: srcType,
+		SourceID:   srcID,
+	})
+	if err != nil {
+		return err
+	}
+	if result.DSLError != "" {
+		return fmt.Errorf("%s", result.DSLError)
+	}
+	for k, v := range result.Fields {
+		w.obj.Fields[strings.ToLower(k)] = v
+	}
+	for tpName, rows := range result.TablePartRows {
+		if rows != nil {
+			w.obj.TablePartRows[tpName] = rows
 		}
 	}
 	return nil

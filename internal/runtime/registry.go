@@ -35,6 +35,11 @@ type Registry struct {
 	widgets         map[string]*metadata.Widget // lowercase name → widget
 	widgetOrder     []string                    // preserves load order
 	homePage        *metadata.HomePage
+	// basedOnIndex — обратный индекс «источник → приёмники» для ввода на
+	// основании. Ключ — lowercase имя источника (документа/справочника),
+	// значение — список *Entity-приёмников, у которых в YAML указан этот
+	// источник в `based_on`. Заполняется в Load(opts).
+	basedOnIndex map[string][]*metadata.Entity
 }
 
 func NewRegistry() *Registry {
@@ -131,6 +136,13 @@ func (r *Registry) Load(opts LoadOptions) {
 		newEntities[e.Name] = e
 		newSlugs[strings.ToLower(e.Name)] = e
 	}
+	newBasedOn := make(map[string][]*metadata.Entity)
+	for _, e := range opts.Entities {
+		for _, src := range e.BasedOn {
+			key := strings.ToLower(src)
+			newBasedOn[key] = append(newBasedOn[key], e)
+		}
+	}
 	newRegs := make(map[string]*metadata.Register, len(opts.Registers))
 	for _, reg := range opts.Registers {
 		newRegs[reg.Name] = reg
@@ -175,7 +187,23 @@ func (r *Registry) Load(opts LoadOptions) {
 	r.reports = newReps
 	r.printForms = newPrintForms
 	r.procs = newProcs
+	r.basedOnIndex = newBasedOn
 	r.mu.Unlock()
+}
+
+// ReceiversOf возвращает список сущностей, у которых в `based_on` указан
+// данный источник. Используется UI для построения меню «Ввести на основании ▾»
+// в форме и списке источника. Поиск регистронезависимый.
+func (r *Registry) ReceiversOf(sourceName string) []*metadata.Entity {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	src := r.basedOnIndex[strings.ToLower(sourceName)]
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]*metadata.Entity, len(src))
+	copy(out, src)
+	return out
 }
 
 // GetPrintForms returns all print forms registered for an entity name (case-insensitive).
@@ -392,6 +420,7 @@ func (r *Registry) Entities() []*metadata.Entity {
 var eventAliases = map[string]string{
 	"onwrite": "призаписи",
 	"onpost":  "обработкапроведения",
+	"onfill":  "обработказаполнения",
 }
 
 func (r *Registry) LoadModules(modules map[string]*ast.Program) {

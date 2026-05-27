@@ -334,6 +334,16 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	tablePartRows := map[string][]map[string]any{}
+	var fillError string
+	var fillMessages []string
+
+	// Ввод на основании: GET /ui/{kind}/{name}/new?based_on=<src>&based_on_id=<uuid>.
+	// Загружаем источник и запускаем ОбработкаЗаполнения у приёмника — её
+	// результаты (Fields + TablePartRows) перетирают дефолтные значения.
+	if srcType := r.URL.Query().Get("based_on"); srcType != "" {
+		fillError = s.applyFillFromQuery(r, entity, srcType, r.URL.Query().Get("based_on_id"), values, tablePartRows, &fillMessages)
+	}
 	var folderOpts []map[string]any
 	if entity.Hierarchical {
 		folderOpts = s.loadFolderOptions(r.Context(), entity)
@@ -352,13 +362,91 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 		"EnumOptions":   enumOpts,
 		"TPRefOptions":  tpRefOpts,
 		"TPRefMeta":     tpRefMeta(entity),
-		"TablePartRows": map[string][]map[string]any{},
+		"TablePartRows": tablePartRows,
 		"FolderOptions": folderOpts,
+		"Error":         fillError,
+		"Messages":      fillMessages,
 		// IsPopup — форма открыта в iframe для inline-создания из другой
 		// формы (как «новый элемент справочника» из поля документа в 1С).
 		// Шаблон скрывает nav/тулбар и меняет кнопку на «Записать и выбрать».
 		"IsPopup": r.URL.Query().Get("_popup") == "1",
 	})
+}
+
+// applyFillFromQuery загружает источник и запускает ОбработкаЗаполнения у
+// приёмника, втягивает результаты в values + tablePartRows (модифицируются
+// in-place). Возвращает строку для шаблона "Error" — пустая, если всё ок.
+//
+// Ошибки доступа/валидации (нет прав на источник, srcType не в based_on)
+// возвращаются как fillError-строки, форма всё равно открывается (пустая
+// или с уже накопленными дефолтами). Так пользователь видит причину
+// провала, но может продолжить ввод вручную.
+func (s *Server) applyFillFromQuery(r *http.Request, entity *metadata.Entity, srcType, srcIDStr string, values map[string]string, tablePartRows map[string][]map[string]any, messages *[]string) string {
+	srcID, err := uuid.Parse(srcIDStr)
+	if err != nil {
+		return "Некорректный идентификатор основания: " + srcIDStr
+	}
+	src := s.reg.GetEntity(srcType)
+	if src == nil {
+		return "Неизвестный тип основания: " + srcType
+	}
+	if !s.can(r, string(src.Kind), src.Name, "read") {
+		return "Нет прав на чтение источника: " + srcType
+	}
+	result, err := s.entitySvc.Fill(r.Context(), entityservice.FillRequest{
+		Receiver:   entity,
+		SourceType: srcType,
+		SourceID:   srcID,
+	})
+	if err != nil {
+		return err.Error()
+	}
+	for k, v := range result.Fields {
+		if v == nil {
+			continue
+		}
+		values[fieldKeyForForm(entity, k)] = formatFieldValueForInput(v)
+	}
+	for tpName, rows := range result.TablePartRows {
+		if rows != nil {
+			tablePartRows[tpName] = rows
+		}
+	}
+	if messages != nil && len(result.DSLMessages) > 0 {
+		*messages = append(*messages, result.DSLMessages...)
+	}
+	return result.DSLError
+}
+
+// fieldKeyForForm возвращает имя поля в том регистре, в котором его ждёт
+// шаблон (PascalCase из YAML). Object.Set/Fields у нас хранятся в lowercase
+// — без приведения значения в форму не попадают (input name="Покупатель",
+// values["покупатель"] не найдётся).
+func fieldKeyForForm(entity *metadata.Entity, lowerKey string) string {
+	for _, f := range entity.Fields {
+		if strings.EqualFold(f.Name, lowerKey) {
+			return f.Name
+		}
+	}
+	return lowerKey
+}
+
+// formatFieldValueForInput приводит значение поля к строке для <input value=...>.
+// Для *interpreter.Ref (после enrichHeaderRefs) — UUID, для time — RFC3339-короткий,
+// иначе — fmt.Sprint.
+func formatFieldValueForInput(v any) string {
+	if v == nil {
+		return ""
+	}
+	if t, ok := v.(time.Time); ok {
+		return t.In(time.Local).Format("2006-01-02T15:04")
+	}
+	if ref, ok := v.(interface{ GetRefUUID() string }); ok {
+		if s := ref.GetRefUUID(); s != "" {
+			return s
+		}
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 // parseSubmitForm — общая часть submit и submitEdit. Парсит форму, строит
@@ -652,6 +740,10 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"FolderOptions": folderOptsEdit,
 		"DocMovements":  docMovements,
 		"Error":         buildEditError(r),
+		// Receivers — список сущностей, у которых в based_on указан текущий
+		// объект. Шаблон рисует выпадающую кнопку «Ввести на основании ▾» —
+		// аналог одноимённой команды в 1С:Предприятие.
+		"Receivers": s.reg.ReceiversOf(entity.Name),
 	})
 }
 
