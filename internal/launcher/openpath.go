@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"bytes"
+	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -28,13 +29,22 @@ func BrowseDir(title, initialPath string) (string, error) {
 	case "windows":
 		initDir := ""
 		if initialPath != "" {
-			initDir = "$d.SelectedPath = '" + initialPath + "'\n"
+			initDir = "$d.SelectedPath = '" + psEscape(initialPath) + "'\n"
 		}
 		script := `Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.ShowInTaskbar = $false
+$owner.WindowState = 'Minimized'
+$owner.Opacity = 0
+$owner.TopMost = $true
+$owner.Show()
+$owner.Activate()
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
-$d.Description = '` + title + `'
+$d.Description = '` + psEscape(title) + `'
 $d.ShowNewFolderButton = $true
-` + initDir + `if ($d.ShowDialog() -eq 'OK') { Write-Output $d.SelectedPath }`
+` + initDir + `$r = $d.ShowDialog($owner)
+$owner.Close()
+if ($r -eq 'OK') { Write-Output $d.SelectedPath }`
 		out, err := runPowerShell(script)
 		return strings.TrimSpace(out), err
 	case "darwin":
@@ -69,11 +79,20 @@ func BrowseFile(title, filter string) (string, error) {
 	switch runtime.GOOS {
 	case "windows":
 		script := `Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.ShowInTaskbar = $false
+$owner.WindowState = 'Minimized'
+$owner.Opacity = 0
+$owner.TopMost = $true
+$owner.Show()
+$owner.Activate()
 $d = New-Object System.Windows.Forms.OpenFileDialog
-$d.Title = '` + title + `'
-$d.Filter = '` + filter + `'
+$d.Title = '` + psEscape(title) + `'
+$d.Filter = '` + psEscape(filter) + `'
 $d.CheckFileExists = $false
-if ($d.ShowDialog() -eq 'OK') { Write-Output $d.FileName }`
+$r = $d.ShowDialog($owner)
+$owner.Close()
+if ($r -eq 'OK') { Write-Output $d.FileName }`
 		out, err := runPowerShell(script)
 		return strings.TrimSpace(out), err
 	default:
@@ -85,13 +104,29 @@ if ($d.ShowDialog() -eq 'OK') { Write-Output $d.FileName }`
 	}
 }
 
+// psEscape экранирует значение для вставки в одинарные кавычки PowerShell.
+// Внутри '...' единственный спец-символ — одинарная кавычка (удваивается).
+func psEscape(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
 func runPowerShell(script string) (string, error) {
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
+	// -Sta обязателен для WinForms (FolderBrowserDialog/OpenFileDialog требуют STA-апартмент).
+	// Без него на Server 2016/2019/2022 ShowDialog может молча зависнуть или вернуть ошибку.
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Sta", "-WindowStyle", "Hidden", "-Command", script)
 	noWindow(cmd) // CREATE_NO_WINDOW: suppresses the brief flash before -WindowStyle kicks in
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		// Пишем причину в server log — пользователь видит «ничего», но при репорте
+		// можно понять что именно сломалось (AppLocker, отсутствие WinForms на Server Core, etc).
+		if s := strings.TrimSpace(stderr.String()); s != "" {
+			log.Printf("launcher: powershell dialog failed: %v: %s", err, s)
+		} else {
+			log.Printf("launcher: powershell dialog failed: %v", err)
+		}
 		return "", nil // user cancelled = exit code != 0
 	}
-	return buf.String(), nil
+	return stdout.String(), nil
 }
