@@ -80,6 +80,12 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 // Messages returns the per-user message store (used to inject Сообщить sink).
 func (s *Server) Messages() *MessageStore { return s.messages }
 
+// EntitySvc возвращает разделяемый сервис сохранения сущностей. Используется
+// REST API (internal/api) чтобы вызывать OnWrite/OnPost + ТЧ + движения +
+// проведение по той же логике, что и UI submit/submitEdit — иначе бизнес-
+// правила работали бы только через web-форму.
+func (s *Server) EntitySvc() *entityservice.Service { return s.entitySvc }
+
 // InvalidateWidgetCache drops every cached widget result. The dev/reload path
 // calls this so users see fresh data after metadata changes.
 func (s *Server) InvalidateWidgetCache() { s.widgetCache.Invalidate() }

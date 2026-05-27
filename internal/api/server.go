@@ -22,7 +22,8 @@ type Server struct {
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, port int, uiCfg ui.Config, sched *scheduler.Scheduler) *Server {
-	h := &handler{reg: reg, store: store, interp: interp}
+	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
+	h := &handler{reg: reg, store: store, interp: interp, entitySvc: uiSrv.EntitySvc()}
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -36,8 +37,6 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	r.Post("/auth/login", authH.LoginJSON)
 	r.Get("/auth/bootstrap", authH.Bootstrap)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-
-	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
@@ -55,6 +54,8 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		r.Get("/documents/{entity}/{id}", h.getObject(metadata.KindDocument))
 		r.Put("/documents/{entity}/{id}", h.updateObject(metadata.KindDocument))
 		r.Delete("/documents/{entity}/{id}", h.deleteObject(metadata.KindDocument))
+		// Posting/un-posting документа (аналог UI-кнопки «Провести»).
+		r.Post("/documents/{entity}/{id}/post", h.postDocument())
 
 		// Web UI
 		uiSrv.Mount(r)
