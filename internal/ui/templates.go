@@ -303,7 +303,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"echartsJSON": echartsJSON,
 	"splitCamel":  splitCamel,
 	"fmtCell":     fmtReportCell,
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplForbidden))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -466,6 +466,7 @@ const tplNav = `
       <div class="sys-submenu">
         <a href="/ui/dev/query-console">{{t $.Lang "Консоль запросов"}}</a>
         <a href="/ui/dev/code-console">{{t $.Lang "Консоль кода"}}</a>
+        <a href="/ui/dev/gengen">{{t $.Lang "Gengen"}}</a>
       </div>
     </div>{{end}}
       {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">{{t $.Lang "Сменить пароль"}}</a>{{end}}{{end}}

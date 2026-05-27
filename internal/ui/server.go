@@ -210,6 +210,11 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/dev/code-console", s.codeConsolePage)
 	r.Post("/ui/dev/code-exec", s.codeConsoleExec)
 
+	// Gengen — генерация конфигурации
+	r.Get("/ui/dev/gengen", s.gengenPage)
+	r.Post("/ui/dev/gengen/analyze", s.gengenAnalyze)
+	r.Post("/ui/dev/gengen/generate", s.gengenGenerate)
+
 	// All functions (admin only)
 	r.Get("/ui/all-functions", s.allFunctions)
 
