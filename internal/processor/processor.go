@@ -9,13 +9,12 @@ import (
 )
 
 type Param struct {
-	Name   string            `yaml:"name"`
-	Type   string            `yaml:"type"`   // string, number, date, bool, reference:Entity
-	Label  string            `yaml:"label"`  // подпись поля; по умолчанию совпадает с Name
-	Labels map[string]string `yaml:"labels"` // переводы подписи по языкам (lang code → перевод)
-	// Default — значение по умолчанию, подставляется при первом открытии формы.
-	// Для type: bool допустимы true/false (флажок), для остальных — строка/число.
-	Default any `yaml:"default"`
+	Name    string            `yaml:"name"`
+	Type    string            `yaml:"type"`    // string, text, number, date, bool, choice, reference:Entity
+	Label   string            `yaml:"label"`   // подпись поля; по умолчанию совпадает с Name
+	Labels  map[string]string `yaml:"labels"`  // переводы подписи по языкам (lang code → перевод)
+	Default any               `yaml:"default"` // значение по умолчанию
+	Options []string          `yaml:"options"` // для type: choice — список вариантов выбора
 }
 
 type Processor struct {

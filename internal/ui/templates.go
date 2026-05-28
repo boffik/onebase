@@ -1580,6 +1580,11 @@ const tplProcessor = `
         <span>{{.DisplayLabel $.Lang}}</span>
       </label>
     </div>
+    {{else if eq .Type "text"}}
+    <div class="form-group" style="margin-bottom:0;grid-column:1/-1">
+      <label>{{.DisplayLabel $.Lang}}</label>
+      <textarea name="{{$pname}}" rows="12" style="width:100%;font-family:monospace;font-size:13px;resize:vertical">{{index $.ParamValues $pname}}</textarea>
+    </div>
     {{else}}
     <div class="form-group" style="margin-bottom:0">
       <label>{{.DisplayLabel $.Lang}}</label>
@@ -1587,6 +1592,17 @@ const tplProcessor = `
         <input type="date" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
       {{else if eq .Type "number"}}
         <input type="number" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
+      {{else if eq .Type "choice"}}
+        <select name="{{$pname}}">
+          {{range .Options}}<option value="{{.}}" {{if eq . (index $.ParamValues $pname)}}selected{{end}}>{{.}}</option>{{end}}
+        </select>
+      {{else if isRef (str .Type)}}
+        <div style="display:flex;gap:6px;align-items:center">
+          <select name="{{$pname}}" style="flex:1">
+            <option value="">{{t $.Lang "— выбрать —"}}</option>
+            {{with index $.RefOptions $pname}}{{range .}}<option value="{{index . "id"}}" {{if eq (index . "id") (index $.ParamValues $pname)}}selected{{end}}>{{index . "_label"}}</option>{{end}}{{end}}
+          </select>
+        </div>
       {{else}}
         <input type="text" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
       {{end}}

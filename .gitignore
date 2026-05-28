@@ -12,7 +12,6 @@ __*.py
 __*.go
 exit
 GIT_WORKFLOW.md
-Plans/
 
 # Internal docs (drafts, plans, specs)
 starterplan.MD

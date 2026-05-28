@@ -1385,10 +1385,37 @@ func (s *Server) processorForm(w http.ResponseWriter, r *http.Request) {
 			paramValues[p.Name] = paramDefaultValue(p.Default, p.Type)
 		}
 	}
+	refOpts := s.loadProcessorRefOpts(r.Context(), proc.Params)
 	s.render(w, r, "page-processor", map[string]any{
 		"Processor":   proc,
 		"ParamValues": paramValues,
+		"RefOptions":  refOpts,
 	})
+}
+
+// loadProcessorRefOpts returns select options for reference-typed processor params.
+func (s *Server) loadProcessorRefOpts(ctx context.Context, params []processorpkg.Param) map[string][]map[string]any {
+	opts := make(map[string][]map[string]any)
+	for _, p := range params {
+		if !strings.HasPrefix(p.Type, "reference:") {
+			continue
+		}
+		entityName := strings.TrimPrefix(p.Type, "reference:")
+		entity := s.reg.GetEntity(entityName)
+		if entity == nil {
+			continue
+		}
+		rows, err := s.store.List(ctx, entity.Name, entity, storage.ListParams{})
+		if err != nil {
+			continue
+		}
+		rows = filterOutFolders(rows)
+		for _, row := range rows {
+			row["_label"] = firstStringField(row, entity)
+		}
+		opts[p.Name] = rows
+	}
+	return opts
 }
 
 // paramDefaultValue приводит значение default из YAML обработки к виду,
@@ -1425,11 +1452,14 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 		paramValues[p.Name] = parseParamValue(r.FormValue(p.Name), p.Type)
 	}
 
+	refOpts := s.loadProcessorRefOpts(r.Context(), proc.Params)
+
 	procDecl := s.reg.GetProcedure(proc.Name, "Выполнить")
 	if procDecl == nil {
 		s.render(w, r, "page-processor", map[string]any{
 			"Processor":   proc,
 			"ParamValues": paramValues,
+			"RefOptions":  refOpts,
 			"RunError":    s.tr(s.resolveLang(r), "Процедура Выполнить() не найдена в src/") + strings.ToLower(string([]rune(proc.Name)[:1])) + string([]rune(proc.Name)[1:]) + ".proc.os",
 		})
 		return
@@ -1462,6 +1492,7 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "page-processor", map[string]any{
 		"Processor":   proc,
 		"ParamValues": paramValues,
+		"RefOptions":  refOpts,
 		"Messages":    messages,
 		"RunError":    runErr,
 		"Ran":         true,
