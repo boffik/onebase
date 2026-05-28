@@ -204,8 +204,14 @@ func newStruct(args []any) *Struct {
 	return s
 }
 
-func (s *Struct) Get(field string) any    { return s.vals[strings.ToLower(field)] }
-func (s *Struct) Set(field string, v any) { s.vals[strings.ToLower(field)] = v }
+func (s *Struct) Get(field string) any { return s.vals[strings.ToLower(field)] }
+func (s *Struct) Set(field string, v any) {
+	key := strings.ToLower(field)
+	if _, exists := s.vals[key]; !exists {
+		s.keys = append(s.keys, key)
+	}
+	s.vals[key] = v
+}
 func (s *Struct) String() string          { return fmt.Sprintf("Структура[%d]", len(s.keys)) }
 func (s *Struct) TypeName() string        { return "Структура" }
 

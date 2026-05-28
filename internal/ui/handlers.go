@@ -1606,25 +1606,14 @@ func (s *Server) getProcessor(w http.ResponseWriter, r *http.Request) *processor
 
 // decodeUploadText tries UTF-8; falls back to Windows-1251.
 func decodeUploadText(data []byte) string {
-	valid := utf8.Valid(data)
-	fmt.Printf("[DEBUG decodeUploadText] len=%d utf8.Valid=%v first32=%x\n", len(data), valid, data[:min(32, len(data))])
-	if valid {
+	if utf8.Valid(data) {
 		return string(data)
 	}
 	decoded, err := charmap.Windows1251.NewDecoder().Bytes(data)
 	if err != nil {
-		fmt.Printf("[DEBUG] win1251 decode error: %v\n", err)
 		return string(data)
 	}
-	fmt.Printf("[DEBUG] decoded OK, sample: %q\n", string(decoded[:min(80, len(decoded))]))
 	return string(decoded)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // processorVirtualEntity создаёт виртуальную Entity из параметров обработки,

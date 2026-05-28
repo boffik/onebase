@@ -320,16 +320,23 @@ func toTime(args []any, i int) (time.Time, bool) {
 func midStr(args []any) string {
 	s := []rune(strArg(args, 0))
 	start := int(floatArg(args, 1)) - 1 // 1-based → 0-based
-	length := int(floatArg(args, 2))
 	if start < 0 {
 		start = 0
 	}
 	if start >= len(s) {
 		return ""
 	}
-	end := start + length
-	if end > len(s) {
-		end = len(s)
+	// Длина (3-й аргумент) опциональна: без неё Сред возвращает остаток
+	// строки до конца — как в 1С:Предприятие.
+	end := len(s)
+	if len(args) >= 3 {
+		end = start + int(floatArg(args, 2))
+		if end < start {
+			end = start
+		}
+		if end > len(s) {
+			end = len(s)
+		}
 	}
 	return string(s[start:end])
 }
