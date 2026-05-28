@@ -599,5 +599,13 @@
   "Добавить обработку": "Add data processor",
   "Добавить общий модуль": "Add common module",
   "Переместить вверх": "Move up",
-  "Переместить вниз": "Move down"
+  "Переместить вниз": "Move down",
+  "Все формы": "All forms",
+  "Импорт из 1С": "Import from 1C",
+  "Модуль": "Module",
+  "У обработки": "Processor has",
+  "Управляемая форма": "Managed form",
+  "Форма объекта": "Object form",
+  "есть": "yes",
+  "нет управляемых форм.": "no managed forms."
 }

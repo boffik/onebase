@@ -362,17 +362,19 @@ func (s *Server) handleProcessorFormEvent(w http.ResponseWriter, r *http.Request
 				if runErr := s.interp.Run(decl, thisObj, vars); runErr != nil {
 					enc.Encode(formEventResponse{
 						OK:     false,
-						Values: serializeFieldsForEntity(obj.Fields, virtEntity),
-						Messages: msgs,
-						Error:  runErr.Error(),
+						Values:     serializeFieldsForEntity(obj.Fields, virtEntity),
+						TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, virtEntity),
+						Messages:   msgs,
+						Error:      runErr.Error(),
 					})
 					return
 				}
 
 				enc.Encode(formEventResponse{
-					OK:     true,
-					Values: serializeFieldsForEntity(obj.Fields, virtEntity),
-					Messages: msgs,
+					OK:         true,
+					Values:     serializeFieldsForEntity(obj.Fields, virtEntity),
+					TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, virtEntity),
+					Messages:   msgs,
 				})
 				return
 			}

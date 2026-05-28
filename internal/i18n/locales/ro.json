@@ -593,5 +593,13 @@
   "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Butonul «+ Creează» în selector pentru un câmp de referință. Activat implicit pentru antetul documentului.",
   "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Butonul «+ Creează» în selector. Dezactivat implicit în secțiunile tabelare.",
   "Открыть карточку": "Deschide fișa",
-  "Показывать «+ Создать» в picker'е": "Afișează «+ Creează» în selector"
+  "Показывать «+ Создать» в picker'е": "Afișează «+ Creează» în selector",
+  "Все формы": "Toate formularele",
+  "Импорт из 1С": "Import din 1C",
+  "Модуль": "Modul",
+  "У обработки": "Procesor",
+  "Управляемая форма": "Formular gestionat",
+  "Форма объекта": "Formular obiect",
+  "есть": "da",
+  "нет управляемых форм.": "fără formulare gestionate."
 }

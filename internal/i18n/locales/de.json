@@ -595,5 +595,13 @@
   "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Schaltfläche «+ Erstellen» im Picker für ein Referenzfeld. Standardmäßig für den Belegkopf aktiviert.",
   "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Schaltfläche «+ Erstellen» im Picker. In Tabellenteilen standardmäßig deaktiviert.",
   "Открыть карточку": "Karte öffnen",
-  "Показывать «+ Создать» в picker'е": "«+ Erstellen» im Picker anzeigen"
+  "Показывать «+ Создать» в picker'е": "«+ Erstellen» im Picker anzeigen",
+  "Все формы": "Alle Formulare",
+  "Импорт из 1С": "Import aus 1C",
+  "Модуль": "Modul",
+  "У обработки": "Verarbeitung hat",
+  "Управляемая форма": "Verwaltetes Formular",
+  "Форма объекта": "Objektformular",
+  "есть": "ja",
+  "нет управляемых форм.": "keine verwalteten Formulare."
 }

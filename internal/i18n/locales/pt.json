@@ -593,5 +593,13 @@
   "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Botão «+ Criar» no seletor para um campo de referência. Ativado por padrão no cabeçalho do documento.",
   "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Botão «+ Criar» no seletor. Desativado por padrão nas partes tabulares.",
   "Открыть карточку": "Abrir ficha",
-  "Показывать «+ Создать» в picker'е": "Mostrar «+ Criar» no seletor"
+  "Показывать «+ Создать» в picker'е": "Mostrar «+ Criar» no seletor",
+  "Все формы": "Todos os formulários",
+  "Импорт из 1С": "Importar do 1C",
+  "Модуль": "Módulo",
+  "У обработки": "O processador tem",
+  "Управляемая форма": "Formulário gerenciado",
+  "Форма объекта": "Formulário do objeto",
+  "есть": "sim",
+  "нет управляемых форм.": "sem formulários gerenciados."
 }

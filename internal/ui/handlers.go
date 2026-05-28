@@ -1648,11 +1648,12 @@ func processorVirtualEntity(proc *processorpkg.Processor) *metadata.Entity {
 		fields = append(fields, f)
 	}
 	return &metadata.Entity{
-		Name:   proc.Name,
-		Title:  proc.Title,
-		Titles: proc.Titles,
-		Kind:   metadata.KindCatalog,
-		Fields: fields,
+		Name:       proc.Name,
+		Title:      proc.Title,
+		Titles:     proc.Titles,
+		Kind:       metadata.KindCatalog,
+		Fields:     fields,
+		TableParts: proc.TableParts,
 	}
 }
 

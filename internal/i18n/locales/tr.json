@@ -593,5 +593,13 @@
   "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Referans alanı için seçicideki «+ Oluştur» düğmesi. Belge başlığı için varsayılan olarak etkin.",
   "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Seçicideki «+ Oluştur» düğmesi. Tablo bölümlerinde varsayılan olarak devre dışı.",
   "Открыть карточку": "Kartı aç",
-  "Показывать «+ Создать» в picker'е": "Seçicide «+ Oluştur» göster"
+  "Показывать «+ Создать» в picker'е": "Seçicide «+ Oluştur» göster",
+  "Все формы": "Tüm formlar",
+  "Импорт из 1С": "1C'den içe aktar",
+  "Модуль": "Modül",
+  "У обработки": "İşlem",
+  "Управляемая форма": "Yönetilen form",
+  "Форма объекта": "Nesne formu",
+  "есть": "var",
+  "нет управляемых форм.": "yönetilen form yok."
 }

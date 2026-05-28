@@ -593,5 +593,13 @@
   "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "İstinad sahəsi üçün seçicidəki «+ Yarat» düyməsi. Sənəd başlığı üçün defolt olaraq aktivdir.",
   "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Seçicidəki «+ Yarat» düyməsi. Cədvəl hissələrində defolt olaraq deaktivdir.",
   "Открыть карточку": "Kartı aç",
-  "Показывать «+ Создать» в picker'е": "Seçicidə «+ Yarat» göstər"
+  "Показывать «+ Создать» в picker'е": "Seçicidə «+ Yarat» göstər",
+  "Все формы": "Bütün formalar",
+  "Импорт из 1С": "1C-dən idxal",
+  "Модуль": "Modul",
+  "У обработки": "Emalın",
+  "Управляемая форма": "İdarə olunan forma",
+  "Форма объекта": "Obyekt forması",
+  "есть": "var",
+  "нет управляемых форм.": "idarə olunan forma yoxdur."
 }

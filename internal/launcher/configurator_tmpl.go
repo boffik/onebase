@@ -3377,6 +3377,48 @@ const cfgTabTree = `{{define "tab-tree"}}
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
+    {{/* Управляемые формы обработки */}}
+    {{ := filterFormsByEntity $.ManagedForms .Name}}
+    <div class="section-hd" style="margin-top:18px">â {{t $.Lang "Управляемая форма"}}</div>
+    <div style="background:#f8fafc;border:1px dashed #c8d4f0;border-radius:6px;padding:12px 14px;font-size:12px;color:#475569;line-height:1.5">
+      {{if }}
+      <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px">
+        <thead><tr style="background:#fff;border-bottom:1px solid #e2e8f0">
+          <th style="text-align:left;padding:4px 8px">{{t $.Lang "Имя"}}</th>
+          <th style="text-align:left;padding:4px 8px">{{t $.Lang "Тип"}}</th>
+          <th style="text-align:left;padding:4px 8px">{{t $.Lang "Модуль"}}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+        {{range }}
+        <tr style="border-bottom:1px solid #eef0f5">
+          <td style="padding:6px 8px">â {{.Name}}</td>
+          <td style="padding:6px 8px">{{if .Kind}}{{.Kind}}{{else}}â{{end}}</td>
+          <td style="padding:6px 8px">{{if .HasOS}}{{t $.Lang "есть"}}{{else}}â{{end}}</td>
+          <td style="text-align:right;padding:6px 8px">
+            <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}"
+               style="display:inline-block;padding:3px 10px;background:#1a4a80;color:#fff;text-decoration:none;border-radius:4px;font-size:11px">
+              {{t $.Lang "Редактировать"}}
+            </a>
+          </td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p style="margin:0 0 10px">{{t $.Lang "У обработки"}} <b>{{.Name}}</b> {{t $.Lang "нет управляемых форм."}}</p>
+      {{end}}
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Name}}&name=Ð¤Ð¾ÑÐ¼Ð°ÐÐ±ÑÐµÐºÑÐ°"
+           style="display:inline-block;padding:5px 12px;background:#16a34a;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">
+          + {{t $.Lang "Форма объекта"}}
+        </a>
+        <a href="/bases/{{$.Base.ID}}/configurator/forms"
+           style="display:inline-block;padding:5px 12px;background:#e2e8f0;color:#334155;text-decoration:none;border-radius:4px;font-size:12px">
+          {{t $.Lang "Все формы"}} / {{t $.Lang "Импорт из 1С"}}
+        </a>
+      </div>
+    </div>
   </div>
   {{end}}
 

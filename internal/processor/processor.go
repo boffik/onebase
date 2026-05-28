@@ -19,11 +19,12 @@ type Param struct {
 }
 
 type Processor struct {
-	Name   string                    `yaml:"name"`
-	Title  string                    `yaml:"title"`
-	Titles map[string]string         `yaml:"titles"`
-	Params []Param                   `yaml:"params"`
-	Forms  []*metadata.FormModule    `yaml:"-"`
+	Name       string                    `yaml:"name"`
+	Title      string                    `yaml:"title"`
+	Titles     map[string]string         `yaml:"titles"`
+	Params     []Param                   `yaml:"params"`
+	TableParts []metadata.TablePart      `yaml:"table_parts"`
+	Forms      []*metadata.FormModule    `yaml:"-"`
 }
 
 // DisplayLabel возвращает подпись параметра с учётом языка.
