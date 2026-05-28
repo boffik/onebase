@@ -107,8 +107,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 .cfg-group{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px}
 .cfg-tree details summary{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
 .cfg-tree details summary::-webkit-details-marker{display:none}
-.cfg-tree details summary::before{content:'▸ ';font-size:10px;transition:content .15s}
-.cfg-tree details[open] summary::before{content:'▾ '}
+
 .cfg-sub{padding:2px 12px 2px 36px;font-size:11px;color:#6b7280;cursor:pointer;border-left:2px solid transparent}
 .cfg-sub:hover{background:#f0f4ff;color:#1a4a80}
 .cfg-sub-label{font-size:10px;color:#94a3b8;padding:2px 12px 2px 36px;border-left:2px solid transparent}
@@ -206,6 +205,7 @@ pre.os-code{
 .cfg-group-hd{display:flex;justify-content:space-between;align-items:center;padding-right:6px}
 .cfg-add-btn{cursor:pointer;color:#1a4a80;font-size:17px;line-height:1;padding:0 4px;border-radius:3px;font-weight:400;opacity:.7}
 .cfg-add-btn:hover{background:#e0e8ff;opacity:1}
+.tree-toggle{font-size:10px;margin-right:4px;user-select:none}
 .cfg-new-form{padding:8px 10px 10px;border-top:1px solid #d8dde8;margin-top:4px}
 .cfg-new-form input[type=text]{width:100%;padding:5px 6px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px;margin-bottom:6px;box-sizing:border-box}
 .cfg-new-form input[type=text]:focus{border-color:#1a4a80;outline:none}
@@ -2759,6 +2759,13 @@ function dbgRenderBreakpoints(editorId) {
   ed._dbgBpDecos = ed.deltaDecorations(ed._dbgBpDecos || [], decos);
 }
 </script>
+<script>
+document.querySelectorAll('.cfg-tree details').forEach(function(d){
+  var a=d.querySelector('.tree-toggle');if(!a)return;
+  function u(){a.textContent=d.open?'▾':'▸'}
+  d.addEventListener('toggle',u);u();
+});
+</script>
 </body></html>
 {{end}}`
 
@@ -2790,7 +2797,7 @@ const cfgTabTree = `{{define "tab-tree"}}
     <span class="ic">🏠</span>Главная страница
   </div>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Справочники"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="{{t $.Lang "Добавить справочник"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Справочники"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="{{t $.Lang "Добавить справочник"}}">+</span></summary>
   {{range .Catalogs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📄</span>{{.Name}}
@@ -2798,7 +2805,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Документы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="{{t $.Lang "Добавить документ"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Документы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="{{t $.Lang "Добавить документ"}}">+</span></summary>
   {{range .Docs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📃</span>{{.Name}}{{if .Posting}}<span class="bp">✓</span>{{end}}
@@ -2806,7 +2813,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Регистры"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('register')" title="{{t $.Lang "Добавить регистр"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Регистры"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('register')" title="{{t $.Lang "Добавить регистр"}}">+</span></summary>
   {{range .Registers}}
   <div class="cfg-item" data-id="r-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📊</span>{{.Name}}
@@ -2814,7 +2821,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Регистры сведений"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('inforeg')" title="{{t $.Lang "Добавить регистр сведений"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Регистры сведений"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('inforeg')" title="{{t $.Lang "Добавить регистр сведений"}}">+</span></summary>
   {{range .InfoRegisters}}
   <div class="cfg-item" data-id="ir-{{.Name}}" onclick="selItem(this)">
     <span class="ic">{{if .Periodic}}⏱{{else}}📋{{end}}</span>{{.Name}}
@@ -2822,7 +2829,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Регистры бухгалтерии"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('accountreg')" title="{{t $.Lang "Добавить регистр бухгалтерии"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Регистры бухгалтерии"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('accountreg')" title="{{t $.Lang "Добавить регистр бухгалтерии"}}">+</span></summary>
   {{range .AccountRegisters}}
   <div class="cfg-item" data-id="ar-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚖</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2830,7 +2837,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Перечисления"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="{{t $.Lang "Добавить перечисление"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Перечисления"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('enum')" title="{{t $.Lang "Добавить перечисление"}}">+</span></summary>
   {{range .Enums}}
   <div class="cfg-item" data-id="en-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🔢</span>{{.Name}}
@@ -2838,7 +2845,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">{{t $.Lang "Константы"}}</summary>
+  <details open class="cfg-tree"><summary class="cfg-group"><span class="tree-toggle">▾</span>{{t $.Lang "Константы"}}</summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
@@ -2846,7 +2853,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group">{{t $.Lang "Отчёты"}}</summary>
+  <details open class="cfg-tree"><summary class="cfg-group"><span class="tree-toggle">▾</span>{{t $.Lang "Отчёты"}}</summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📈</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2854,7 +2861,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Общие модули"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('module')" title="{{t $.Lang "Добавить общий модуль"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Общие модули"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('module')" title="{{t $.Lang "Добавить общий модуль"}}">+</span></summary>
   {{range .Modules}}
   <div class="cfg-item" data-id="mod-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📦</span>{{.Name}}
@@ -2862,7 +2869,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Обработки"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('processor')" title="{{t $.Lang "Добавить обработку"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Обработки"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('processor')" title="{{t $.Lang "Добавить обработку"}}">+</span></summary>
   {{range .Processors}}
   <div class="cfg-item" data-id="proc-{{.Name}}" onclick="selItem(this)">
     <span class="ic">⚙</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2870,7 +2877,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Печатные формы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="{{t $.Lang "Добавить печатную форму"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Печатные формы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('printform')" title="{{t $.Lang "Добавить печатную форму"}}">+</span></summary>
   {{range .PrintForms}}
   <div class="cfg-item{{if .Shadowed}} cfg-item-shadowed{{end}}" data-id="pf-{{.Name}}" onclick="selItem(this)"{{if .Shadowed}} title="Эту YAML-форму перебивает одноимённая .os — в runtime используется DSL-вариант (см. замечание #10)"{{end}}>
     <span class="ic">🖨</span>{{if .Shadowed}}<span style="color:#d97706" title="Перебивается .os">⚠️ </span>{{end}}{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">→{{.Document}}{{if .Shadowed}} (скрыта .os){{end}}</span>
@@ -2901,7 +2908,7 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Подсистемы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="{{t $.Lang "Добавить подсистему"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Подсистемы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('subsystem')" title="{{t $.Lang "Добавить подсистему"}}">+</span></summary>
   {{range .Subsystems}}
   <div class="cfg-item" data-id="sub-{{.Name}}" onclick="selItem(this)">
     <span class="ic">🗂</span>{{.Title}}
@@ -2909,7 +2916,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span>{{t $.Lang "Виджеты"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('widget')" title="{{t $.Lang "Добавить виджет"}}">+</span></summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Виджеты"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('widget')" title="{{t $.Lang "Добавить виджет"}}">+</span></summary>
   {{range .Widgets}}
   <div class="cfg-item" data-id="wdg-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📊</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}<span style="color:#aaa;font-size:10px;margin-left:4px">[{{.Type}}]</span>
