@@ -107,7 +107,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 .cfg-group{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px}
 .cfg-tree details summary{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
 .cfg-tree details summary::-webkit-details-marker{display:none}
-.cfg-tree details summary::before{content:'▾ ';font-size:10px}
+.cfg-tree details summary::before{content:'▸ ';font-size:10px;transition:content .15s}
 .cfg-tree details[open] summary::before{content:'▾ '}
 .cfg-sub{padding:2px 12px 2px 36px;font-size:11px;color:#6b7280;cursor:pointer;border-left:2px solid transparent}
 .cfg-sub:hover{background:#f0f4ff;color:#1a4a80}
@@ -3363,7 +3363,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </tr>
         {{end}}
       </table>
-      <div class="section-hd" style="margin-top:12px">{{t $.Lang "Исходный код"}} ({{t $.Lang "Процедура Выполнить()"}}) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
+      <details open><summary class="section-hd" style="cursor:pointer;margin-top:12px">{{t $.Lang "Исходный код"}} ({{t $.Lang "Процедура Выполнить()"}}) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></summary>
       <div class="code-wrap">
         <pre class="os-code" id="pre-proc-{{$pn}}" onclick="startEdit('proc-{{$pn}}')">{{if .Source}}{{.Source}}{{else}}Процедура Выполнить()&#10;    Сообщить("Привет!")&#10;КонецПроцедуры{{end}}</pre>
         <textarea class="os-edit" id="ta-proc-{{$pn}}" name="source"
@@ -3376,6 +3376,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <span class="check-result" id="check-proc-{{$pn}}"></span>
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
+      </details>
     </form>
     {{/* Управляемые формы обработки */}}
 		{{$procForms := filterFormsByEntity $.ManagedForms .Name}}
