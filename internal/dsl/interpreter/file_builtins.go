@@ -5,7 +5,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/encoding/charmap"
 )
+
+// decodeText tries UTF-8 first; if not valid, decodes as Windows-1251.
+func decodeText(data []byte) string {
+	s := string(data)
+	if isValidUTF8(s) {
+		return s
+	}
+	decoded, err := charmap.Windows1251.NewDecoder().Bytes(data)
+	if err != nil {
+		return s
+	}
+	return string(decoded)
+}
+
+func isValidUTF8(s string) bool {
+	for _, r := range s {
+		if r == 0xFFFD {
+			return false
+		}
+	}
+	return true
+}
 
 // ─── dslTextReader (ЧтениеТекста) ──────────────────────────────────────────
 
@@ -39,7 +63,7 @@ func (r *dslTextReader) CallMethod(name string, args []any) any {
 		if err != nil {
 			panic(userError{Msg: "ЧтениеТекста: ошибка чтения файла " + r.path + ": " + err.Error()})
 		}
-		r.content = string(data)
+		r.content = decodeText(data)
 		r.lines = strings.Split(r.content, "\n")
 		r.lineIdx = 0
 		r.isOpen = true
@@ -54,7 +78,7 @@ func (r *dslTextReader) CallMethod(name string, args []any) any {
 			panic(userError{Msg: "ЧтениеТекста.ПрочитатьСтроку: файл не открыт"})
 		}
 		if r.lineIdx >= len(r.lines) {
-			return nil // Неопределено
+			return nil
 		}
 		line := r.lines[r.lineIdx]
 		r.lineIdx++
@@ -69,9 +93,9 @@ func (r *dslTextReader) CallMethod(name string, args []any) any {
 // ─── dslTextWriter (ЗаписьТекста) ──────────────────────────────────────────
 
 type dslTextWriter struct {
-	path    string
-	buf     strings.Builder
-	isOpen  bool
+	path   string
+	buf    strings.Builder
+	isOpen bool
 }
 
 func (w *dslTextWriter) Get(field string) any {
@@ -174,9 +198,27 @@ func (f *dslFile) CallMethod(name string, args []any) any {
 	panic(userError{Msg: "Файл: неизвестный метод " + name})
 }
 
+// ─── DecodeFile builtin ───────────────────────────────────────────────────
+
+// decodeFileBuiltin converts raw bytes (Windows-1251 → UTF-8) when needed.
+// Used for uploaded file content that may not be UTF-8.
+func decodeFileBuiltin(args []any, file string, line int) (any, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("ДекодироватьФайл: требуется текст")
+	}
+	s := fmt.Sprintf("%v", args[0])
+	if isValidUTF8(s) {
+		return s, nil
+	}
+	decoded, err := charmap.Windows1251.NewDecoder().String(s)
+	if err != nil {
+		return s, nil
+	}
+	return decoded, nil
+}
+
 // ─── NewFileFunctions ──────────────────────────────────────────────────────
 
-// NewFileFunctions returns factories for ЧтениеТекста, ЗаписьТекста, Файл.
 func NewFileFunctions() map[string]any {
 	m := map[string]any{}
 
@@ -199,6 +241,9 @@ func NewFileFunctions() map[string]any {
 	m["__factory_TextWriter"] = textWriterFactory
 	m["__factory_Файл"] = fileFactory
 	m["__factory_File"] = fileFactory
+
+	m["ДекодироватьФайл"] = BuiltinFunc(decodeFileBuiltin)
+	m["DecodeFile"] = BuiltinFunc(decodeFileBuiltin)
 
 	return m
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"golang.org/x/text/encoding/charmap"
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
@@ -1461,7 +1462,7 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 				data, err := io.ReadAll(file)
 				file.Close()
 				if err == nil {
-					paramValues[p.Name] = string(data)
+					paramValues[p.Name] = decodeUploadText(data)
 					continue
 				}
 			}
@@ -1529,6 +1530,21 @@ func (s *Server) getProcessor(w http.ResponseWriter, r *http.Request) *processor
 		return nil
 	}
 	return proc
+}
+
+// decodeUploadText tries UTF-8; falls back to Windows-1251.
+func decodeUploadText(data []byte) string {
+	s := string(data)
+	for _, r := range s {
+		if r == '�' {
+			decoded, err := charmap.Windows1251.NewDecoder().Bytes(data)
+			if err == nil {
+				return string(decoded)
+			}
+			return s
+		}
+	}
+	return s
 }
 
 func parseParamValue(s, typ string) any {
