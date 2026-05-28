@@ -1570,7 +1570,7 @@ const tplProcessor = `
 <h2>{{.Processor.DisplayName $.Lang}}</h2>
 {{if .Processor.Params}}
 <div class="card" style="margin-bottom:16px">
-<form method="POST">
+<form method="POST" enctype="multipart/form-data">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .Processor.Params}}{{$pname := .Name}}
     {{if eq .Type "bool"}}
@@ -1579,6 +1579,11 @@ const tplProcessor = `
         <input type="checkbox" name="{{$pname}}" value="true" {{if index $.ParamValues $pname}}checked{{end}}>
         <span>{{.DisplayLabel $.Lang}}</span>
       </label>
+    </div>
+    {{else if eq .Type "file"}}
+    <div class="form-group" style="margin-bottom:0;grid-column:1/-1">
+      <label>{{.DisplayLabel $.Lang}}</label>
+      <input type="file" name="{{$pname}}">
     </div>
     {{else if eq .Type "text"}}
     <div class="form-group" style="margin-bottom:0;grid-column:1/-1">

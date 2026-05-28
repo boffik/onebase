@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -1446,9 +1447,22 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 	if proc == nil {
 		return
 	}
-	r.ParseForm()
+	r.ParseMultipartForm(32 << 20) // 32 MB max
 	paramValues := map[string]any{}
 	for _, p := range proc.Params {
+		if p.Type == "file" {
+			file, _, err := r.FormFile(p.Name)
+			if err == nil {
+				data, err := io.ReadAll(file)
+				file.Close()
+				if err == nil {
+					paramValues[p.Name] = string(data)
+					continue
+				}
+			}
+			paramValues[p.Name] = ""
+			continue
+		}
 		paramValues[p.Name] = parseParamValue(r.FormValue(p.Name), p.Type)
 	}
 

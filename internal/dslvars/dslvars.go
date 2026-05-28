@@ -63,5 +63,8 @@ func (c Common) Build() map[string]any {
 	for k, v := range interpreter.NewEmailFunctions(c.Mailer) {
 		vars[k] = v
 	}
+	for k, v := range interpreter.NewFileFunctions() {
+		vars[k] = v
+	}
 	return vars
 }
