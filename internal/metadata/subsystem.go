@@ -16,6 +16,7 @@ type Subsystem struct {
 	Icon     string
 	Order    int
 	Contents SubsystemContents
+	HomePage *HomePage
 }
 
 // DisplayName возвращает заголовок подсистемы с учётом языка.
@@ -56,6 +57,7 @@ type rawSubsystem struct {
 		Processors []string `yaml:"processors"`
 		Journals   []string `yaml:"journals"`
 	} `yaml:"contents"`
+	HomePage *HomePage `yaml:"home_page"`
 }
 
 func LoadSubsystemFile(path string) (*Subsystem, error) {
@@ -73,7 +75,7 @@ func LoadSubsystemFile(path string) (*Subsystem, error) {
 	if raw.Title == "" {
 		raw.Title = raw.Name
 	}
-	return &Subsystem{
+	ss := &Subsystem{
 		Name:   raw.Name,
 		Title:  raw.Title,
 		Titles: raw.Titles,
@@ -88,7 +90,12 @@ func LoadSubsystemFile(path string) (*Subsystem, error) {
 			Processors: raw.Contents.Processors,
 			Journals:   raw.Contents.Journals,
 		},
-	}, nil
+	}
+	if raw.HomePage != nil {
+		raw.HomePage.applyDefaults()
+		ss.HomePage = raw.HomePage
+	}
+	return ss, nil
 }
 
 func LoadSubsystemDir(dir string) ([]*Subsystem, error) {

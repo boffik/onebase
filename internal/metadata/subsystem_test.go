@@ -71,3 +71,60 @@ func TestLoadSubsystemDir_Empty(t *testing.T) {
 		t.Errorf("expected nil slice, got %v", subs)
 	}
 }
+
+func TestLoadSubsystemFile_WithHomePage(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: Закупки
+title: Закупки
+order: 20
+contents:
+  documents: [ПоступлениеТоваров]
+home_page:
+  title: Рабочий стол закупщика
+  rows:
+    - widgets: [A, B]
+    - widgets: [C]
+`
+	path := filepath.Join(dir, "закупки.yaml")
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := LoadSubsystemFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.HomePage == nil {
+		t.Fatal("HomePage is nil, expected non-nil")
+	}
+	if s.HomePage.Title != "Рабочий стол закупщика" {
+		t.Errorf("HomePage.Title = %q", s.HomePage.Title)
+	}
+	if s.HomePage.Layout != "rows" {
+		t.Errorf("HomePage.Layout = %q, want rows", s.HomePage.Layout)
+	}
+	names := s.HomePage.WidgetNames()
+	if len(names) != 3 || names[0] != "A" || names[1] != "B" || names[2] != "C" {
+		t.Errorf("WidgetNames = %v", names)
+	}
+}
+
+func TestLoadSubsystemFile_NoHomePage(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: Продажи
+title: Продажи
+order: 10
+contents:
+  documents: [РеализацияТоваров]
+`
+	path := filepath.Join(dir, "продажи.yaml")
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := LoadSubsystemFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.HomePage != nil {
+		t.Errorf("HomePage should be nil, got %+v", s.HomePage)
+	}
+}

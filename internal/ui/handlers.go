@@ -110,6 +110,11 @@ func (s *Server) logo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	hp := s.reg.HomePage()
+	if sub := r.URL.Query().Get("subsystem"); sub != "" {
+		if ss := s.reg.GetSubsystem(sub); ss != nil && ss.HomePage != nil {
+			hp = ss.HomePage
+		}
+	}
 	widgets, defaulted := homePageWidgets(hp, s.reg)
 
 	login := ""

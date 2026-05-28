@@ -44,6 +44,20 @@ func (h *HomePage) DisplayTitle(lang string) string {
 	return "Главная"
 }
 
+// applyDefaults fills in zero-value fields with sensible defaults.
+func (h *HomePage) applyDefaults() {
+	if h.Title == "" {
+		h.Title = "Главная"
+	}
+	if h.Layout == "" {
+		if len(h.Widgets) > 0 {
+			h.Layout = "grid"
+		} else {
+			h.Layout = "rows"
+		}
+	}
+}
+
 // LoadHomePage reads config/home_page.yaml. Returns nil, nil when file does not exist —
 // caller is expected to fall back to a default page in that case.
 func LoadHomePage(path string) (*HomePage, error) {
@@ -58,16 +72,7 @@ func LoadHomePage(path string) (*HomePage, error) {
 	if err := yaml.Unmarshal(data, &hp); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if hp.Title == "" {
-		hp.Title = "Главная"
-	}
-	if hp.Layout == "" {
-		if len(hp.Widgets) > 0 {
-			hp.Layout = "grid"
-		} else {
-			hp.Layout = "rows"
-		}
-	}
+	hp.applyDefaults()
 	return &hp, nil
 }
 

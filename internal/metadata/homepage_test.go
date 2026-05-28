@@ -58,3 +58,32 @@ func TestLoadHomePage_Missing(t *testing.T) {
 		t.Errorf("missing returned hp = %+v, want nil", hp)
 	}
 }
+
+func TestApplyDefaults(t *testing.T) {
+	// Empty → title "Главная", layout "rows"
+	h := &HomePage{}
+	h.applyDefaults()
+	if h.Title != "Главная" {
+		t.Errorf("default title = %q, want %q", h.Title, "Главная")
+	}
+	if h.Layout != "rows" {
+		t.Errorf("default layout (no widgets) = %q, want rows", h.Layout)
+	}
+
+	// With flat widgets → layout "grid"
+	h2 := &HomePage{Widgets: []HomePageWidget{{Name: "X"}}}
+	h2.applyDefaults()
+	if h2.Layout != "grid" {
+		t.Errorf("default layout (with widgets) = %q, want grid", h2.Layout)
+	}
+
+	// Explicit values preserved
+	h3 := &HomePage{Title: "Мой стол", Layout: "rows"}
+	h3.applyDefaults()
+	if h3.Title != "Мой стол" {
+		t.Errorf("explicit title overwritten: %q", h3.Title)
+	}
+	if h3.Layout != "rows" {
+		t.Errorf("explicit layout overwritten: %q", h3.Layout)
+	}
+}
