@@ -3378,10 +3378,10 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
     </form>
     {{/* Управляемые формы обработки */}}
-    {{ := filterFormsByEntity $.ManagedForms .Name}}
+		{{$procForms := filterFormsByEntity $.ManagedForms .Name}}
     <div class="section-hd" style="margin-top:18px">â {{t $.Lang "Управляемая форма"}}</div>
     <div style="background:#f8fafc;border:1px dashed #c8d4f0;border-radius:6px;padding:12px 14px;font-size:12px;color:#475569;line-height:1.5">
-      {{if }}
+      {{if $procForms}}
       <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px">
         <thead><tr style="background:#fff;border-bottom:1px solid #e2e8f0">
           <th style="text-align:left;padding:4px 8px">{{t $.Lang "Имя"}}</th>
@@ -3390,7 +3390,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           <th></th>
         </tr></thead>
         <tbody>
-        {{range }}
+		{{range $procForms}}
         <tr style="border-bottom:1px solid #eef0f5">
           <td style="padding:6px 8px">â {{.Name}}</td>
           <td style="padding:6px 8px">{{if .Kind}}{{.Kind}}{{else}}â{{end}}</td>
@@ -3409,7 +3409,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       <p style="margin:0 0 10px">{{t $.Lang "У обработки"}} <b>{{.Name}}</b> {{t $.Lang "нет управляемых форм."}}</p>
       {{end}}
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Name}}&name=Ð¤Ð¾ÑÐ¼Ð°ÐÐ±ÑÐµÐºÑÐ°"
+		<a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Name}}&name=ФормаОбъекта"
            style="display:inline-block;padding:5px 12px;background:#16a34a;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">
           + {{t $.Lang "Форма объекта"}}
         </a>
