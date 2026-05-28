@@ -2,6 +2,8 @@ package launcher
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,9 +17,10 @@ import (
 )
 
 type managedProc struct {
-	cmd       *exec.Cmd
-	port      int
-	startedAt time.Time
+	cmd        *exec.Cmd
+	port       int
+	startedAt  time.Time
+	debugToken string // секрет для X-OneBase-Debug-Token (прокси отладчика)
 }
 
 // Runner tracks running base processes.
@@ -28,6 +31,26 @@ type Runner struct {
 
 func NewRunner() *Runner {
 	return &Runner{procs: make(map[string]*managedProc)}
+}
+
+// DebugToken возвращает секрет debug API для запущенной базы (пустую строку,
+// если база не запущена этим лаунчером). Прокси отладчика прикладывает его как
+// заголовок X-OneBase-Debug-Token.
+func (r *Runner) DebugToken(baseID string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if mp, ok := r.procs[baseID]; ok {
+		return mp.debugToken
+	}
+	return ""
+}
+
+func generateDebugToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func (r *Runner) Start(base *Base) error {
@@ -76,9 +99,18 @@ func (r *Runner) Start(base *Base) error {
 		args = append(args, "--config-source", "database")
 	}
 
+	// Per-base секрет для debug API: процесс базы примет запросы к /debug/global/*
+	// только с этим токеном (см. ui.MountDebug). Конфигуратор-прокси его прикладывает.
+	debugToken, err := generateDebugToken()
+	if err != nil {
+		logFile.Close()
+		return fmt.Errorf("runner: debug token: %w", err)
+	}
+
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	cmd.Env = append(os.Environ(), "ONEBASE_DEBUG_TOKEN="+debugToken)
 	noWindow(cmd)
 
 	if err := cmd.Start(); err != nil {
@@ -86,7 +118,7 @@ func (r *Runner) Start(base *Base) error {
 		return fmt.Errorf("runner: start: %w", err)
 	}
 
-	r.procs[base.ID] = &managedProc{cmd: cmd, port: base.Port, startedAt: time.Now()}
+	r.procs[base.ID] = &managedProc{cmd: cmd, port: base.Port, startedAt: time.Now(), debugToken: debugToken}
 
 	go func() {
 		cmd.Wait()

@@ -33,6 +33,10 @@ type Config struct {
 	DemoMessage   string
 	Lang          string       // base language from config
 	Bundle        *i18n.Bundle // translations
+	// DebugToken — общий секрет для debug API. Пустой → debug-маршруты не
+	// монтируются (см. api.New). Непустой → каждый запрос к /debug/global/*
+	// должен нести его в заголовке X-OneBase-Debug-Token.
+	DebugToken string
 }
 
 type Server struct {
@@ -241,12 +245,14 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/messages/clear", s.messagesClear)
 }
 
-// MountDebug registers debug API routes WITHOUT auth middleware.
-// Must be called outside the auth-protected group so the configurator
-// (running on a different port) can reach the endpoints cross-origin.
+// MountDebug registers debug API routes gated by an internal shared token
+// (X-OneBase-Debug-Token). api.New mounts this only when a token is configured
+// (ONEBASE_DEBUG_TOKEN), so a plain `onebase run` (published base) exposes no
+// debug surface at all. The configurator reaches these via its server-side
+// debug proxy, which attaches the token.
 func (s *Server) MountDebug(r chi.Router) {
 	r.Route("/debug/global", func(r chi.Router) {
-		r.Use(corsMiddleware)
+		r.Use(debugTokenMiddleware(s.cfg.DebugToken))
 		r.Post("/enable", s.debugGlobalEnable)
 		r.Post("/disable", s.debugGlobalDisable)
 		r.Get("/status", s.debugGlobalStatus)

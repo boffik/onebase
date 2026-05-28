@@ -3359,6 +3359,12 @@ func (h *handler) debugProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Требуем сессию админа конфигуратора. 401 JSON (не 302), т.к. это API для JS.
+	if !h.cfgAdminAuthorized(r, b) {
+		writeJSON(w, 401, map[string]string{"error": "Требуется вход администратора"})
+		return
+	}
+
 	uiURL := fmt.Sprintf("http://localhost:%d/debug/global/%s", b.Port, action)
 
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, uiURL, r.Body)
@@ -3369,6 +3375,10 @@ func (h *handler) debugProxy(w http.ResponseWriter, r *http.Request) {
 	// Forward Content-Type from original request
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
+	}
+	// Внутренний токен — процесс базы примет debug-запрос только с ним.
+	if tok := h.runner.DebugToken(baseID); tok != "" {
+		req.Header.Set("X-OneBase-Debug-Token", tok)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

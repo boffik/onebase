@@ -267,3 +267,33 @@ func (h *handler) cfgAuthMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+
+// cfgAdminAuthorized повторяет проверку cfgAuthMiddleware, но возвращает bool
+// вместо 302-редиректа — для API-эндпоинтов (debug-прокси), которые зовёт JS:
+// им нужен 401 JSON, а не HTML логина. Passthrough-кейсы (БД недоступна, нет
+// схемы, нет пользователей) совпадают с cfgAuthMiddleware, чтобы поведение
+// первого запуска не отличалось. Жёсткая защита всё равно на app-стороне:
+// процесс базы требует X-OneBase-Debug-Token.
+func (h *handler) cfgAdminAuthorized(r *http.Request, b *Base) bool {
+	db, err := getAuthDB(r.Context(), b)
+	if err != nil {
+		return true
+	}
+	repo := auth.NewRepo(db)
+	if err := repo.EnsureSchema(r.Context()); err != nil {
+		return true
+	}
+	hasUsers, err := repo.HasUsers(r.Context())
+	if err != nil || !hasUsers {
+		return true
+	}
+	cookie, err := r.Cookie("onebase_session")
+	if err != nil {
+		return false
+	}
+	user, err := repo.LookupSession(r.Context(), cookie.Value)
+	if err != nil || user == nil || !user.IsAdmin {
+		return false
+	}
+	return true
+}

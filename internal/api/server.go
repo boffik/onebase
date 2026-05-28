@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -22,6 +23,10 @@ type Server struct {
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, port int, uiCfg ui.Config, sched *scheduler.Scheduler) *Server {
+	// Debug API защищён внутренним токеном. Без него (плоский `onebase run`,
+	// опубликованная база) debug-маршруты не монтируются вовсе.
+	debugToken := os.Getenv("ONEBASE_DEBUG_TOKEN")
+	uiCfg.DebugToken = debugToken
 	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
 	h := &handler{reg: reg, store: store, interp: interp, entitySvc: uiSrv.EntitySvc()}
 	r := chi.NewRouter()
@@ -65,8 +70,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		})
 	})
 
-	// Debug API — outside auth so configurator (different port) can reach it
-	uiSrv.MountDebug(r)
+	// Debug API — токен-гейт (см. MountDebug). Монтируем только если токен
+	// задан: без него опубликованная база не имеет debug-поверхности.
+	if debugToken != "" {
+		uiSrv.MountDebug(r)
+	}
 
 	addr := fmt.Sprintf(":%d", port)
 	return &Server{handler: r, srv: &http.Server{Addr: addr, Handler: r}}

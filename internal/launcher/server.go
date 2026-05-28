@@ -166,8 +166,9 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/backup/full-import", s.h.backupFullImport)
 	})
 
-	// Debug proxy — outside auth group: debug endpoints on UI server are already unprotected.
-	// Keeping this inside cfgAuthMiddleware caused silent 302→HTML when session expired.
+	// Debug proxy — вне cfgAuth-группы намеренно: хендлер сам проверяет
+	// сессию админа и отвечает 401 JSON (а не 302→HTML, который ломал JS-fetch).
+	// На app-стороне debug-запрос дополнительно требует X-OneBase-Debug-Token.
 	r.HandleFunc("/bases/{id}/debug/{action}", s.h.debugProxy) // GET + POST
 
 	r.Post("/killall", s.h.killAll)
