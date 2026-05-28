@@ -33,13 +33,20 @@ func cfgUpsert(ctx context.Context, db *storage.DB, path string, content []byte)
 // ── YAML save structs ────────────────────────────────────────────────────────
 
 type saveField struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title,omitempty"`
+	Titles map[string]string `yaml:"titles,omitempty"`
+	Type   string            `yaml:"type"`
+	// AllowInlineCreate — pointer-bool, чтобы omitempty отличал «явно false»
+	// от «не задано». nil → дефолт контекста (true в шапке, false в ТЧ).
+	AllowInlineCreate *bool `yaml:"allow_inline_create,omitempty"`
 }
 
 type saveTP struct {
-	Name   string      `yaml:"name"`
-	Fields []saveField `yaml:"fields"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title,omitempty"`
+	Titles map[string]string `yaml:"titles,omitempty"`
+	Fields []saveField       `yaml:"fields"`
 }
 
 // saveNumerator зеркалирует metadata.rawNumerator, чтобы при roundtrip
@@ -69,6 +76,7 @@ type savePredefined struct {
 type saveEntity struct {
 	Name          string           `yaml:"name"`
 	Title         string           `yaml:"title,omitempty"`
+	Titles        map[string]string `yaml:"titles,omitempty"`
 	Hierarchical  bool             `yaml:"hierarchical,omitempty"`
 	HierarchyKind string           `yaml:"hierarchy_kind,omitempty"`
 	Posting       bool             `yaml:"posting,omitempty"`
@@ -105,12 +113,23 @@ type saveAccountReg struct {
 // ── view types ────────────────────────────────────────────────────────────────
 
 type cfgField struct {
-	Name           string
-	Type           string
-	RefEntity      string
-	EnumName       string
-	FormListHidden bool
-	FormItemHidden bool
+	Name              string
+	Type              string
+	RefEntity         string
+	EnumName          string
+	FormListHidden    bool
+	FormItemHidden    bool
+	AllowInlineCreate *bool // nil = дефолт контекста (true в шапке, false в ТЧ)
+}
+
+// InlineAllowChecked — состояние чекбокса «Кнопка + в picker'е» с учётом
+// дефолта контекста. Шаблон редактора полей вызывает с inTablePart=true
+// для строк ТЧ, false для шапки.
+func (f cfgField) InlineAllowChecked(inTablePart bool) bool {
+	if f.AllowInlineCreate != nil {
+		return *f.AllowInlineCreate
+	}
+	return !inTablePart
 }
 
 type cfgEnum struct {
@@ -1013,7 +1032,7 @@ func toCfgField(f metadata.Field) cfgField {
 	} else if f.EnumName != "" {
 		typ = "enum"
 	}
-	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName}
+	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName, AllowInlineCreate: f.AllowInlineCreate}
 }
 
 func readOSSources(dir string) (sources, postingSources, managerSources map[string]string) {
@@ -1601,7 +1620,18 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			}
 			typ = typ + ":" + ref
 		}
-		fields = append(fields, saveField{Name: name, Type: typ})
+		sf := saveField{Name: name, Type: typ}
+		// allow_inline_create — пишем только если значение отличается от дефолта
+		// контекста (true в шапке). Шаблон отрисовывает hidden inline_present=1
+		// только для ссылочных полей, поэтому маркер косвенно фильтрует тип.
+		if r.FormValue(fmt.Sprintf("field.%d.inline_present", i)) == "1" {
+			allow := r.FormValue(fmt.Sprintf("field.%d.inline_allow", i)) == "1"
+			if !allow {
+				f := false
+				sf.AllowInlineCreate = &f
+			}
+		}
+		fields = append(fields, sf)
 	}
 	// new fields added via "+ Добавить поле"
 	for i := 1; i <= 500; i++ {
@@ -1650,7 +1680,16 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 				}
 				typ = typ + ":" + ref
 			}
-			f = append(f, saveField{Name: name, Type: typ})
+			sf := saveField{Name: name, Type: typ}
+			// В ТЧ дефолт allow_inline_create = false; пишем только если
+			// чекбокс установлен (отличие от дефолта).
+			if r.FormValue(fmt.Sprintf("tp.%s.field.%d.inline_present", tpName, i)) == "1" {
+				if r.FormValue(fmt.Sprintf("tp.%s.field.%d.inline_allow", tpName, i)) == "1" {
+					t := true
+					sf.AllowInlineCreate = &t
+				}
+			}
+			f = append(f, sf)
 		}
 		tpFields[tpName] = f
 	}

@@ -599,6 +599,21 @@ func (s *Server) refCreateRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/ui/"+kind+"/"+ent.Name+"/new?_popup=1", http.StatusFound)
 }
 
+// refOpenRedirect — точка входа для иконки-лупы в picker'е («провалиться»
+// в карточку выбранного элемента). JS знает имя сущности и id, kind
+// резолвим по имени и редиректим на форму редактирования.
+func (s *Server) refOpenRedirect(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "entity")
+	id := chi.URLParam(r, "id")
+	ent := s.reg.GetEntity(name)
+	if ent == nil {
+		http.Error(w, "Сущность не найдена: "+name, http.StatusNotFound)
+		return
+	}
+	kind := strings.ToLower(string(ent.Kind))
+	http.Redirect(w, r, "/ui/"+kind+"/"+ent.Name+"/"+id, http.StatusFound)
+}
+
 // renderPopupSaved отдаёт минимальную HTML-страницу, которая через
 // postMessage передаёт родительскому окну id и подпись созданного объекта.
 // Родитель (см. openRefCreate в шаблоне) подставит значение в свой select
@@ -1934,6 +1949,9 @@ type reportParamUI struct {
 	IsRef   bool
 	Options []string         // for IsSel
 	Opts    []map[string]any // for IsRef: [{id, _label}]
+	// RefEntity — имя сущности (для IsRef), используется на UI для лупы
+	// в picker'е (открытие карточки через /ui/_ref-open/<entity>/<id>).
+	RefEntity string
 }
 
 // buildReportParams builds UI-ready param descriptors, loading reference options inline.
@@ -1958,6 +1976,7 @@ func (s *Server) buildReportParams(ctx context.Context, lang string, params []re
 		case strings.HasPrefix(p.Type, "reference:"):
 			ui.IsRef = true
 			entityName := strings.TrimPrefix(p.Type, "reference:")
+			ui.RefEntity = entityName
 			if entity := s.reg.GetEntity(entityName); entity != nil {
 				rows, _ := s.store.List(ctx, entity.Name, entity, storage.ListParams{})
 				rows = filterOutFolders(rows)

@@ -1034,16 +1034,14 @@ const tplForm = `
   <label>{{$flabel}}</label>
   {{if isRef (str .Type)}}
     <div style="display:flex;gap:6px;align-items:center">
-      <select id="ref-{{$fn}}" name="{{$fn}}" style="flex:1">
+      <select id="ref-{{$fn}}" name="{{$fn}}" style="flex:1" data-ref-entity="{{.RefEntity}}"{{if .InlineCreateEnabled false}} data-ref-allow-create="1"{{end}}>
         <option value="">{{t $.Lang "— выбрать —"}}</option>
         {{range index $.RefOptions $fn}}
         <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
         {{end}}
       </select>
       <button type="button" onclick="openRefPicker('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-      {{if .InlineCreateEnabled false}}
-      <button type="button" onclick="openRefCreate(document.getElementById('ref-{{$fn}}'), '{{.RefEntity}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;font-weight:600;color:#16a34a" title="{{t $.Lang "Создать новый"}}">+</button>
-      {{end}}
+      <button type="button" onclick="openRefCurrent('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
     </div>
   {{else if isEnum (str .Type)}}
     <select name="{{$fn}}">
@@ -1080,16 +1078,14 @@ const tplForm = `
         <td>
         {{if isRef (str .Type)}}
           <div style="display:flex;gap:4px;align-items:center">
-            <select name="tp.{{$tpName}}.{{$i}}.{{$fn}}" style="flex:1">
+            <select name="tp.{{$tpName}}.{{$i}}.{{$fn}}" style="flex:1" data-ref-entity="{{.RefEntity}}"{{if .InlineCreateEnabled true}} data-ref-allow-create="1"{{end}}>
               <option value="">{{t $.Lang "— выбрать —"}}</option>
               {{range index $tpRef $fn}}
               <option value="{{index . "id"}}" {{if eq (str (index . "id")) (refID (index $row $fn))}}selected{{end}}>{{index . "_label"}}</option>
               {{end}}
             </select>
             <button type="button" onclick="openRefPicker(this.parentElement.querySelector('select'))" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-            {{if .InlineCreateEnabled true}}
-            <button type="button" onclick="openRefCreate(this.parentElement.querySelector('select'), '{{.RefEntity}}')" style="padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0;font-weight:600;color:#16a34a" title="{{t $.Lang "Создать новый"}}">+</button>
-            {{end}}
+            <button type="button" onclick="openRefCurrent(this.parentElement.querySelector('select'))" style="padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
           </div>
         {{else if eq (str .Type) "number"}}
           <input type="number" name="tp.{{$tpName}}.{{$i}}.{{$fn}}" value="{{index $row $fn}}"
@@ -1197,6 +1193,13 @@ function addTpRow(tpName, fields, numFields, idx) {
       var sel = document.createElement('select');
       sel.name = 'tp.' + tpName + '.' + idx + '.' + fn;
       sel.style.flex = '1';
+      // Метаданные для picker'а: entity нужен для лупы (/_ref-open) и
+      // кнопки «+ Создать» внутри picker'а; allowCreate управляет показом «+».
+      var meta = refMeta[fn];
+      if (meta && meta.entity) {
+        sel.setAttribute('data-ref-entity', meta.entity);
+        if (meta.allowCreate) sel.setAttribute('data-ref-allow-create', '1');
+      }
       var defOpt = document.createElement('option');
       defOpt.value = ''; defOpt.textContent = '— выбрать —';
       sel.appendChild(defOpt);
@@ -1212,17 +1215,14 @@ function addTpRow(tpName, fields, numFields, idx) {
       (function(s){ pickBtn.onclick = function(){ openRefPicker(s); }; })(sel);
       wrapper.appendChild(sel);
       wrapper.appendChild(pickBtn);
-      // Кнопка «+» — создать новый элемент справочника не покидая формы.
-      // refMeta[fn] = {entity, allowCreate}. allowCreate=false по дефолту для
-      // полей ТЧ; перекрывается в metadata YAML.
-      var meta = refMeta[fn];
-      if (meta && meta.allowCreate && meta.entity) {
-        var createBtn = document.createElement('button');
-        createBtn.type = 'button'; createBtn.textContent = '+';
-        createBtn.title = 'Создать новый';
-        createBtn.style.cssText = 'padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0;font-weight:600;color:#16a34a';
-        (function(s, re){ createBtn.onclick = function(){ openRefCreate(s, re); }; })(sel, meta.entity);
-        wrapper.appendChild(createBtn);
+      // Лупа — открыть карточку текущего значения (только если есть entity).
+      if (meta && meta.entity) {
+        var openBtn = document.createElement('button');
+        openBtn.type = 'button'; openBtn.textContent = '🔍';
+        openBtn.title = 'Открыть карточку';
+        openBtn.style.cssText = 'padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0';
+        (function(s){ openBtn.onclick = function(){ openRefCurrent(s); }; })(sel);
+        wrapper.appendChild(openBtn);
       }
       td.appendChild(wrapper);
     } else {
@@ -1258,9 +1258,16 @@ function recalcTpRow(inp) {
     nums[2].value = (a * b).toFixed(2);
   }
 }
+// openRefPicker — единая точка для всех действий со ссылочным полем по
+// аналогии с 1С: модалка показывает список, кнопку «+ Создать» (если поле
+// помечено data-ref-allow-create) и иконку-лупу у каждой строки для
+// перехода в карточку (data-ref-entity нужно для резолва kind на сервере).
+// Внешние кнопки «+» и «лупа» рядом с select не нужны — всё внутри picker'а.
 function openRefPicker(selOrId) {
   var sel = (typeof selOrId === 'string') ? document.getElementById(selOrId) : selOrId;
   if (!sel) return;
+  var refEntity = sel.getAttribute('data-ref-entity') || '';
+  var allowCreate = sel.getAttribute('data-ref-allow-create') === '1';
   var opts = [];
   for (var i = 0; i < sel.options.length; i++) {
     var o = sel.options[i];
@@ -1272,14 +1279,19 @@ function openRefPicker(selOrId) {
   modal.id = '_ref-picker-modal';
   modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
   var inner = '<div style="background:#fff;border-radius:10px;padding:20px;width:480px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18)">';
-  inner += '<div style="font-weight:600;font-size:15px;margin-bottom:12px;color:#1e293b">Выбор из списка</div>';
+  inner += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="font-weight:600;font-size:15px;color:#1e293b">Выбор из списка</div>';
+  if (allowCreate && refEntity) {
+    inner += '<button type="button" id="_rp-create" style="padding:5px 12px;border:1px solid #16a34a;border-radius:6px;background:#f0fdf4;cursor:pointer;font-size:12px;font-weight:600;color:#16a34a" title="Создать новый">+ Создать</button>';
+  }
+  inner += '</div>';
   inner += '<input id="_rp-search" type="text" placeholder="Поиск..." autocomplete="off" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;margin-bottom:10px;outline:none">';
   inner += '<div id="_rp-list" style="overflow-y:auto;flex:1;border:1px solid #e2e8f0;border-radius:7px">';
   if (opts.length === 0) {
     inner += '<div style="padding:16px;color:#94a3b8;font-size:13px;text-align:center">Список пуст</div>';
   } else {
     for (var i = 0; i < opts.length; i++) {
-      inner += '<div data-id="' + opts[i].id.replace(/"/g,'&quot;') + '" class="_rp-item" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px;color:#1e293b">' + opts[i].label + '</div>';
+      var idAttr = opts[i].id.replace(/"/g,'&quot;');
+      inner += '<div data-id="' + idAttr + '" class="_rp-item" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px;color:#1e293b">' + opts[i].label + '</div>';
     }
   }
   inner += '</div>';
@@ -1300,11 +1312,32 @@ function openRefPicker(selOrId) {
   document.getElementById('_rp-list').addEventListener('click', function(e) {
     var item = e.target.closest('._rp-item');
     if (!item) return;
-    if (window._rpTarget) window._rpTarget.value = item.getAttribute('data-id');
+    if (window._rpTarget) {
+      window._rpTarget.value = item.getAttribute('data-id');
+      try { window._rpTarget.dispatchEvent(new Event('change', {bubbles:true})); } catch(e) {}
+    }
     modal.remove();
   });
+  var createBtn = document.getElementById('_rp-create');
+  if (createBtn) {
+    createBtn.addEventListener('click', function() {
+      modal.remove();
+      openRefCreate(sel, refEntity);
+    });
+  }
   document.getElementById('_rp-cancel').addEventListener('click', function() { modal.remove(); });
   modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+// openRefCurrent — «провалиться» в карточку текущего выбранного значения
+// ссылочного поля (паттерн 1С: кнопка-лупа открывает выбранный элемент).
+// Если поле пустое — короткое уведомление. refEntity берём с data-атрибута.
+function openRefCurrent(selOrId) {
+  var sel = (typeof selOrId === 'string') ? document.getElementById(selOrId) : selOrId;
+  if (!sel) return;
+  var refEntity = sel.getAttribute('data-ref-entity') || '';
+  if (!refEntity || !sel.value) return;
+  window.open('/ui/_ref-open/' + encodeURIComponent(refEntity) + '/' + encodeURIComponent(sel.value), '_blank');
 }
 
 // openRefCreate — открывает модалку с iframe для inline-создания элемента
@@ -1390,13 +1423,14 @@ const tplReport = `
         </select>
       {{else if $p.IsRef}}
         <div style="display:flex;gap:4px;align-items:center">
-          <select name="{{$pname}}" id="rp-{{$pname}}" style="flex:1;min-width:0">
+          <select name="{{$pname}}" id="rp-{{$pname}}" style="flex:1;min-width:0" data-ref-entity="{{$p.RefEntity}}">
             <option value="">{{t $.Lang "— все —"}}</option>
             {{range $p.Opts}}
               <option value="{{index . "id"}}" {{if eq $pval (str (index . "id"))}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
           <button type="button" onclick="openRefPicker('rp-{{$pname}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+          <button type="button" onclick="openRefCurrent('rp-{{$pname}}')" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
         </div>
       {{else}}
         <input type="text" name="{{$pname}}" value="{{$pval}}">
@@ -1693,11 +1727,12 @@ const tplInfoReg = `
     <label>{{.DisplayName $.Lang}} <span style="color:#94a3b8;font-size:11px">[{{t $.Lang "измерение"}}]</span></label>
     {{if .RefEntity}}
     <div style="display:flex;gap:4px;align-items:center">
-      <select name="{{$dn}}" id="ird-{{$dn}}" style="flex:1;min-width:0">
+      <select name="{{$dn}}" id="ird-{{$dn}}" style="flex:1;min-width:0" data-ref-entity="{{.RefEntity}}">
         <option value="">{{t $.Lang "— выбрать —"}}</option>
         {{range index $.RefOpts $dn}}<option value="{{index . "id"}}" {{if eq (index $.Values $dn) (index . "id")}}selected{{end}}>{{index . "_label"}}</option>{{end}}
       </select>
       <button type="button" onclick="openRefPicker('ird-{{$dn}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+      <button type="button" onclick="openRefCurrent('ird-{{$dn}}')" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
     </div>
     {{else}}
     <input type="text" name="{{$dn}}" value="{{index $.Values $dn}}">

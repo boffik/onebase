@@ -590,5 +590,10 @@
   "Путь к папке XML-выгрузки": "Pfad zum XML-Exportordner",
   "Управляемые формы": "Verwaltete Formulare",
   "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект.": "Dies ist eine umgekehrte Liste: Das ursprüngliche based_on wird in diesen Entitäten gespeichert. Öffnen Sie das entsprechende Objekt, um es zu ändern.",
-  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Der Export erfolgt im 1C:Enterprise-Konfigurator: Konfiguration → Konfiguration in Dateien exportieren"
+  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Der Export erfolgt im 1C:Enterprise-Konfigurator: Konfiguration → Konfiguration in Dateien exportieren",
+  "+ в picker'е": "+ im Picker",
+  "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Schaltfläche «+ Erstellen» im Picker für ein Referenzfeld. Standardmäßig für den Belegkopf aktiviert.",
+  "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Schaltfläche «+ Erstellen» im Picker. In Tabellenteilen standardmäßig deaktiviert.",
+  "Открыть карточку": "Karte öffnen",
+  "Показывать «+ Создать» в picker'е": "«+ Erstellen» im Picker anzeigen"
 }

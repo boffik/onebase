@@ -588,5 +588,10 @@
   "Путь к папке XML-выгрузки": "XML dışa aktarım klasörünün yolu",
   "Управляемые формы": "Yönetilen formlar",
   "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект.": "Bu ters bir listedir: orijinal based_on bu varlıklarda saklanır. Değiştirmek için ilgili nesneyi açın.",
-  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Dışa aktarım 1C:Enterprise yapılandırıcısında yapılır: Yapılandırma → Yapılandırmayı dosyalara aktar"
+  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Dışa aktarım 1C:Enterprise yapılandırıcısında yapılır: Yapılandırma → Yapılandırmayı dosyalara aktar",
+  "+ в picker'е": "+ seçicide",
+  "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Referans alanı için seçicideki «+ Oluştur» düğmesi. Belge başlığı için varsayılan olarak etkin.",
+  "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Seçicideki «+ Oluştur» düğmesi. Tablo bölümlerinde varsayılan olarak devre dışı.",
+  "Открыть карточку": "Kartı aç",
+  "Показывать «+ Создать» в picker'е": "Seçicide «+ Oluştur» göster"
 }

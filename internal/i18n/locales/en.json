@@ -589,5 +589,10 @@
   "Путь к папке XML-выгрузки": "Path to XML export folder",
   "Управляемые формы": "Managed forms",
   "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект.": "This is a reverse list: the original based_on is stored in these entities. To change it, open the corresponding object.",
-  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Export is done in the 1C:Enterprise configurator: Configuration → Export configuration to files"
+  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Export is done in the 1C:Enterprise configurator: Configuration → Export configuration to files",
+  "+ в picker'е": "+ in picker",
+  "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "«+ Create» button in the picker for a reference field. Enabled by default for the document header.",
+  "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "«+ Create» button in the picker. Disabled by default in table parts.",
+  "Открыть карточку": "Open card",
+  "Показывать «+ Создать» в picker'е": "Show «+ Create» in the picker"
 }

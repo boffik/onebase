@@ -588,5 +588,10 @@
   "Путь к папке XML-выгрузки": "Chemin du dossier d'export XML",
   "Управляемые формы": "Formulaires gérés",
   "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект.": "Ceci est une liste inversée : le based_on d'origine est stocké dans ces entités. Pour le modifier, ouvrez l'objet correspondant.",
-  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "L'export se fait dans le configurateur 1C:Enterprise : Configuration → Exporter la configuration en fichiers"
+  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "L'export se fait dans le configurateur 1C:Enterprise : Configuration → Exporter la configuration en fichiers",
+  "+ в picker'е": "+ dans le sélecteur",
+  "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Bouton « + Créer » dans le sélecteur pour un champ de référence. Activé par défaut pour l'en-tête du document.",
+  "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Bouton « + Créer » dans le sélecteur. Désactivé par défaut dans les sections tabulaires.",
+  "Открыть карточку": "Ouvrir la fiche",
+  "Показывать «+ Создать» в picker'е": "Afficher « + Créer » dans le sélecteur"
 }

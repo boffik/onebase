@@ -588,5 +588,10 @@
   "Путь к папке XML-выгрузки": "XML eksport papkasiga yo'l",
   "Управляемые формы": "Boshqariladigan shakllar",
   "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект.": "Bu teskari ro'yxat: asl based_on shu obyektlarda saqlanadi. O'zgartirish uchun mos obyektni oching.",
-  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Eksport 1C:Enterprise konfigurator-da bajariladi: Konfiguratsiya → Konfiguratsiyani fayllarga eksport qilish"
+  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "Eksport 1C:Enterprise konfigurator-da bajariladi: Konfiguratsiya → Konfiguratsiyani fayllarga eksport qilish",
+  "+ в picker'е": "+ tanlash oynasida",
+  "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "Havola maydoni uchun tanlash oynasidagi «+ Yaratish» tugmasi. Hujjat sarlavhasi uchun standart bo'yicha yoqilgan.",
+  "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Tanlash oynasidagi «+ Yaratish» tugmasi. Jadval qismlarida standart bo'yicha o'chirilgan.",
+  "Открыть карточку": "Kartani ochish",
+  "Показывать «+ Создать» в picker'е": "Tanlash oynasida «+ Yaratish» ko'rsatish"
 }

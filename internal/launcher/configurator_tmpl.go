@@ -3752,11 +3752,11 @@ const cfgTabTree = `{{define "tab-tree"}}
 <input type="hidden" name="based_on_present" value="1">
 <div style="font-size:12px;color:#475569;margin:6px 0">{{t $.Lang "Объекты, на основании которых можно вводить эту сущность. При создании появится кнопка «Ввести на основании ▾» в форме источника."}}</div>
 <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px">
-  {{range $allEntities}}{{if ne . $e.Name}}
+  {{range $allEntities}}{{if ne . $e.Name}}{{$entName := .}}
   <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-    <input type="checkbox" name="based_on" value="{{.}}"
-      {{range $b := $e.BasedOn}}{{if eq $b .}}checked{{end}}{{end}}>
-    <span>{{.}}</span>
+    <input type="checkbox" name="based_on" value="{{$entName}}"
+      {{range $b := $e.BasedOn}}{{if eq $b $entName}}checked{{end}}{{end}}>
+    <span>{{$entName}}</span>
   </label>
   {{end}}{{end}}
 </div>
@@ -3785,7 +3785,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{if $e.Fields}}
 <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Реквизиты"}} ({{len $e.Fields}})</summary>
 <table class="fields-tbl" id="ft-{{$e.Name}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th title="{{t $.Lang "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа."}}">{{t $.Lang "+ в picker'е"}}</th></tr>
 {{range $i, $f := $e.Fields}}
 <input type="hidden" name="field.{{$i}}.name" value="{{$f.Name}}">
 <tr>
@@ -3810,6 +3810,12 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
     </select>
   </td>
+  <td style="text-align:center">
+    {{if eq $f.Type "reference"}}
+    <input type="hidden" name="field.{{$i}}.inline_present" value="1">
+    <input type="checkbox" name="field.{{$i}}.inline_allow" value="1"{{if $f.InlineAllowChecked false}} checked{{end}} title="{{t $.Lang "Показывать «+ Создать» в picker'е"}}">
+    {{end}}
+  </td>
 </tr>
 {{end}}
 </table>
@@ -3821,7 +3827,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 <details open><summary class="section-hd" style="cursor:pointer">📋 {{$tp.Name}} ({{len $tp.Fields}})</summary>
 <div class="tp-block">
 <table class="fields-tbl" id="ft-{{$e.Name}}-tp{{$j}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th title="{{t $.Lang "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена."}}">{{t $.Lang "+ в picker'е"}}</th></tr>
 {{range $i, $f := $tp.Fields}}
 <input type="hidden" name="tp.{{$tp.Name}}.field.{{$i}}.name" value="{{$f.Name}}">
 <tr>
@@ -3845,6 +3851,12 @@ const cfgTabTree = `{{define "tab-tree"}}
         {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
       {{end}}
     </select>
+  </td>
+  <td style="text-align:center">
+    {{if eq $f.Type "reference"}}
+    <input type="hidden" name="tp.{{$tp.Name}}.field.{{$i}}.inline_present" value="1">
+    <input type="checkbox" name="tp.{{$tp.Name}}.field.{{$i}}.inline_allow" value="1"{{if $f.InlineAllowChecked true}} checked{{end}} title="{{t $.Lang "Показывать «+ Создать» в picker'е"}}">
+    {{end}}
   </td>
 </tr>
 {{end}}

@@ -118,6 +118,9 @@ func (s *Server) Mount(r chi.Router) {
 	// сущности — этот маршрут резолвит kind по имени и редиректит на форму
 	// создания в popup-режиме.
 	r.Get("/ui/_ref-create/{entity}", s.refCreateRedirect)
+	// Открытие карточки элемента справочника из picker'а (иконка-лупа):
+	// JS знает только имя сущности и id, kind резолвим на сервере.
+	r.Get("/ui/_ref-open/{entity}/{id}", s.refOpenRedirect)
 	r.Get("/ui/{kind}/{entity}/{id}", s.formEdit)
 	r.Post("/ui/{kind}/{entity}/{id}", s.submitEdit)
 	// Рантайм событий управляемых форм (план 37, этап 8): обработчики

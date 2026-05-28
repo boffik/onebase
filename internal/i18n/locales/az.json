@@ -588,5 +588,10 @@
   "Путь к папке XML-выгрузки": "XML ixrac qovluğuna yol",
   "Управляемые формы": "İdarə olunan formalar",
   "Это обратный список: исходное based_on хранится у этих сущностей. Чтобы изменить — откройте соответствующий объект.": "Bu əks siyahıdır: orijinal based_on bu obyektlərdə saxlanılır. Dəyişmək üçün müvafiq obyekti açın.",
-  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "İxrac 1C:Enterprise konfiqurator-da edilir: Konfiqurasiya → Konfiqurasiyanı fayllara ixrac et"
+  "Выгрузка делается в конфигураторе 1С:Предприятие: Конфигурация → Выгрузить конфигурацию в файлы": "İxrac 1C:Enterprise konfiqurator-da edilir: Konfiqurasiya → Konfiqurasiyanı fayllara ixrac et",
+  "+ в picker'е": "+ seçicidə",
+  "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа.": "İstinad sahəsi üçün seçicidəki «+ Yarat» düyməsi. Sənəd başlığı üçün defolt olaraq aktivdir.",
+  "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена.": "Seçicidəki «+ Yarat» düyməsi. Cədvəl hissələrində defolt olaraq deaktivdir.",
+  "Открыть карточку": "Kartı aç",
+  "Показывать «+ Создать» в picker'е": "Seçicidə «+ Yarat» göstər"
 }
