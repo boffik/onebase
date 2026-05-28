@@ -74,6 +74,13 @@ func init() {
 	builtins["dayofweek"] = dowFn
 
 	// ─── B3: Строковые функции ────────────────────────────────────────────
+	chrFn := func(args []any, _ string, _ int) (any, error) {
+		return string(rune(int(floatArg(args, 0)))), nil
+	}
+	builtins["символ"] = chrFn
+	builtins["chr"] = chrFn
+	builtins["char"] = chrFn
+
 	replaceFn := func(args []any, _ string, _ int) (any, error) {
 		return strings.ReplaceAll(strArg(args, 0), strArg(args, 1), strArg(args, 2)), nil
 	}
