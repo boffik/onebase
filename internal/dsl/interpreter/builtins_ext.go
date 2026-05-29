@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // isBlankVal checks if a value is considered empty (nil, "", 0, false, empty collection).
@@ -17,6 +19,8 @@ func isBlankVal(v any) bool {
 		return t == ""
 	case float64:
 		return t == 0
+	case decimal.Decimal:
+		return t.IsZero()
 	case bool:
 		return !t
 	case []any:

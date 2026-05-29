@@ -14,6 +14,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/shopspring/decimal"
 )
 
 // «Ввод на основании»: документ-приёмник с based_on и хуком
@@ -220,6 +221,8 @@ func TestFill_NoHook_ReturnsEmpty(t *testing.T) {
 
 func toFloat(v any) float64 {
 	switch x := v.(type) {
+	case decimal.Decimal:
+		return x.InexactFloat64()
 	case float64:
 		return x
 	case int:

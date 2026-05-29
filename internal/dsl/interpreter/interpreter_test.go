@@ -174,7 +174,7 @@ func TestInterpreter_NamespacedModuleProc(t *testing.T) {
 	if err := interp.Run(main, obj); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if obj.Get("Результат") != float64(42) {
+	if !numEq(obj.Get("Результат"), 42) {
 		t.Errorf("expected 42, got %v", obj.Get("Результат"))
 	}
 }

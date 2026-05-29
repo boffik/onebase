@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // ListParams controls filtering, search, sorting and pagination for List queries.
@@ -157,7 +158,7 @@ func (db *DB) GetByID(ctx context.Context, entityName string, id uuid.UUID, enti
 	result := make(map[string]any, len(cols))
 	result["id"] = normalizeValue(dest[0])
 	for i, f := range entity.Fields {
-		result[f.Name] = normalizeValue(dest[i+1])
+		result[f.Name] = normalizeFieldValue(f, dest[i+1])
 	}
 	off := len(entity.Fields) + 1
 	if entity.Kind == metadata.KindDocument {
@@ -177,6 +178,8 @@ func (db *DB) GetByID(ctx context.Context, entityName string, id uuid.UUID, enti
 }
 
 // normalizeValue converts pgx scan results to display-friendly Go types.
+// pgtype.Numeric (PG NUMERIC) → decimal.Decimal без потери точности: значение
+// строится из big.Int и экспоненты напрямую, минуя float64.
 func normalizeValue(v any) any {
 	switch t := v.(type) {
 	case [16]byte:
@@ -184,18 +187,56 @@ func normalizeValue(v any) any {
 	case uuid.UUID:
 		return t.String()
 	case pgtype.Numeric:
-		if !t.Valid || t.NaN {
+		if !t.Valid || t.NaN || t.Int == nil {
 			return nil
 		}
-		f, err := t.Float64Value()
-		if err == nil && f.Valid {
-			return f.Float64
-		}
-		return nil
+		return decimal.NewFromBigInt(t.Int, t.Exp)
 	case int64:
 		return t
 	}
 	return v
+}
+
+// normalizeNumber приводит значение числового поля к decimal.Decimal независимо
+// от движка: PG отдаёт pgtype.Numeric, SQLite — строку (колонка TEXT).
+func normalizeNumber(v any) any {
+	switch t := v.(type) {
+	case nil:
+		return nil
+	case decimal.Decimal:
+		return t
+	case pgtype.Numeric:
+		if !t.Valid || t.NaN || t.Int == nil {
+			return nil
+		}
+		return decimal.NewFromBigInt(t.Int, t.Exp)
+	case string:
+		if t == "" {
+			return nil
+		}
+		if d, err := decimal.NewFromString(t); err == nil {
+			return d
+		}
+		return nil
+	case float64:
+		return decimal.NewFromFloat(t)
+	case int64:
+		return decimal.NewFromInt(t)
+	case int32:
+		return decimal.NewFromInt(int64(t))
+	case int:
+		return decimal.NewFromInt(int64(t))
+	}
+	return v
+}
+
+// normalizeFieldValue нормализует значение с учётом типа поля. Числовые поля
+// всегда возвращаются как decimal.Decimal — единая точность на PG и SQLite.
+func normalizeFieldValue(f metadata.Field, v any) any {
+	if f.Type == metadata.FieldTypeNumber {
+		return normalizeNumber(v)
+	}
+	return normalizeValue(v)
 }
 
 // normalizeBool converts any DB boolean representation (bool, int64 0/1) to bool.
@@ -366,7 +407,7 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 		row := make(map[string]any, len(cols))
 		row["id"] = normalizeValue(dest[0])
 		for i, f := range entity.Fields {
-			row[f.Name] = normalizeValue(dest[i+1])
+			row[f.Name] = normalizeFieldValue(f, dest[i+1])
 		}
 		off := len(entity.Fields) + 1
 		if entity.Kind == metadata.KindDocument {
@@ -501,7 +542,7 @@ func (db *DB) GetTablePartRows(ctx context.Context, entityName, tpName string, p
 		row := make(map[string]any, len(cols))
 		row["строка"] = dest[0]
 		for i, f := range tp.Fields {
-			row[f.Name] = normalizeValue(dest[i+1])
+			row[f.Name] = normalizeFieldValue(f, dest[i+1])
 		}
 		result = append(result, row)
 	}

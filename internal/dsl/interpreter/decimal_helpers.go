@@ -1,0 +1,47 @@
+package interpreter
+
+import "github.com/shopspring/decimal"
+
+// divisionPrecision — глобальная точность деления decimal (план 42, решение #1).
+// Деление в decimal требует заданной точности, иначе бесконечные дроби (10/3)
+// обрезаются непредсказуемо. 16 знаков покрывает типовые учётные расчёты.
+const divisionPrecision = 16
+
+func init() {
+	decimal.DivisionPrecision = divisionPrecision
+}
+
+// toDecimal приводит DSL-значение к decimal.Decimal.
+// Возвращает (Zero, false) для нечислового значения.
+// Строки парсятся как числа — это сохраняет прежнюю семантику toFloat,
+// где "5" + "3" давало 8 (числовое сложение), а не конкатенацию.
+func toDecimal(v any) (decimal.Decimal, bool) {
+	switch t := v.(type) {
+	case decimal.Decimal:
+		return t, true
+	case float64:
+		return decimal.NewFromFloat(t), true
+	case int:
+		return decimal.NewFromInt(int64(t)), true
+	case int32:
+		return decimal.NewFromInt(int64(t)), true
+	case int64:
+		return decimal.NewFromInt(t), true
+	case string:
+		if d, err := decimal.NewFromString(t); err == nil {
+			return d, true
+		}
+	}
+	return decimal.Zero, false
+}
+
+// isNumeric сообщает, является ли значение числом (decimal/float/int) без
+// парсинга строк. Используется в equal для числового сравнения: строки и даты
+// должны и дальше сравниваться через refKey, а не приводиться к числу.
+func isNumeric(v any) bool {
+	switch v.(type) {
+	case decimal.Decimal, float64, int, int32, int64:
+		return true
+	}
+	return false
+}

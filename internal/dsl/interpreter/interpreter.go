@@ -10,6 +10,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/shopspring/decimal"
 )
 
 // dslStop — системная остановка (Error без Попытки, внутренние ошибки интерпретатора)
@@ -382,8 +383,11 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 	case *ast.StringLit:
 		return v.Value
 	case *ast.NumberLit:
-		f, _ := strconv.ParseFloat(v.Value, 64)
-		return f
+		d, err := decimal.NewFromString(v.Value)
+		if err != nil {
+			return decimal.Zero
+		}
+		return d
 	case *ast.BoolLit:
 		return v.Value
 	case *ast.Ident:
@@ -507,19 +511,19 @@ func (i *Interpreter) evalBinary(b *ast.BinaryExpr, e *env) any {
 				return dateAddSeconds(rt, sec)
 			}
 		}
-		lf, lok := toFloat(l)
-		rf, rok := toFloat(r)
+		ld, lok := toDecimal(l)
+		rd, rok := toDecimal(r)
 		if lok && rok {
-			return lf + rf
+			return ld.Add(rd)
 		}
 		// nil-toleration: пустое число + N → N, иначе `Объект.Сумма + 100`
 		// при пустом поле дало бы concat «<nil>100», который потом ломает
 		// запись в numeric (SQLSTATE 22P02).
 		if l == nil && rok {
-			return rf
+			return rd
 		}
 		if r == nil && lok {
-			return lf
+			return ld
 		}
 		return fmt.Sprintf("%v", l) + fmt.Sprintf("%v", r)
 	case token.MINUS:
@@ -532,35 +536,35 @@ func (i *Interpreter) evalBinary(b *ast.BinaryExpr, e *env) any {
 				return dateAddSeconds(lt, -sec)
 			}
 		}
-		lf, lok := toFloat(l)
-		rf, rok := toFloat(r)
+		ld, lok := toDecimal(l)
+		rd, rok := toDecimal(r)
 		if lok && rok {
-			return lf - rf
+			return ld.Sub(rd)
 		}
 		if l == nil && rok {
-			return -rf
+			return rd.Neg()
 		}
 		if r == nil && lok {
-			return lf
+			return ld
 		}
 	case token.STAR:
-		lf, lok := toFloat(l)
-		rf, rok := toFloat(r)
+		ld, lok := toDecimal(l)
+		rd, rok := toDecimal(r)
 		if lok && rok {
-			return lf * rf
+			return ld.Mul(rd)
 		}
 		// nil * число / число * nil → 0 (а не string concat).
 		if (l == nil && rok) || (r == nil && lok) {
-			return float64(0)
+			return decimal.Zero
 		}
 	case token.SLASH:
-		lf, lok := toFloat(l)
-		rf, rok := toFloat(r)
-		if lok && rok && rf != 0 {
-			return lf / rf
+		ld, lok := toDecimal(l)
+		rd, rok := toDecimal(r)
+		if lok && rok && !rd.IsZero() {
+			return ld.Div(rd)
 		}
-		if l == nil && rok && rf != 0 {
-			return float64(0)
+		if l == nil && rok && !rd.IsZero() {
+			return decimal.Zero
 		}
 	}
 	return nil
@@ -701,6 +705,8 @@ func truthy(v any) bool {
 		return t
 	case float64:
 		return t != 0
+	case decimal.Decimal:
+		return !t.IsZero()
 	case string:
 		return t != ""
 	}
@@ -708,6 +714,14 @@ func truthy(v any) bool {
 }
 
 func equal(a, b any) bool {
+	// Числа сравниваем по значению (decimal.Equal), а не строково: иначе
+	// decimal(5) и int64(5) или 0.10 и 0.1 могли бы разойтись. Строки/ссылки/
+	// даты — по-прежнему через refKey.
+	if isNumeric(a) && isNumeric(b) {
+		ad, _ := toDecimal(a)
+		bd, _ := toDecimal(b)
+		return ad.Equal(bd)
+	}
 	return refKey(a) == refKey(b)
 }
 
@@ -730,16 +744,10 @@ func compare(a, b any) int {
 			}
 		}
 	}
-	af, aok := toFloat(a)
-	bf, bok := toFloat(b)
+	ad, aok := toDecimal(a)
+	bd, bok := toDecimal(b)
 	if aok && bok {
-		if af < bf {
-			return -1
-		}
-		if af > bf {
-			return 1
-		}
-		return 0
+		return ad.Cmp(bd)
 	}
 	as := fmt.Sprintf("%v", a)
 	bs := fmt.Sprintf("%v", b)
@@ -808,6 +816,8 @@ func toFloat(v any) (float64, bool) {
 	switch t := v.(type) {
 	case float64:
 		return t, true
+	case decimal.Decimal:
+		return t.InexactFloat64(), true
 	case int:
 		return float64(t), true
 	case int32:
@@ -824,21 +834,21 @@ func toFloat(v any) (float64, bool) {
 
 // applyCompoundOp computes the result of a compound assignment operator.
 func applyCompoundOp(op token.Type, old, val any) any {
-	lf, lok := toFloat(old)
-	rf, rok := toFloat(val)
+	ld, lok := toDecimal(old)
+	rd, rok := toDecimal(val)
 	if lok && rok {
 		switch op {
 		case token.PLUS_ASSIGN:
-			return lf + rf
+			return ld.Add(rd)
 		case token.MINUS_ASSIGN:
-			return lf - rf
+			return ld.Sub(rd)
 		case token.STAR_ASSIGN:
-			return lf * rf
+			return ld.Mul(rd)
 		case token.SLASH_ASSIGN:
-			if rf != 0 {
-				return lf / rf
+			if !rd.IsZero() {
+				return ld.Div(rd)
 			}
-			return float64(0)
+			return decimal.Zero
 		}
 	}
 	if op == token.PLUS_ASSIGN {

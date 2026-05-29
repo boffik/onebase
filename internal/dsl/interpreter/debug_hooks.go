@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/shopspring/decimal"
 )
 
 // ── Source location extraction from AST ──────────────────────────
@@ -124,6 +125,8 @@ func getTypeName(v any) string {
 		return "Булево"
 	case float64:
 		return "Число"
+	case decimal.Decimal:
+		return "Число"
 	case int, int32, int64:
 		return "Число"
 	case string:
@@ -154,6 +157,8 @@ func formatValue(v any) string {
 		return val
 	case float64:
 		return fmt.Sprintf("%.2f", val)
+	case decimal.Decimal:
+		return val.String()
 	case bool:
 		if val {
 			return "Истина"

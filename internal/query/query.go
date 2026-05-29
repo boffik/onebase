@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/shopspring/decimal"
 )
 
 // CompileOpts holds options for query compilation including register metadata
@@ -1687,7 +1688,7 @@ func pgCast(v any) string {
 			return "::uuid"
 		}
 		return "::text"
-	case float64, float32:
+	case float64, float32, decimal.Decimal:
 		return "::numeric"
 	case int, int32, int64, uint, uint32, uint64:
 		return "::bigint"

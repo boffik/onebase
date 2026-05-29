@@ -120,7 +120,7 @@ func TestDefaultParam_UsedWhenOmitted(t *testing.T) {
 	if err := i.RunWithResult(main, &MapThis{M: map[string]any{}}, &result); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result != float64(30) {
+	if !numEq(result, 30) {
 		t.Errorf("expected 30 (10+20 default), got %v", result)
 	}
 }
@@ -148,7 +148,7 @@ func TestDefaultParam_OverriddenByArg(t *testing.T) {
 	if err := i.RunWithResult(main, &MapThis{M: map[string]any{}}, &result); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result != float64(15) {
+	if !numEq(result, 15) {
 		t.Errorf("expected 15, got %v", result)
 	}
 }
@@ -209,7 +209,7 @@ func TestScope_FirstAssignInIfVisibleOutside(t *testing.T) {
   КонецЕсли;
   Возврат Результат;
 КонецФункции`
-	if got := runScopeFunc(t, code); got != float64(42) {
+	if got := runScopeFunc(t, code); !numEq(got, 42) {
 		t.Errorf("expected 42, got %v", got)
 	}
 }
@@ -223,7 +223,7 @@ func TestScope_FirstAssignInElseVisibleOutside(t *testing.T) {
   КонецЕсли;
   Возврат Результат;
 КонецФункции`
-	if got := runScopeFunc(t, code); got != float64(99) {
+	if got := runScopeFunc(t, code); !numEq(got, 99) {
 		t.Errorf("expected 99, got %v", got)
 	}
 }
@@ -238,7 +238,7 @@ func TestScope_FirstAssignInForEachVisibleOutside(t *testing.T) {
   КонецЦикла;
   Возврат Сумма;
 КонецФункции`
-	if got := runScopeFunc(t, code); got != float64(7) {
+	if got := runScopeFunc(t, code); !numEq(got, 7) {
 		t.Errorf("expected 7, got %v", got)
 	}
 }
@@ -250,7 +250,7 @@ func TestScope_FirstAssignInNumericForVisibleOutside(t *testing.T) {
   КонецЦикла;
   Возврат Итог;
 КонецФункции`
-	if got := runScopeFunc(t, code); got != float64(5) {
+	if got := runScopeFunc(t, code); !numEq(got, 5) {
 		t.Errorf("expected 5, got %v", got)
 	}
 }
@@ -264,7 +264,7 @@ func TestScope_FirstAssignInWhileVisibleOutside(t *testing.T) {
   КонецЦикла;
   Возврат Последний;
 КонецФункции`
-	if got := runScopeFunc(t, code); got != float64(3) {
+	if got := runScopeFunc(t, code); !numEq(got, 3) {
 		t.Errorf("expected 3, got %v", got)
 	}
 }

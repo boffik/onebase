@@ -58,8 +58,8 @@ func TestDocsRoot_ManagerMethod(t *testing.T) {
 	root := newDocsRoot(s, interpreter.NewTxState(ctx))
 	proxy := root.Get("Счёт").(*docProxy)
 	got := proxy.CallMethod("Удвоить", []any{21.0})
-	if got != 42.0 {
-		t.Fatalf("Документы.Счёт.Удвоить(21) → %v (%T), ожидалось 42 (float64)", got, got)
+	if toFloat(got) != 42 {
+		t.Fatalf("Документы.Счёт.Удвоить(21) → %v (%T), ожидалось 42", got, got)
 	}
 }
 

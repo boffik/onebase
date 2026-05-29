@@ -3,12 +3,12 @@ package ui
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // objectAttributeValue реализует DSL-функцию ЗначениеРеквизитаОбъекта(Ссылка,
@@ -107,15 +107,17 @@ func normalizeAttrValue(ft metadata.FieldType, v any) any {
 	switch ft {
 	case metadata.FieldTypeNumber:
 		switch n := v.(type) {
-		case float64:
+		case decimal.Decimal:
 			return n
+		case float64:
+			return decimal.NewFromFloat(n)
 		case int64:
-			return float64(n)
+			return decimal.NewFromInt(n)
 		case int:
-			return float64(n)
+			return decimal.NewFromInt(int64(n))
 		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil {
-				return f
+			if d, err := decimal.NewFromString(strings.TrimSpace(n)); err == nil {
+				return d
 			}
 		}
 	case metadata.FieldTypeBool:

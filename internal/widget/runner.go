@@ -14,6 +14,7 @@ import (
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/shopspring/decimal"
 )
 
 // Result is the rendered output of a single widget. Type mirrors metadata.WidgetType
@@ -420,6 +421,8 @@ func firstScalar(row map[string]any) any {
 
 func toFloat(v any) float64 {
 	switch t := v.(type) {
+	case decimal.Decimal:
+		return t.InexactFloat64()
 	case float64:
 		return t
 	case float32:

@@ -226,8 +226,10 @@ func (s *ChartSeries) CallMethod(method string, args []any) any {
 			switch v := args[0].(type) {
 			case *ChartPoint:
 				ptIdx = v.idx
-			case float64:
-				ptIdx = int(v)
+			default:
+				if f, ok := toFloat(v); ok {
+					ptIdx = int(f)
+				}
 			}
 			val := toFloatOr0(args[1])
 			if ptIdx >= 0 {

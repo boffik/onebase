@@ -41,7 +41,7 @@ func TestBreak_ForEach(t *testing.T) {
   КонецЦикла;
   Возврат сумма;
 КонецФункции`)
-	if result != float64(3) {
+	if !numEq(result, 3) {
 		t.Errorf("expected 3, got %v", result)
 	}
 }
@@ -57,7 +57,7 @@ func TestBreak_NumericFor(t *testing.T) {
   КонецЦикла;
   Возврат Сумма;
 КонецФункции`)
-	if result != float64(6) {
+	if !numEq(result, 6) {
 		t.Errorf("expected 6, got %v", result)
 	}
 }
@@ -77,7 +77,7 @@ func TestContinue_ForEach(t *testing.T) {
   КонецЦикла;
   Возврат сумма;
 КонецФункции`)
-	if result != float64(4) {
+	if !numEq(result, 4) {
 		t.Errorf("expected 4, got %v", result)
 	}
 }
@@ -93,7 +93,7 @@ func TestContinue_NumericFor(t *testing.T) {
   КонецЦикла;
   Возврат сумма;
 КонецФункции`)
-	if result != float64(12) {
+	if !numEq(result, 12) {
 		t.Errorf("expected 12, got %v", result)
 	}
 }
@@ -139,7 +139,7 @@ func TestBreak_FIFO(t *testing.T) {
   КонецЦикла;
   Возврат Списано;
 КонецФункции`)
-	if result != float64(1) {
+	if !numEq(result, 1) {
 		t.Errorf("expected 1, got %v", result)
 	}
 }
@@ -162,7 +162,7 @@ func TestBreak_InsideTry(t *testing.T) {
   КонецЦикла;
   Возврат Сумма;
 КонецФункции`)
-	if result != float64(0) {
+	if !numEq(result, 0) {
 		t.Errorf("expected 0, got %v", result)
 	}
 }

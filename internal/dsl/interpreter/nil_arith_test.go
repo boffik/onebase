@@ -14,7 +14,7 @@ func TestArith_NilPlusNumber_ReturnsNumber(t *testing.T) {
   Возврат X + 100;
 КонецФункции`
 	got := evalFunc(t, src)
-	if got != float64(100) {
+	if !numEq(got, 100) {
 		t.Errorf("nil + 100 = %v (%T), ожидалось 100", got, got)
 	}
 }
@@ -25,7 +25,7 @@ func TestArith_NumberPlusNil_ReturnsNumber(t *testing.T) {
   Возврат 50 + X;
 КонецФункции`
 	got := evalFunc(t, src)
-	if got != float64(50) {
+	if !numEq(got, 50) {
 		t.Errorf("50 + nil = %v, ожидалось 50", got)
 	}
 }
@@ -36,7 +36,7 @@ func TestArith_NilTimesNumber_ReturnsZero(t *testing.T) {
   Возврат X * 100;
 КонецФункции`
 	got := evalFunc(t, src)
-	if got != float64(0) {
+	if !numEq(got, 0) {
 		t.Errorf("nil * 100 = %v, ожидалось 0", got)
 	}
 }
@@ -47,7 +47,7 @@ func TestArith_NumberMinusNil_ReturnsNumber(t *testing.T) {
   Возврат 200 - X;
 КонецФункции`
 	got := evalFunc(t, src)
-	if got != float64(200) {
+	if !numEq(got, 200) {
 		t.Errorf("200 - nil = %v, ожидалось 200", got)
 	}
 }
@@ -60,7 +60,7 @@ func TestArith_TwoNumbers_StillNumeric(t *testing.T) {
   Возврат 7 + 3;
 КонецФункции`
 	got := evalFunc(t, src)
-	if got != float64(10) {
+	if !numEq(got, 10) {
 		t.Errorf("7 + 3 = %v, ожидалось 10", got)
 	}
 }

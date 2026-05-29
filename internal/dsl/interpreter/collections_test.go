@@ -8,7 +8,24 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/shopspring/decimal"
 )
+
+// numEq сравнивает числовой результат DSL (теперь decimal.Decimal) с ожидаемым
+// значением. Числа в DSL — decimal; служебные счётчики могут быть int64/float64.
+func numEq(got any, want float64) bool {
+	switch v := got.(type) {
+	case decimal.Decimal:
+		return v.Equal(decimal.NewFromFloat(want))
+	case float64:
+		return v == want
+	case int64:
+		return float64(v) == want
+	case int:
+		return float64(v) == want
+	}
+	return false
+}
 
 func evalFunc(t *testing.T, src string) any {
 	t.Helper()
@@ -54,7 +71,7 @@ func TestArray_Count(t *testing.T) {
 КонецФункции`
 
 	result := evalFunc(t, src)
-	if result != float64(3) {
+	if !numEq(result, 3) {
 		t.Fatalf("expected 3, got %v", result)
 	}
 }
@@ -73,7 +90,7 @@ func TestArray_ForEach(t *testing.T) {
 КонецФункции`
 
 	result := evalFunc(t, src)
-	if result != float64(60) {
+	if !numEq(result, 60) {
 		t.Fatalf("expected 60, got %v", result)
 	}
 }
@@ -87,7 +104,7 @@ func TestArray_IndexAssign(t *testing.T) {
 КонецФункции`
 
 	result := evalFunc(t, src)
-	if result != float64(42) {
+	if !numEq(result, 42) {
 		t.Fatalf("expected 42, got %v", result)
 	}
 }
@@ -102,7 +119,7 @@ func TestMap_InsertGet(t *testing.T) {
 КонецФункции`
 
 	result := evalFunc(t, src)
-	if result != float64(90) {
+	if !numEq(result, 90) {
 		t.Fatalf("expected 90, got %v", result)
 	}
 }
@@ -120,7 +137,7 @@ func TestMap_ForEach_KeyValue(t *testing.T) {
 КонецФункции`
 
 	result := evalFunc(t, src)
-	if result != float64(3) {
+	if !numEq(result, 3) {
 		t.Fatalf("expected 3, got %v", result)
 	}
 }

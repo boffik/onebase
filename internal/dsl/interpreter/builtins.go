@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // BuiltinFunc is a callable value that can be injected via extraVars (e.g. Сообщить).
@@ -100,58 +102,10 @@ var builtins = map[string]func(args []any, file string, line int) (any, error){
 	},
 
 	// ─── Строки ───────────────────────────────────────────────────────────
-	"str": func(args []any, file string, line int) (any, error) {
-		if len(args) == 0 {
-			return "", nil
-		}
-		if f, ok := toFloat(args[0]); ok {
-			if f == math.Trunc(f) {
-				return strconv.FormatInt(int64(f), 10), nil
-			}
-			return strconv.FormatFloat(f, 'f', -1, 64), nil
-		}
-		if t, ok := args[0].(time.Time); ok {
-			return t.Format("02.01.2006 15:04:05"), nil
-		}
-		return fmt.Sprintf("%v", args[0]), nil
-	},
-	"строка": func(args []any, file string, line int) (any, error) {
-		if len(args) == 0 {
-			return "", nil
-		}
-		if f, ok := toFloat(args[0]); ok {
-			if f == math.Trunc(f) {
-				return strconv.FormatInt(int64(f), 10), nil
-			}
-			return strconv.FormatFloat(f, 'f', -1, 64), nil
-		}
-		if t, ok := args[0].(time.Time); ok {
-			return t.Format("02.01.2006 15:04:05"), nil
-		}
-		return fmt.Sprintf("%v", args[0]), nil
-	},
-	"number": func(args []any, file string, line int) (any, error) {
-		if len(args) == 0 {
-			return float64(0), nil
-		}
-		s := fmt.Sprintf("%v", args[0])
-		f, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", "."), 64)
-		if err != nil {
-			return float64(0), nil
-		}
-		return f, nil
-	},
-	"число": func(args []any, file string, line int) (any, error) {
-		if len(args) == 0 {
-			return float64(0), nil
-		}
-		s := fmt.Sprintf("%v", args[0])
-		f, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", "."), 64)
-		if err != nil {
-			return float64(0), nil
-		}
-		return f, nil
-	},
+	"str":    builtinToString,
+	"строка": builtinToString,
+	"number": builtinToNumber,
+	"число":  builtinToNumber,
 	"upper": func(args []any, file string, line int) (any, error) {
 		return strings.ToUpper(strArg(args, 0)), nil
 	},
@@ -246,42 +200,16 @@ var builtins = map[string]func(args []any, file string, line int) (any, error){
 	},
 
 	// ─── Математика ───────────────────────────────────────────────────────
-	"round": func(args []any, file string, line int) (any, error) {
-		n := floatArg(args, 0)
-		d := int(floatArg(args, 1))
-		p := math.Pow(10, float64(d))
-		return math.Round(n*p) / p, nil
-	},
-	"окр": func(args []any, file string, line int) (any, error) {
-		n := floatArg(args, 0)
-		d := int(floatArg(args, 1))
-		p := math.Pow(10, float64(d))
-		return math.Round(n*p) / p, nil
-	},
-	"abs": func(args []any, file string, line int) (any, error) {
-		return math.Abs(floatArg(args, 0)), nil
-	},
-	"абс": func(args []any, file string, line int) (any, error) {
-		return math.Abs(floatArg(args, 0)), nil
-	},
-	"int": func(args []any, file string, line int) (any, error) {
-		return math.Trunc(floatArg(args, 0)), nil
-	},
-	"цел": func(args []any, file string, line int) (any, error) {
-		return math.Trunc(floatArg(args, 0)), nil
-	},
-	"max": func(args []any, file string, line int) (any, error) {
-		return math.Max(floatArg(args, 0), floatArg(args, 1)), nil
-	},
-	"макс": func(args []any, file string, line int) (any, error) {
-		return math.Max(floatArg(args, 0), floatArg(args, 1)), nil
-	},
-	"min": func(args []any, file string, line int) (any, error) {
-		return math.Min(floatArg(args, 0), floatArg(args, 1)), nil
-	},
-	"мин": func(args []any, file string, line int) (any, error) {
-		return math.Min(floatArg(args, 0), floatArg(args, 1)), nil
-	},
+	"round": builtinRound,
+	"окр":   builtinRound,
+	"abs":   builtinAbs,
+	"абс":   builtinAbs,
+	"int":   builtinTrunc,
+	"цел":   builtinTrunc,
+	"max":   builtinMax,
+	"макс":  builtinMax,
+	"min":   builtinMin,
+	"мин":   builtinMin,
 
 	// ─── JSON ─────────────────────────────────────────────────────────────
 	"прочитатьjson": builtinReadJSON,
@@ -306,6 +234,88 @@ func floatArg(args []any, i int) float64 {
 		}
 	}
 	return 0
+}
+
+func decimalArg(args []any, i int) decimal.Decimal {
+	if i < len(args) {
+		if d, ok := toDecimal(args[i]); ok {
+			return d
+		}
+	}
+	return decimal.Zero
+}
+
+// builtinToString — Строка()/Стр(). Для decimal используем String() напрямую:
+// маршрут через toFloat терял бы точность на больших числах.
+func builtinToString(args []any, file string, line int) (any, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	if d, ok := args[0].(decimal.Decimal); ok {
+		return d.String(), nil
+	}
+	if f, ok := toFloat(args[0]); ok {
+		if f == math.Trunc(f) {
+			return strconv.FormatInt(int64(f), 10), nil
+		}
+		return strconv.FormatFloat(f, 'f', -1, 64), nil
+	}
+	if t, ok := args[0].(time.Time); ok {
+		return t.Format("02.01.2006 15:04:05"), nil
+	}
+	return fmt.Sprintf("%v", args[0]), nil
+}
+
+// builtinToNumber — Число()/Number(). Возвращает decimal, запятая → точка.
+func builtinToNumber(args []any, file string, line int) (any, error) {
+	if len(args) == 0 {
+		return decimal.Zero, nil
+	}
+	if d, ok := args[0].(decimal.Decimal); ok {
+		return d, nil
+	}
+	s := fmt.Sprintf("%v", args[0])
+	d, err := decimal.NewFromString(strings.ReplaceAll(s, ",", "."))
+	if err != nil {
+		return decimal.Zero, nil
+	}
+	return d, nil
+}
+
+// builtinRound — Окр(Число, Точность, Режим). Режим 0 (по умолчанию) —
+// математическое (half away from zero, как Окр в 1С); 1 — банковское.
+func builtinRound(args []any, file string, line int) (any, error) {
+	d := decimalArg(args, 0)
+	places := int32(floatArg(args, 1))
+	mode := int(floatArg(args, 2))
+	if mode == 1 {
+		return d.RoundBank(places), nil
+	}
+	return d.Round(places), nil
+}
+
+func builtinAbs(args []any, file string, line int) (any, error) {
+	return decimalArg(args, 0).Abs(), nil
+}
+
+func builtinTrunc(args []any, file string, line int) (any, error) {
+	return decimalArg(args, 0).Truncate(0), nil
+}
+
+func builtinMax(args []any, file string, line int) (any, error) {
+	a, b := decimalArg(args, 0), decimalArg(args, 1)
+	if a.Cmp(b) >= 0 {
+		return a, nil
+	}
+	return b, nil
+}
+
+func builtinMin(args []any, file string, line int) (any, error) {
+	a, b := decimalArg(args, 0), decimalArg(args, 1)
+	if a.Cmp(b) <= 0 {
+		return a, nil
+	}
+	return b, nil
 }
 
 func toTime(args []any, i int) (time.Time, bool) {

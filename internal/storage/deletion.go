@@ -123,7 +123,7 @@ func (db *DB) ListMarked(ctx context.Context, entityName string, entity *metadat
 		row := make(map[string]any, len(cols))
 		row["id"] = normalizeValue(dest[0])
 		for i, f := range entity.Fields {
-			row[f.Name] = normalizeValue(dest[i+1])
+			row[f.Name] = normalizeFieldValue(f, dest[i+1])
 		}
 		result = append(result, row)
 	}

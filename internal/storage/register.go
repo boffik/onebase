@@ -231,7 +231,7 @@ func (db *DB) GetMovements(ctx context.Context, regName string, reg *metadata.Re
 		}
 		row["вид_движения"] = dest[4]
 		for i, f := range allFields {
-			row[f.Name] = normalizeValue(dest[5+i])
+			row[f.Name] = normalizeFieldValue(f, dest[5+i])
 		}
 		result = append(result, row)
 	}
@@ -275,7 +275,7 @@ func (db *DB) GetDocumentMovements(ctx context.Context, recorderID uuid.UUID, re
 			}
 			row["вид_движения"] = dest[2]
 			for i, f := range allFields {
-				row[f.Name] = normalizeValue(dest[3+i])
+				row[f.Name] = normalizeFieldValue(f, dest[3+i])
 			}
 			regRows = append(regRows, row)
 		}
@@ -335,7 +335,7 @@ func (db *DB) GetBalances(ctx context.Context, regName string, reg *metadata.Reg
 			row[name] = normalizeValue(dest[i])
 		}
 		for i, name := range resNames {
-			row[name] = normalizeValue(dest[len(reg.Dimensions)+i])
+			row[name] = normalizeNumber(dest[len(reg.Dimensions)+i])
 		}
 		result = append(result, row)
 	}

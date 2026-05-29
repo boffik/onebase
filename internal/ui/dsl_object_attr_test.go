@@ -64,7 +64,7 @@ func TestObjectAttributeValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("СтавкаНДС: %v", err)
 	}
-	if v != float64(20) {
+	if toFloat(v) != 20 {
 		t.Errorf("СтавкаНДС = %v (%T), ожидалось 20", v, v)
 	}
 

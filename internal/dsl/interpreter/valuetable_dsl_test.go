@@ -34,7 +34,7 @@ func TestVT_DSL_ForEach(t *testing.T) {
   КонецЦикла;
   Возврат с;
 КонецФункции`
-	if got := runFunc(t, src); got != float64(42) {
+	if got := runFunc(t, src); !numEq(got, 42) {
 		t.Fatalf("сумма через Для Каждого: ожидалось 42, got %v", got)
 	}
 }

@@ -2,6 +2,13 @@ package interpreter
 
 import "testing"
 
+// numEq сравнивает числовой DSL-результат (теперь decimal.Decimal) с ожидаемым
+// значением. Для целочисленных ожиданий InexactFloat64 точен.
+func numEq(got any, want float64) bool {
+	f, ok := toFloat(got)
+	return ok && f == want
+}
+
 // TestWhile_Basic — классический счётчик через Пока ... Цикл.
 func TestWhile_Basic(t *testing.T) {
 	result := evalBreakFunc(t, `Функция Тест()
@@ -13,7 +20,7 @@ func TestWhile_Basic(t *testing.T) {
   КонецЦикла;
   Возврат Сумма;
 КонецФункции`)
-	if result != float64(15) {
+	if !numEq(result, 15) {
 		t.Errorf("expected 15, got %v", result)
 	}
 }
@@ -32,7 +39,7 @@ func TestWhile_Break(t *testing.T) {
   КонецЦикла;
   Возврат Сумма;
 КонецФункции`)
-	if result != float64(6) {
+	if !numEq(result, 6) {
 		t.Errorf("expected 6, got %v", result)
 	}
 }
@@ -51,7 +58,7 @@ func TestWhile_Continue(t *testing.T) {
   КонецЦикла;
   Возврат Сумма;
 КонецФункции`)
-	if result != float64(12) {
+	if !numEq(result, 12) {
 		t.Errorf("expected 12, got %v", result)
 	}
 }
@@ -65,7 +72,7 @@ func TestWhile_ConditionFalse(t *testing.T) {
   КонецЦикла;
   Возврат Счётчик;
 КонецФункции`)
-	if result != float64(0) {
+	if !numEq(result, 0) {
 		t.Errorf("expected 0, got %v", result)
 	}
 }
@@ -79,7 +86,7 @@ func TestWhile_EnglishKeyword(t *testing.T) {
   КонецЦикла;
   Возврат n;
 КонецФункции`)
-	if result != float64(10) {
+	if !numEq(result, 10) {
 		t.Errorf("expected 10, got %v", result)
 	}
 }

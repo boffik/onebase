@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/shopspring/decimal"
 )
 
 // splitCamel turns "ПоступлениеТоваров" into "Поступление товаров" — a
@@ -118,6 +119,8 @@ func echartsJSON(chart *widget.ChartData) template.JS {
 
 func toFloatForCell(v any) float64 {
 	switch t := v.(type) {
+	case decimal.Decimal:
+		return t.InexactFloat64()
 	case float64:
 		return t
 	case float32:
@@ -206,6 +209,11 @@ func fmtReportCell(v any) string {
 			return t.Format("02.01.2006 15:04:05")
 		}
 		return t.Format("02.01.2006")
+	case decimal.Decimal:
+		if t.IsInteger() {
+			return groupThousands(t.IntPart())
+		}
+		return t.String()
 	case float64:
 		if t == float64(int64(t)) {
 			return groupThousands(int64(t))

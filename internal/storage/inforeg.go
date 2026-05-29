@@ -137,11 +137,11 @@ func (db *DB) InfoRegList(ctx context.Context, ir *metadata.InfoRegister) ([]map
 			i = 1
 		}
 		for _, f := range ir.Dimensions {
-			row[f.Name] = normalizeValue(dest[i])
+			row[f.Name] = normalizeFieldValue(f, dest[i])
 			i++
 		}
 		for _, f := range ir.Resources {
-			row[f.Name] = normalizeValue(dest[i])
+			row[f.Name] = normalizeFieldValue(f, dest[i])
 			i++
 		}
 		result = append(result, row)
@@ -334,11 +334,11 @@ func (db *DB) infoRegScan(ctx context.Context, ir *metadata.InfoRegister, sql st
 	result := make(map[string]any, len(allCols))
 	i := 0
 	for _, f := range ir.Dimensions {
-		result[f.Name] = normalizeValue(dest[i])
+		result[f.Name] = normalizeFieldValue(f, dest[i])
 		i++
 	}
 	for _, f := range ir.Resources {
-		result[f.Name] = normalizeValue(dest[i])
+		result[f.Name] = normalizeFieldValue(f, dest[i])
 		i++
 	}
 	return result, nil

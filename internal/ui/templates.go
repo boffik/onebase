@@ -12,6 +12,7 @@ import (
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/shopspring/decimal"
 )
 
 // globalBundle is set by Server at init time so the template FuncMap can access it.
@@ -266,6 +267,8 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 			return int(t)
 		case float64:
 			return int(t)
+		case decimal.Decimal:
+			return int(t.IntPart())
 		}
 		return 0
 	},

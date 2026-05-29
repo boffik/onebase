@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+
+	"github.com/shopspring/decimal"
 )
 
 func builtinReadJSON(args []any, file string, line int) (any, error) {
@@ -77,6 +79,10 @@ func valueToJSON(v any) any {
 			items[i] = valueToJSON(item)
 		}
 		return items
+	case decimal.Decimal:
+		// json.Number маршалится как число без кавычек. По умолчанию shopspring
+		// сериализует decimal строкой ("30"), что ломает совместимость с JSON-числами.
+		return json.Number(x.String())
 	default:
 		return v // string, float64, int64, bool, nil — маршалятся напрямую
 	}

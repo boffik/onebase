@@ -71,8 +71,8 @@ func TestPlan36_CompoundAssignPlus(t *testing.T) {
   Out(x)
 КонецПроцедуры`
 	got := runReturning(t, src)
-	if f, ok := got.(float64); !ok || f != 8 {
-		t.Errorf("+=: got %v (%T), want 8.0", got, got)
+	if !numEq(got, 8) {
+		t.Errorf("+=: got %v (%T), want 8", got, got)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestPlan36_CompoundAssignMul(t *testing.T) {
   Out(x)
 КонецПроцедуры`
 	got := runReturning(t, src)
-	if f, ok := got.(float64); !ok || f != 10 {
-		t.Errorf("*=: got %v (%T), want 10.0", got, got)
+	if !numEq(got, 10) {
+		t.Errorf("*=: got %v (%T), want 10", got, got)
 	}
 }
 

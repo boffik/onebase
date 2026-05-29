@@ -40,7 +40,7 @@ func TestTry_CatchesUserError(t *testing.T) {
 КонецФункции`
 
 	result := evalFuncTry(t, src)
-	if result != float64(1) {
+	if !numEq(result, 1) {
 		t.Fatalf("expected 1, got %v", result)
 	}
 }
@@ -57,7 +57,7 @@ func TestTry_NoError_SkipsExcept(t *testing.T) {
 КонецФункции`
 
 	result := evalFuncTry(t, src)
-	if result != float64(1) {
+	if !numEq(result, 1) {
 		t.Fatalf("expected 1, got %v", result)
 	}
 }
