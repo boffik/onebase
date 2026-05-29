@@ -395,6 +395,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		"имяпользователя", "username",
 		"справочники", "catalogs",
 		"документы", "documents",
+		"регистрынакопления", "accumulationregisters",
 		"предопределённыезначения", "predefinedvalues",
 		"значениереквизитаобъекта", "objectattributevalue",
 	} {

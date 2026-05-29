@@ -1895,6 +1895,8 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg).WithManagerCaller(mgrCaller)
 	// Документы.X.Создать()/.Записать()/.Провести() из обработки.
 	documents := newDocsRoot(s, txState)
+	// РегистрыНакопления.X.Остатки()/.Движения()/.ВыбратьПоРегистратору(Док).
+	accumRegs := newAccumRegsRoot(s, txState)
 	// #2 managed locks: builtin БлокировкаДанных() возвращает свежий LockObject,
 	// привязанный к глобальному менеджеру server'а.
 	lockFactory := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
@@ -1931,6 +1933,8 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	vars["Catalogs"] = catalogs
 	vars["Документы"] = documents
 	vars["Documents"] = documents
+	vars["РегистрыНакопления"] = accumRegs
+	vars["AccumulationRegisters"] = accumRegs
 	vars["БлокировкаДанных"] = lockFactory
 	vars["DataLock"] = lockFactory
 	vars["ТекущийПользователь"] = currentUserFn

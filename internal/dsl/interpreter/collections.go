@@ -104,6 +104,11 @@ type Array struct {
 	items []any
 }
 
+// NewArray создаёт Массив из готового среза значений. Нужен внешним пакетам
+// (ui), которым требуется вернуть в DSL коллекцию с методами Количество()/
+// Получить()/итерацией — items не экспортируется.
+func NewArray(items []any) *Array { return &Array{items: items} }
+
 func (a *Array) CallMethod(name string, args []any) any {
 	switch name {
 	case "добавить", "add":
