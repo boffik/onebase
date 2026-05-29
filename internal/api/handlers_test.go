@@ -308,3 +308,106 @@ func TestAPI_PostDocument_WritesMovements(t *testing.T) {
 		t.Fatalf("ожидалось 1 движение, получено %d: %v", len(rows), rows)
 	}
 }
+
+// Регресс (H1): POST /documents/{e}/{id}/post с ПУСТЫМ телом не должен затирать
+// табличные части документа, а OnPost обязан видеть строки ТЧ (иначе движения
+// считаются по пустой this.Товары). Раньше пустое тело → tpRows=nil → Save
+// перезаписывал ТЧ пустым набором и движения выходили нулевыми.
+func TestAPI_PostDocument_EmptyBody_KeepsTableParts(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+		TableParts: []metadata.TablePart{
+			{Name: "Товары", Fields: []metadata.Field{
+				{Name: "Номенклатура", Type: metadata.FieldTypeString},
+				{Name: "Количество", Type: metadata.FieldTypeNumber},
+			}},
+		},
+	}
+	reg := &metadata.Register{
+		Name:       "Остатки",
+		Dimensions: []metadata.Field{{Name: "Номенклатура", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+	}
+	// OnPost считает движения по строкам ТЧ — если ТЧ пуста, движений не будет.
+	prog := mustParseProgram(t, `Процедура ОбработкаПроведения()
+  Для Каждого Стр Из ЭтотОбъект.Товары Цикл
+    Дв = Движения.Остатки.Добавить();
+    Дв.ВидДвижения = "Приход";
+    Дв.Номенклатура = Стр.Номенклатура;
+    Дв.Количество = Стр.Количество;
+  КонецЦикла;
+КонецПроцедуры`)
+
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.Migrate(ctx, []*metadata.Entity{doc}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{
+		Entities:  []*metadata.Entity{doc},
+		Registers: []*metadata.Register{reg},
+		Programs:  map[string]*ast.Program{"Поступление": prog},
+	})
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+	buildVars := func(c context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any {
+		return dslvars.Common{Ctx: c, Reg: registry, Store: db, Movements: mc}.Build()
+	}
+	svc := &entityservice.Service{Store: db, Reg: registry, Interp: interp, BuildVars: buildVars}
+	h := &handler{reg: registry, store: db, interp: interp, entitySvc: svc}
+
+	// Создаём документ с одной строкой ТЧ через API (__tableparts).
+	body := []byte(`{"Номер":"1","__tableparts":{"Товары":[{"Номенклатура":"Гвоздь","Количество":7}]}}`)
+	rc := reqWithEntity("POST", "/documents/Поступление", body, map[string]string{"entity": "Поступление"}, nil)
+	wc := httptest.NewRecorder()
+	h.createObject(metadata.KindDocument).ServeHTTP(wc, rc)
+	if wc.Code != http.StatusOK {
+		t.Fatalf("create: ожидалось 200, получено %d: %s", wc.Code, wc.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(wc.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	docID := uuid.MustParse(created.ID)
+
+	// Проводим документ ПУСТЫМ телом.
+	rp := reqWithEntity("POST", "/documents/Поступление/"+docID.String()+"/post", nil,
+		map[string]string{"entity": "Поступление", "id": docID.String()}, nil)
+	wp := httptest.NewRecorder()
+	h.postDocument().ServeHTTP(wp, rp)
+	if wp.Code != http.StatusOK {
+		t.Fatalf("post: ожидалось 200, получено %d: %s", wp.Code, wp.Body.String())
+	}
+
+	// 1) Строки ТЧ должны сохраниться, а не обнулиться.
+	tpRows, err := db.GetTablePartRows(ctx, "Поступление", "Товары", docID, doc.TableParts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tpRows) != 1 {
+		t.Fatalf("ТЧ затёрта: ожидалась 1 строка, получено %d: %v", len(tpRows), tpRows)
+	}
+
+	// 2) OnPost увидел строку ТЧ → ровно одно движение.
+	movs, err := db.GetMovements(ctx, "Остатки", reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(movs) != 1 {
+		t.Fatalf("ожидалось 1 движение из ТЧ, получено %d: %v", len(movs), movs)
+	}
+}

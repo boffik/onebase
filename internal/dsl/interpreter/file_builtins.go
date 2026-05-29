@@ -5,30 +5,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
 )
 
 // decodeText tries UTF-8 first; if not valid, decodes as Windows-1251.
+// utf8.Valid — строгая проверка байтов (как в decodeUploadText), в отличие от
+// эвристики «есть руна U+FFFD»: та давала ложные срабатывания на валидном
+// UTF-8, легитимно содержащем U+FFFD, и портила такой текст перекодировкой.
 func decodeText(data []byte) string {
-	s := string(data)
-	if isValidUTF8(s) {
-		return s
+	if utf8.Valid(data) {
+		return string(data)
 	}
 	decoded, err := charmap.Windows1251.NewDecoder().Bytes(data)
 	if err != nil {
-		return s
+		return string(data)
 	}
 	return string(decoded)
-}
-
-func isValidUTF8(s string) bool {
-	for _, r := range s {
-		if r == 0xFFFD {
-			return false
-		}
-	}
-	return true
 }
 
 // ─── dslTextReader (ЧтениеТекста) ──────────────────────────────────────────
@@ -207,7 +201,7 @@ func decodeFileBuiltin(args []any, file string, line int) (any, error) {
 		return nil, fmt.Errorf("ДекодироватьФайл: требуется текст")
 	}
 	s := fmt.Sprintf("%v", args[0])
-	if isValidUTF8(s) {
+	if utf8.ValidString(s) {
 		return s, nil
 	}
 	decoded, err := charmap.Windows1251.NewDecoder().String(s)

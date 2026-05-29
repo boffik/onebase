@@ -152,9 +152,9 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 			vars = s.BuildVars(ctx, mc, &msgs)
 		}
 		if err := s.Interp.Run(proc, obj, vars); err != nil {
-			if dslErr, ok := err.(*interpreter.DSLError); ok {
-				return SaveResult{ID: req.ID, DSLError: dslErr.Error(), DSLMessages: msgs, Movements: mc}, nil
-			}
+			// DSL-ошибка (бизнес-правило), а не технический сбой: отдаём текст
+			// в DSLError, БД не трогаем. И *interpreter.DSLError, и обычная
+			// ошибка форматируются одинаково через Error().
 			return SaveResult{ID: req.ID, DSLError: err.Error(), DSLMessages: msgs, Movements: mc}, nil
 		}
 	}
@@ -171,7 +171,17 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 			}
 		}
 		for _, tp := range req.Entity.TableParts {
-			rows := req.TablePartRows[tp.Name]
+			// Ключ отсутствует в запросе ⇒ ТЧ не передана — не трогаем
+			// существующие строки. Ключ присутствует (в т.ч. с пустым
+			// слайсом) ⇒ перезаписываем. Это отличает «не передано» от
+			// «очистить»: UI всегда шлёт все ключи ТЧ (parseTablePartRows
+			// кладёт пустой слайс для пустых), а частичные REST-запросы и
+			// POST /post с пустым телом могут ключ опустить — тогда строки
+			// ТЧ не должны затираться.
+			rows, ok := req.TablePartRows[tp.Name]
+			if !ok {
+				continue
+			}
 			if rows == nil {
 				rows = []map[string]any{}
 			}
@@ -187,12 +197,23 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 				return s.Store.SetPosted(ctx, req.Entity.Name, req.ID, true)
 			}
 			// «Записать» для уже проведённого документа (только при редактировании,
-			// при IsNew проведения нет в принципе) — сбрасываем движения по всем
-			// регистрам и снимаем флаг проведения. Это правило сохранено из
-			// прежнего ui.submitEdit.
+			// при IsNew проведения нет в принципе) — сбрасываем движения по ВСЕМ
+			// типам регистров (накопления, бухгалтерии, сведений) и снимаем флаг
+			// проведения. Раньше чистились только регистры накопления, из-за чего
+			// движения бухгалтерии/сведений оставались осиротевшими.
 			if !req.IsNew {
 				for _, reg := range s.Reg.Registers() {
 					if err := s.Store.WriteMovements(ctx, reg.Name, req.Entity.Name, req.ID, nil, reg, nil); err != nil {
+						return err
+					}
+				}
+				for _, ar := range s.Reg.AccountRegisters() {
+					if err := s.Store.WriteAccountMovements(ctx, ar.Name, req.Entity.Name, req.ID, nil, ar, nil); err != nil {
+						return err
+					}
+				}
+				for _, ir := range s.Reg.InfoRegisters() {
+					if err := s.Store.WriteInfoMovements(ctx, ir.Name, req.Entity.Name, req.ID, nil, ir, nil); err != nil {
 						return err
 					}
 				}

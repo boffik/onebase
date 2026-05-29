@@ -310,6 +310,19 @@ func (h *handler) postDocument() http.HandlerFunc {
 				return
 			}
 			fields = existing
+			// Догружаем табличные части из БД. Иначе OnPost увидел бы пустую
+			// this.Товары и посчитал движения по пустой ТЧ, а сам документ
+			// потерял бы строки. Передаём их в Save явно (ключ присутствует ⇒
+			// строки сохраняются как есть).
+			tpRows = make(map[string][]map[string]any, len(entity.TableParts))
+			for _, tp := range entity.TableParts {
+				rows, terr := h.store.GetTablePartRows(r.Context(), entityName, tp.Name, id, tp)
+				if terr != nil {
+					writeError(w, http.StatusInternalServerError, terr.Error(), "", 0)
+					return
+				}
+				tpRows[tp.Name] = rows
+			}
 		}
 
 		result, err := h.entitySvc.Save(r.Context(), entityservice.SaveRequest{
@@ -337,10 +350,10 @@ func (h *handler) postDocument() http.HandlerFunc {
 	}
 }
 
-// generateAutoNumber — упрощённый аналог ui.Server.generateNumber. Не пытается
-// использовать Numerator-конфиг (это требует доступа к storage.ComputePeriodKey),
-// просто берёт NextNum для базы. Для API этого достаточно — клиенты, которым
-// нужна сложная нумерация, могут передавать Номер сами.
+// generateAutoNumber генерирует номер документа для API так же, как UI: при
+// наличии Numerator-конфига использует его (ComputePeriodKey + NextNumber +
+// FormatNumber), иначе откатывается на простой NextNum с дополнением нулями.
+// Клиенты, которым нужна особая нумерация, могут передавать Номер сами.
 func generateAutoNumber(ctx context.Context, store *storage.DB, entity *metadata.Entity, fields map[string]any) string {
 	if entity.Numerator != nil {
 		num := entity.Numerator
