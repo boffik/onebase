@@ -21,5 +21,10 @@ func Execute() {
 }
 
 func init() {
+	// Ошибку печатает showError (единая точка: stderr + при необходимости окно),
+	// поэтому cobra не должен печатать её сам — иначе вывод дублируется.
+	rootCmd.SilenceErrors = true
+	rootCmd.PersistentFlags().BoolVar(&noGUI, "no-gui", false,
+		"не показывать модальные окна с ошибками — для скриптов и CI (также ONEBASE_NO_GUI=1)")
 	rootCmd.AddCommand(initCmd, devCmd, runCmd, migrateCmd, buildCmd, startCmd, ibasesCmd, convertCmd, backupCmd, restoreCmd, deployCmd, serviceCmd)
 }
