@@ -129,6 +129,23 @@ func (a *Array) CallMethod(name string, args []any) any {
 		}
 	case "очистить", "clear":
 		a.items = nil
+	case "найти", "find":
+		// Найти(Значение) → индекс (Число) или Неопределено (nil), как в 1С.
+		if len(args) > 0 {
+			for idx, item := range a.items {
+				if compareAny(item, args[0]) == 0 {
+					return float64(idx)
+				}
+			}
+		}
+		return nil
+	case "установить", "set":
+		if len(args) >= 2 {
+			a.SetIndex(int(floatArg(args, 0)), args[1])
+		}
+	case "вграница", "upperbound":
+		// Верхняя граница: Количество-1; для пустого массива -1.
+		return float64(len(a.items) - 1)
 	case "вставить", "insert":
 		if len(args) >= 2 {
 			idx := int(floatArg(args, 0))

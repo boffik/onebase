@@ -390,6 +390,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		"сообщить", "message",
 		"описаниеошибки", "errordescription",
 		"информацияобошибке", "errorinfo",
+		"вычислить", "eval",
 		"блокировкаданных", "datalock",
 		"текущийпользователь", "currentuser",
 		"имяпользователя", "username",

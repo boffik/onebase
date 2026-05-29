@@ -571,6 +571,12 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 	switch callee := c.Callee.(type) {
 	case *ast.Ident:
 		fnName := callee.Tok.Literal
+		// Вычислить(Выражение) — разбор строки как выражения и вычисление в
+		// текущем окружении (видит локальные переменные). Обрабатывается до
+		// обычного поиска builtin, т.к. требует доступа к env.
+		if low := strings.ToLower(fnName); low == "вычислить" || low == "eval" {
+			return i.evalEvalBuiltin(args, e)
+		}
 		if val, ok := e.get(fnName); ok {
 			if bf, ok2 := val.(BuiltinFunc); ok2 {
 				result, err := bf(args, callee.Tok.File, callee.Tok.Line)
@@ -622,6 +628,25 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 		return nil
 	}
 	return nil
+}
+
+// evalEvalBuiltin реализует Вычислить(Выражение): args[0] — строка-выражение.
+// Разбирается через parser.ParseExpr и вычисляется в переданном окружении,
+// поэтому выражение видит локальные переменные процедуры.
+func (i *Interpreter) evalEvalBuiltin(args []any, e *env) any {
+	if len(args) == 0 {
+		return nil
+	}
+	src, ok := args[0].(string)
+	if !ok {
+		panic(userError{Msg: "Вычислить: ожидается строка-выражение"})
+	}
+	p := parser.New(lexer.New(src, "<Вычислить>"))
+	expr, err := p.ParseExpr()
+	if err != nil {
+		panic(userError{Msg: "Вычислить: " + err.Error()})
+	}
+	return i.evalExpr(expr, e)
 }
 
 func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args []any) (retVal any) {
