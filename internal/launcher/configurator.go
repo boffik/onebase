@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -74,19 +75,19 @@ type savePredefined struct {
 // Список/Дерево, Группа» после добавления поля «Поставщик» в Номенклатуру
 // (2026-05-25). Теперь поля сохраняются полностью.
 type saveEntity struct {
-	Name          string           `yaml:"name"`
-	Title         string           `yaml:"title,omitempty"`
+	Name          string            `yaml:"name"`
+	Title         string            `yaml:"title,omitempty"`
 	Titles        map[string]string `yaml:"titles,omitempty"`
-	Hierarchical  bool             `yaml:"hierarchical,omitempty"`
-	HierarchyKind string           `yaml:"hierarchy_kind,omitempty"`
-	Posting       bool             `yaml:"posting,omitempty"`
-	BasedOn       []string         `yaml:"based_on,omitempty"`
-	Numerator     *saveNumerator   `yaml:"numerator,omitempty"`
-	Predefined    []savePredefined `yaml:"predefined,omitempty"`
-	ListForm      []string         `yaml:"list_form,omitempty"`
-	ItemForm      []string         `yaml:"item_form,omitempty"`
-	Fields        []saveField      `yaml:"fields"`
-	TableParts    []saveTP         `yaml:"tableparts,omitempty"`
+	Hierarchical  bool              `yaml:"hierarchical,omitempty"`
+	HierarchyKind string            `yaml:"hierarchy_kind,omitempty"`
+	Posting       bool              `yaml:"posting,omitempty"`
+	BasedOn       []string          `yaml:"based_on,omitempty"`
+	Numerator     *saveNumerator    `yaml:"numerator,omitempty"`
+	Predefined    []savePredefined  `yaml:"predefined,omitempty"`
+	ListForm      []string          `yaml:"list_form,omitempty"`
+	ItemForm      []string          `yaml:"item_form,omitempty"`
+	Fields        []saveField       `yaml:"fields"`
+	TableParts    []saveTP          `yaml:"tableparts,omitempty"`
 }
 
 type saveRegister struct {
@@ -117,6 +118,8 @@ type cfgField struct {
 	Type              string
 	RefEntity         string
 	EnumName          string
+	Length            int // разрядность number(L,P): всего знаков (Длина)
+	Scale             int // знаков после запятой (Точность)
 	FormListHidden    bool
 	FormItemHidden    bool
 	AllowInlineCreate *bool // nil = дефолт контекста (true в шапке, false в ТЧ)
@@ -1032,7 +1035,7 @@ func toCfgField(f metadata.Field) cfgField {
 	} else if f.EnumName != "" {
 		typ = "enum"
 	}
-	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName, AllowInlineCreate: f.AllowInlineCreate}
+	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName, Length: f.Length, Scale: f.Scale, AllowInlineCreate: f.AllowInlineCreate}
 }
 
 func readOSSources(dir string) (sources, postingSources, managerSources map[string]string) {
@@ -1551,6 +1554,24 @@ func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
 	renderCfg(w, r, fresh)
 }
 
+// numberTypeWithSpec превращает тип "number" в инлайн-нотацию "number(L,P)",
+// если на форме заданы разрядность (Длина) и точность. Для остальных типов
+// (включая уже собранные "reference:X"/"enum:X") возвращает typ без изменений.
+func numberTypeWithSpec(typ, lengthVal, scaleVal string) string {
+	if typ != "number" {
+		return typ
+	}
+	l, _ := strconv.Atoi(strings.TrimSpace(lengthVal))
+	if l <= 0 {
+		return typ
+	}
+	s, _ := strconv.Atoi(strings.TrimSpace(scaleVal))
+	if s < 0 {
+		s = 0
+	}
+	return fmt.Sprintf("number(%d,%d)", l, s)
+}
+
 func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -1620,6 +1641,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			}
 			typ = typ + ":" + ref
 		}
+		typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("field.%d.length", i)), r.FormValue(fmt.Sprintf("field.%d.scale", i)))
 		sf := saveField{Name: name, Type: typ}
 		// allow_inline_create — пишем только если значение отличается от дефолта
 		// контекста (true в шапке). Шаблон отрисовывает hidden inline_present=1
@@ -1654,6 +1676,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			}
 			typ = typ + ":" + ref
 		}
+		typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("new_field.%d.length", i)), r.FormValue(fmt.Sprintf("new_field.%d.scale", i)))
 		fields = append(fields, saveField{Name: name, Type: typ})
 	}
 
@@ -1680,6 +1703,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 				}
 				typ = typ + ":" + ref
 			}
+			typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("tp.%s.field.%d.length", tpName, i)), r.FormValue(fmt.Sprintf("tp.%s.field.%d.scale", tpName, i)))
 			sf := saveField{Name: name, Type: typ}
 			// В ТЧ дефолт allow_inline_create = false; пишем только если
 			// чекбокс установлен (отличие от дефолта).
@@ -1727,6 +1751,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 				}
 				typ = typ + ":" + ref
 			}
+			typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("new_tp.%d.field.%d.length", ntp, i)), r.FormValue(fmt.Sprintf("new_tp.%d.field.%d.scale", ntp, i)))
 			f = append(f, saveField{Name: name, Type: typ})
 		}
 		tpFields[tpKey] = f

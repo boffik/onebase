@@ -42,15 +42,15 @@ type rawEntity struct {
 	Title         string            `yaml:"title"`
 	Titles        map[string]string `yaml:"titles"`
 	Fields        []rawField        `yaml:"fields"`
-	TableParts    []rawTablePart  `yaml:"tableparts"`
-	Posting       bool            `yaml:"posting"`
-	Numerator     *rawNumerator   `yaml:"numerator"`
-	Predefined    []rawPredefined `yaml:"predefined"`
-	Hierarchical  bool            `yaml:"hierarchical"`
-	HierarchyKind string          `yaml:"hierarchy_kind"`
-	ListForm      []string        `yaml:"list_form"`
-	ItemForm      []string        `yaml:"item_form"`
-	BasedOn       []string        `yaml:"based_on"`
+	TableParts    []rawTablePart    `yaml:"tableparts"`
+	Posting       bool              `yaml:"posting"`
+	Numerator     *rawNumerator     `yaml:"numerator"`
+	Predefined    []rawPredefined   `yaml:"predefined"`
+	Hierarchical  bool              `yaml:"hierarchical"`
+	HierarchyKind string            `yaml:"hierarchy_kind"`
+	ListForm      []string          `yaml:"list_form"`
+	ItemForm      []string          `yaml:"item_form"`
+	BasedOn       []string          `yaml:"based_on"`
 }
 
 func LoadFile(path string, kind Kind) (*Entity, error) {
@@ -229,6 +229,10 @@ func LoadConstantsFile(path string) ([]*Constant, error) {
 			c.RefEntity = strings.TrimPrefix(rc.Type, "reference:")
 		} else if strings.HasPrefix(rc.Type, "enum:") {
 			c.EnumName = strings.TrimPrefix(rc.Type, "enum:")
+		} else if l, s, ok := parseNumberSpec(rc.Type); ok {
+			c.Type = FieldTypeNumber
+			c.Length = l
+			c.Scale = s
 		}
 		result = append(result, c)
 	}
@@ -241,6 +245,38 @@ func parseField(rf rawField) Field {
 		f.RefEntity = strings.TrimPrefix(rf.Type, "reference:")
 	} else if strings.HasPrefix(rf.Type, "enum:") {
 		f.EnumName = strings.TrimPrefix(rf.Type, "enum:")
+	} else if l, s, ok := parseNumberSpec(rf.Type); ok {
+		// "number(10,2)" / "decimal(15,2)" / "decimal(15)" → number с разрядностью.
+		f.Type = FieldTypeNumber
+		f.Length = l
+		f.Scale = s
 	}
 	return f
+}
+
+// parseNumberSpec разбирает инлайн-нотацию разрядности числового типа:
+// "number(10,2)" → 10,2; "decimal(15,2)" → 15,2; "decimal(15)" → 15,0.
+// Возвращает ok=false для всех остальных строк (включая голый "number").
+// Семантика как в SQL NUMERIC(precision, scale) и в 1С (Длина, Точность).
+func parseNumberSpec(typ string) (length, scale int, ok bool) {
+	t := strings.TrimSpace(typ)
+	idx := strings.Index(t, "(")
+	if idx <= 0 || !strings.HasSuffix(t, ")") {
+		return 0, 0, false
+	}
+	base := strings.TrimSpace(t[:idx])
+	if base != "number" && base != "decimal" {
+		return 0, 0, false
+	}
+	params := t[idx+1 : len(t)-1]
+	parts := strings.Split(params, ",")
+	if len(parts) >= 1 {
+		if _, err := fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", &length); err != nil {
+			return 0, 0, false
+		}
+	}
+	if len(parts) >= 2 {
+		fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &scale)
+	}
+	return length, scale, true
 }

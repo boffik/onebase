@@ -643,17 +643,28 @@ function cfgToggleRef(sel, refId) {
     r.style.display = 'none';
   }
 }
+// cfgToggleNum показывает поля «Длина, Точность» только для типа «число».
+function cfgToggleNum(sel, numId) {
+  var n = document.getElementById(numId);
+  if (!n) return;
+  n.style.display = (sel.value === 'number') ? '' : 'none';
+}
 var _cfgNewFieldIdx = 0;
 function cfgAddField(tblId, prefix, entityName) {
   _cfgNewFieldIdx++;
   var tbl = document.getElementById(tblId);
   if (!tbl) return;
   var refId = 'cfr-'+entityName+'-nf'+_cfgNewFieldIdx;
+  var numId = 'cfn-'+entityName+'-nf'+_cfgNewFieldIdx;
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><input name="'+prefix+'.'+_cfgNewFieldIdx+'.name" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px" placeholder="ИмяПоля"></td>'
-    +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.type" onchange="cfgToggleRef(this,\''+refId+'\')">'
+    +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.type" onchange="cfgToggleRef(this,\''+refId+'\');cfgToggleNum(this,\''+numId+'\')">'
     +'<option value="string">{{t $.Lang "строка"}}</option><option value="number">{{t $.Lang "число"}}</option><option value="date">{{t $.Lang "дата"}}</option><option value="bool">{{t $.Lang "булево"}}</option><option value="reference">{{t $.Lang "ссылка →"}}</option><option value="enum">{{t $.Lang "перечисление →"}}</option>'
-    +'</select></td>'
+    +'</select>'
+    +' <span id="'+numId+'" style="display:none" title="{{t $.Lang "Длина, Точность"}}">'
+    +'<input type="number" min="1" name="'+prefix+'.'+_cfgNewFieldIdx+'.length" placeholder="дл" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">'
+    +' , <input type="number" min="0" name="'+prefix+'.'+_cfgNewFieldIdx+'.scale" placeholder="точн" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">'
+    +'</span></td>'
     +'<td><select name="'+prefix+'.'+_cfgNewFieldIdx+'.ref" id="'+refId+'" style="display:none">'
     +'<option value="">{{t $.Lang "— выбрать —"}}</option>'
     +'</select></td>';
@@ -3873,7 +3884,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 <tr>
   <td>{{$f.Name}}</td>
   <td>
-    <select name="field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-f{{$i}}')">
+    <select name="field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-f{{$i}}');cfgToggleNum(this,'cfn-{{$e.Name}}-f{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
       <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
       <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
@@ -3881,6 +3892,10 @@ const cfgTabTree = `{{define "tab-tree"}}
       <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
       <option value="enum"      {{if eq $f.Type "enum"}}selected{{end}}>{{t $.Lang "перечисление →"}}</option>
     </select>
+    <span id="cfn-{{$e.Name}}-f{{$i}}"{{if ne $f.Type "number"}} style="display:none"{{end}} title="{{t $.Lang "Длина, Точность"}}">
+      <input type="number" min="1" name="field.{{$i}}.length" value="{{if $f.Length}}{{$f.Length}}{{end}}" placeholder="дл" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">
+      , <input type="number" min="0" name="field.{{$i}}.scale" value="{{if $f.Length}}{{$f.Scale}}{{end}}" placeholder="точн" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">
+    </span>
   </td>
   <td>
     <select name="field.{{$i}}.ref" id="cfr-{{$e.Name}}-f{{$i}}"{{if and (ne $f.Type "reference") (ne $f.Type "enum")}} style="display:none"{{end}}>
@@ -3915,7 +3930,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 <tr>
   <td>{{$f.Name}}</td>
   <td>
-    <select name="tp.{{$tp.Name}}.field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-tp{{$j}}f{{$i}}')">
+    <select name="tp.{{$tp.Name}}.field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-tp{{$j}}f{{$i}}');cfgToggleNum(this,'cfn-{{$e.Name}}-tp{{$j}}f{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
       <option value="number"    {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
       <option value="date"      {{if eq $f.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
@@ -3923,6 +3938,10 @@ const cfgTabTree = `{{define "tab-tree"}}
       <option value="reference" {{if eq $f.Type "reference"}}selected{{end}}>{{t $.Lang "ссылка →"}}</option>
       <option value="enum"      {{if eq $f.Type "enum"}}selected{{end}}>{{t $.Lang "перечисление →"}}</option>
     </select>
+    <span id="cfn-{{$e.Name}}-tp{{$j}}f{{$i}}"{{if ne $f.Type "number"}} style="display:none"{{end}} title="{{t $.Lang "Длина, Точность"}}">
+      <input type="number" min="1" name="tp.{{$tp.Name}}.field.{{$i}}.length" value="{{if $f.Length}}{{$f.Length}}{{end}}" placeholder="дл" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">
+      , <input type="number" min="0" name="tp.{{$tp.Name}}.field.{{$i}}.scale" value="{{if $f.Length}}{{$f.Scale}}{{end}}" placeholder="точн" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">
+    </span>
   </td>
   <td>
     <select name="tp.{{$tp.Name}}.field.{{$i}}.ref" id="cfr-{{$e.Name}}-tp{{$j}}f{{$i}}"{{if and (ne $f.Type "reference") (ne $f.Type "enum")}} style="display:none"{{end}}>

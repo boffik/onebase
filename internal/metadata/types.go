@@ -1,4 +1,4 @@
-﻿package metadata
+package metadata
 
 import "strings"
 
@@ -28,6 +28,12 @@ type Field struct {
 	Type      FieldType
 	RefEntity string // non-empty when Type starts with "reference:"
 	EnumName  string // non-empty when Type starts with "enum:"
+	// Length и Scale задают разрядность числового реквизита (Type=number),
+	// по аналогии с 1С (Длина, Точность) и SQL NUMERIC(precision, scale).
+	// Length — всего знаков, Scale — знаков после запятой. Непустые только
+	// когда тип задан как "number(L,P)" / "decimal(L,P)". 0,0 = без ограничения.
+	Length int
+	Scale  int
 	// AllowInlineCreate управляет показом кнопки «+» (создать новый элемент
 	// справочника, не покидая формы) у ссылочного поля. nil = дефолт по
 	// контексту: для полей шапки true, для полей ТЧ false. Переопределяется
@@ -74,6 +80,8 @@ type Constant struct {
 	Default   string
 	Label     string
 	Labels    map[string]string // переводы подписи по языкам
+	Length    int               // разрядность для number(L,P), см. Field
+	Scale     int
 }
 
 // DisplayLabel возвращает подпись константы с учётом языка.

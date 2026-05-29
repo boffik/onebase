@@ -607,5 +607,6 @@
   "Управляемая форма": "Managed form",
   "Форма объекта": "Object form",
   "есть": "yes",
-  "нет управляемых форм.": "no managed forms."
+  "нет управляемых форм.": "no managed forms.",
+  "Длина, Точность": "Length, Precision"
 }

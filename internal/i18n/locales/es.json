@@ -601,5 +601,6 @@
   "Управляемая форма": "Formulario gestionado",
   "Форма объекта": "Formulario de objeto",
   "есть": "sí",
-  "нет управляемых форм.": "no hay formularios gestionados."
+  "нет управляемых форм.": "no hay formularios gestionados.",
+  "Длина, Точность": "Longitud, Precisión"
 }

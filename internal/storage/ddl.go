@@ -1,4 +1,4 @@
-﻿package storage
+package storage
 
 import (
 	"context"
@@ -16,7 +16,7 @@ func fieldType(d Dialect, f metadata.Field) string {
 	case metadata.FieldTypeDate:
 		return d.TypeTimestamp()
 	case metadata.FieldTypeNumber:
-		return d.TypeNumber(0, 0)
+		return d.TypeNumber(f.Length, f.Scale)
 	case metadata.FieldTypeBool:
 		return d.TypeBool()
 	default:
