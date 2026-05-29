@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -177,6 +178,12 @@ func (s *Server) ListenAndServe() error {
 		close(s.quit)
 	})
 
-	s.httpSrv = &http.Server{Handler: r}
+	// Slowloris-защита (см. api/server.go): только ReadHeaderTimeout + IdleTimeout.
+	// WriteTimeout не ставим — launcher проксирует SSE-события отладчика.
+	s.httpSrv = &http.Server{
+		Handler:           r,
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	return s.httpSrv.Serve(s.ln)
 }

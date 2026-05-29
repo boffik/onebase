@@ -65,8 +65,12 @@ type Interpreter struct {
 	// идентификатор, не разрешённый в env как переменная. См.
 	LookupModuleProc func(module, name string) *ast.ProcedureDecl
 	DebugHook        DebugHook // nil = no debugging
-	curFile          string    // last executed statement location (for error reporting)
-	curLine          int
+	// MaxRecursionDepth ограничивает глубину вложенных вызовов процедур/функций.
+	// 0 = defaultMaxRecursionDepth. Поле (а не глобальная константа), чтобы порог
+	// можно было задать per-Interpreter и понизить в тестах стража рекурсии.
+	MaxRecursionDepth int
+	curFile           string // last executed statement location (for error reporting)
+	curLine           int
 }
 
 func New() *Interpreter { return &Interpreter{} }
@@ -326,8 +330,7 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 		}
 	case *ast.WhileStmt:
 		// Защита от зацикливания: сессия onebase однопоточная, runaway-цикл
-		// заблокировал бы всю работу платформы.
-		const maxWhileIter = 50_000_000
+		// заблокировал бы всю работу платформы. Лимит — см. limits.go.
 		iter := 0
 		for truthy(i.evalExpr(v.Cond, e)) {
 			iter++
@@ -654,6 +657,16 @@ func (i *Interpreter) evalEvalBuiltin(args []any, e *env) any {
 }
 
 func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args []any) (retVal any) {
+	// Страж рекурсии: env нового кадра будет на уровень глубже вызывающего.
+	// Обрываем ДО создания кадра и проброса в отладчик, иначе бесконечная
+	// рекурсия переполнит стек горутины и аварийно уронит процесс (мимо Попытки).
+	limit := i.MaxRecursionDepth
+	if limit <= 0 {
+		limit = defaultMaxRecursionDepth
+	}
+	if callEnv.depth+1 > limit {
+		RaiseUserError(fmt.Sprintf("Превышена максимальная глубина рекурсии (%d) — вероятно, бесконечный вызов процедуры/функции", limit))
+	}
 	if i.DebugHook != nil {
 		i.DebugHook.HookPushFrame(proc.Name.Literal, 0)
 		defer i.DebugHook.HookPopFrame()
@@ -668,7 +681,7 @@ func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args [
 			}
 		}
 	}()
-	child := &env{vars: make(map[string]any), parent: callEnv, this: callEnv.this}
+	child := &env{vars: make(map[string]any), parent: callEnv, this: callEnv.this, depth: callEnv.depth + 1}
 	for idx, param := range proc.Params {
 		if idx < len(args) {
 			child.set(param.Literal, args[idx])

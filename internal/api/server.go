@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -77,7 +78,17 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	}
 
 	addr := fmt.Sprintf(":%d", port)
-	return &Server{handler: r, srv: &http.Server{Addr: addr, Handler: r}}
+	return &Server{handler: r, srv: &http.Server{
+		Addr:    addr,
+		Handler: r,
+		// Slowloris-защита: обрываем клиента, который медленно шлёт заголовки,
+		// и закрываем простаивающие keep-alive соединения. ReadTimeout/
+		// WriteTimeout НАМЕРЕННО не выставлены — они оборвали бы загрузку
+		// крупных .obz при восстановлении, SSE-стрим отладчика и скачивание
+		// бэкапов. Тело запроса ограничивается отдельными MaxBytesReader.
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}}
 }
 
 func (s *Server) Handler() http.Handler { return s.handler }

@@ -41,14 +41,18 @@ type env struct {
 	vars   map[string]any
 	parent *env
 	this   This
+	// depth — глубина вызова процедур/функций (корень = 1). Растёт на каждый
+	// callUserProc; используется стражем рекурсии (см. limits.go). O(1) и
+	// потокобезопасно: счётчик живёт в цепочке env конкретного запуска.
+	depth int
 }
 
 func newEnv(this This) *env {
-	return &env{vars: make(map[string]any), this: this}
+	return &env{vars: make(map[string]any), this: this, depth: 1}
 }
 
 func (e *env) child() *env {
-	return &env{vars: make(map[string]any), parent: e, this: e.this}
+	return &env{vars: make(map[string]any), parent: e, this: e.this, depth: e.depth + 1}
 }
 
 func (e *env) get(name string) (any, bool) {
