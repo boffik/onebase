@@ -76,6 +76,21 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		}
 		return out
 	},
+	"formLabel": func(name string) string {
+			lower := strings.ToLower(name)
+			switch lower {
+			case "формаобъекта":
+				return "Форма объекта"
+			case "формасписка":
+				return "Форма списка"
+			case "формавыбора":
+				return "Форма выбора"
+			case "форма":
+				return "Форма"
+			default:
+				return name
+			}
+		},
 }).Parse(cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgFoot))
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
@@ -105,17 +120,17 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 .sidebar-toggle{position:absolute;left:220px;top:50%;z-index:10;width:16px;height:40px;background:#e8ecf2;border:1px solid #d8dde8;border-left:none;border-radius:0 4px 4px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;transition:left .2s}
 .sidebar-toggle.collapsed{left:0}
 .cfg-group{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px}
-.cfg-tree details summary{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.cfg-tree details summary{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px 4px;margin-top:4px;cursor:pointer;list-style:none;display:flex;align-items:center;gap:2px}
 .cfg-tree details summary::-webkit-details-marker{display:none}
 
 .cfg-sub{padding:2px 12px 2px 36px;font-size:11px;color:#6b7280;cursor:pointer;border-left:2px solid transparent}
 .cfg-sub:hover{background:#f0f4ff;color:#1a4a80}
 .cfg-sub-label{font-size:10px;color:#94a3b8;padding:2px 12px 2px 36px;border-left:2px solid transparent}
 .cfg-group:first-child{margin-top:0}
-.cfg-item{padding:6px 12px 6px 20px;cursor:pointer;font-size:13px;color:#333;display:flex;align-items:center;gap:6px;border-left:2px solid transparent}
+.cfg-item{padding:6px 12px 6px 12px;cursor:pointer;font-size:13px;color:#333;display:flex;align-items:center;gap:4px;border-left:2px solid transparent}
 .cfg-item:hover{background:#f0f4ff;color:#1a4a80}
 .cfg-item.sel{background:#e8eeff;color:#1a4a80;font-weight:600;border-left-color:#1a4a80}
-.cfg-item .ic{font-size:13px;flex-shrink:0}
+.cfg-item .ic{font-size:14px;flex-shrink:0;width:20px;text-align:center;line-height:1}
 .cfg-item .bp{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:2px}
 .cfg-dirty{color:#e8b400;font-weight:700;margin-left:4px;font-size:14px;cursor:help}
 
@@ -202,8 +217,8 @@ pre.os-code{
 .hl-cmt{color:#546e7a;font-style:italic}
 
 /* ── New object form ─────────────────────────────────── */
-.cfg-group-hd{display:flex;justify-content:space-between;align-items:center;padding-right:6px}
-.cfg-add-btn{cursor:pointer;color:#1a4a80;font-size:17px;line-height:1;padding:0 4px;border-radius:3px;font-weight:400;opacity:.7}
+.cfg-group-hd{display:flex;align-items:center;padding-right:6px}
+.cfg-add-btn{cursor:pointer;color:#1a4a80;font-size:17px;line-height:1;padding:0 4px;border-radius:3px;font-weight:400;opacity:.7;margin-left:auto}
 .cfg-add-btn:hover{background:#e0e8ff;opacity:1}
 .tree-toggle{font-size:10px;margin-right:4px;user-select:none}
 .cfg-new-form{padding:8px 10px 10px;border-top:1px solid #d8dde8;margin-top:4px}
@@ -2760,7 +2775,7 @@ function dbgRenderBreakpoints(editorId) {
 }
 </script>
 <script>
-document.querySelectorAll('.cfg-tree details').forEach(function(d){
+document.querySelectorAll('details.cfg-tree').forEach(function(d){
   var a=d.querySelector('.tree-toggle');if(!a)return;
   function u(){a.textContent=d.open?'▾':'▸'}
   d.addEventListener('toggle',u);u();
@@ -2800,7 +2815,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Справочники"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="{{t $.Lang "Добавить справочник"}}">+</span></summary>
   {{range .Catalogs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
-    <span class="ic">📄</span>{{.Name}}
+    <span class="ic">📕</span>{{.Name}}
   </div>
   {{end}}
   </details>
@@ -2808,7 +2823,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Документы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="{{t $.Lang "Добавить документ"}}">+</span></summary>
   {{range .Docs}}
   <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
-    <span class="ic">📃</span>{{.Name}}{{if .Posting}}<span class="bp">✓</span>{{end}}
+    <span class="ic">📄</span>{{.Name}}{{if .Posting}}<span class="bp">✓</span>{{end}}
   </div>
   {{end}}
   </details>
@@ -2845,15 +2860,15 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group"><span class="tree-toggle">▾</span>{{t $.Lang "Константы"}}</summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Константы"}}</span></summary>
   {{range .Constants}}
   <div class="cfg-item" data-id="cn-{{.Name}}" onclick="selItem(this)">
-    <span class="ic">⚙</span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
+    <span class="ic">🔒</span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
   </div>
   {{end}}
   </details>
 
-  <details open class="cfg-tree"><summary class="cfg-group"><span class="tree-toggle">▾</span>{{t $.Lang "Отчёты"}}</summary>
+  <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Отчёты"}}</span></summary>
   {{range .Reports}}
   <div class="cfg-item" data-id="rep-{{.Name}}" onclick="selItem(this)">
     <span class="ic">📈</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}
@@ -2897,12 +2912,12 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   <details open class="cfg-tree">
     <summary class="cfg-group cfg-group-hd">
-      <span><a href="/bases/{{.Base.ID}}/configurator/forms" style="color:inherit;text-decoration:none" title="{{t $.Lang "Все управляемые формы"}}">◇ {{t $.Lang "Управляемые формы"}}</a></span>
+      <span class="tree-toggle">▾</span><span><a href="/bases/{{.Base.ID}}/configurator/forms" style="color:inherit;text-decoration:none" title="{{t $.Lang "Все управляемые формы"}}">◇ {{t $.Lang "Управляемые формы"}}</a></span>
     </summary>
     {{range .ManagedForms}}
     <div class="cfg-item">
       <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}" style="color:inherit;text-decoration:none;display:block">
-        <span class="ic">◇</span>{{.Entity}}.{{.Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">{{.Kind}}</span>
+        <span class="ic">◇</span>{{.Entity}} · {{formLabel .Name}}<span style="color:#aaa;font-size:10px;margin-left:4px">{{.Kind}}</span>
       </a>
     </div>
     {{end}}
@@ -2919,7 +2934,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <details open class="cfg-tree"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▾</span><span>{{t $.Lang "Виджеты"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('widget')" title="{{t $.Lang "Добавить виджет"}}">+</span></summary>
   {{range .Widgets}}
   <div class="cfg-item" data-id="wdg-{{.Name}}" onclick="selItem(this)">
-    <span class="ic">📊</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}<span style="color:#aaa;font-size:10px;margin-left:4px">[{{.Type}}]</span>
+    <span class="ic">🧩</span>{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}<span style="color:#aaa;font-size:10px;margin-left:4px">[{{.Type}}]</span>
   </div>
   {{end}}
   </details>
@@ -3207,7 +3222,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{range .Constants}}
   {{$cn := .}}
   <div class="cfg-panel" id="cn-{{.Name}}">
-    <div class="panel-title">⚙ {{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</div>
+    <div class="panel-title">🔒 {{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</div>
     <div class="panel-kind">{{t $.Lang "Константа"}} · <span class="{{fieldTypeClass .Type}}">{{fieldTypeLabel .Type .RefEntity}}</span></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/constant" style="margin-top:12px">
       <input type="hidden" name="const_name" value="{{.Name}}">
@@ -3400,7 +3415,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <tbody>
 		{{range $procForms}}
         <tr style="border-bottom:1px solid #eef0f5">
-          <td style="padding:6px 8px">â {{.Name}}</td>
+          <td style="padding:6px 8px">â {{formLabel .Name}}</td>
           <td style="padding:6px 8px">{{if .Kind}}{{.Kind}}{{else}}â{{end}}</td>
           <td style="padding:6px 8px">{{if .HasOS}}{{t $.Lang "есть"}}{{else}}â{{end}}</td>
           <td style="text-align:right;padding:6px 8px">
@@ -3653,7 +3668,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   {{/* Widgets */}}
   {{range .Widgets}}
   <div class="cfg-panel" id="wdg-{{.Name}}">
-    <div class="panel-title">📊 {{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}</div>
+    <div class="panel-title">🧩 {{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}</div>
     <div class="panel-kind">{{t $.Lang "Виджет дашборда"}} · {{t $.Lang "тип"}} <b>{{.Type}}</b></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/widget">
       <input type="hidden" name="widget_name" value="{{.Name}}">
@@ -4064,7 +4079,7 @@ const cfgTabTree = `{{define "tab-tree"}}
     <tbody>
     {{range $mine}}
     <tr style="border-bottom:1px solid #eef0f5">
-      <td style="padding:6px 8px">◇ {{.Name}}</td>
+      <td style="padding:6px 8px">◇ {{formLabel .Name}}</td>
       <td style="padding:6px 8px">{{if .Kind}}{{.Kind}}{{else}}—{{end}}</td>
       <td style="padding:6px 8px">{{if .HasOS}}есть{{else}}—{{end}}</td>
       <td style="text-align:right;padding:6px 8px">
