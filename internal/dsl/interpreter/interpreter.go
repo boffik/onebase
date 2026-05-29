@@ -440,6 +440,8 @@ func (i *Interpreter) evalNew(n *ast.NewExpr, e *env) any {
 		return &Map{}
 	case "структура", "structure":
 		return newStruct(args)
+	case "таблицазначений", "valuetable":
+		return NewValueTable(args)
 	}
 	// Расширяемые типы через env: "__factory_<ИмяТипа>"
 	if factory, ok := e.get("__factory_" + typeName); ok {
