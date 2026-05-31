@@ -280,12 +280,12 @@ type navGroup struct {
 }
 
 func (s *Server) buildNav(r *http.Request, sub string) []navGroup {
-	subs := s.reg.Subsystems()
-	if len(subs) > 0 {
-		cur := s.reg.GetSubsystem(sub)
-		if cur == nil {
-			cur = subs[0]
-		}
+	// Нейтральный старт: на глобальной главной (подсистема не выбрана) показываем
+	// плоский список всех объектов и не привязываемся к конкретной подсистеме.
+	if sub == "" {
+		return s.buildFlatNav(r)
+	}
+	if cur := s.reg.GetSubsystem(sub); cur != nil {
 		return s.buildNavForSubsystem(r, cur, sub)
 	}
 	return s.buildFlatNav(r)

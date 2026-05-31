@@ -449,7 +449,7 @@ body{padding-bottom:32px}
 const tplNav = `
 {{define "nav"}}
 <header class="topbar">
-  <span class="topbar-title">{{if .Cfg.Logo}}<img src="/ui/logo" alt="" style="height:22px;max-width:90px;vertical-align:middle;margin-right:6px;border-radius:2px">{{end}}⚡ {{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</span>
+  <a href="/ui/" class="topbar-title" style="text-decoration:none;color:inherit" title="{{t $.Lang "Главная"}}">{{if .Cfg.Logo}}<img src="/ui/logo" alt="" style="height:22px;max-width:90px;vertical-align:middle;margin-right:6px;border-radius:2px">{{end}}⚡ {{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</a>
   <div class="sys-menu">
     <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; {{t $.Lang "Система"}} &#9660;</button>
     <div class="sys-drop" id="sysd">
@@ -480,12 +480,13 @@ const tplNav = `
 {{end}}
 {{if .Subsystems}}
 <nav class="subsys-bar">
+  <a href="/ui/" class="{{if not .CurrentSubsystem}}active{{end}}">{{t $.Lang "Главная"}}</a>
   {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{.DisplayName $.Lang}}</a>{{end}}
 </nav>
 {{end}}
 <div class="app-body">
 <aside>
-  <a href="/ui{{if .CurrentSubsystem}}/?subsystem={{.CurrentSubsystem}}{{end}}" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">{{t $.Lang "Главная"}}</a>
+  {{if not .Subsystems}}<a href="/ui/" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">{{t $.Lang "Главная"}}</a>{{end}}
   {{range .Nav}}
   <div class="sec">{{.Kind}}</div>
   {{range .Items}}<a href="{{.URL}}" title="{{.Label}}">{{navLabel .Label}}</a>
@@ -533,9 +534,11 @@ const tplIndex = `
   <h2 style="margin-bottom:14px">{{.HomeTitle}}</h2>
   {{if .DefaultedHome}}<div class="w-default-hint">Стартовая страница не настроена — показаны последние документы из аудита. Создайте <code>config/home_page.yaml</code> и виджеты в <code>widgets/</code>, чтобы оформить дашборд.</div>{{end}}
   <div class="dash">
+    {{range .WidgetRows}}
     <div class="dash-row">
-      {{range .WidgetResults}}{{template "widget-card" .}}{{end}}
+      {{range .}}{{template "widget-card" .}}{{end}}
     </div>
+    {{end}}
   </div>
 </main></div>
 <script>

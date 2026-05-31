@@ -59,6 +59,37 @@ func TestLoadHomePage_Missing(t *testing.T) {
 	}
 }
 
+func TestRowGroups(t *testing.T) {
+	hp := &HomePage{Rows: []HomePageRow{
+		{Widgets: []string{"A", "B"}},
+		{Widgets: []string{"C"}},
+	}}
+	groups := hp.RowGroups()
+	if len(groups) != 2 {
+		t.Fatalf("RowGroups len = %d, want 2", len(groups))
+	}
+	if len(groups[0]) != 2 || groups[0][0] != "A" || groups[0][1] != "B" {
+		t.Errorf("group 0 = %v, want [A B]", groups[0])
+	}
+	if len(groups[1]) != 1 || groups[1][0] != "C" {
+		t.Errorf("group 1 = %v, want [C]", groups[1])
+	}
+
+	// Flat widgets append as a trailing group.
+	hp2 := &HomePage{
+		Rows:    []HomePageRow{{Widgets: []string{"A"}}},
+		Widgets: []HomePageWidget{{Name: "X"}, {Name: "Y"}},
+	}
+	g2 := hp2.RowGroups()
+	if len(g2) != 2 || len(g2[1]) != 2 || g2[1][0] != "X" || g2[1][1] != "Y" {
+		t.Errorf("RowGroups with flat = %v", g2)
+	}
+
+	if (*HomePage)(nil).RowGroups() != nil {
+		t.Error("nil HomePage RowGroups should be nil")
+	}
+}
+
 func TestApplyDefaults(t *testing.T) {
 	// Empty → title "Главная", layout "rows"
 	h := &HomePage{}
@@ -66,8 +97,8 @@ func TestApplyDefaults(t *testing.T) {
 	if h.Title != "Главная" {
 		t.Errorf("default title = %q, want %q", h.Title, "Главная")
 	}
-	if h.Layout != "rows" {
-		t.Errorf("default layout (no widgets) = %q, want rows", h.Layout)
+	if h.Layout != "auto" {
+		t.Errorf("default layout (no widgets) = %q, want auto", h.Layout)
 	}
 
 	// With flat widgets → layout "grid"

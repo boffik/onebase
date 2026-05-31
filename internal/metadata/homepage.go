@@ -45,6 +45,11 @@ func (h *HomePage) DisplayTitle(lang string) string {
 }
 
 // applyDefaults fills in zero-value fields with sensible defaults.
+//
+// Раскладка по умолчанию — "auto": все виджеты идут одним потоком и переносятся
+// по ширине. Режим "rows" (соблюдение настроенных рядов) — только явный opt-in,
+// чтобы существующие дашборды не меняли вид. Для flat-виджетов сохраняем "grid"
+// (рендерится так же, как auto).
 func (h *HomePage) applyDefaults() {
 	if h.Title == "" {
 		h.Title = "Главная"
@@ -53,7 +58,7 @@ func (h *HomePage) applyDefaults() {
 		if len(h.Widgets) > 0 {
 			h.Layout = "grid"
 		} else {
-			h.Layout = "rows"
+			h.Layout = "auto"
 		}
 	}
 }
@@ -90,4 +95,28 @@ func (h *HomePage) WidgetNames() []string {
 		out = append(out, w.Name)
 	}
 	return out
+}
+
+// RowGroups returns widget names grouped by configured row, preserving order.
+// Each Rows[i] becomes one group; any flat Widgets are appended as a final
+// group. Used by the dashboard renderer in "rows" (WYSIWYG) layout so that the
+// configured row boundaries are honoured instead of being flattened.
+func (h *HomePage) RowGroups() [][]string {
+	if h == nil {
+		return nil
+	}
+	var groups [][]string
+	for _, r := range h.Rows {
+		if len(r.Widgets) > 0 {
+			groups = append(groups, append([]string(nil), r.Widgets...))
+		}
+	}
+	if len(h.Widgets) > 0 {
+		var names []string
+		for _, w := range h.Widgets {
+			names = append(names, w.Name)
+		}
+		groups = append(groups, names)
+	}
+	return groups
 }

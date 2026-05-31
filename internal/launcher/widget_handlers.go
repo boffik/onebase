@@ -91,10 +91,61 @@ func (h *handler) configuratorDeleteWidget(w http.ResponseWriter, r *http.Reques
 	renderCfg(w, r, data)
 }
 
-// configuratorSaveHomePage writes config/home_page.yaml verbatim. Validation
-// is YAML-only — empty layout means "use defaults" which is supported by the
-// runtime.
+// configuratorSaveHomePage writes config/home_page.yaml from the visual editor:
+// checked widgets (home_widgets) grouped into rows by home_cols, layout mode
+// (home_layout: auto|rows) and an optional title. Existing title translations
+// (titles) are preserved by loading the current file. The verbatim YAML editor
+// lives in configuratorSaveHomePageYAML.
 func (h *handler) configuratorSaveHomePage(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	lang := resolveLang(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	type yamlHomePage struct {
+		Title   string                    `yaml:"title,omitempty"`
+		Titles  map[string]string         `yaml:"titles,omitempty"`
+		Layout  string                    `yaml:"layout,omitempty"`
+		Rows    []metadata.HomePageRow    `yaml:"rows,omitempty"`
+		Widgets []metadata.HomePageWidget `yaml:"widgets,omitempty"`
+	}
+	hp := yamlHomePage{Title: strings.TrimSpace(r.FormValue("home_title"))}
+
+	// Сохраняем переводы заголовка (titles) из существующего файла.
+	if proj, lerr := h.loadProjectFor(r.Context(), b); lerr == nil && proj != nil {
+		if proj.HomePage != nil {
+			hp.Titles = proj.HomePage.Titles
+			if hp.Title == "" {
+				hp.Title = proj.HomePage.Title
+			}
+		}
+		proj.Close()
+	}
+
+	hp.Rows, hp.Layout = rowsFromForm(r)
+
+	out, _ := yaml.Marshal(&hp)
+	saveErr := saveConfigFile(r, h, b, "config/home_page.yaml", out)
+	data := h.loadCfgData(r.Context(), b, "tree")
+	if saveErr != nil {
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + saveErr.Error()
+	} else {
+		data.FieldsSaved = true
+		data.FieldsSavedEntity = "home-page"
+	}
+	renderCfg(w, r, data)
+}
+
+// configuratorSaveHomePageYAML writes config/home_page.yaml verbatim from the
+// «Расширенно (YAML)» editor. Validation is YAML-only — empty layout means
+// "use defaults" which is supported by the runtime.
+func (h *handler) configuratorSaveHomePageYAML(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		http.NotFound(w, r)

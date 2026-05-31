@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"encoding/json"
 	"strings"
 	"text/template"
 
@@ -27,6 +28,15 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		return m
 	},
 	"lower": strings.ToLower,
+	"js": func(v any) string {
+		// json.Marshal по умолчанию экранирует <, >, & в \uXXXX — безопасно
+		// для вставки в <script> (text/template не экранирует сам).
+		b, err := json.Marshal(v)
+		if err != nil {
+			return "null"
+		}
+		return string(b)
+	},
 	"fieldTypeLabel": func(typ, ref string) string {
 		switch typ {
 		case "string":
@@ -150,6 +160,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f0f2f5;h
 
 .section-hd{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid #eef0f5;padding-top:10px}
 .section-hd:first-child{border-top:none;margin-top:0;padding-top:0}
+/* drag-конструктор раскладки рабочего стола */
+.ob-row{display:flex;align-items:flex-start;gap:8px;margin:6px 0}
+.ob-zone{flex:1;display:flex;flex-wrap:wrap;gap:6px;min-height:38px;padding:6px;border:1px dashed #c3c9d4;border-radius:6px;background:#fafbfc}
+.ob-pool{margin-top:2px;background:#f1f5f9}
+.ob-chip{display:inline-flex;align-items:center;background:#fff;border:1px solid #ccd0d8;border-radius:14px;padding:3px 10px;font-size:12px;color:#334155;cursor:grab;user-select:none;box-shadow:0 1px 1px rgba(0,0,0,.05)}
+.ob-chip.dragging{opacity:.4}
+.ob-row-del{background:none;border:none;color:#c00;font-size:13px;cursor:pointer;padding:6px 4px;line-height:1}
 
 .fields-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
 .fields-tbl th{text-align:left;padding:5px 8px;color:#999;font-weight:600;font-size:11px;border-bottom:1px solid #eef0f5}
@@ -574,23 +591,91 @@ function cfgHideNew() {
   document.getElementById('cfg-new-form').style.display = 'none';
   document.getElementById('cfg-new-form-pf').style.display = 'none';
 }
-// insertWidgetName вставляет имя виджета в поле раскладки рабочего стола
-// подсистемы (textarea[name=home_widgets]) в той же форме, по месту курсора.
-function insertWidgetName(el, name) {
-  var form = el.closest('form');
-  if (!form) return;
-  var ta = form.querySelector('textarea[name="home_widgets"]');
-  if (!ta) return;
-  var start = ta.selectionStart, end = ta.selectionEnd;
-  var before = ta.value.slice(0, start), after = ta.value.slice(end);
-  // Добавляем запятую-разделитель, если курсор стоит сразу после имени.
-  var sep = (before && !/[\s,\n]$/.test(before)) ? ', ' : '';
-  var ins = sep + name;
-  ta.value = before + ins + after;
-  var pos = start + ins.length;
-  ta.focus();
-  ta.setSelectionRange(pos, pos);
+// obToggleLayout переключает пейны редактора раскладки: «Авто» (галочки) и
+// «По рядам» (drag-конструктор).
+function obToggleLayout(sel) {
+  var form = sel.closest('form'); if (!form) return;
+  var auto = form.querySelector('.ob-auto'), rows = form.querySelector('.ob-rows-pane');
+  if (auto) auto.style.display = (sel.value === 'rows') ? 'none' : 'block';
+  if (rows) rows.style.display = (sel.value === 'rows') ? 'block' : 'none';
 }
+// obHomeInit инициализирует drag-конструктор рядов для одной формы редактора.
+function obHomeInit(form) {
+  var key = form.getAttribute('data-home-key'); if (!key) return;
+  var rowsWrap = form.querySelector('.ob-rows');
+  var pool = form.querySelector('.ob-pool');
+  var hidden = form.querySelector('input[name="home_rows"]');
+  if (!rowsWrap || !pool || !hidden) return;
+  var data = (window.__homeData && window.__homeData[key]) || {rows: []};
+  var widgets = window.__homeWidgets || [];
+  var titleByName = {}; widgets.forEach(function (w) { titleByName[w.name] = w.title || w.name; });
+
+  function chip(name) {
+    var c = document.createElement('span');
+    c.className = 'ob-chip'; c.setAttribute('draggable', 'true'); c.dataset.name = name;
+    c.textContent = titleByName[name] || name;
+    c.addEventListener('dragstart', function () { window.__obDrag = c; setTimeout(function(){ c.classList.add('dragging'); }, 0); });
+    c.addEventListener('dragend', function () { c.classList.remove('dragging'); window.__obDrag = null; });
+    return c;
+  }
+  function afterElement(zone, x) {
+    var els = Array.prototype.slice.call(zone.querySelectorAll('.ob-chip:not(.dragging)'));
+    for (var i = 0; i < els.length; i++) {
+      var r = els[i].getBoundingClientRect();
+      if (x < r.left + r.width / 2) return els[i];
+    }
+    return null;
+  }
+  function bindZone(zone) {
+    zone.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      var dr = window.__obDrag; if (!dr) return;
+      var after = afterElement(zone, e.clientX);
+      if (after == null) zone.appendChild(dr); else zone.insertBefore(dr, after);
+    });
+  }
+  function makeRow(names) {
+    var row = document.createElement('div'); row.className = 'ob-row';
+    var zone = document.createElement('div'); zone.className = 'ob-zone';
+    (names || []).forEach(function (n) { zone.appendChild(chip(n)); });
+    bindZone(zone);
+    var del = document.createElement('button');
+    del.type = 'button'; del.className = 'ob-row-del'; del.textContent = '✕'; del.title = 'Удалить ряд';
+    del.addEventListener('click', function () {
+      Array.prototype.slice.call(zone.children).forEach(function (c) { pool.appendChild(c); });
+      row.remove();
+    });
+    row.appendChild(zone); row.appendChild(del);
+    return row;
+  }
+
+  bindZone(pool);
+  rowsWrap.innerHTML = '';
+  var used = {};
+  (data.rows || []).forEach(function (names) {
+    rowsWrap.appendChild(makeRow(names));
+    (names || []).forEach(function (n) { used[n] = 1; });
+  });
+  pool.innerHTML = '';
+  widgets.forEach(function (w) { if (!used[w.name]) pool.appendChild(chip(w.name)); });
+
+  var addBtn = form.querySelector('.ob-add-row');
+  if (addBtn) addBtn.addEventListener('click', function () { rowsWrap.appendChild(makeRow([])); });
+
+  form.addEventListener('submit', function () {
+    var sel = form.querySelector('select[name="home_layout"]');
+    if (!sel || sel.value !== 'rows') return; // в «Авто» сохраняются галочки
+    var out = [];
+    Array.prototype.slice.call(rowsWrap.querySelectorAll('.ob-zone')).forEach(function (zone) {
+      var names = Array.prototype.slice.call(zone.querySelectorAll('.ob-chip')).map(function (c) { return c.dataset.name; });
+      if (names.length) out.push(names);
+    });
+    hidden.value = JSON.stringify(out);
+  });
+}
+document.addEventListener('DOMContentLoaded', function () {
+  Array.prototype.slice.call(document.querySelectorAll('form[data-home-key]')).forEach(obHomeInit);
+});
 function cfgNewPrintFormShow() {
   document.getElementById('cfg-new-form').style.display = 'none';
   document.getElementById('cfg-new-form-pf').style.display = 'block';
@@ -3614,7 +3699,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-panel" id="sub-{{$sub.Name}}">
     <div class="panel-title">🗂 {{$sub.Title}}</div>
     <div class="panel-kind">{{t $.Lang "Подсистема"}}</div>
-    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/subsystem">
+    <form method="POST" action="/bases/{{$.Base.ID}}/configurator/subsystem" data-home-key="sub-{{$sub.Name}}">
       <input type="hidden" name="subsystem_name" value="{{$sub.Name}}">
       <div class="fg" style="margin-top:12px">
         <label>{{t $.Lang "Заголовок"}}</label>
@@ -3686,15 +3771,18 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
 
       <div class="section-hd" style="margin-top:14px">{{t $.Lang "Рабочий стол подсистемы"}}</div>
-      <div style="font-size:12px;color:#64748b;margin:6px 0">
-        {{t $.Lang "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан."}}
-      </div>
-      <textarea name="home_widgets" placeholder="ВыручкаМесяца, ПродажиМесяца&#10;ПродажиПоДням" style="width:100%;min-height:90px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{$sub.HomeWidgetsText}}</textarea>
       {{if $.Widgets}}
-      <div style="font-size:11px;color:#64748b;margin-top:6px">
-        {{t $.Lang "Доступные виджеты"}}:
-        {{range $i, $w := $.Widgets}}{{if $i}}, {{end}}<code style="cursor:pointer" onclick="insertWidgetName(this,'{{$w.Name}}')" title="{{t $.Lang "вставить"}}">{{$w.Name}}</code>{{end}}
+      <div class="fg" style="margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="font-size:12px;color:#555">{{t $.Lang "Раскладка"}}</label>
+        <select name="home_layout" style="width:180px" onchange="obToggleLayout(this)">
+          <option value="auto" {{if ne $sub.HomeLayout "rows"}}selected{{end}}>{{t $.Lang "Авто (по ширине)"}}</option>
+          <option value="rows" {{if eq $sub.HomeLayout "rows"}}selected{{end}}>{{t $.Lang "По рядам"}}</option>
+        </select>
       </div>
+      {{template "home-layout-editor" dict "Widgets" $.Widgets "Selected" $sub.HomeWidgets "Layout" $sub.HomeLayout "Lang" $.Lang "AutoHint" (t $.Lang "Отметьте виджеты для рабочего стола подсистемы")}}
+      <script>window.__homeData=window.__homeData||{};window.__homeData[{{js (printf "sub-%s" $sub.Name)}}]={rows:{{js $sub.HomeRows}}};window.__homeWidgets={{js $.WidgetOptions}};</script>
+      {{else}}
+      <div style="font-size:12px;color:#94a3b8;margin:6px 0">{{t $.Lang "Виджеты не созданы"}}</div>
       {{end}}
 
       <div class="module-save-row" style="margin-top:14px">
@@ -3737,30 +3825,75 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-panel" id="home-page">
     <div class="panel-title">🏠 {{t $.Lang "Главная страница"}}</div>
     <div class="panel-kind">{{t $.Lang "Раскладка стартового дашборда"}} (<code>config/home_page.yaml</code>)</div>
-    <form method="POST" action="/bases/{{.Base.ID}}/configurator/home-page">
-      <div style="font-size:12px;color:#64748b;margin:6px 0">
-        Опишите порядок и группировку виджетов. Поля: <code>title</code>, <code>layout</code> (<code>rows</code> или <code>grid</code>), <code>rows[].widgets</code>.
-        Если файл пуст, на главной показываются все зарегистрированные виджеты в порядке загрузки.
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/home-page" data-home-key="home">
+      <div class="fg" style="margin-top:12px">
+        <label>{{t $.Lang "Заголовок"}}</label>
+        <input type="text" name="home_title" value="{{.GlobalHome.Title}}" placeholder="{{t $.Lang "Главная"}}">
       </div>
-      <div class="code-wrap">
-        <textarea name="yaml" id="ta-home-page" style="width:100%;min-height:300px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.HomePageYAML}}</textarea>
+      {{if .Widgets}}
+      <div class="fg" style="margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="font-size:12px;color:#555">{{t $.Lang "Раскладка"}}</label>
+        <select name="home_layout" style="width:180px" onchange="obToggleLayout(this)">
+          <option value="auto" {{if ne .GlobalHome.Layout "rows"}}selected{{end}}>{{t $.Lang "Авто (по ширине)"}}</option>
+          <option value="rows" {{if eq .GlobalHome.Layout "rows"}}selected{{end}}>{{t $.Lang "По рядам"}}</option>
+        </select>
       </div>
-      <div style="font-size:11px;color:#94a3b8;margin-top:6px">
-        {{t $.Lang "Доступные виджеты"}}:
-        {{range $i, $w := .Widgets}}{{if $i}}, {{end}}<code>{{$w.Name}}</code>{{end}}
-        {{if not .Widgets}}<i>{{t $.Lang "пока ни одного — создайте через «+» в дереве «Виджеты»"}}</i>{{end}}
-      </div>
-      <div class="module-save-row">
+      {{template "home-layout-editor" dict "Widgets" .Widgets "Selected" .GlobalHome.Widgets "Layout" .GlobalHome.Layout "Lang" .Lang "AutoHint" (t .Lang "Отметьте виджеты для главной страницы")}}
+      <script>window.__homeData=window.__homeData||{};window.__homeData["home"]={rows:{{js .GlobalHome.Rows}}};window.__homeWidgets={{js .WidgetOptions}};</script>
+      {{else}}
+      <div style="font-size:12px;color:#94a3b8;margin:6px 0">{{t $.Lang "пока ни одного — создайте через «+» в дереве «Виджеты»"}}</div>
+      {{end}}
+      <div class="module-save-row" style="margin-top:14px">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
-        <button type="button" class="btn-check" onclick="runCheck('home_page','home-page','home_page')">{{t $.Lang "Проверить"}}</button>
-        <span class="check-result" id="check-home-page"></span>
         {{if and .FieldsSaved (eq .FieldsSavedEntity "home-page")}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
     </form>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:12px;color:#64748b;font-weight:600">{{t $.Lang "Расширенно (YAML)"}}</summary>
+      <form method="POST" action="/bases/{{.Base.ID}}/configurator/home-page-yaml" style="margin-top:8px">
+        <div style="font-size:12px;color:#64748b;margin:6px 0">
+          Поля: <code>title</code>, <code>layout</code> (<code>auto</code> / <code>rows</code> / <code>grid</code>), <code>rows[].widgets</code>, <code>titles</code>.
+          Если файл пуст, на главной показываются все зарегистрированные виджеты.
+        </div>
+        <div class="code-wrap">
+          <textarea name="yaml" id="ta-home-page" style="width:100%;min-height:260px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.HomePageYAML}}</textarea>
+        </div>
+        <div class="module-save-row">
+          <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+          <button type="button" class="btn-check" onclick="runCheck('home_page','home-page','home_page')">{{t $.Lang "Проверить"}}</button>
+          <span class="check-result" id="check-home-page"></span>
+        </div>
+      </form>
+    </details>
   </div>
 
 </div>{{/* cfg-right */}}
 </div>{{/* cfg-split */}}
+{{end}}
+
+{{/* home-layout-editor — общий редактор раскладки рабочего стола: пейн «Авто»
+   (галочки) и пейн «По рядам» (drag-конструктор). Параметры (dict): Widgets,
+   Selected (отмеченные имена), Layout ("auto"|"rows"), Lang, AutoHint. */}}
+{{define "home-layout-editor"}}
+<div class="ob-auto"{{if eq .Layout "rows"}} style="display:none"{{end}}>
+  <div style="font-size:12px;color:#64748b;margin:6px 0">{{.AutoHint}}</div>
+  {{$sel := .Selected}}
+  {{range $w := .Widgets}}
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">
+    <input type="checkbox" name="home_widgets" value="{{$w.Name}}" {{range $sel}}{{if eq . $w.Name}}checked{{end}}{{end}}>
+    {{if $w.Title}}{{$w.Title}} <span style="color:#94a3b8">({{$w.Name}})</span>{{else}}{{$w.Name}}{{end}}
+  </label>
+  {{end}}
+</div>
+<div class="ob-rows-pane"{{if ne .Layout "rows"}} style="display:none"{{end}}>
+  <input type="hidden" name="home_rows">
+  <div style="font-size:12px;color:#64748b;margin:6px 0">{{t $.Lang "Перетащите виджеты в ряды. «+ Ряд» добавляет новый ряд."}}</div>
+  <div class="ob-rows"></div>
+  <button type="button" class="ob-add-row" style="margin:6px 0;background:none;border:1px dashed #c3c9d4;color:#475569;padding:5px 12px;font-size:12px;border-radius:5px;cursor:pointer">+ {{t $.Lang "Ряд"}}</button>
+  <div style="font-size:11px;color:#94a3b8;margin:8px 0 4px">{{t $.Lang "Доступные виджеты"}}</div>
+  <div class="ob-pool ob-zone"></div>
+</div>
 {{end}}
 
 {{define "entity-detail"}}

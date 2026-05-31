@@ -117,7 +117,9 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 			hp = ss.HomePage
 		}
 	}
-	widgets, defaulted := homePageWidgets(hp, s.reg)
+	// Соблюдение настроенных рядов (WYSIWYG) включается явно через layout: rows.
+	honor := hp != nil && hp.Layout == "rows"
+	groups, defaulted := homePageWidgetGroups(hp, s.reg, honor)
 
 	login := ""
 	if u := auth.UserFromContext(r.Context()); u != nil {
@@ -128,77 +130,93 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	runner.Cache = s.widgetCache
 
 	lang := s.resolveLang(r)
-	results := make([]widget.Result, 0, len(widgets))
-	for _, wMeta := range widgets {
+	// rows — для раскладки по рядам, flat — для инициализации графиков в JS.
+	rows := make([][]widget.Result, 0, len(groups))
+	var flat []widget.Result
+	run := func(wMeta *metadata.Widget) widget.Result {
 		if wMeta.Type == "missing" {
-			results = append(results, widget.Result{
+			return widget.Result{
 				Name:  wMeta.Name,
 				Title: wMeta.DisplayTitle(lang),
 				Error: s.tr(lang, "виджет не найден:") + " " + wMeta.Name,
-			})
-			continue
+			}
 		}
 		res := runner.Run(r.Context(), wMeta)
 		res.Title = wMeta.DisplayTitle(lang)
-		results = append(results, res)
+		return res
+	}
+	for _, group := range groups {
+		rowRes := make([]widget.Result, 0, len(group))
+		for _, wMeta := range group {
+			res := run(wMeta)
+			rowRes = append(rowRes, res)
+			flat = append(flat, res)
+		}
+		rows = append(rows, rowRes)
 	}
 
 	title := s.tr(lang, "Главная")
-	layout := "rows"
 	if hp != nil {
 		if t := hp.DisplayTitle(lang); t != "" && t != "Главная" {
 			title = t
-		}
-		if hp.Layout != "" {
-			layout = hp.Layout
 		}
 	}
 
 	s.render(w, r, "page-index", map[string]any{
 		"HomeTitle":     title,
-		"HomeLayout":    layout,
-		"WidgetResults": results,
+		"WidgetRows":    rows,
+		"WidgetResults": flat,
 		"DefaultedHome": defaulted,
 	})
 }
 
-// homePageWidgets resolves the dashboard layout into a flat ordered list of
-// widget metadata. Behaviour:
-//   - With a configured HomePage: use its rows/widgets order. Unknown names
-//     become a synthetic "widget not found" entry so the dashboard still
-//     renders and the user can spot the typo.
-//   - Without a HomePage but with registered widgets: show them in load order.
-//   - Otherwise: synthesize a transient "recent" widget so a fresh install
-//     never lands on a blank page.
-func homePageWidgets(hp *metadata.HomePage, reg *runtime.Registry) ([]*metadata.Widget, bool) {
-	if hp != nil {
-		names := hp.WidgetNames()
-		if len(names) > 0 {
-			out := make([]*metadata.Widget, 0, len(names))
-			for _, n := range names {
-				if w := reg.GetWidget(n); w != nil {
-					out = append(out, w)
-				} else {
-					out = append(out, &metadata.Widget{
-						Name:  n,
-						Type:  "missing",
-						Title: n,
-					})
-				}
+// homePageWidgetGroups resolves the dashboard layout into ordered groups of
+// widget metadata, one group per rendered row. Behaviour:
+//   - With a HomePage and honor=true (layout: rows): one group per configured
+//     row (RowGroups), so row boundaries are preserved (WYSIWYG).
+//   - With a HomePage otherwise: a single group with every widget in order
+//     (auto-flow — the template wraps them by width).
+//   - Unknown widget names become a synthetic "widget not found" entry so the
+//     dashboard still renders and the user can spot the typo.
+//   - Without a HomePage but with registered widgets: one group in load order.
+//   - Otherwise: a transient "recent" widget so a fresh install is never blank.
+func homePageWidgetGroups(hp *metadata.HomePage, reg *runtime.Registry, honor bool) ([][]*metadata.Widget, bool) {
+	resolve := func(names []string) []*metadata.Widget {
+		out := make([]*metadata.Widget, 0, len(names))
+		for _, n := range names {
+			if w := reg.GetWidget(n); w != nil {
+				out = append(out, w)
+			} else {
+				out = append(out, &metadata.Widget{Name: n, Type: "missing", Title: n})
 			}
-			return out, false
+		}
+		return out
+	}
+	if hp != nil {
+		if honor {
+			if rg := hp.RowGroups(); len(rg) > 0 {
+				groups := make([][]*metadata.Widget, 0, len(rg))
+				for _, names := range rg {
+					groups = append(groups, resolve(names))
+				}
+				return groups, false
+			}
+		}
+		if names := hp.WidgetNames(); len(names) > 0 {
+			return [][]*metadata.Widget{resolve(names)}, false
 		}
 	}
 	if registered := reg.Widgets(); len(registered) > 0 {
-		return registered, true
+		return [][]*metadata.Widget{registered}, true
 	}
-	return []*metadata.Widget{{
+	def := &metadata.Widget{
 		Name:  "_default_recent",
 		Type:  metadata.WidgetTypeRecent,
 		Title: "Последние документы",
 		Limit: 10,
 		Scope: "all",
-	}}, true
+	}
+	return [][]*metadata.Widget{{def}}, true
 }
 
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
@@ -2403,13 +2421,11 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 		}
 	}
 	if _, ok := data["Nav"]; !ok {
+		// Нейтральный старт: подсистему не подставляем — на /ui/ ничего не
+		// подсвечено, активна «Главная», сайдбар плоский (см. buildNav).
 		sub := r.URL.Query().Get("subsystem")
-		subs := s.reg.Subsystems()
-		if sub == "" && len(subs) > 0 {
-			sub = subs[0].Name
-		}
 		data["Nav"] = s.buildNav(r, sub)
-		data["Subsystems"] = subs
+		data["Subsystems"] = s.reg.Subsystems()
 		data["CurrentSubsystem"] = sub
 	}
 	if _, ok := data["IsAdmin"]; !ok {

@@ -264,10 +264,27 @@ type cfgSubsystem struct {
 	Icon     string
 	Order    int
 	Contents metadata.SubsystemContents
-	// HomeWidgetsText — раскладка виджетов рабочего стола подсистемы в виде
-	// текста: одна строка = один ряд, имена виджетов через запятую. Пустая
-	// строка означает отсутствие настроенного рабочего стола.
-	HomeWidgetsText string
+	// HomeWidgets — плоский список отмеченных виджетов (для режима «Авто»).
+	// HomeRows — раскладка по рядам (для drag-конструктора «По рядам»).
+	// HomeLayout — режим: "auto" (поток по ширине) или "rows" (соблюдение рядов).
+	HomeWidgets []string
+	HomeRows    [][]string
+	HomeLayout  string
+}
+
+// widgetOption — лёгкая проекция виджета (имя+заголовок) для JS drag-конструктора.
+type widgetOption struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+}
+
+// cfgHomePage — проекция глобальной главной страницы (config/home_page.yaml)
+// для визуального редактора конфигуратора (галочки виджетов + раскладка).
+type cfgHomePage struct {
+	Title   string
+	Widgets []string   // отмеченные виджеты (режим «Авто»)
+	Rows    [][]string // раскладка по рядам (режим «По рядам»)
+	Layout  string     // "auto" | "rows"
 }
 
 type configuratorData struct {
@@ -293,12 +310,14 @@ type configuratorData struct {
 	PrintForms       []cfgPrintForm
 	DSLPrintForms    []cfgDSLPrintForm
 	// План 37, этап 4: управляемые формы.
-	ManagedForms []cfgManagedForm
-	EditingForm  *cfgManagedForm
-	Subsystems   []cfgSubsystem
-	Widgets      []cfgWidget
-	HomePageYAML string
-	Error        string
+	ManagedForms  []cfgManagedForm
+	EditingForm   *cfgManagedForm
+	Subsystems    []cfgSubsystem
+	Widgets       []cfgWidget
+	WidgetOptions []widgetOption // имя+заголовок всех виджетов для drag-конструктора
+	HomePageYAML  string         // verbatim config/home_page.yaml — для «Расширенно (YAML)»
+	GlobalHome    cfgHomePage
+	Error         string
 	// all entity names for reference picker
 	AllEntityNames []string
 	// all enum names for enum-type field picker
@@ -758,13 +777,19 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 
 	// Subsystems
 	for _, sub := range proj.Subsystems {
+		var rows [][]string
+		if sub.HomePage != nil {
+			rows = sub.HomePage.RowGroups()
+		}
 		data.Subsystems = append(data.Subsystems, cfgSubsystem{
-			Name:            sub.Name,
-			Title:           sub.Title,
-			Icon:            sub.Icon,
-			Order:           sub.Order,
-			Contents:        sub.Contents,
-			HomeWidgetsText: homeWidgetsToText(sub.HomePage),
+			Name:        sub.Name,
+			Title:       sub.Title,
+			Icon:        sub.Icon,
+			Order:       sub.Order,
+			Contents:    sub.Contents,
+			HomeWidgets: homeWidgetsNames(sub.HomePage),
+			HomeRows:    rows,
+			HomeLayout:  homeLayoutMode(sub.HomePage),
 		})
 	}
 
@@ -786,7 +811,26 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		})
 	}
 	sort.Slice(data.Widgets, func(i, j int) bool { return data.Widgets[i].Name < data.Widgets[j].Name })
+	for _, wc := range data.Widgets {
+		data.WidgetOptions = append(data.WidgetOptions, widgetOption{Name: wc.Name, Title: wc.Title})
+	}
 	data.HomePageYAML = readHomePageYAML(proj.Dir)
+
+	// Глобальная главная для визуального редактора (галочки / drag-конструктор).
+	ghTitle := ""
+	var ghRows [][]string
+	if proj.HomePage != nil {
+		ghRows = proj.HomePage.RowGroups()
+		if proj.HomePage.Title != "" && proj.HomePage.Title != "Главная" {
+			ghTitle = proj.HomePage.Title
+		}
+	}
+	data.GlobalHome = cfgHomePage{
+		Title:   ghTitle,
+		Widgets: homeWidgetsNames(proj.HomePage),
+		Rows:    ghRows,
+		Layout:  homeLayoutMode(proj.HomePage),
+	}
 
 	// Generate query builder schema
 	data.QBSchema = buildQBSchema(data)
@@ -1126,6 +1170,26 @@ func readWidgetSources(dir string) map[string]string {
 		result[key] = string(raw)
 	}
 	return result
+}
+
+// loadProjectFor загружает конфигурацию базы из файлов или из БД, повторяя
+// ветвление loadCfgData. Используется обработчиками сохранения, которым нужны
+// уже распарсенные метаданные (например, существующая главная страница).
+// Вызывающий обязан вызвать proj.Close().
+func (h *handler) loadProjectFor(ctx context.Context, b *Base) (*project.Project, error) {
+	if b.ConfigSource == "database" {
+		db, err := OpenDB(ctx, b)
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		repo := configdb.New(db)
+		if err := repo.EnsureSchema(ctx); err != nil {
+			return nil, err
+		}
+		return project.LoadFromDB(ctx, repo)
+	}
+	return project.Load(b.Path)
 }
 
 // readHomePageYAML reads config/home_page.yaml verbatim. Empty string when the
@@ -2774,43 +2838,58 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 
 // ── Subsystem save ──────────────────────────────────────────────────────────
 
-// homeWidgetsToText сериализует раскладку рабочего стола подсистемы в текст для
-// редактора: одна строка = один ряд, имена виджетов через запятую. Поддерживает
-// и rows-, и flat-раскладку (последняя превращается в один ряд).
-func homeWidgetsToText(hp *metadata.HomePage) string {
+// homeWidgetsNames разворачивает раскладку рабочего стола в плоский список имён
+// виджетов (в порядке вывода) — для отметки галочек в режиме «Авто».
+func homeWidgetsNames(hp *metadata.HomePage) []string {
 	if hp == nil {
-		return ""
+		return nil
 	}
-	var lines []string
+	var names []string
 	for _, row := range hp.Rows {
-		lines = append(lines, strings.Join(row.Widgets, ", "))
+		names = append(names, row.Widgets...)
 	}
-	if len(hp.Widgets) > 0 {
-		var names []string
-		for _, w := range hp.Widgets {
-			names = append(names, w.Name)
-		}
-		lines = append(lines, strings.Join(names, ", "))
+	for _, w := range hp.Widgets {
+		names = append(names, w.Name)
 	}
-	return strings.Join(lines, "\n")
+	return names
 }
 
-// parseHomeWidgets разбирает текст редактора в ряды виджетов. Пустые строки и
-// пробелы игнорируются.
-func parseHomeWidgets(text string) []metadata.HomePageRow {
-	var rows []metadata.HomePageRow
-	for _, line := range strings.Split(text, "\n") {
-		var names []string
-		for _, part := range strings.Split(line, ",") {
-			if p := strings.TrimSpace(part); p != "" {
-				names = append(names, p)
+// homeLayoutMode возвращает режим раскладки для селектора: "rows" или "auto".
+func homeLayoutMode(hp *metadata.HomePage) string {
+	if hp != nil && hp.Layout == "rows" {
+		return "rows"
+	}
+	return "auto"
+}
+
+// rowsFromForm строит ряды виджетов и режим раскладки из формы редактора.
+// Режим «По рядам» (home_layout=rows) читает JSON home_rows из drag-конструктора;
+// иначе отмеченные галочками виджеты (home_widgets) складываются в один ряд.
+func rowsFromForm(r *http.Request) ([]metadata.HomePageRow, string) {
+	clean := func(in []string) []string {
+		var out []string
+		for _, n := range in {
+			if n = strings.TrimSpace(n); n != "" {
+				out = append(out, n)
 			}
 		}
-		if len(names) > 0 {
-			rows = append(rows, metadata.HomePageRow{Widgets: names})
-		}
+		return out
 	}
-	return rows
+	if r.FormValue("home_layout") == "rows" {
+		var raw [][]string
+		_ = json.Unmarshal([]byte(r.FormValue("home_rows")), &raw)
+		var rows []metadata.HomePageRow
+		for _, names := range raw {
+			if c := clean(names); len(c) > 0 {
+				rows = append(rows, metadata.HomePageRow{Widgets: c})
+			}
+		}
+		return rows, "rows"
+	}
+	if names := clean(r.Form["home_widgets"]); len(names) > 0 {
+		return []metadata.HomePageRow{{Widgets: names}}, "auto"
+	}
+	return nil, "auto"
 }
 
 func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Request) {
@@ -2905,15 +2984,16 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Раскладка виджетов рабочего стола из формы: одна строка = один ряд,
-	// имена виджетов через запятую. Перезаписывает только rows, сохраняя
-	// title/layout/titles рабочего стола.
-	rows := parseHomeWidgets(r.FormValue("home_widgets"))
+	// Раскладка виджетов рабочего стола из формы: режим «Авто» — отмеченные
+	// галочками виджеты одним рядом; «По рядам» — ряды из drag-конструктора.
+	// Перезаписывает rows/layout, сохраняя title/titles рабочего стола.
+	rows, layout := rowsFromForm(r)
 	if len(rows) > 0 {
 		if ys.HomePage == nil {
 			ys.HomePage = &yamlHomePage{}
 		}
 		ys.HomePage.Rows = rows
+		ys.HomePage.Layout = layout
 		ys.HomePage.Widgets = nil // rows и flat widgets взаимоисключающи
 	} else if ys.HomePage != nil {
 		ys.HomePage.Rows = nil
