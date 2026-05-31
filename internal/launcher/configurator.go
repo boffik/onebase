@@ -264,6 +264,10 @@ type cfgSubsystem struct {
 	Icon     string
 	Order    int
 	Contents metadata.SubsystemContents
+	// HomeWidgetsText — раскладка виджетов рабочего стола подсистемы в виде
+	// текста: одна строка = один ряд, имена виджетов через запятую. Пустая
+	// строка означает отсутствие настроенного рабочего стола.
+	HomeWidgetsText string
 }
 
 type configuratorData struct {
@@ -755,11 +759,12 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	// Subsystems
 	for _, sub := range proj.Subsystems {
 		data.Subsystems = append(data.Subsystems, cfgSubsystem{
-			Name:     sub.Name,
-			Title:    sub.Title,
-			Icon:     sub.Icon,
-			Order:    sub.Order,
-			Contents: sub.Contents,
+			Name:            sub.Name,
+			Title:           sub.Title,
+			Icon:            sub.Icon,
+			Order:           sub.Order,
+			Contents:        sub.Contents,
+			HomeWidgetsText: homeWidgetsToText(sub.HomePage),
 		})
 	}
 
@@ -2769,6 +2774,45 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 
 // ── Subsystem save ──────────────────────────────────────────────────────────
 
+// homeWidgetsToText сериализует раскладку рабочего стола подсистемы в текст для
+// редактора: одна строка = один ряд, имена виджетов через запятую. Поддерживает
+// и rows-, и flat-раскладку (последняя превращается в один ряд).
+func homeWidgetsToText(hp *metadata.HomePage) string {
+	if hp == nil {
+		return ""
+	}
+	var lines []string
+	for _, row := range hp.Rows {
+		lines = append(lines, strings.Join(row.Widgets, ", "))
+	}
+	if len(hp.Widgets) > 0 {
+		var names []string
+		for _, w := range hp.Widgets {
+			names = append(names, w.Name)
+		}
+		lines = append(lines, strings.Join(names, ", "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// parseHomeWidgets разбирает текст редактора в ряды виджетов. Пустые строки и
+// пробелы игнорируются.
+func parseHomeWidgets(text string) []metadata.HomePageRow {
+	var rows []metadata.HomePageRow
+	for _, line := range strings.Split(text, "\n") {
+		var names []string
+		for _, part := range strings.Split(line, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				names = append(names, p)
+			}
+		}
+		if len(names) > 0 {
+			rows = append(rows, metadata.HomePageRow{Widgets: names})
+		}
+	}
+	return rows
+}
+
 func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -2806,21 +2850,33 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	subDir := filepath.Join(dir, "subsystems")
 	os.MkdirAll(subDir, 0o755)
 
-	type yamlSubsystem struct {
-		Name     string `yaml:"name"`
-		Title    string `yaml:"title"`
-		Icon     string `yaml:"icon"`
-		Order    int    `yaml:"order"`
-		Contents struct {
-			Catalogs   []string `yaml:"catalogs"`
-			Documents  []string `yaml:"documents"`
-			Registers  []string `yaml:"registers"`
-			InfoRegs   []string `yaml:"inforegs"`
-			Reports    []string `yaml:"reports"`
-			Processors []string `yaml:"processors"`
-			Journals   []string `yaml:"journals"`
-		} `yaml:"contents"`
+	type yamlContents struct {
+		Catalogs   []string `yaml:"catalogs,omitempty"`
+		Documents  []string `yaml:"documents,omitempty"`
+		Registers  []string `yaml:"registers,omitempty"`
+		InfoRegs   []string `yaml:"inforegs,omitempty"`
+		Reports    []string `yaml:"reports,omitempty"`
+		Processors []string `yaml:"processors,omitempty"`
+		Journals   []string `yaml:"journals,omitempty"`
 	}
+	type yamlHomePage struct {
+		Title   string                    `yaml:"title,omitempty"`
+		Titles  map[string]string         `yaml:"titles,omitempty"`
+		Layout  string                    `yaml:"layout,omitempty"`
+		Rows    []metadata.HomePageRow    `yaml:"rows,omitempty"`
+		Widgets []metadata.HomePageWidget `yaml:"widgets,omitempty"`
+	}
+	type yamlSubsystem struct {
+		Name     string            `yaml:"name"`
+		Title    string            `yaml:"title"`
+		Titles   map[string]string `yaml:"titles,omitempty"`
+		Icon     string            `yaml:"icon,omitempty"`
+		Order    int               `yaml:"order"`
+		Contents yamlContents      `yaml:"contents"`
+		HomePage *yamlHomePage     `yaml:"home_page,omitempty"`
+	}
+
+	targetFile := filepath.Join(subDir, nameToFilename(subName)+".yaml")
 
 	ys := yamlSubsystem{
 		Name:  subName,
@@ -2835,8 +2891,40 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	ys.Contents.Reports = r.Form["reports"]
 	ys.Contents.Processors = r.Form["processors"]
 
+	// Сохраняем переводы (titles) и метаданные рабочего стола из уже
+	// существующего файла, чтобы перезапись не теряла данные, которых нет в форме.
+	if existing, lerr := metadata.LoadSubsystemFile(targetFile); lerr == nil && existing != nil {
+		ys.Titles = existing.Titles
+		if existing.HomePage != nil {
+			ys.HomePage = &yamlHomePage{
+				Title:   existing.HomePage.Title,
+				Titles:  existing.HomePage.Titles,
+				Layout:  existing.HomePage.Layout,
+				Widgets: existing.HomePage.Widgets,
+			}
+		}
+	}
+
+	// Раскладка виджетов рабочего стола из формы: одна строка = один ряд,
+	// имена виджетов через запятую. Перезаписывает только rows, сохраняя
+	// title/layout/titles рабочего стола.
+	rows := parseHomeWidgets(r.FormValue("home_widgets"))
+	if len(rows) > 0 {
+		if ys.HomePage == nil {
+			ys.HomePage = &yamlHomePage{}
+		}
+		ys.HomePage.Rows = rows
+		ys.HomePage.Widgets = nil // rows и flat widgets взаимоисключающи
+	} else if ys.HomePage != nil {
+		ys.HomePage.Rows = nil
+		// Если от рабочего стола ничего не осталось — убираем секцию целиком.
+		if ys.HomePage.Title == "" && len(ys.HomePage.Titles) == 0 &&
+			ys.HomePage.Layout == "" && len(ys.HomePage.Widgets) == 0 {
+			ys.HomePage = nil
+		}
+	}
+
 	out, _ := yaml.Marshal(&ys)
-	targetFile := filepath.Join(subDir, nameToFilename(subName)+".yaml")
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if err := os.WriteFile(targetFile, out, 0o644); err != nil {

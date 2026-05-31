@@ -1,5 +1,8 @@
 {
   "__native__": "Français",
+  "Рабочий стол подсистемы": "Tableau de bord du sous-système",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "Une ligne = une rangée de widgets, noms séparés par des virgules. Champ vide — aucun tableau de bord.",
+  "вставить": "insérer",
   "Записать": "Enregistrer",
   "Провести": "Valider",
   "Провести и закрыть": "Valider et fermer",

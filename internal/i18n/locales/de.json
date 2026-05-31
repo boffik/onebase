@@ -1,5 +1,8 @@
 {
   "__native__": "Deutsch",
+  "Рабочий стол подсистемы": "Subsystem-Dashboard",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "Eine Zeile ist eine Widget-Reihe, Namen durch Komma getrennt. Leeres Feld — kein Dashboard.",
+  "вставить": "einfügen",
   "Записать": "Speichern",
   "Провести": "Buchen",
   "Провести и закрыть": "Buchen und schliessen",

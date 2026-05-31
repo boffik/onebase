@@ -1,5 +1,8 @@
 {
   "__native__": "Português",
+  "Рабочий стол подсистемы": "Painel do subsistema",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "Uma linha é uma fileira de widgets, nomes separados por vírgulas. Campo vazio — sem painel.",
+  "вставить": "inserir",
   "Записать": "Salvar",
   "Провести": "Lançar",
   "Провести и закрыть": "Lançar e fechar",

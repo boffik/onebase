@@ -1,5 +1,8 @@
 {
   "__native__": "Türkçe",
+  "Рабочий стол подсистемы": "Alt sistem panosu",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "Bir satır bir widget sırasıdır, adlar virgülle ayrılır. Boş alan — pano tanımlı değil.",
+  "вставить": "ekle",
   "Записать": "Kaydet",
   "Провести": "Onayla",
   "Провести и закрыть": "Onayla ve kapat",

@@ -1,4 +1,7 @@
 {
+  "Рабочий стол подсистемы": "Subsystem dashboard",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "One line is one widget row, names comma-separated. Empty field means no dashboard.",
+  "вставить": "insert",
   "Записать": "Save",
   "Провести": "Post",
   "Провести и закрыть": "Post and close",

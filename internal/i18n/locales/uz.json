@@ -1,5 +1,8 @@
 {
   "__native__": "O'zbekcha",
+  "Рабочий стол подсистемы": "Quyi tizim ish stoli",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "Bir qator — vidjetlar qatori, nomlar vergul bilan ajratiladi. Bo'sh maydon — ish stoli belgilanmagan.",
+  "вставить": "qo'yish",
   "Записать": "Saqlash",
   "Провести": "O'tkazish",
   "Провести и закрыть": "O'tkazish va yopish",

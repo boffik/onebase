@@ -574,6 +574,23 @@ function cfgHideNew() {
   document.getElementById('cfg-new-form').style.display = 'none';
   document.getElementById('cfg-new-form-pf').style.display = 'none';
 }
+// insertWidgetName вставляет имя виджета в поле раскладки рабочего стола
+// подсистемы (textarea[name=home_widgets]) в той же форме, по месту курсора.
+function insertWidgetName(el, name) {
+  var form = el.closest('form');
+  if (!form) return;
+  var ta = form.querySelector('textarea[name="home_widgets"]');
+  if (!ta) return;
+  var start = ta.selectionStart, end = ta.selectionEnd;
+  var before = ta.value.slice(0, start), after = ta.value.slice(end);
+  // Добавляем запятую-разделитель, если курсор стоит сразу после имени.
+  var sep = (before && !/[\s,\n]$/.test(before)) ? ', ' : '';
+  var ins = sep + name;
+  ta.value = before + ins + after;
+  var pos = start + ins.length;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+}
 function cfgNewPrintFormShow() {
   document.getElementById('cfg-new-form').style.display = 'none';
   document.getElementById('cfg-new-form-pf').style.display = 'block';
@@ -3666,6 +3683,18 @@ const cfgTabTree = `{{define "tab-tree"}}
         {{if $p.Title}}{{$p.Title}}{{else}}{{$p.Name}}{{end}}
       </label>
       {{end}}
+      {{end}}
+
+      <div class="section-hd" style="margin-top:14px">{{t $.Lang "Рабочий стол подсистемы"}}</div>
+      <div style="font-size:12px;color:#64748b;margin:6px 0">
+        {{t $.Lang "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан."}}
+      </div>
+      <textarea name="home_widgets" placeholder="ВыручкаМесяца, ПродажиМесяца&#10;ПродажиПоДням" style="width:100%;min-height:90px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{$sub.HomeWidgetsText}}</textarea>
+      {{if $.Widgets}}
+      <div style="font-size:11px;color:#64748b;margin-top:6px">
+        {{t $.Lang "Доступные виджеты"}}:
+        {{range $i, $w := $.Widgets}}{{if $i}}, {{end}}<code style="cursor:pointer" onclick="insertWidgetName(this,'{{$w.Name}}')" title="{{t $.Lang "вставить"}}">{{$w.Name}}</code>{{end}}
+      </div>
       {{end}}
 
       <div class="module-save-row" style="margin-top:14px">

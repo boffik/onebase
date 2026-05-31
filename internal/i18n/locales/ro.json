@@ -1,5 +1,8 @@
 {
   "__native__": "Romana",
+  "Рабочий стол подсистемы": "Tabloul de bord al subsistemului",
+  "Одна строка — один ряд виджетов, имена через запятую. Пустое поле — рабочий стол не задан.": "Un rând este o linie de widgeturi, nume separate prin virgulă. Câmp gol — fără tablou de bord.",
+  "вставить": "inserează",
   "Записать": "Salvare",
   "Провести": "Postare",
   "Провести и закрыть": "Postare si inchidere",
