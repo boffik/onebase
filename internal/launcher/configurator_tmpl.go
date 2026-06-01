@@ -1145,11 +1145,19 @@ function cfgAjaxSubmit(form) {
     if (saveBtn) saveBtn.disabled = false;
     submitBtns.forEach(function(b){ b.disabled = false; });
   };
-  fetch(form.getAttribute('action'), {
-    method: 'POST',
-    headers: { 'X-Onebase-Ajax': '1' },
-    body: new FormData(form)
-  })
+  // Формы с файлами шлём multipart (их хендлеры зовут ParseMultipartForm).
+  // Остальные — urlencoded: Go r.ParseForm() декодирует их без отдельного
+  // ParseMultipartForm, а FormData форсировал бы multipart, при котором
+  // r.ParseForm()+r.FormValue() возвращали бы пустые поля (тост «Укажите
+  // имя подсистемы» и т.п.).
+  var opts = { method: 'POST', headers: { 'X-Onebase-Ajax': '1' } };
+  if (form.querySelector('input[type="file"]')) {
+    opts.body = new FormData(form);
+  } else {
+    opts.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+    opts.body = new URLSearchParams(new FormData(form)).toString();
+  }
+  fetch(form.getAttribute('action'), opts)
     .then(function(r){ return r.json().catch(function(){ return { ok:false, error:'Некорректный ответ сервера' }; }); })
     .then(function(d){
       done();
