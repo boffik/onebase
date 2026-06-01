@@ -76,9 +76,22 @@ const tplManagedForm = `
           <option value="false" {{if eq (index $ctx.Values $fn) "false"}}selected{{end}}>Нет</option>
           <option value="true" {{if eq (index $ctx.Values $fn) "true"}}selected{{end}}>Да</option>
         </select>
+      {{else if eq (str $el.Type) "file"}}
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" name="{{$fn}}" id="file-path-{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="Путь к файлу" style="flex:1"{{if $el.ReadOnly}} readonly{{end}}>
+          <input type="file" id="file-pick-{{$fn}}" style="display:none" onchange="obFilePick(this,'file-path-{{$fn}}')">
+          <button type="button" onclick="document.getElementById('file-pick-{{$fn}}').click()" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap" title="Выбрать файл">…</button>
+        </div>
       {{else}}
         <input type="text" name="{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="{{$fn}}"{{if $el.ReadOnly}} readonly{{end}}{{if $el.Mask}} pattern="{{$el.Mask}}"{{end}}{{if $hChg}} onchange="obFire('{{$el.Name}}','ПриИзменении')"{{end}}>
       {{end}}
+    {{else if eq (str $el.Type) "file"}}
+      {{/* Поле не найдено в Entity, но элемент объявлен как file */}}
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" name="{{$fn}}" id="file-path-{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="Путь к файлу" style="flex:1">
+        <input type="file" id="file-pick-{{$fn}}" style="display:none" onchange="obFilePick(this,'file-path-{{$fn}}')">
+        <button type="button" onclick="document.getElementById('file-pick-{{$fn}}').click()" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap" title="Выбрать файл">…</button>
+      </div>
     {{else}}
       {{/* Поле не найдено в Entity (возможно реквизит формы, ещё не привязан) */}}
       <input type="text" name="{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="{{$fn}}" style="background:#fef9c3"
@@ -424,6 +437,16 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       });
     });
   }
+
+  // obFilePick — при выборе файла подставляет путь в текстовое поле.
+  // file.path доступен в webview/Electron; fallback на file.name.
+  window.obFilePick = function(input, targetId) {
+    const file = input.files[0];
+    if (!file) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.value = file.path || file.name;
+  };
 
   window.obFire = async function(elementName, eventName){
     const form = document.getElementById('main-form');

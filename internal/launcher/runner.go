@@ -88,8 +88,14 @@ func (r *Runner) Start(base *Base) error {
 	}
 
 	var args []string
-	if base.DBType == "sqlite" {
-		args = []string{"run", "--sqlite", base.DBPath, "--port", fmt.Sprintf("%d", base.Port)}
+	if base.DBType == "sqlite" || (base.DBType == "" && base.DB == "") {
+		// backward-compat: пустой db и пустой db_type → SQLite (как было до
+		// добавления поля db_type). db_path генерируется автоматически если пустой.
+		dbPath := base.DBPath
+		if dbPath == "" {
+			dbPath = filepath.Join(os.TempDir(), "onebase_"+base.ID+".db")
+		}
+		args = []string{"run", "--sqlite", dbPath, "--port", fmt.Sprintf("%d", base.Port)}
 	} else {
 		args = []string{"run", "--db", base.DB, "--port", fmt.Sprintf("%d", base.Port)}
 	}

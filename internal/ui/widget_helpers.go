@@ -56,6 +56,23 @@ func widgetCell(row map[string]any, field, format string) string {
 		if t, ok := v.(time.Time); ok {
 			return t.Format("02.01.2006 15:04")
 		}
+		if s, ok := v.(string); ok && len(s) >= 10 {
+			for _, layout := range []string{
+				time.RFC3339, time.RFC3339Nano,
+				"2006-01-02 15:04:05 -0700 MST",
+				"2006-01-02 15:04:05.999999999 -0700 MST",
+				"2006-01-02T15:04:05", "2006-01-02 15:04:05",
+				"2006-01-02T15:04", "2006-01-02",
+			} {
+				if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+					h, m, sec := t.Clock()
+					if h != 0 || m != 0 || sec != 0 {
+						return t.Format("02.01.2006 15:04")
+					}
+					return t.Format("02.01.2006")
+				}
+			}
+		}
 		return fmt.Sprintf("%v", v)
 	}
 	return fmt.Sprintf("%v", v)

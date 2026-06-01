@@ -110,6 +110,7 @@ type FormElement struct {
 	ReadOnly        bool              `yaml:"readonly,omitempty"`          // только чтение
 	Hint            string            `yaml:"hint,omitempty"`              // всплывающая подсказка
 	Mask            string            `yaml:"mask,omitempty"`              // маска ввода
+	Type            string            `yaml:"type,omitempty"`              // "file" для файлового поля, и т.п.
 	Choice          bool              `yaml:"choice,omitempty"`            // включена кнопка выбора у InputField
 	UnknownXML      []byte            `yaml:"unknown_xml,omitempty"`       // экзотический XML, сохраняется как есть
 }
