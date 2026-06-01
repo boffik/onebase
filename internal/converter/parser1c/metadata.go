@@ -132,7 +132,15 @@ func parseV83File(path string) (*xmlV8Root, error) {
 	if err := xml.Unmarshal(data, &root); err != nil {
 		return nil, nil
 	}
-	if root.Catalog == nil && root.Document == nil && root.AccReg == nil {
+	// Файл является v8.3 MDClasses, если внутри распознан хотя бы один известный
+	// тип объекта. Раньше проверялись только Catalog/Document/AccReg — из-за этого
+	// перечисления, константы, регистры сведений и т.п. молча отбраковывались
+	// (см. issue #16: «Перечислений: 0 → 0», хотя <Enumeration> в выгрузке есть).
+	if root.Catalog == nil && root.Document == nil && root.Task == nil &&
+		root.DataProcessor == nil && root.BusinessProcess == nil &&
+		root.AccReg == nil && root.InfoReg == nil && root.AcctReg == nil &&
+		root.Enum == nil && root.Constant == nil && root.ChartOfAccounts == nil &&
+		root.ScheduledJob == nil {
 		return nil, nil
 	}
 	return &root, nil
@@ -489,12 +497,29 @@ func parseEnumerations(dir string) ([]*EnumMeta, error) {
 	if err != nil {
 		return nil, nil
 	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+	// Перечисления в выгрузке 1С часто представлены ТОЛЬКО файлом «Имя.xml» без
+	// папки-компаньона (в отличие от справочников/документов). Раньше цикл
+	// перебирал лишь подкаталоги и пропускал такие enum целиком — issue #16.
+	// Поэтому собираем имена и из директорий, и из одиночных .xml-файлов,
+	// обрабатывая каждое имя один раз.
+	seen := make(map[string]bool)
+	var names []string
+	addName := func(n string) {
+		if n == "" || seen[n] {
+			return
 		}
-		name := e.Name()
+		seen[n] = true
+		names = append(names, n)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			addName(e.Name())
+		} else if strings.EqualFold(filepath.Ext(e.Name()), ".xml") {
+			addName(strings.TrimSuffix(e.Name(), filepath.Ext(e.Name())))
+		}
+	}
 
+	for _, name := range names {
 		if v8, _ := parseV83File(filepath.Join(dir, name+".xml")); v8 != nil && v8.Enum != nil {
 			em := &EnumMeta{Name: orDefault(v8.Enum.Props.Name, name)}
 			for _, v := range v8.Enum.ChildObjects.Values {

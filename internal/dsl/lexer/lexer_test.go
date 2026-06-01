@@ -76,6 +76,23 @@ func TestLexer_Operators(t *testing.T) {
 	}
 }
 
+func TestLexer_LeadingBOM(t *testing.T) {
+	// Файлы, выгруженные из 1С или сохранённые внешними редакторами, часто
+	// начинаются с BOM (U+FEFF). Лексер должен его проглотить, иначе первый
+	// токен ломается с "expected Procedure or Function".
+	input := "\uFEFFProcedure Выполнить()\nEndProcedure"
+	l := lexer.New(input, "bom.os")
+
+	tok := l.NextToken()
+	if tok.Type != token.PROCEDURE {
+		t.Fatalf("first token after BOM: want PROCEDURE, got %v (literal=%q)", tok.Type, tok.Literal)
+	}
+	// Позиция первого токена не должна сдвинуться из-за BOM.
+	if tok.Line != 1 || tok.Col != 1 {
+		t.Fatalf("want line=1 col=1, got line=%d col=%d", tok.Line, tok.Col)
+	}
+}
+
 func TestLexer_MultilineStringPipe(t *testing.T) {
 	// 1C-style: '|' at start of continuation line is stripped
 	input := "\"ВЫБРАТЬ\n|  Номер,\n|  Дата\n|ИЗ Документ.Заявка\""

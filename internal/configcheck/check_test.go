@@ -67,6 +67,39 @@ func TestCheckDir(t *testing.T) {
 	}
 }
 
+func TestCheckDir_ProcessorWizardWarning(t *testing.T) {
+	dir := t.TempDir()
+	procs := filepath.Join(dir, "processors")
+	if err := os.MkdirAll(procs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Плоская обработка — без предупреждений.
+	mustWrite(t, filepath.Join(procs, "flat.yaml"), "name: Плоская\nparams:\n  - name: Путь\n    type: string\n")
+	// Обработка-мастер — должна вызвать предупреждение про wizard и steps.
+	mustWrite(t, filepath.Join(procs, "wiz.yaml"), "name: Мастер\nwizard: true\nsteps:\n  - title: Шаг 1\n    params:\n      - name: Файл\n        type: string\n")
+
+	issues := CheckDir(dir)
+	for _, is := range issues {
+		if strings.HasPrefix(is.File, "processors/flat.yaml") {
+			t.Errorf("плоская обработка не должна иметь проблем: %+v", is)
+		}
+	}
+	var wizardKeys []string
+	for _, is := range issues {
+		if strings.HasPrefix(is.File, "processors/wiz.yaml") && strings.Contains(is.Message, "не поддерживается") {
+			if strings.Contains(is.Message, `"wizard"`) {
+				wizardKeys = append(wizardKeys, "wizard")
+			}
+			if strings.Contains(is.Message, `"steps"`) {
+				wizardKeys = append(wizardKeys, "steps")
+			}
+		}
+	}
+	if len(wizardKeys) != 2 {
+		t.Fatalf("ожидались предупреждения про wizard и steps, получено %v (все: %+v)", wizardKeys, issues)
+	}
+}
+
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

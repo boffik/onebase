@@ -138,6 +138,47 @@ func TestParseDirV83(t *testing.T) {
 	}
 }
 
+const enumXML = `<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject>
+  <Enumeration>
+    <Properties><Name>ВидКонтрагента</Name></Properties>
+    <ChildObjects>
+      <EnumValue><Properties><Name>ЮрЛицо</Name></Properties></EnumValue>
+      <EnumValue><Properties><Name>ФизЛицо</Name></Properties></EnumValue>
+    </ChildObjects>
+  </Enumeration>
+</MetaDataObject>`
+
+// Перечисление в выгрузке 1С часто лежит ОДНИМ файлом «Имя.xml» без папки.
+// Раньше parseEnumerations перебирал только подкаталоги и пропускал такой enum
+// (issue #16: «Перечислений: 0 → 0»). Проверяем оба представления.
+func TestParseDirEnumerations(t *testing.T) {
+	src := t.TempDir()
+	enumsDir := filepath.Join(src, "Enumerations")
+	if err := os.MkdirAll(enumsDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Одиночный .xml без папки-компаньона.
+	if err := os.WriteFile(filepath.Join(enumsDir, "ВидКонтрагента.xml"), []byte(enumXML), 0o644); err != nil {
+		t.Fatalf("write enum xml: %v", err)
+	}
+
+	dump, err := ParseDir(src)
+	if err != nil {
+		t.Fatalf("ParseDir: %v", err)
+	}
+	if len(dump.Enums) != 1 {
+		t.Fatalf("ожидалось 1 перечисление, получено %d", len(dump.Enums))
+	}
+	em := dump.Enums[0]
+	if em.Name != "ВидКонтрагента" {
+		t.Errorf("имя перечисления: %q", em.Name)
+	}
+	if len(em.Values) != 2 || em.Values[0] != "ЮрЛицо" || em.Values[1] != "ФизЛицо" {
+		t.Fatalf("значения перечисления разобраны неверно: %+v", em.Values)
+	}
+}
+
 // Неизвестные/непарсящиеся объекты не должны валить разбор — они уходят в
 // SkippedDirs или конвертируются как справочники (поведение по умолчанию).
 func TestParseDirUnknownSection(t *testing.T) {

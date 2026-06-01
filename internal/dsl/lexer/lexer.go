@@ -15,7 +15,14 @@ type Lexer struct {
 }
 
 func New(input, file string) *Lexer {
-	return &Lexer{input: []rune(input), file: file, line: 1, col: 1}
+	// Срезаем ведущий BOM (U+FEFF): файлы, сохранённые внешними редакторами
+	// или выгруженные из 1С, часто начинаются с него, и без этого лексер
+	// спотыкается на первом же токене ("expected Procedure or Function").
+	runes := []rune(input)
+	if len(runes) > 0 && runes[0] == '\uFEFF' {
+		runes = runes[1:]
+	}
+	return &Lexer{input: runes, file: file, line: 1, col: 1}
 }
 
 func (l *Lexer) peek() rune {

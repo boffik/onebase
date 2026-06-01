@@ -19,6 +19,25 @@ func parse(t *testing.T, src string) *ast.Program {
 	return prog
 }
 
+func TestParser_EmptyModule(t *testing.T) {
+	// Пустой модуль обработки — норма (как в 1С): валидный модуль без процедур.
+	for _, src := range []string{"", "   \n\t\n", "// только комментарий\n"} {
+		prog := parse(t, src)
+		if len(prog.Procedures) != 0 {
+			t.Fatalf("empty module %q: want 0 procedures, got %d", src, len(prog.Procedures))
+		}
+	}
+}
+
+func TestParser_BOMOnlyModule(t *testing.T) {
+	// Файл из одного BOM (часто встречается в выгрузках 1С) должен парситься
+	// как пустой модуль, а не падать с "expected Procedure or Function".
+	prog := parse(t, "\uFEFF")
+	if len(prog.Procedures) != 0 {
+		t.Fatalf("BOM-only module: want 0 procedures, got %d", len(prog.Procedures))
+	}
+}
+
 func TestParser_OnWriteProcedure(t *testing.T) {
 	src := `Procedure OnWrite()
   If this.Number = "" Then

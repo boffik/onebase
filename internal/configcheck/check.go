@@ -18,8 +18,10 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/query"
+	"gopkg.in/yaml.v3"
 )
 
 // Issue is a single error/warning. Line and column are 1-based; zero means the
@@ -81,6 +83,33 @@ func CheckDir(dir string) []Issue {
 					Message: err.Error(),
 				})
 			}
+		}
+	}
+
+	// processors/*.yaml — валидность + предупреждение о неподдерживаемых
+	// конструкциях мастера (wizard/steps). Платформа рендерит только плоский
+	// список params; wizard:true / steps: молча игнорируются yaml.v3, и форма
+	// вырождается в одну кнопку «Выполнить» (issue #14). Сообщаем об этом явно.
+	procDir := filepath.Join(dir, "processors")
+	procEntries, _ := os.ReadDir(procDir)
+	for _, e := range procEntries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".yaml") {
+			continue
+		}
+		path := filepath.Join(procDir, e.Name())
+		label := "processors/" + e.Name()
+		object := strings.TrimSuffix(e.Name(), ".yaml")
+		if _, err := processor.LoadFile(path); err != nil {
+			issues = append(issues, Issue{File: label, Object: object, Kind: "Обработка", Message: err.Error()})
+			continue
+		}
+		for _, key := range unsupportedProcessorKeys(path) {
+			issues = append(issues, Issue{
+				File:    label,
+				Object:  object,
+				Kind:    "Обработка",
+				Message: fmt.Sprintf("ключ %q не поддерживается: многошаговые мастера не реализованы, опишите параметры плоским списком «params» (иначе форма покажет только кнопку «Выполнить»)", key),
+			})
 		}
 	}
 
@@ -284,6 +313,29 @@ func CheckEntityYAML(source, name string) []Issue {
 	}
 	_, e := metadata.LoadFile(tmp.Name(), metadata.KindCatalog)
 	return []Issue{{Kind: "Объект метаданных", Object: name, Message: e.Error()}}
+}
+
+// unsupportedProcessorKeys возвращает имена ключей верхнего уровня YAML
+// обработки, которые платформа не поддерживает (wizard, steps). Их наличие —
+// признак того, что разработчик ожидает многошаговый мастер, которого в OneBase
+// нет; ключи нужно ловить отдельно, т.к. yaml.v3 молча отбрасывает неизвестные
+// поля структуры Processor.
+func unsupportedProcessorKeys(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var top map[string]any
+	if err := yaml.Unmarshal(data, &top); err != nil {
+		return nil
+	}
+	var found []string
+	for _, key := range []string{"wizard", "steps"} {
+		if _, ok := top[key]; ok {
+			found = append(found, key)
+		}
+	}
+	return found
 }
 
 // AlreadyReported reports whether msg overlaps an existing issue message.
