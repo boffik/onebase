@@ -108,6 +108,23 @@ func TestApplyDefaults(t *testing.T) {
 		t.Errorf("default layout (with widgets) = %q, want grid", h2.Layout)
 	}
 
+	// Single row, no explicit layout → "auto" (нейтральный старт)
+	h4 := &HomePage{Rows: []HomePageRow{{Widgets: []string{"A", "B"}}}}
+	h4.applyDefaults()
+	if h4.Layout != "auto" {
+		t.Errorf("default layout (single row) = %q, want auto", h4.Layout)
+	}
+
+	// Multiple rows, no explicit layout → "rows" (осознанная раскладка)
+	h5 := &HomePage{Rows: []HomePageRow{
+		{Widgets: []string{"A"}},
+		{Widgets: []string{"B", "C"}},
+	}}
+	h5.applyDefaults()
+	if h5.Layout != "rows" {
+		t.Errorf("default layout (multi row) = %q, want rows", h5.Layout)
+	}
+
 	// Explicit values preserved
 	h3 := &HomePage{Title: "Мой стол", Layout: "rows"}
 	h3.applyDefaults()

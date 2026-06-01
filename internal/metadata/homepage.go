@@ -47,17 +47,23 @@ func (h *HomePage) DisplayTitle(lang string) string {
 // applyDefaults fills in zero-value fields with sensible defaults.
 //
 // Раскладка по умолчанию — "auto": все виджеты идут одним потоком и переносятся
-// по ширине. Режим "rows" (соблюдение настроенных рядов) — только явный opt-in,
-// чтобы существующие дашборды не меняли вид. Для flat-виджетов сохраняем "grid"
-// (рендерится так же, как auto).
+// по ширине. Для flat-виджетов сохраняем "grid" (рендерится так же, как auto).
+//
+// Исключение: если автор задал несколько рядов (len(Rows) > 1) и не указал
+// layout явно, это осознанная раскладка по рядам — ставим "rows", чтобы и
+// рабочий стол, и конфигуратор уважали границы рядов. Один ряд (или его
+// отсутствие) трактуется как нейтральный «авто»-старт.
 func (h *HomePage) applyDefaults() {
 	if h.Title == "" {
 		h.Title = "Главная"
 	}
 	if h.Layout == "" {
-		if len(h.Widgets) > 0 {
+		switch {
+		case len(h.Widgets) > 0:
 			h.Layout = "grid"
-		} else {
+		case len(h.Rows) > 1:
+			h.Layout = "rows"
+		default:
 			h.Layout = "auto"
 		}
 	}

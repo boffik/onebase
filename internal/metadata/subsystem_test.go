@@ -99,10 +99,10 @@ home_page:
 	if s.HomePage.Title != "Рабочий стол закупщика" {
 		t.Errorf("HomePage.Title = %q", s.HomePage.Title)
 	}
-	// Без явного layout раскладка по умолчанию — "auto" (соблюдение рядов
-	// включается явно через layout: rows).
-	if s.HomePage.Layout != "auto" {
-		t.Errorf("HomePage.Layout = %q, want auto", s.HomePage.Layout)
+	// Несколько рядов без явного layout — осознанная раскладка по рядам:
+	// applyDefaults ставит "rows", чтобы границы рядов соблюдались.
+	if s.HomePage.Layout != "rows" {
+		t.Errorf("HomePage.Layout = %q, want rows", s.HomePage.Layout)
 	}
 	names := s.HomePage.WidgetNames()
 	if len(names) != 3 || names[0] != "A" || names[1] != "B" || names[2] != "C" {
