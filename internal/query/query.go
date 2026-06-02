@@ -1449,6 +1449,19 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				}
 			}
 
+			// п.47: известное имя VT после источника, но без "(" — иначе суффикс
+			// молча уходит в имя физической таблицы и падает рантайм `no such table`.
+			// Выдаём понятную ошибку компиляции вместо тихой поломки виджета.
+			if tr.peek(3).kind == tDot && tr.peek(4).kind == tIdent && tr.peek(5).kind != tLParen {
+				vtName := tr.peek(4).val
+				vtU := strings.ToUpper(vtName)
+				_, isAccumVT := accumVTKinds[vtU]
+				_, isInfoVT := infoVTKinds[vtU]
+				if isAccumVT || isInfoVT {
+					return Result{}, fmt.Errorf("виртуальная таблица %q требует круглые скобки: .%s(...)", vtName, vtName)
+				}
+			}
+
 			// Regular source: TypeName.EntityName → table_name [+ КАК alias] [+ auto-JOINs]
 			tr.advance()
 			tr.advance()
