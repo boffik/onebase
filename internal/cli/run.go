@@ -174,7 +174,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	reg.LoadWidgets(proj.Widgets)
 	reg.LoadHomePage(proj.HomePage)
 
-	// Внешний контур: печатные формы из БД (вне конфигурации проекта).
+	// Внешний контур: печатные формы и отчёты из БД (вне конфигурации проекта).
 	extRepo := extform.New(db)
 	if err := extRepo.EnsureSchema(ctx); err != nil {
 		return fmt.Errorf("extform schema: %w", err)
@@ -183,6 +183,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(os.Stderr, "external print forms:", err)
 	} else {
 		reg.SetExternalPrintForms(extForms)
+	}
+	extRepRepo := extform.NewReports(db)
+	if err := extRepRepo.EnsureSchema(ctx); err != nil {
+		return fmt.Errorf("extform reports schema: %w", err)
+	}
+	if extReps, err := extRepRepo.LoadEnabledReports(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "external reports:", err)
+	} else {
+		reg.SetExternalReports(extReps)
 	}
 
 	appCfg, _ := project.LoadConfig(proj.Dir)

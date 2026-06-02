@@ -21,6 +21,11 @@ type Report struct {
 	Params    []Param           `yaml:"params"`
 	Query     string            `yaml:"query"`
 	ChartProc string            `yaml:"chart_proc"`
+
+	// External помечает отчёт из внешнего контура (таблица _ext_reports),
+	// а не из конфигурации проекта. Заполняется программно при загрузке;
+	// в YAML не сериализуется.
+	External bool `yaml:"-"`
 }
 
 // DisplayLabel возвращает подпись параметра с учётом языка.
@@ -54,6 +59,12 @@ func LoadFile(path string) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ParseBytes(data)
+}
+
+// ParseBytes разбирает YAML отчёта из памяти (без файла). Нужна для внешних
+// отчётов, хранящихся в БД (см. internal/extform).
+func ParseBytes(data []byte) (*Report, error) {
 	var r Report
 	if err := yaml.Unmarshal(data, &r); err != nil {
 		return nil, err

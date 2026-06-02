@@ -5,6 +5,7 @@ import (
 
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/ivantit66/onebase/internal/report"
 )
 
 // при коллизии YAML/.os одноимённой печатной формы
@@ -126,6 +127,33 @@ func TestSetExternalPrintForms_Replaces(t *testing.T) {
 	forms := r.GetPrintForms("Док")
 	if len(forms) != 1 || forms[0].Name != "B" {
 		t.Fatalf("ожидалась только форма B после замены, получили %+v", forms)
+	}
+}
+
+// Внешние отчёты дополняют список конфигурации и помечаются External;
+// при коллизии имени приоритет у конфигурации.
+func TestSetExternalReports_MergeAndPriority(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.reports["ОстаткиТоваров"] = &report.Report{Name: "ОстаткиТоваров", Query: "ВЫБРАТЬ 1"}
+	r.mu.Unlock()
+
+	r.SetExternalReports([]*report.Report{
+		{Name: "ВнешнийОтчёт", Query: "ВЫБРАТЬ 2"},
+		{Name: "ОстаткиТоваров", Query: "ВЫБРАТЬ 999"}, // коллизия
+	})
+
+	// GetReport: коллизия → отдаётся конфиг-отчёт.
+	if rep := r.GetReport("ОстаткиТоваров"); rep == nil || rep.Query != "ВЫБРАТЬ 1" || rep.External {
+		t.Errorf("при коллизии должен отдаваться отчёт конфигурации, got %+v", rep)
+	}
+	// Внешний уникальный отчёт доступен и помечен External.
+	if rep := r.GetReport("ВнешнийОтчёт"); rep == nil || !rep.External {
+		t.Errorf("ожидался внешний отчёт с External=true, got %+v", rep)
+	}
+	// Reports(): конфиг + только не конфликтующие внешние = 2.
+	if got := len(r.Reports()); got != 2 {
+		t.Errorf("ожидалось 2 отчёта (конфиг + 1 внешний без коллизии), got %d", got)
 	}
 }
 

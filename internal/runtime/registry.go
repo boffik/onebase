@@ -23,6 +23,7 @@ type Registry struct {
 	enums           map[string]*metadata.Enum
 	constants       map[string]*metadata.Constant
 	reports         map[string]*report.Report
+	extReports      map[string]*report.Report           // внешние отчёты (из БД), ключ — Name
 	printForms      map[string][]*printform.PrintForm   // lowercase entity name → forms
 	extPrintForms   map[string][]*printform.PrintForm   // lowercase entity name → внешние формы (из БД)
 	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
@@ -54,6 +55,7 @@ func NewRegistry() *Registry {
 		enums:           make(map[string]*metadata.Enum),
 		constants:       make(map[string]*metadata.Constant),
 		reports:         make(map[string]*report.Report),
+		extReports:      make(map[string]*report.Report),
 		printForms:      make(map[string][]*printform.PrintForm),
 		extPrintForms:   make(map[string][]*printform.PrintForm),
 		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
@@ -364,17 +366,54 @@ func (r *Registry) GetReport(name string) *report.Report {
 			return v
 		}
 	}
+	// внешние отчёты — только если в конфигурации такого нет (конфиг приоритетнее)
+	if rep, ok := r.extReports[name]; ok {
+		return rep
+	}
+	for k, v := range r.extReports {
+		if strings.ToLower(k) == nl {
+			return v
+		}
+	}
 	return nil
 }
 
 func (r *Registry) Reports() []*report.Report {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]*report.Report, 0, len(r.reports))
+	out := make([]*report.Report, 0, len(r.reports)+len(r.extReports))
 	for _, rep := range r.reports {
 		out = append(out, rep)
 	}
+	// внешние отчёты, чьё имя не занято конфигурацией
+	for name, rep := range r.extReports {
+		if _, busy := r.reports[name]; busy {
+			continue
+		}
+		out = append(out, rep)
+	}
 	return out
+}
+
+// SetExternalReports атомарно заменяет набор внешних отчётов (из внешнего
+// контура расширяемости). Каждому выставляется External=true. При коллизии
+// имени с отчётом конфигурации пишется предупреждение — приоритет у
+// конфигурации (см. GetReport/Reports). Хранится отдельно от reports, поэтому
+// reload конфигурации (Load) внешние отчёты не затирает.
+func (r *Registry) SetExternalReports(reports []*report.Report) {
+	m := make(map[string]*report.Report, len(reports))
+	for _, rep := range reports {
+		rep.External = true
+		m[rep.Name] = rep
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name := range m {
+		if _, busy := r.reports[name]; busy {
+			log.Printf("extform: внешний отчёт %q совпадает по имени с отчётом конфигурации — используется отчёт конфигурации", name)
+		}
+	}
+	r.extReports = m
 }
 
 func (r *Registry) GetEntity(name string) *metadata.Entity {

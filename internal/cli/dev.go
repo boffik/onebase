@@ -150,7 +150,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		reg.LoadWidgets(proj.Widgets)
 		reg.LoadHomePage(proj.HomePage)
 
-		// Внешний контур: печатные формы из БД (вне конфигурации проекта).
+		// Внешний контур: печатные формы и отчёты из БД (вне конфигурации проекта).
 		extRepo := extform.New(db)
 		if err := extRepo.EnsureSchema(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, "[dev] extform schema error:", err)
@@ -158,6 +158,14 @@ func runDev(cmd *cobra.Command, _ []string) error {
 			fmt.Fprintln(os.Stderr, "[dev] external print forms:", err)
 		} else {
 			reg.SetExternalPrintForms(extForms)
+		}
+		extRepRepo := extform.NewReports(db)
+		if err := extRepRepo.EnsureSchema(ctx); err != nil {
+			fmt.Fprintln(os.Stderr, "[dev] extform reports schema error:", err)
+		} else if extReps, err := extRepRepo.LoadEnabledReports(ctx); err != nil {
+			fmt.Fprintln(os.Stderr, "[dev] external reports:", err)
+		} else {
+			reg.SetExternalReports(extReps)
 		}
 		if loadErr := sched.Reload(proj.ScheduledJobs); loadErr != nil {
 			fmt.Fprintln(os.Stderr, "[dev] scheduler reload error:", loadErr)
