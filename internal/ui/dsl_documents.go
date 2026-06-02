@@ -145,12 +145,25 @@ func (p *docProxy) findByField(field, value string, raw any) any {
 }
 
 // DeleteRef реализует interpreter.RefManager — удаление документа по UUID.
+// Для проводимых документов сначала очищает движения по всем регистрам —
+// иначе после DELETE останутся осиротевшие движения (recorder указывает на
+// удалённый документ), которые раздувают остатки. То же делает UI-удаление
+// (deleteRecord в handlers.go) и API; раньше DSL-путь это пропускал, из-за
+// чего повторные запуски обработок накапливали движения.
 func (p *docProxy) DeleteRef(uuidStr string) error {
 	id, err := uuid.Parse(uuidStr)
 	if err != nil {
 		return fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
-	return p.s.store.Delete(p.ctx(), p.entity.Name, id)
+	ctx := p.ctx()
+	if p.entity.Posting {
+		for _, reg := range p.s.reg.Registers() {
+			if err := p.s.store.WriteMovements(ctx, reg.Name, p.entity.Name, id, nil, reg, nil); err != nil {
+				return fmt.Errorf("очистка движений %s: %w", reg.Name, err)
+			}
+		}
+	}
+	return p.s.store.Delete(ctx, p.entity.Name, id)
 }
 
 // LoadObject реализует interpreter.RefManager — загружает существующий документ

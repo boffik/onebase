@@ -151,6 +151,93 @@ func TestDocsRoot_CreateWritePost(t *testing.T) {
 	}
 }
 
+// Удаление проведённого документа из обработки должно очищать его движения
+// по регистрам — иначе остаются осиротевшие движения (recorder на удалённый
+// документ), раздувающие остатки. Регрессия на накопление движений при
+// повторных запусках обработки заполнения демоданных.
+func TestDocsRoot_DeleteClearsMovements(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	doc := &metadata.Entity{
+		Name:    "ПоступлениеТоваров",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+		TableParts: []metadata.TablePart{
+			{Name: "Товары", Fields: []metadata.Field{
+				{Name: "Номенклатура", Type: metadata.FieldTypeString},
+				{Name: "Количество", Type: metadata.FieldTypeNumber},
+			}},
+		},
+	}
+	reg := &metadata.Register{
+		Name:       "ОстаткиТоваров",
+		Dimensions: []metadata.Field{{Name: "Номенклатура", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{doc}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatal(err)
+	}
+
+	onPostSrc := `Процедура ОбработкаПроведения()
+  Для Каждого Стр Из ЭтотОбъект.Товары Цикл
+    Дв = Движения.ОстаткиТоваров.Добавить();
+    Дв.ВидДвижения = "Приход";
+    Дв.Номенклатура = Стр.Номенклатура;
+    Дв.Количество = Стр.Количество;
+  КонецЦикла;
+КонецПроцедуры`
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{
+		Entities:  []*metadata.Entity{doc},
+		Programs:  map[string]*ast.Program{"ПоступлениеТоваров": mustParse(t, onPostSrc)},
+		Registers: []*metadata.Register{reg},
+	})
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+	s := &Server{store: db, reg: registry, interp: interp, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
+
+	root := newDocsRoot(s, interpreter.NewTxState(ctx))
+	dp := root.Get("ПоступлениеТоваров").(*docProxy)
+
+	// Создать → заполнить ТЧ → провести.
+	w := dp.CallMethod("создать", nil).(*docWriter)
+	w.Set("Номер", "ПОС-001")
+	tp := w.Get("Товары").(*tpProxy)
+	r := tp.CallMethod("добавить", nil).(*interpreter.MapThis)
+	r.Set("Номенклатура", "Тумбочка")
+	r.Set("Количество", float64(100))
+	w.CallMethod("провести", nil)
+
+	var mov int
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if mov != 1 {
+		t.Fatalf("до удаления ожидалось 1 движение, получили %d", mov)
+	}
+
+	// Удалить документ из обработки → движения должны исчезнуть.
+	ref := dp.CallMethod("найтипономеру", []any{"ПОС-001"}).(*interpreter.Ref)
+	dp.CallMethod("удалить", []any{ref})
+
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if mov != 0 {
+		t.Errorf("после удаления документа движений должно быть 0, получили %d (осиротевшие)", mov)
+	}
+	var docCnt int
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров").Scan(&docCnt)
+	if docCnt != 0 {
+		t.Errorf("документ не удалён: осталось %d", docCnt)
+	}
+}
+
 // Документы.X.НайтиПоНомеру() находит документ по номеру и возвращает
 // ссылку, по которой работает Удалить() (и через менеджер, и напрямую).
 func TestDocsRoot_FindByNumberAndDelete(t *testing.T) {
