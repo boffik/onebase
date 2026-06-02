@@ -1,0 +1,11 @@
+name: МестоХранения
+title: Место хранения
+fields:
+  - name: Наименование
+    type: string
+  - name: Склад
+    type: reference:Склад
+  - name: Код
+    type: string
+  - name: ТипМеста
+    type: enum:ТипМестаХранения

@@ -1,0 +1,26 @@
+name: ЗавершённыеЗаМесяц
+type: kpi
+title: Завершено за месяц
+titles:
+  en: Completed this month
+  de: Diesen Monat abgeschlossen
+  sr: Завршено овог месеца
+  az: Bu ay yekunlaşdırılmış
+  es: Completadas este mes
+  fr: Terminées ce mois
+  hy: Ամսական ավարտված
+  ka: ამ თვეში დასრულებული
+  kk: Осы айда аяқталған
+  pt: Concluídas este mês
+  ro: Finalizate luna aceasta
+  tr: Bu ay tamamlanan
+  uk: Завершено за місяць
+  uz: Bu oyda yakunlangan
+  zh: 本月完成
+format: number
+params:
+  Начало: "{{today|start_of_month}}"
+query: |
+  ВЫБРАТЬ СУММА(Количество) КАК Значение
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам
+  ГДЕ Статус В ("Готово", "Закрыто") И period >= &Начало

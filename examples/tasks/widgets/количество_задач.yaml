@@ -1,0 +1,23 @@
+name: КоличествоЗадач
+type: kpi
+title: Задач всего
+titles:
+  en: Total tasks
+  de: Aufgaben gesamt
+  sr: Укупно задатака
+  az: Ümumi tapşırıqlar
+  es: Total de tareas
+  fr: Total des tâches
+  hy: Ընդհանուր առաջադրանքներ
+  ka: სულ დავალებები
+  kk: Барлық тапсырмалар
+  pt: Total de tarefas
+  ro: Total sarcini
+  tr: Toplam görev
+  uk: Завдань всього
+  uz: Jami vazifalar
+  zh: 任务总数
+format: number
+query: |
+  ВЫБРАТЬ СУММА(Количество) КАК Значение
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам

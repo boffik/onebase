@@ -1,0 +1,141 @@
+name: Спринт
+title: Спринт
+titles:
+  en: Sprint
+  de: Sprint
+  sr: Спринт
+  az: Sprint
+  es: Sprint
+  fr: Sprint
+  hy: Սպրինտ
+  ka: სპრინტი
+  kk: Спринт
+  pt: Sprint
+  ro: Sprint
+  tr: Sprint
+  uk: Спринт
+  uz: Sprint
+  zh: 冲刺
+posting: false
+numerator:
+  prefix: "СПР-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+    title: Номер
+  - name: Наименование
+    type: string
+    title: Наименование
+    titles:
+      en: Name
+      de: Name
+      sr: Назив
+      az: Adlandırma
+      es: Nombre
+      fr: Nom
+      hy: Անվանում
+      ka: დასახელება
+      kk: Атауы
+      pt: Nome
+      ro: Denumire
+      tr: Ad
+      uk: Найменування
+      uz: Nomi
+      zh: 名称
+  - name: Проект
+    type: reference:Проект
+    title: Проект
+    titles:
+      en: Project
+      de: Projekt
+      sr: Пројекат
+      az: Layihə
+      es: Proyecto
+      fr: Projet
+      hy: Նախագիծ
+      ka: პროექტი
+      kk: Жоба
+      pt: Projeto
+      ro: Proiect
+      tr: Proje
+      uk: Проєкт
+      uz: Loyiha
+      zh: 项目
+  - name: ДатаНачала
+    type: date
+    title: Дата начала
+    titles:
+      en: Start date
+      de: Startdatum
+      sr: Датум почетка
+      az: Başlama tarixi
+      es: Fecha de inicio
+      fr: Date de début
+      hy: Սկզբի ամսաթիվ
+      ka: დაწყების თარიღი
+      kk: Басталу күні
+      pt: Data de início
+      ro: Dată de început
+      tr: Başlangıç tarihi
+      uk: Дата початку
+      uz: Boshlanish sanasi
+      zh: 开始日期
+  - name: ДатаЗавершения
+    type: date
+    title: Дата завершения
+    titles:
+      en: End date
+      de: Enddatum
+      sr: Датум завршетка
+      az: Yekun tarixi
+      es: Fecha de fin
+      fr: Date de fin
+      hy: Ավարտի ամսաթիվ
+      ka: დასრულების თარიღი
+      kk: Аяқталу күні
+      pt: Data de fim
+      ro: Dată de sfârșit
+      tr: Bitiş tarihi
+      uk: Дата завершення
+      uz: Tugash sanasi
+      zh: 结束日期
+  - name: Цель
+    type: string
+    title: Цель спринта
+    titles:
+      en: Sprint goal
+      de: Sprint-Ziel
+      sr: Циљ спринта
+      az: Sprint məqsədi
+      es: Objetivo del sprint
+      fr: Objectif du sprint
+      hy: Սպրինտի նպատակ
+      ka: სპრინტის მიზანი
+      kk: Спринт мақсаты
+      pt: Objetivo do sprint
+      ro: Obiectiv sprint
+      tr: Sprint hedefi
+      uk: Ціль спринту
+      uz: Sprint maqsadi
+      zh: 冲刺目标
+  - name: Статус
+    type: enum:СтатусСпринта
+    title: Статус спринта
+    titles:
+      en: Sprint status
+      de: Sprint-Status
+      sr: Статус спринта
+      az: Sprint statusu
+      es: Estado del sprint
+      fr: Statut du sprint
+      hy: Սպրինտի կարգավիճակ
+      ka: სპრინტის სტატუსი
+      kk: Спринт күйі
+      pt: Estado do sprint
+      ro: Status sprint
+      tr: Sprint durumu
+      uk: Статус спринту
+      uz: Sprint holati
+      zh: 冲刺状态

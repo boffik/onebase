@@ -1,0 +1,27 @@
+name: Просроченные
+type: kpi
+title: Просроченные
+titles:
+  en: Overdue
+  de: Überfällig
+  sr: Прекорачени
+  az: Gecikmiş
+  es: Vencidas
+  fr: En retard
+  hy: Ժամկետանց
+  ka: დაგვიანებული
+  kk: Мерзімі өткен
+  pt: Atrasadas
+  ro: Restante
+  tr: Gecikmiş
+  uk: Прострочені
+  uz: Kechikkan
+  zh: 逾期
+format: number
+params:
+  Сегодня: "{{today}}"
+query: |
+  ВЫБРАТЬ КОЛИЧЕСТВО(*) КАК Значение
+  ИЗ Документ.Задача
+  ГДЕ Статус НЕ В ("Готово", "Закрыто", "Отменено")
+    И Срок < &Сегодня

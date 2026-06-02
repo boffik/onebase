@@ -1,0 +1,95 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Оплата
+  title:
+    ru: "Оплата"
+    en: "Payment"
+    de: "Zahlung"
+  auto_save_settings: true
+
+attributes:
+  - name: Объект
+    type: DocumentRef.Оплата
+    save: true
+    main: true
+
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Параметры оплаты"
+      en: "Payment parameters"
+      de: "Zahlungsparameter"
+    children:
+      - kind: ПолеВвода
+        name: ПолеНомер
+        title:
+          ru: "Номер"
+          en: "Number"
+          de: "Nummer"
+        data_path: Объект.Номер
+        readonly: true
+      - kind: ПолеВвода
+        name: ПолеДата
+        title:
+          ru: "Дата"
+          en: "Date"
+          de: "Datum"
+        data_path: Объект.Дата
+        required: true
+      - kind: ПолеВвода
+        name: ПолеКлиент
+        title:
+          ru: "Клиент"
+          en: "Client"
+          de: "Kunde"
+        data_path: Объект.Клиент
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСделка
+        title:
+          ru: "Сделка"
+          en: "Deal"
+          de: "Geschäft"
+        data_path: Объект.Сделка
+        choice: true
+        hint: "Привяжите оплату к сделке для отслеживания"
+      - kind: ПолеВвода
+        name: ПолеСумма
+        title:
+          ru: "Сумма"
+          en: "Amount"
+          de: "Betrag"
+        data_path: Объект.Сумма
+        required: true
+      - kind: ПолеВвода
+        name: ПолеСпособОплаты
+        title:
+          ru: "Способ оплаты"
+          en: "Payment method"
+          de: "Zahlungsmethode"
+        data_path: Объект.СпособОплаты
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеНазначениеПлатежа
+        title:
+          ru: "Назначение платежа"
+          en: "Payment purpose"
+          de: "Verwendungszweck"
+        data_path: Объект.НазначениеПлатежа
+      - kind: ПолеВвода
+        name: ПолеОтветственный
+        title:
+          ru: "Ответственный"
+          en: "Responsible"
+          de: "Verantwortlich"
+        data_path: Объект.Ответственный
+        choice: true
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

@@ -1,0 +1,29 @@
+name: ЗадачиПоПриоритету
+type: chart
+chart_kind: bar
+title: Задачи по приоритету
+titles:
+  en: Tasks by priority
+  de: Aufgaben nach Priorität
+  sr: Задаци по приоритету
+  az: Prioritetə görə tapşırıqlar
+  es: Tareas por prioridad
+  fr: Tâches par priorité
+  hy: Առաջադրանքներ ըստ առաջնահերթության
+  ka: დავალებები პრიორიტეტის მიხედვით
+  kk: Басымдылық бойынша тапсырмалар
+  pt: Tarefas por prioridade
+  ro: Sarcini după prioritate
+  tr: Görevler önceliğe göre
+  uk: Завдання за пріоритетом
+  uz: Ustuvorlik bo'yicha vazifalar
+  zh: 按优先级分布
+query: |
+  ВЫБРАТЬ
+    Приоритет,
+    СУММА(Количество) КАК Количество
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам
+  СГРУППИРОВАТЬ ПО Приоритет
+  УПОРЯДОЧИТЬ ПО Количество УБЫВ
+x_field: Приоритет
+y_fields: [Количество]

@@ -1,0 +1,95 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Инвентаризация
+  title:
+    ru: "Инвентаризация"
+    en: "Inventory count"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.Инвентаризация
+    save: true
+    main: true
+commands:
+  - name: РассчитатьОтклонения
+    title:
+      ru: "Рассчитать отклонения"
+    action: КнопкаРассчитатьНажатие
+    picture: stdpic:Refresh
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Реквизиты"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеОрганизация
+                title:
+                  ru: "Организация"
+                data_path: Объект.Организация
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСклад
+                title:
+                  ru: "Склад"
+                data_path: Объект.Склад
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                data_path: Объект.Статус
+                choice: true
+      - kind: Страница
+        name: СтраницаТовары
+        title:
+          ru: "Товары"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаТаблица
+            title:
+              ru: "Инвентаризационная ведомость"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабТовары
+                title:
+                  ru: "Товары"
+                data_path: Объект.Товары
+              - kind: Кнопка
+                name: КнопкаРассчитать
+                title:
+                  ru: "Рассчитать отклонения"
+                hint: "Отклонение = Факт - Учёт"
+                events:
+                  Нажатие: КнопкаРассчитатьНажатие
+          - kind: ПолеВвода
+            name: ПолеКомментарий
+            title:
+              ru: "Комментарий"
+            data_path: Объект.Комментарий
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

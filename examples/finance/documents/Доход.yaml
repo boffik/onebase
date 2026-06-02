@@ -1,0 +1,26 @@
+name: Доход
+title: Доход
+posting: true
+numerator:
+  prefix: "Д-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Счёт
+    type: reference:Счёт
+  - name: КатегорияДохода
+    type: reference:КатегорияДохода
+  - name: Сумма
+    type: number
+  - name: Контрагент
+    type: reference:Контрагент
+  - name: Описание
+    type: string
+  - name: ЧленСемьи
+    type: reference:ЧленСемьи
+  - name: Ожидаемый
+    type: bool

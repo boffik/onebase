@@ -1,0 +1,35 @@
+name: МенеджерПродаж
+title: Менеджер по продажам
+description: Полный доступ к сделкам, активностям и задачам
+permissions:
+  catalogs:
+    Клиент: [read, write]
+    КонтактноеЛицо: [read, write]
+    Сотрудник: [read]
+    Воронка: [read]
+    СтадияСделки: [read]
+    ТипАктивности: [read]
+    КаналСвязи: [read]
+  documents:
+    Сделка: [read, write, post, unpost]
+    Активность: [read, write, post, unpost]
+    ЗадачаCRM: [read, write, post, unpost]
+    Звонок: [read, write, post, unpost]
+    КоммерческоеПредложение: [read, write]
+    Оплата: [read, write, post, unpost]
+  registers:
+    ВоронкаПродаж: [read]
+    Взаимодействия: [read]
+    ОплатыКлиентов: [read]
+    ВыполнениеЗадач: [read]
+  reports:
+    ВоронкаПродаж: [run]
+    СделкиПоМенеджерам: [run]
+    СделкиПоИсточникам: [run]
+    ДинамикаСделок: [run]
+    АктивностьМенеджеров: [run]
+    ВзаимодействияПоКлиентам: [run]
+    КонверсияСтадий: [run]
+    СреднийЧек: [run]
+    ЗагруженностьСотрудников: [run]
+  printforms: [run]

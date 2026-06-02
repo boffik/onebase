@@ -1,0 +1,20 @@
+name: Оператор
+title: Оператор
+description: Ввод данных по клиентам и взаимодействиям
+permissions:
+  catalogs:
+    Клиент: [read, write]
+    КонтактноеЛицо: [read, write]
+    Сотрудник: [read]
+    ТипАктивности: [read]
+    КаналСвязи: [read]
+  documents:
+    Активность: [read, write]
+    Звонок: [read, write]
+    ЗадачаCRM: [read]
+    КоммерческоеПредложение: [read, write]
+  reports:
+    ВзаимодействияПоКлиентам: [run]
+    ВоронкаПродаж: [run]
+    СделкиПоМенеджерам: [run]
+  printforms: [run]

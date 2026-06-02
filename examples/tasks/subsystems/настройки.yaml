@@ -1,0 +1,22 @@
+name: Настройки
+title: Настройки
+titles:
+  en: Settings
+  de: Einstellungen
+  sr: Подешавања
+  az: Parametrlər
+  es: Configuración
+  fr: Paramètres
+  hy: Կարգավորումներ
+  ka: პარამეტრები
+  kk: Баптаулар
+  pt: Configurações
+  ro: Setări
+  tr: Ayarlar
+  uk: Налаштування
+  uz: Sozlamalar
+  zh: 设置
+order: 40
+contents:
+  catalogs: [Исполнитель, Метка, Проект, Веха]
+  processors: [ЗаполнитьТестовуюБазу]

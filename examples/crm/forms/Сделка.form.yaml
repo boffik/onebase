@@ -1,0 +1,256 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Сделка
+  title:
+    ru: "Сделка"
+    en: "Deal"
+    de: "Geschäft"
+  auto_save_settings: true
+  vertical_scroll: auto
+
+attributes:
+  - name: Объект
+    type: DocumentRef.Сделка
+    save: true
+    main: true
+
+commands:
+  - name: ПересчитатьКоманда
+    title:
+      ru: "Пересчитать итоги"
+      en: "Recalculate totals"
+      de: "Summen neu berechnen"
+    action: КнопкаПересчитатьНажатие
+    picture: stdpic:Refresh
+
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+          de: "Allgemein"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Шапка документа"
+              en: "Document header"
+              de: "Belegkopf"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                  en: "Number"
+                  de: "Nummer"
+                data_path: Объект.Номер
+                readonly: true
+                hint: "СД-NNNNN"
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                  en: "Date"
+                  de: "Datum"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеЗаголовок
+                title:
+                  ru: "Заголовок"
+                  en: "Title"
+                  de: "Titel"
+                data_path: Объект.Заголовок
+                required: true
+                hint: "Краткое название сделки"
+              - kind: ПолеВвода
+                name: ПолеКлиент
+                title:
+                  ru: "Клиент"
+                  en: "Client"
+                  de: "Kunde"
+                data_path: Объект.Клиент
+                required: true
+                choice: true
+                hint: "Клиент, с которым заключается сделка"
+                events:
+                  ПриИзменении: КлиентПриИзменении
+              - kind: ПолеВвода
+                name: ПолеКонтактноеЛицо
+                title:
+                  ru: "Контактное лицо"
+                  en: "Contact person"
+                  de: "Kontaktperson"
+                data_path: Объект.КонтактноеЛицо
+                choice: true
+                hint: "Основной контакт клиента"
+              - kind: ПолеВвода
+                name: ПолеОтветственный
+                title:
+                  ru: "Ответственный"
+                  en: "Responsible"
+                  de: "Verantwortlich"
+                data_path: Объект.Ответственный
+                choice: true
+          - kind: ГруппаФормы
+            name: ГруппаФинансы
+            title:
+              ru: "Финансы"
+              en: "Finance"
+              de: "Finanzen"
+            children:
+              - kind: ПолеВвода
+                name: ПолеСумма
+                title:
+                  ru: "Сумма сделки"
+                  en: "Deal amount"
+                  de: "Geschäftsbetrag"
+                data_path: Объект.Сумма
+                hint: "Ожидаемая сумма сделки"
+              - kind: ПолеВвода
+                name: ПолеВалюта
+                title:
+                  ru: "Валюта"
+                  en: "Currency"
+                  de: "Währung"
+                data_path: Объект.Валюта
+              - kind: ПолеВвода
+                name: ПолеВероятность
+                title:
+                  ru: "Вероятность, %"
+                  en: "Probability, %"
+                  de: "Wahrscheinlichkeit, %"
+                data_path: Объект.Вероятность
+                hint: "Вероятность закрытия в %"
+              - kind: ПолеВвода
+                name: ПолеОжидаемаяДата
+                title:
+                  ru: "Ожидаемая дата закрытия"
+                  en: "Expected close date"
+                  de: "Erwartetes Abschlussdatum"
+                data_path: Объект.ОжидаемаяДата
+          - kind: ГруппаФормы
+            name: ГруппаСтатус
+            title:
+              ru: "Статус"
+              en: "Status"
+              de: "Status"
+            children:
+              - kind: ПолеВвода
+                name: ПолеВоронка
+                title:
+                  ru: "Воронка"
+                  en: "Pipeline"
+                  de: "Pipeline"
+                data_path: Объект.Воронка
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСтадия
+                title:
+                  ru: "Стадия"
+                  en: "Stage"
+                  de: "Stufe"
+                data_path: Объект.Стадия
+                choice: true
+                events:
+                  ПриИзменении: СтадияПриИзменении
+              - kind: ПолеВвода
+                name: ПолеРезультат
+                title:
+                  ru: "Результат"
+                  en: "Result"
+                  de: "Ergebnis"
+                data_path: Объект.Результат
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеПричинаПроигрыша
+                title:
+                  ru: "Причина проигрыша"
+                  en: "Loss reason"
+                  de: "Verlustgrund"
+                data_path: Объект.ПричинаПроигрыша
+      - kind: Страница
+        name: СтраницаСостав
+        title:
+          ru: "Состав"
+          en: "Items"
+          de: "Positionen"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаТоварыУслуги
+            title:
+              ru: "Товары и услуги"
+              en: "Products and services"
+              de: "Produkte und Dienstleistungen"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабТоварыУслуги
+                title:
+                  ru: "Товары и услуги"
+                  en: "Products and services"
+                  de: "Produkte und Dienstleistungen"
+                data_path: Объект.ТоварыУслуги
+              - kind: Кнопка
+                name: КнопкаПересчитать
+                title:
+                  ru: "Пересчитать суммы"
+                  en: "Recalculate amounts"
+                  de: "Summen neu berechnen"
+                hint: "Пересчитать сумму по каждой строке"
+                events:
+                  Нажатие: КнопкаПересчитатьНажатие
+      - kind: Страница
+        name: СтраницаКоманда
+        title:
+          ru: "Команда"
+          en: "Team"
+          de: "Team"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаУчастники
+            title:
+              ru: "Участники сделки"
+              en: "Deal team"
+              de: "Deal-Team"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабУчастники
+                title:
+                  ru: "Участники"
+                  en: "Participants"
+                  de: "Teilnehmer"
+                data_path: Объект.Участники
+      - kind: Страница
+        name: СтраницаОписание
+        title:
+          ru: "Описание"
+          en: "Description"
+          de: "Beschreibung"
+        children:
+          - kind: ПолеВвода
+            name: ПолеОписание
+            title:
+              ru: "Описание"
+              en: "Description"
+              de: "Beschreibung"
+            data_path: Объект.Описание
+          - kind: ПолеВвода
+            name: ПолеИсточник
+            title:
+              ru: "Источник"
+              en: "Source"
+              de: "Quelle"
+            data_path: Объект.Источник
+            choice: true
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы
+  ПриЗаписи: ПриЗаписиФормы

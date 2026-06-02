@@ -1,0 +1,24 @@
+name: ЗадачиВРаботе
+type: kpi
+title: В работе
+titles:
+  en: In progress
+  de: In Bearbeitung
+  sr: У току
+  az: İcrada
+  es: En progreso
+  fr: En cours
+  hy: Ընթացիկ
+  ka: მიმდინარე
+  kk: Орындалуда
+  pt: Em andamento
+  ro: În lucru
+  tr: Devam ediyor
+  uk: В роботі
+  uz: Jarayonda
+  zh: 进行中
+format: number
+query: |
+  ВЫБРАТЬ СУММА(Количество) КАК Значение
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам
+  ГДЕ Статус = "ВРаботе"

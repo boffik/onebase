@@ -1,0 +1,80 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: ПеремещениеТоваров
+  title:
+    ru: "Перемещение товаров"
+    en: "Stock transfer"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.ПеремещениеТоваров
+    save: true
+    main: true
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Реквизиты"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеОрганизация
+                title:
+                  ru: "Организация"
+                data_path: Объект.Организация
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСкладОтправитель
+                title:
+                  ru: "Склад-отправитель"
+                data_path: Объект.СкладОтправитель
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСкладПолучатель
+                title:
+                  ru: "Склад-получатель"
+                data_path: Объект.СкладПолучатель
+                required: true
+                choice: true
+                events:
+                  ПриИзменении: СкладПолучательПриИзменении
+      - kind: Страница
+        name: СтраницаТовары
+        title:
+          ru: "Товары"
+        children:
+          - kind: ТабличнаяЧасть
+            name: ТабТовары
+            title:
+              ru: "Товары"
+            data_path: Объект.Товары
+          - kind: ПолеВвода
+            name: ПолеКомментарий
+            title:
+              ru: "Комментарий"
+            data_path: Объект.Комментарий
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

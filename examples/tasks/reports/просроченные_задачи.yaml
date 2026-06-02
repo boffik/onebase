@@ -1,0 +1,50 @@
+name: ПросроченныеЗадачи
+title: Просроченные задачи
+titles:
+  en: Overdue tasks
+  de: Überfällige Aufgaben
+  sr: Прекорачени задаци
+  az: Gecikmiş tapşırıqlar
+  es: Tareas vencidas
+  fr: Tâches en retard
+  hy: Ժամկետանց առաջադրանքներ
+  ka: დაგვიანებული დავალებები
+  kk: Мерзімі өткен тапсырмалар
+  pt: Tarefas atrasadas
+  ro: Sarcini restante
+  tr: Gecikmiş görevler
+  uk: Прострочені завдання
+  uz: Kechikkan vazifalar
+  zh: 逾期任务
+params:
+  - name: НаДату
+    type: date
+    label: На дату
+    labels:
+      en: On date
+      de: Zum Datum
+      sr: На датум
+      az: Tarixə
+      es: A fecha
+      fr: À la date
+      hy: Ամսաթվով
+      ka: თარიღით
+      kk: Күніне
+      pt: Na data
+      ro: La data
+      tr: Tarihe
+      uk: На дату
+      uz: Sanaga
+      zh: 截至
+query: |
+  ВЫБРАТЬ
+    Заголовок,
+    Проект,
+    Исполнитель,
+    Приоритет,
+    Срок,
+    Прогресс
+  ИЗ Документ.Задача
+  ГДЕ Срок < &НаДату
+    И Статус НЕ В ("Готово", "Закрыто", "Отменено")
+  УПОРЯДОЧИТЬ ПО Срок, Приоритет УБЫВ

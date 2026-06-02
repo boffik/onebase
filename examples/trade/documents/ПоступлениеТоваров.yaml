@@ -1,0 +1,43 @@
+name: ПоступлениеТоваров
+title: Поступление товаров
+posting: true
+numerator:
+  prefix: "ПТ-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Организация
+    type: reference:Организация
+  - name: Поставщик
+    type: reference:Контрагент
+  - name: Склад
+    type: reference:Склад
+  - name: Сумма
+    type: number
+  - name: СуммаНДС
+    type: number
+  - name: Комментарий
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Номенклатура
+        type: reference:Номенклатура
+      - name: ЕдиницаИзмерения
+        type: reference:ЕдиницаИзмерения
+      - name: Количество
+        type: number
+      - name: Цена
+        type: number
+      - name: Сумма
+        type: number
+      - name: СтавкаНДС
+        type: reference:СтавкаНДС
+      - name: СуммаНДС
+        type: number
+      - name: МестоХранения
+        type: reference:МестоХранения

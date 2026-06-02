@@ -1,0 +1,38 @@
+name: Менеджер
+title: Менеджер
+description: Полный доступ
+permissions:
+  catalogs:
+    Номенклатура: [read, write]
+    Склад: [read, write]
+    МестоХранения: [read, write]
+    ЕдиницаИзмерения: [read, write]
+    СтавкаНДС: [read]
+    Организация: [read]
+    Контрагент: [read, write]
+  documents:
+    ПоступлениеТоваров: [read, write, post, unpost]
+    РеализацияТоваров: [read, write, post, unpost]
+    ПеремещениеТоваров: [read, write, post, unpost]
+    СписаниеТоваров: [read, write, post, unpost]
+    ОприходованиеТоваров: [read, write, post, unpost]
+    Инвентаризация: [read, write, post, unpost]
+    ЗаказПокупателя: [read, write, post, unpost]
+    ЗаказПоставщику: [read, write, post, unpost]
+  registers:
+    ОстаткиТоваров: [read]
+    ПартииТоваров: [read]
+    РезервыТоваров: [read]
+    ТоварыВПути: [read]
+    Взаиморасчеты: [read]
+  reports:
+    ОстаткиТоваров: [run]
+    ДвиженияТоваров: [run]
+    ОборотПоСкладам: [run]
+    ВедомостьПартий: [run]
+    РезервыТоваров: [run]
+    ТоварыВПути: [run]
+    Неликвиды: [run]
+    Оборачиваемость: [run]
+    Взаиморасчеты: [run]
+    МинимальныеОстатки: [run]

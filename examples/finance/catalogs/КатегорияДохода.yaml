@@ -1,0 +1,12 @@
+name: КатегорияДохода
+title: Категория дохода
+hierarchical: true
+fields:
+  - name: Наименование
+    type: string
+  - name: Иконка
+    type: string
+  - name: Цвет
+    type: string
+  - name: Периодичность
+    type: enum:Периодичность

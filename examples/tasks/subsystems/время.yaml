@@ -1,0 +1,30 @@
+name: Время
+title: Учёт времени
+titles:
+  en: Time tracking
+  de: Zeiterfassung
+  sr: Евиденција времена
+  az: Vaxt uçotu
+  es: Registro de tiempo
+  fr: Suivi du temps
+  hy: Ժամանակի հաշվառում
+  ka: დროის აღრიცხვა
+  kk: Уақыт есебі
+  pt: Registro de tempo
+  ro: Evidență timp
+  tr: Zaman takibi
+  uk: Облік часу
+  uz: Vaqt hisobi
+  zh: 工时管理
+order: 20
+contents:
+  documents: [УчётВремени]
+  catalogs: [Исполнитель]
+  reports: [ЗатраченноеВремяОтчёт]
+home_page:
+  rows:
+    - widgets:
+        - ЗадачиВРаботе
+    - widgets:
+        - МоиЗадачи
+        - БыстрыеДействия

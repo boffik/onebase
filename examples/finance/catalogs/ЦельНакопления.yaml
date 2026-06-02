@@ -1,0 +1,23 @@
+name: ЦельНакопления
+title: Цель накопления
+fields:
+  - name: Наименование
+    type: string
+  - name: ЦелеваяСумма
+    type: number
+  - name: ТекущаяСумма
+    type: number
+  - name: ДатаНачала
+    type: date
+  - name: ДатаЦели
+    type: date
+  - name: Цвет
+    type: string
+  - name: Иконка
+    type: string
+  - name: ПроцентВыполнения
+    type: number
+  - name: Счёт
+    type: reference:Счёт
+  - name: Описание
+    type: string

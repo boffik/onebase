@@ -1,0 +1,8 @@
+title: Главная — Minimal
+layout: rows
+rows:
+  - widgets:
+      - БыстрыеДействия
+  - widgets:
+      - ОстаткиНаСкладе
+      - СуммаСклада

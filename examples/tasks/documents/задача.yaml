@@ -1,0 +1,633 @@
+name: Задача
+title: Задача
+titles:
+  en: Task
+  de: Aufgabe
+  sr: Задатак
+  az: Tapşırıq
+  es: Tarea
+  fr: Tâche
+  hy: Առաջադրանք
+  ka: დავალება
+  kk: Тапсырма
+  pt: Tarefa
+  ro: Sarcină
+  tr: Görev
+  uk: Завдання
+  uz: Vazifa
+  zh: 任务
+posting: true
+numerator:
+  prefix: "ЗД-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+    title: Номер
+    titles:
+      en: Number
+      de: Nummer
+      sr: Број
+      az: Nömrə
+      es: Número
+      fr: Numéro
+      hy: Համար
+      ka: ნომერი
+      kk: Нөмір
+      pt: Número
+      ro: Număr
+      tr: Numara
+      uk: Номер
+      uz: Raqam
+      zh: 编号
+  - name: Дата
+    type: date
+    title: Дата создания
+    titles:
+      en: Created date
+      de: Erstellungsdatum
+      sr: Датум креирања
+      az: Yaradılma tarixi
+      es: Fecha de creación
+      fr: Date de création
+      hy: Ստեղծման ամսաթիվ
+      ka: შექმნის თარიღი
+      kk: Құрылған күні
+      pt: Data de criação
+      ro: Dată creare
+      tr: Oluşturulma tarihi
+      uk: Дата створення
+      uz: Yaratilgan sana
+      zh: 创建日期
+  - name: Заголовок
+    type: string
+    title: Заголовок
+    titles:
+      en: Title
+      de: Titel
+      sr: Наслов
+      az: Başlıq
+      es: Título
+      fr: Titre
+      hy: Վերնագիր
+      ka: სათაური
+      kk: Тақырып
+      pt: Título
+      ro: Titlu
+      tr: Başlık
+      uk: Заголовок
+      uz: Sarlavha
+      zh: 标题
+  - name: Описание
+    type: string
+    title: Описание
+    titles:
+      en: Description
+      de: Beschreibung
+      sr: Опис
+      az: Təsvir
+      es: Descripción
+      fr: Description
+      hy: Նկարագրություն
+      ka: აღწერა
+      kk: Сипаттамасы
+      pt: Descrição
+      ro: Descriere
+      tr: Açıklama
+      uk: Опис
+      uz: Tavsif
+      zh: 描述
+  - name: Проект
+    type: reference:Проект
+    title: Проект
+    titles:
+      en: Project
+      de: Projekt
+      sr: Пројекат
+      az: Layihə
+      es: Proyecto
+      fr: Projet
+      hy: Նախագիծ
+      ka: პროექტი
+      kk: Жоба
+      pt: Projeto
+      ro: Proiect
+      tr: Proje
+      uk: Проєкт
+      uz: Loyiha
+      zh: 项目
+  - name: ТипЗадачи
+    type: enum:ТипЗадачи
+    title: Тип задачи
+    titles:
+      en: Task type
+      de: Aufgabentyp
+      sr: Тип задатка
+      az: Tapşırıq növü
+      es: Tipo de tarea
+      fr: Type de tâche
+      hy: Առաջադրանքի տեսակ
+      ka: დავალების ტიპი
+      kk: Тапсырма түрі
+      pt: Tipo de tarefa
+      ro: Tip sarcină
+      tr: Görev türü
+      uk: Тип завдання
+      uz: Vazifa turi
+      zh: 任务类型
+  - name: Приоритет
+    type: enum:Приоритет
+    title: Приоритет
+    titles:
+      en: Priority
+      de: Priorität
+      sr: Приоритет
+      az: Prioritet
+      es: Prioridad
+      fr: Priorité
+      hy: Առաջնահերթություն
+      ka: პრიორიტეტი
+      kk: Басымдылық
+      pt: Prioridade
+      ro: Prioritate
+      tr: Öncelik
+      uk: Пріоритет
+      uz: Ustuvorlik
+      zh: 优先级
+  - name: Статус
+    type: enum:СтатусЗадачи
+    title: Статус
+    titles:
+      en: Status
+      de: Status
+      sr: Статус
+      az: Status
+      es: Estado
+      fr: Statut
+      hy: Կարգավիճակ
+      ka: სტატუსი
+      kk: Күй
+      pt: Estado
+      ro: Status
+      tr: Durum
+      uk: Статус
+      uz: Holat
+      zh: 状态
+  - name: Исполнитель
+    type: reference:Исполнитель
+    title: Исполнитель
+    titles:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+  - name: Автор
+    type: reference:Исполнитель
+    title: Автор
+    titles:
+      en: Author
+      de: Autor
+      sr: Аутор
+      az: Müəllif
+      es: Autor
+      fr: Auteur
+      hy: Հեղինակ
+      ka: ავტორი
+      kk: Авторы
+      pt: Autor
+      ro: Autor
+      tr: Yazar
+      uk: Автор
+      uz: Muallif
+      zh: 创建者
+  - name: Веха
+    type: reference:Веха
+    title: Веха
+    titles:
+      en: Milestone
+      de: Meilenstein
+      sr: Мељок
+      az: Mərhələ
+      es: Hito
+      fr: Jalon
+      hy: Ուղենիշ
+      ka: ეტაპი
+      kk: Кезең
+      pt: Marco
+      ro: Piatră de hotar
+      tr: Kilometre taşı
+      uk: Віха
+      uz: Bosqich
+      zh: 里程碑
+  - name: Спринт
+    type: reference:Спринт
+    title: Спринт
+    titles:
+      en: Sprint
+      de: Sprint
+      sr: Спринт
+      az: Sprint
+      es: Sprint
+      fr: Sprint
+      hy: Սպրինտ
+      ka: სპრინტი
+      kk: Спринт
+      pt: Sprint
+      ro: Sprint
+      tr: Sprint
+      uk: Спринт
+      uz: Sprint
+      zh: 冲刺
+  - name: ДатаНачала
+    type: date
+    title: Плановое начало
+    titles:
+      en: Planned start
+      de: Geplanter Start
+      sr: Планирани почетак
+      az: Planlaşdırılan başlanğıc
+      es: Inicio planificado
+      fr: Début prévu
+      hy: Պլանային սկիզբ
+      ka: დაგეგმილი დაწყება
+      kk: Жоспарлы басталу
+      pt: Início planeado
+      ro: Început planificat
+      tr: Planlanan başlangıç
+      uk: Плановий початок
+      uz: Rejalashtirilgan boshlanish
+      zh: 计划开始
+  - name: Срок
+    type: date
+    title: Дедлайн
+    titles:
+      en: Deadline
+      de: Frist
+      sr: Рок
+      az: Son tarix
+      es: Fecha límite
+      fr: Date limite
+      hy: Վերջնաժամկետ
+      ka: ბოლო ვადა
+      kk: Мерзімі
+      pt: Prazo
+      ro: Termen limită
+      tr: Son tarih
+      uk: Дедлайн
+      uz: Muddat
+      zh: 截止日期
+  - name: ДатаЗавершения
+    type: date
+    title: Фактическое завершение
+    titles:
+      en: Actual completion
+      de: Tatsächlicher Abschluss
+      sr: Стварно завршетак
+      az: Faktiki yekun
+      es: Finalización real
+      fr: Achèvement réel
+      hy: Փաստացի ավարտ
+      ka: ფაქტიური დასრულება
+      kk: Нақты аяқталу
+      pt: Conclusão real
+      ro: Finalizare efectivă
+      tr: Gerçekleşen bitiş
+      uk: Фактичне завершення
+      uz: Haqiqiy yakunlanish
+      zh: 实际完成日期
+  - name: Оценка
+    type: number
+    title: Оценка (часы)
+    titles:
+      en: Estimate (hours)
+      de: Schätzung (Stunden)
+      sr: Процена (сати)
+      az: Qiymətləndirmə (saat)
+      es: Estimación (horas)
+      fr: Estimation (heures)
+      hy: Գնահատում (ժամ)
+      ka: შეფასება (საათი)
+      kk: Бағалау (сағат)
+      pt: Estimativa (horas)
+      ro: Estimare (ore)
+      tr: Tahmin (saat)
+      uk: Оцінка (години)
+      uz: Baholash (soat)
+      zh: 预估（小时）
+  - name: Сложность
+    type: number
+    title: Story points
+    titles:
+      en: Story points
+      de: Story Points
+      sr: Стори поени
+      az: Story points
+      es: Story points
+      fr: Story points
+      hy: Story points
+      ka: Story points
+      kk: Story points
+      pt: Story points
+      ro: Story points
+      tr: Story points
+      uk: Story points
+      uz: Story points
+      zh: 故事点
+  - name: РодительскаяЗадача
+    type: reference:Задача
+    title: Родительская задача
+    titles:
+      en: Parent task
+      de: Übergeordnete Aufgabe
+      sr: Надређени задатак
+      az: Valideyn tapşırığı
+      es: Tarea padre
+      fr: Tâche parente
+      hy: Ծնողական առաջադրանք
+      ka: მშობელი დავალება
+      kk: Атаулық тапсырма
+      pt: Tarefa pai
+      ro: Sarcină părinte
+      tr: Üst görev
+      uk: Батьківське завдання
+      uz: Ota-ona vazifasi
+      zh: 父任务
+  - name: Блокирует
+    type: reference:Задача
+    title: Блокирует задачу
+    titles:
+      en: Blocks task
+      de: Blockiert Aufgabe
+      sr: Блокира задатак
+      az: Tapşırığı bloklayır
+      es: Bloquea tarea
+      fr: Bloque la tâche
+      hy: Արգելափակում է առաջադրանքը
+      ka: დავალების დაბლოკვა
+      kk: Тапсырманы бұғаттайды
+      pt: Bloqueia tarefa
+      ro: Blochează sarcină
+      tr: Görevi engeller
+      uk: Блокує завдання
+      uz: Vazifani bloklaydi
+      zh: 阻塞任务
+  - name: Прогресс
+    type: number
+    title: Прогресс (%)
+    titles:
+      en: Progress (%)
+      de: Fortschritt (%)
+      sr: Напредак (%)
+      az: Proqress (%)
+      es: Progreso (%)
+      fr: Progression (%)
+      hy: Առաջընթաց (%)
+      ka: პროგრესი (%)
+      kk: Прогресс (%)
+      pt: Progresso (%)
+      ro: Progres (%)
+      tr: İlerleme (%)
+      uk: Прогрес (%)
+      uz: Progress (%)
+      zh: 进度（%）
+tableparts:
+  - name: Подзадачи
+    title: Подзадачи
+    titles:
+      en: Subtasks
+      de: Teilaufgaben
+      sr: Подзадаци
+      az: Alt-tapşırıqlar
+      es: Subtareas
+      fr: Sous-tâches
+      hy: Ենթաառաջադրանքներ
+      ka: ქვედავალებები
+      kk: Ішкі тапсырмалар
+      pt: Subtarefas
+      ro: Subsarcini
+      tr: Alt görevler
+      uk: Підзавдання
+      uz: Kichik vazifalar
+      zh: 子任务
+    fields:
+      - name: Задача
+        type: reference:Задача
+        title: Задача
+        titles:
+          en: Task
+          de: Aufgabe
+          sr: Задатак
+          az: Tapşırıq
+          es: Tarea
+          fr: Tâche
+          hy: Առաջադրանք
+          ka: დავალება
+          kk: Тапсырма
+          pt: Tarefa
+          ro: Sarcină
+          tr: Görev
+          uk: Завдання
+          uz: Vazifa
+          zh: 任务
+      - name: Статус
+        type: enum:СтатусЗадачи
+        title: Статус
+        titles:
+          en: Status
+          de: Status
+          sr: Статус
+          az: Status
+          es: Estado
+          fr: Statut
+          hy: Կարգավիճակ
+          ka: სტატუსი
+          kk: Күй
+          pt: Estado
+          ro: Status
+          tr: Durum
+          uk: Статус
+          uz: Holat
+          zh: 状态
+  - name: Метки
+    title: Метки
+    titles:
+      en: Labels
+      de: Labels
+      sr: Ознаке
+      az: Etiketlər
+      es: Etiquetas
+      fr: Étiquettes
+      hy: Պիտակներ
+      ka: ჭდეები
+      kk: Белгілер
+      pt: Etiquetas
+      ro: Etichete
+      tr: Etiketler
+      uk: Мітки
+      uz: Teglar
+      zh: 标签
+    fields:
+      - name: Метка
+        type: reference:Метка
+        title: Метка
+        titles:
+          en: Label
+          de: Label
+          sr: Ознака
+          az: Etiket
+          es: Etiqueta
+          fr: Étiquette
+          hy: Պիտակ
+          ka: ჭდე
+          kk: Белгі
+          pt: Etiqueta
+          ro: Etichetă
+          tr: Etiket
+          uk: Мітка
+          uz: Teg
+          zh: 标签
+  - name: Связи
+    title: Связанные задачи
+    titles:
+      en: Linked tasks
+      de: Verknüpfte Aufgaben
+      sr: Повезани задаци
+      az: Əlaqəli tapşırıqlar
+      es: Tareas vinculadas
+      fr: Tâches liées
+      hy: Կապված առաջադրանքներ
+      ka: დაკავშირებული დავალებები
+      kk: Байланысты тапсырмалар
+      pt: Tarefas vinculadas
+      ro: Sarcini asociate
+      tr: Bağlantılı görevler
+      uk: Пов'язані завдання
+      uz: Bog'liq vazifalar
+      zh: 关联任务
+    fields:
+      - name: СвязаннаяЗадача
+        type: reference:Задача
+        title: Связанная задача
+        titles:
+          en: Linked task
+          de: Verknüpfte Aufgabe
+          sr: Повезани задатак
+          az: Əlaqəli tapşırıq
+          es: Tarea vinculada
+          fr: Tâche liée
+          hy: Կապված առաջադրանք
+          ka: დაკავშირებული დავალება
+          kk: Байланысты тапсырма
+          pt: Tarefa vinculada
+          ro: Sarcină asociată
+          tr: Bağlantılı görev
+          uk: Пов'язане завдання
+          uz: Bog'liq vazifa
+          zh: 关联任务
+      - name: ТипСвязи
+        type: enum:ТипСвязи
+        title: Тип связи
+        titles:
+          en: Link type
+          de: Verknüpfungstyp
+          sr: Тип везе
+          az: Əlaqə növü
+          es: Tipo de vínculo
+          fr: Type de lien
+          hy: Կապի տեսակ
+          ka: კავშირის ტიპი
+          kk: Байланыс түрі
+          pt: Tipo de vínculo
+          ro: Tip asociere
+          tr: Bağlantı türü
+          uk: Тип зв'язку
+          uz: Aloqa turi
+          zh: 关联类型
+  - name: Файлы
+    title: Вложения
+    titles:
+      en: Attachments
+      de: Anhänge
+      sr: Прилози
+      az: Əlavələr
+      es: Adjuntos
+      fr: Pièces jointes
+      hy: Կից նիշքեր
+      ka: თანდართული ფაილები
+      kk: Тіркемелер
+      pt: Anexos
+      ro: Atașamente
+      tr: Ekler
+      uk: Вкладення
+      uz: Ilovachalar
+      zh: 附件
+    fields:
+      - name: ИмяФайла
+        type: string
+        title: Имя файла
+        titles:
+          en: File name
+          de: Dateiname
+          sr: Име фајла
+          az: Fayl adı
+          es: Nombre del archivo
+          fr: Nom du fichier
+          hy: Նիշքի անուն
+          ka: ფაილის სახელი
+          kk: Файл атауы
+          pt: Nome do arquivo
+          ro: Nume fișier
+          tr: Dosya adı
+          uk: Ім'я файлу
+          uz: Fayl nomi
+          zh: 文件名
+      - name: Описание
+        type: string
+        title: Описание
+        titles:
+          en: Description
+          de: Beschreibung
+          sr: Опис
+          az: Təsvir
+          es: Descripción
+          fr: Description
+          hy: Նկարագրություն
+          ka: აღწერა
+          kk: Сипаттамасы
+          pt: Descrição
+          ro: Descriere
+          tr: Açıklama
+          uk: Опис
+          uz: Tavsif
+          zh: 描述
+      - name: Размер
+        type: number
+        title: Размер (байт)
+        titles:
+          en: Size (bytes)
+          de: Größe (Bytes)
+          sr: Величина (бајтова)
+          az: Ölçü (bayt)
+          es: Tamaño (bytes)
+          fr: Taille (octets)
+          hy: Չափ (բայտ)
+          ka: ზომა (ბაიტი)
+          kk: Өлшем (байт)
+          pt: Tamanho (bytes)
+          ro: Dimensiune (bytes)
+          tr: Boyut (bayt)
+          uk: Розмір (байт)
+          uz: Hajm (bayt)
+          zh: 大小（字节）

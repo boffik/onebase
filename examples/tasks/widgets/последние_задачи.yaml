@@ -1,0 +1,26 @@
+name: ПоследниеЗадачи
+type: recent
+title: Последние задачи
+titles:
+  en: Recent tasks
+  de: Letzte Aufgaben
+  sr: Последњи задаци
+  az: Son tapşırıqlar
+  es: Tareas recientes
+  fr: Tâches récentes
+  hy: Վերջին առաջադրանքներ
+  ka: ბოლო დავალებები
+  kk: Соңғы тапсырмалар
+  pt: Tarefas recentes
+  ro: Sarcini recente
+  tr: Son görevler
+  uk: Останні завдання
+  uz: So'nggi vazifalar
+  zh: 最近任务
+limit: 10
+scope: current_user
+entities:
+  - Задача
+  - Комментарий
+  - УчётВремени
+  - Спринт

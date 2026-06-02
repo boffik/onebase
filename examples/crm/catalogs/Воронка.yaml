@@ -1,0 +1,7 @@
+name: Воронка
+title: Воронка продаж
+fields:
+  - name: Наименование
+    type: string
+  - name: Описание
+    type: string

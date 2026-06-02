@@ -1,0 +1,9 @@
+name: ЕдиницаИзмерения
+title: Единица измерения
+fields:
+  - name: Наименование
+    type: string
+  - name: Сокращение
+    type: string
+  - name: КодОКЕИ
+    type: string

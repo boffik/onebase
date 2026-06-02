@@ -1,0 +1,26 @@
+name: Номенклатура
+title: Номенклатура
+hierarchical: true
+fields:
+  - name: Наименование
+    type: string
+  - name: Артикул
+    type: string
+  - name: Штрихкод
+    type: string
+  - name: ЕдиницаИзмерения
+    type: reference:ЕдиницаИзмерения
+  - name: Группа
+    type: string
+  - name: МинимальныйОстаток
+    type: number
+  - name: Описание
+    type: string
+  - name: СтавкаНДС
+    type: reference:СтавкаНДС
+  - name: Вес
+    type: number
+  - name: Объём
+    type: number
+  - name: Активный
+    type: bool

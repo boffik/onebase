@@ -1,0 +1,9 @@
+name: Взаиморасчеты
+dimensions:
+  - name: Контрагент
+    type: reference:Контрагент
+  - name: Организация
+    type: reference:Организация
+resources:
+  - name: Сумма
+    type: number

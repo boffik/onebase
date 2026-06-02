@@ -1,0 +1,13 @@
+name: Склад
+title: Склад
+fields:
+  - name: Наименование
+    type: string
+  - name: Адрес
+    type: string
+  - name: Ответственный
+    type: string
+  - name: ТипСклада
+    type: enum:ТипСклада
+  - name: Активный
+    type: bool

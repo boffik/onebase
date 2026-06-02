@@ -1,0 +1,41 @@
+name: Расход
+title: Расход
+posting: true
+numerator:
+  prefix: "Р-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Счёт
+    type: reference:Счёт
+  - name: КатегорияРасхода
+    type: reference:КатегорияРасхода
+  - name: Сумма
+    type: number
+  - name: Контрагент
+    type: reference:Контрагент
+  - name: Описание
+    type: string
+  - name: ЧленСемьи
+    type: reference:ЧленСемьи
+  - name: МестоПокупки
+    type: string
+  - name: Теги
+    type: string
+tableparts:
+  - name: Строки
+    fields:
+      - name: Наименование
+        type: string
+      - name: Категория
+        type: reference:КатегорияРасхода
+      - name: Количество
+        type: number
+      - name: Цена
+        type: number
+      - name: Сумма
+        type: number

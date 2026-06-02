@@ -1,0 +1,112 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Расход
+  title:
+    ru: "Расход"
+    en: "Expense"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.Расход
+    save: true
+    main: true
+commands:
+  - name: ПересчитатьКоманда
+    title:
+      ru: "Пересчитать"
+    action: КнопкаПересчитатьНажатие
+    picture: stdpic:Refresh
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Параметры расхода"
+            children:
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеСчёт
+                title:
+                  ru: "Счёт"
+                data_path: Объект.Счёт
+                required: true
+                choice: true
+                hint: "С какого счёта списать"
+              - kind: ПолеВвода
+                name: ПолеКатегорияРасхода
+                title:
+                  ru: "Категория"
+                data_path: Объект.КатегорияРасхода
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСумма
+                title:
+                  ru: "Сумма"
+                data_path: Объект.Сумма
+                required: true
+              - kind: ПолеВвода
+                name: ПолеКонтрагент
+                title:
+                  ru: "Контрагент"
+                data_path: Объект.Контрагент
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеЧленСемьи
+                title:
+                  ru: "Член семьи"
+                data_path: Объект.ЧленСемьи
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеОписание
+                title:
+                  ru: "Описание"
+                data_path: Объект.Описание
+      - kind: Страница
+        name: СтраницаСостав
+        title:
+          ru: "Состав"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаПозиции
+            title:
+              ru: "Позиции чека"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабСтроки
+                title:
+                  ru: "Строки"
+                data_path: Объект.Строки
+              - kind: Кнопка
+                name: КнопкаПересчитать
+                title:
+                  ru: "Пересчитать"
+                events:
+                  Нажатие: КнопкаПересчитатьНажатие
+          - kind: ПолеВвода
+            name: ПолеМестоПокупки
+            title:
+              ru: "Место покупки"
+            data_path: Объект.МестоПокупки
+          - kind: ПолеВвода
+            name: ПолеТеги
+            title:
+              ru: "Теги"
+            data_path: Объект.Теги
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

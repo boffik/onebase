@@ -1,0 +1,16 @@
+name: Взаимодействия
+dimensions:
+  - name: Клиент
+    type: reference:Клиент
+  - name: ТипАктивности
+    type: reference:ТипАктивности
+  - name: Ответственный
+    type: reference:Сотрудник
+resources:
+  - name: Количество
+    type: number
+  - name: ДлительностьМинут
+    type: number
+attributes:
+  - name: Сделка
+    type: reference:Сделка

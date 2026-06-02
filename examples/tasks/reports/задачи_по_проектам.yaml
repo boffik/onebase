@@ -1,0 +1,89 @@
+name: ЗадачиПоПроектам
+title: Задачи по проектам
+titles:
+  en: Tasks by project
+  de: Aufgaben nach Projekt
+  sr: Задаци по пројекту
+  az: Layihəyə görə tapşırıqlar
+  es: Tareas por proyecto
+  fr: Tâches par projet
+  hy: Առաջադրаնքներ ըստ նախագծի
+  ka: დავალებები პროექტის მიხედვით
+  kk: Жоба бойынша тапсырмалар
+  pt: Tarefas por projeto
+  ro: Sarcini după proiect
+  tr: Görevler projeye göre
+  uk: Завдання за проєктами
+  uz: Loyiha bo'yicha vazifalar
+  zh: 按项目的任务
+params:
+  - name: НачалоПериода
+    type: date
+    label: Начало периода
+    labels:
+      en: Period start
+      de: Zeitraum Beginn
+      sr: Почетак периода
+      az: Dövrün başlanğıcı
+      es: Inicio del período
+      fr: Début de période
+      hy: Շրջանի սկիզբ
+      ka: პერიოდის დასაწყისი
+      kk: Кезең басы
+      pt: Início do período
+      ro: Început perioadă
+      tr: Dönem başı
+      uk: Початок періоду
+      uz: Davr boshlanishi
+      zh: 开始日期
+  - name: КонецПериода
+    type: date
+    label: Конец периода
+    labels:
+      en: Period end
+      de: Zeitraum Ende
+      sr: Крај периода
+      az: Dövrün sonu
+      es: Fin del período
+      fr: Fin de période
+      hy: Շրջանի վերջ
+      ka: პერიოდის დასრულება
+      kk: Кезең соңы
+      pt: Fim do período
+      ro: Sfârșit perioadă
+      tr: Dönem sonu
+      uk: Кінець періоду
+      uz: Davr oxiri
+      zh: 结束日期
+  - name: Проект
+    type: reference:Проект
+    label: Проект
+    labels:
+      en: Project
+      de: Projekt
+      sr: Пројекат
+      az: Layihə
+      es: Proyecto
+      fr: Projet
+      hy: Նախագիծ
+      ka: პროექტი
+      kk: Жоба
+      pt: Projeto
+      ro: Proiect
+      tr: Proje
+      uk: Проєкт
+      uz: Loyiha
+      zh: 项目
+query: |
+  ВЫБРАТЬ
+    Проект,
+    Заголовок,
+    Статус,
+    Приоритет,
+    Исполнитель,
+    Срок,
+    Оценка,
+    Прогресс
+  ИЗ Документ.Задача
+  ГДЕ Дата >= &НачалоПериода И Дата <= &КонецПериода
+  УПОРЯДОЧИТЬ ПО Проект, Приоритет, Статус

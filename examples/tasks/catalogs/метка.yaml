@@ -1,0 +1,58 @@
+name: Метка
+title: Метка
+titles:
+  en: Label
+  de: Label
+  sr: Ознака
+  az: Etiket
+  es: Etiqueta
+  fr: Étiquette
+  hy: Պիտակ
+  ka: ჭდე
+  kk: Белгі
+  pt: Etiqueta
+  ro: Etichetă
+  tr: Etiket
+  uk: Мітка
+  uz: Teg
+  zh: 标签
+hierarchical: true
+fields:
+  - name: Наименование
+    type: string
+    title: Наименование
+    titles:
+      en: Name
+      de: Name
+      sr: Назив
+      az: Adlandırma
+      es: Nombre
+      fr: Nom
+      hy: Անվանում
+      ka: დასახელება
+      kk: Атауы
+      pt: Nome
+      ro: Denumire
+      tr: Ad
+      uk: Найменування
+      uz: Nomi
+      zh: 名称
+  - name: Цвет
+    type: string
+    title: Цвет
+    titles:
+      en: Color
+      de: Farbe
+      sr: Боја
+      az: Rəng
+      es: Color
+      fr: Couleur
+      hy: Գույն
+      ka: ფერი
+      kk: Түс
+      pt: Cor
+      ro: Culoare
+      tr: Renk
+      uk: Колір
+      uz: Rang
+      zh: 颜色

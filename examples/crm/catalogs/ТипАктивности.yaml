@@ -1,0 +1,7 @@
+name: ТипАктивности
+title: Тип активности
+fields:
+  - name: Наименование
+    type: string
+  - name: Значок
+    type: string

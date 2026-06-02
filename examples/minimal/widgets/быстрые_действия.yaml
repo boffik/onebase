@@ -1,0 +1,10 @@
+name: БыстрыеДействия
+type: actions
+title: Быстрые действия
+items:
+  - label: Поступление товаров
+    entity: Поступление
+  - label: Списание товаров
+    entity: Списание
+  - label: Остатки
+    url: /ui/report/остаткитоваров

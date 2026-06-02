@@ -1,0 +1,59 @@
+name: НазначитьИсполнителя
+title: Массовое назначение исполнителя
+titles:
+  en: Bulk assignee assignment
+  de: Massenbearbeiterzuweisung
+  sr: Масовно додељивање извођача
+  az: Kütləvi icraçı təyinatı
+  es: Asignación masiva de responsable
+  fr: Assignation en masse
+  hy: Զանգվածային կատարողի նշանակում
+  ka: მასობრივი შემსრულებლის დანიშვნა
+  kk: Жаппай орындаушы тағайындау
+  pt: Atribuição em massa de responsável
+  ro: Atribuire în masă a executantului
+  tr: Toplu atama
+  uk: Масове призначення виконавця
+  uz: Ommaviy ijrochi tayinlash
+  zh: 批量指派执行人
+params:
+  - name: Задачи
+    type: string
+    label: Список задач (через запятую)
+    labels:
+      en: Task list (comma separated)
+      de: Aufgabenliste (kommagetrennt)
+      sr: Листа задатака (зарез раздвојени)
+      az: Tapşırıq siyahısı (vergüllə ayrılmış)
+      es: Lista de tareas (separadas por coma)
+      fr: Liste de tâches (séparées par virgule)
+      hy: Առաջադրանքների ցանկ (ստորակետով անջատված)
+      ka: დავალებების სია (მძიმით გამოყოფილი)
+      kk: Тапсырмалар тізімі (үтірмен бөлінген)
+      pt: Lista de tarefas (separadas por vírgula)
+      ro: Listă sarcini (separate prin virgulă)
+      tr: Görev listesi (virgülle ayrılmış)
+      uk: Список завдань (через кому)
+      uz: Vazifalar ro'yxati (vergul bilan ajratilgan)
+      zh: 任务列表（逗号分隔）
+    required: true
+  - name: Исполнитель
+    type: reference:Исполнитель
+    label: Исполнитель
+    labels:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+    required: true

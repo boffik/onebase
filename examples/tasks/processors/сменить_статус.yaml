@@ -1,0 +1,78 @@
+name: СменитьСтатус
+title: Массовая смена статуса
+titles:
+  en: Bulk status change
+  de: Massenstatusänderung
+  sr: Масовна промена статуса
+  az: Kütləvi status dəyişikliyi
+  es: Cambio masivo de estado
+  fr: Changement de statut en masse
+  hy: Զանգվածային կարգավիճակի փոխում
+  ka: მასობრივი სტატუსის შეცვლა
+  kk: Жаппай күй ауыстыру
+  pt: Mudança de estado em massa
+  ro: Schimbare status în masă
+  tr: Toplu durum değişikliği
+  uk: Масова зміна статусу
+  uz: Ommaviy holat o'zgartirish
+  zh: 批量更改状态
+params:
+  - name: Задачи
+    type: string
+    label: Список задач (через запятую)
+    labels:
+      en: Task list (comma separated)
+      de: Aufgabenliste (kommagetrennt)
+      sr: Листа задатака (зарез раздвојени)
+      az: Tapşırıq siyahısı (vergüllə ayrılmış)
+      es: Lista de tareas (separadas por coma)
+      fr: Liste de tâches (séparées par virgule)
+      hy: Առաջադրանքների ցանկ (ստորակետով անջատված)
+      ka: დავალებების სია (მძიმით გამოყოფილი)
+      kk: Тапсырмалар тізімі (үтірмен бөлінген)
+      pt: Lista de tarefas (separadas por vírgula)
+      ro: Listă sarcini (separate prin virgulă)
+      tr: Görev listesi (virgülle ayrılmış)
+      uk: Список завдань (через кому)
+      uz: Vazifalar ro'yxati (vergul bilan ajratilgan)
+      zh: 任务列表（逗号分隔）
+    required: true
+  - name: НовыйСтатус
+    type: enum:СтатусЗадачи
+    label: Новый статус
+    labels:
+      en: New status
+      de: Neuer Status
+      sr: Нови статус
+      az: Yeni status
+      es: Nuevo estado
+      fr: Nouveau statut
+      hy: Նոր կարգավիճակ
+      ka: ახალი სტატუსი
+      kk: Жаңа күй
+      pt: Novo estado
+      ro: Status nou
+      tr: Yeni durum
+      uk: Новий статус
+      uz: Yangi holat
+      zh: 新状态
+    required: true
+  - name: Комментарий
+    type: string
+    label: Комментарий к изменению
+    labels:
+      en: Change comment
+      de: Änderungskommentar
+      sr: Коментар промене
+      az: Dəyişiklik şərhi
+      es: Comentario del cambio
+      fr: Commentaire du changement
+      hy: Փոփոխության մեկնաբանություն
+      ka: ცვლილების კომენტარი
+      kk: Өзгеріс түсініктемесі
+      pt: Comentário da mudança
+      ro: Comentariu schimbare
+      tr: Değişiklik yorumu
+      uk: Коментар до зміни
+      uz: O'zgarish izohi
+      zh: 变更备注

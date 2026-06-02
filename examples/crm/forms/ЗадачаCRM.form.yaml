@@ -1,0 +1,167 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: ЗадачаCRM
+  title:
+    ru: "Задача"
+    en: "Task"
+    de: "Aufgabe"
+  auto_save_settings: true
+  vertical_scroll: auto
+
+attributes:
+  - name: Объект
+    type: DocumentRef.ЗадачаCRM
+    save: true
+    main: true
+
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+          de: "Allgemein"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Параметры задачи"
+              en: "Task parameters"
+              de: "Aufgabenparameter"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                  en: "Number"
+                  de: "Nummer"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                  en: "Date"
+                  de: "Datum"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеТема
+                title:
+                  ru: "Тема"
+                  en: "Subject"
+                  de: "Betreff"
+                data_path: Объект.Тема
+                required: true
+                hint: "Краткое описание задачи"
+              - kind: ПолеВвода
+                name: ПолеПриоритет
+                title:
+                  ru: "Приоритет"
+                  en: "Priority"
+                  de: "Priorität"
+                data_path: Объект.Приоритет
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеОписание
+                title:
+                  ru: "Описание"
+                  en: "Description"
+                  de: "Beschreibung"
+                data_path: Объект.Описание
+      - kind: Страница
+        name: СтраницаИсполнение
+        title:
+          ru: "Исполнение"
+          en: "Execution"
+          de: "Ausführung"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаИсполнение
+            title:
+              ru: "Исполнение задачи"
+              en: "Task execution"
+              de: "Aufgabenausführung"
+            children:
+              - kind: ПолеВвода
+                name: ПолеПостановщик
+                title:
+                  ru: "Постановщик"
+                  en: "Author"
+                  de: "Verfasser"
+                data_path: Объект.Постановщик
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеИсполнитель
+                title:
+                  ru: "Исполнитель"
+                  en: "Assignee"
+                  de: "Bearbeiter"
+                data_path: Объект.Исполнитель
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеДатаНачала
+                title:
+                  ru: "Дата начала"
+                  en: "Start date"
+                  de: "Beginndatum"
+                data_path: Объект.ДатаНачала
+              - kind: ПолеВвода
+                name: ПолеДедлайн
+                title:
+                  ru: "Дедлайн"
+                  en: "Deadline"
+                  de: "Frist"
+                data_path: Объект.Дедлайн
+                required: true
+                hint: "Крайний срок выполнения задачи"
+              - kind: ПолеВвода
+                name: ПолеДатаЗавершения
+                title:
+                  ru: "Дата завершения"
+                  en: "Completion date"
+                  de: "Abschlussdatum"
+                data_path: Объект.ДатаЗавершения
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                  en: "Status"
+                  de: "Status"
+                data_path: Объект.Статус
+                choice: true
+      - kind: Страница
+        name: СтраницаСвязи
+        title:
+          ru: "Связи"
+          en: "Relations"
+          de: "Beziehungen"
+        children:
+          - kind: ПолеВвода
+            name: ПолеКлиент
+            title:
+              ru: "Клиент"
+              en: "Client"
+              de: "Kunde"
+            data_path: Объект.Клиент
+            choice: true
+          - kind: ПолеВвода
+            name: ПолеСделка
+            title:
+              ru: "Сделка"
+              en: "Deal"
+              de: "Geschäft"
+            data_path: Объект.Сделка
+            choice: true
+            hint: "Связанная сделка"
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

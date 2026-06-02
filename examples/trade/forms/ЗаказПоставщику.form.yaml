@@ -1,0 +1,93 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: ЗаказПоставщику
+  title:
+    ru: "Заказ поставщику"
+    en: "Purchase order"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.ЗаказПоставщику
+    save: true
+    main: true
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Реквизиты заказа"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеПоставщик
+                title:
+                  ru: "Поставщик"
+                data_path: Объект.Поставщик
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСкладНазначения
+                title:
+                  ru: "Склад назначения"
+                data_path: Объект.СкладНазначения
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                data_path: Объект.Статус
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеОжидаемаяДата
+                title:
+                  ru: "Ожидаемая дата"
+                data_path: Объект.ОжидаемаяДата
+      - kind: Страница
+        name: СтраницаТовары
+        title:
+          ru: "Товары"
+        children:
+          - kind: ТабличнаяЧасть
+            name: ТабТовары
+            title:
+              ru: "Товары"
+            data_path: Объект.Товары
+          - kind: ГруппаФормы
+            name: ГруппаИтоги
+            title:
+              ru: "Итого"
+            children:
+              - kind: ПолеВвода
+                name: ПолеСумма
+                title:
+                  ru: "Сумма заказа"
+                data_path: Объект.Сумма
+                readonly: true
+          - kind: ПолеВвода
+            name: ПолеКомментарий
+            title:
+              ru: "Комментарий"
+            data_path: Объект.Комментарий
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

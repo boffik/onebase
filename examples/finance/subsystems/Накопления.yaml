@@ -1,0 +1,13 @@
+name: Накопления
+title: Накопления
+order: 20
+contents:
+  documents: [ПополнениеЦели, СнятиеСЦели]
+  catalogs: [ЦельНакопления]
+home_page:
+  rows:
+    - widgets:
+        - ПрогрессНакопленийChart
+        - ПроцентНакоплений
+    - widgets:
+        - ЦелиНакоплений

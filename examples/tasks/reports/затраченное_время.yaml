@@ -1,0 +1,106 @@
+name: ЗатраченноеВремяОтчёт
+title: Затраченное время
+titles:
+  en: Time spent report
+  de: Zeitaufwandsbericht
+  sr: Извештај о потрошеном времену
+  az: Sərf olunan vaxt hesabatı
+  es: Informe de tiempo invertido
+  fr: Rapport du temps passé
+  hy: Ծախսված ժամանակի հաշվետվություն
+  ka: დახარჯული დროის ანგარიში
+  kk: Жұмсалған уақыт есебі
+  pt: Relatório de tempo gasto
+  ro: Raport timp consumat
+  tr: Harcanan zaman raporu
+  uk: Витрачений час
+  uz: Sarflangan vaqt hisoboti
+  zh: 工时报告
+params:
+  - name: НачалоПериода
+    type: date
+    label: Начало периода
+    labels:
+      en: Period start
+      de: Zeitraum Beginn
+      sr: Почетак периода
+      az: Dövrün başlanğıcı
+      es: Inicio del período
+      fr: Début de période
+      hy: Շրջանի սկիզբ
+      ka: პერიოდის დასაწყისი
+      kk: Кезең басы
+      pt: Início do período
+      ro: Început perioadă
+      tr: Dönem başı
+      uk: Початок періоду
+      uz: Davr boshlanishi
+      zh: 开始日期
+  - name: КонецПериода
+    type: date
+    label: Конец периода
+    labels:
+      en: Period end
+      de: Zeitraum Ende
+      sr: Крај периода
+      az: Dövrün sonu
+      es: Fin del período
+      fr: Fin de période
+      hy: Շրջանի վերջ
+      ka: პერიოდის დასრულება
+      kk: Кезең соңы
+      pt: Fim do período
+      ro: Sfârșit perioadă
+      tr: Dönem sonu
+      uk: Кінець періоду
+      uz: Davr oxiri
+      zh: 结束日期
+  - name: Исполнитель
+    type: reference:Исполнитель
+    label: Исполнитель
+    labels:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+  - name: Проект
+    type: reference:Проект
+    label: Проект
+    labels:
+      en: Project
+      de: Projekt
+      sr: Пројекат
+      az: Layihə
+      es: Proyecto
+      fr: Projet
+      hy: Նախագիծ
+      ka: პროექტი
+      kk: Жоба
+      pt: Projeto
+      ro: Proiect
+      tr: Proje
+      uk: Проєкт
+      uz: Loyiha
+      zh: 项目
+query: |
+  ВЫБРАТЬ
+    Исполнитель,
+    Задача,
+    Проект,
+    ТипРаботы,
+    Период,
+    Часы
+  ИЗ РегистрНакопления.ЗатраченноеВремя
+  ГДЕ Период >= &НачалоПериода И Период <= &КонецПериода
+  УПОРЯДОЧИТЬ ПО Исполнитель, Период

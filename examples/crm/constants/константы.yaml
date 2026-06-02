@@ -1,0 +1,27 @@
+constants:
+  - name: ОсновнойОтветственный
+    type: reference:Сотрудник
+    label: Основной ответственный менеджер
+    labels:
+      en: Default manager
+      de: Standard-Verantwortlicher
+  - name: ОсновнаяВоронка
+    type: reference:Воронка
+    label: Основная воронка продаж
+    labels:
+      en: Default sales pipeline
+      de: Standard-Verkaufstrichter
+  - name: ДнейДоНапоминанияОЗадаче
+    type: number
+    default: 1
+    label: За сколько дней напоминать о задаче
+    labels:
+      en: Days before task reminder
+      de: Tage vor Aufgabenerinnerung
+  - name: КонтролироватьДублиКлиентов
+    type: bool
+    default: true
+    label: Контролировать дубли клиентов
+    labels:
+      en: Check for duplicate clients
+      de: Doppelte Kunden prüfen

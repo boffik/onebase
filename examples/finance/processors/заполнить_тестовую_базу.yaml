@@ -1,0 +1,14 @@
+name: ЗаполнитьТестовуюБазу
+title: Заполнить тестовую базу демо-данными (семейный бюджет)
+titles:
+  en: Fill demo database (family budget)
+  de: Demo-Datenbank füllen (Familienbudget)
+  sr: Попуни демо базу (породични буџет)
+params:
+  - name: Очистить
+    type: bool
+    label: "Очистить документы перед загрузкой"
+    labels:
+      en: "Clear documents before loading"
+      de: "Dokumente vor dem Laden löschen"
+    default: true

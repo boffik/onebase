@@ -1,0 +1,115 @@
+name: ЗатраченноеВремя
+title: Затраченное время
+titles:
+  en: Time spent
+  de: Aufgewendete Zeit
+  sr: Потрошено време
+  az: Sərf olunan vaxt
+  es: Tiempo invertido
+  fr: Temps passé
+  hy: Ծախսված ժամանակ
+  ka: დახარჯული დრო
+  kk: Жұмсалған уақыт
+  pt: Tempo gasto
+  ro: Timp consumat
+  tr: Harcanan zaman
+  uk: Витрачений час
+  uz: Sarflangan vaqt
+  zh: 已用时间
+dimensions:
+  - name: Задача
+    type: string
+    title: Задача
+    titles:
+      en: Task
+      de: Aufgabe
+      sr: Задатак
+      az: Tapşırıq
+      es: Tarea
+      fr: Tâche
+      hy: Առաջադրանք
+      ka: დავალება
+      kk: Тапсырма
+      pt: Tarefa
+      ro: Sarcină
+      tr: Görev
+      uk: Завдання
+      uz: Vazifa
+      zh: 任务
+  - name: Исполнитель
+    type: string
+    title: Исполнитель
+    titles:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+  - name: Проект
+    type: string
+    title: Проект
+    titles:
+      en: Project
+      de: Projekt
+      sr: Пројекат
+      az: Layihə
+      es: Proyecto
+      fr: Projet
+      hy: Նախագիծ
+      ka: პროექტი
+      kk: Жоба
+      pt: Projeto
+      ro: Proiect
+      tr: Proje
+      uk: Проєкт
+      uz: Loyiha
+      zh: 项目
+  - name: ТипРаботы
+    type: string
+    title: Тип работы
+    titles:
+      en: Work type
+      de: Arbeitstyp
+      sr: Тип рада
+      az: İş növü
+      es: Tipo de trabajo
+      fr: Type de travail
+      hy: Աշխատանքի տեսակ
+      ka: სამუშაოს ტიპი
+      kk: Жұмыс түрі
+      pt: Tipo de trabalho
+      ro: Tip lucru
+      tr: İş türü
+      uk: Тип роботи
+      uz: Ish turi
+      zh: 工作类型
+resources:
+  - name: Часы
+    type: number
+    title: Часы
+    titles:
+      en: Hours
+      de: Stunden
+      sr: Сати
+      az: Saatlar
+      es: Horas
+      fr: Heures
+      hy: Ժամեր
+      ka: საათები
+      kk: Сағат
+      pt: Horas
+      ro: Ore
+      tr: Saat
+      uk: Години
+      uz: Soatlar
+      zh: 小时

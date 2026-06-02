@@ -1,0 +1,134 @@
+name: ЗадачиПоСтатусам
+title: Задачи по статусам
+titles:
+  en: Tasks by status
+  de: Aufgaben nach Status
+  sr: Задаци по статусу
+  az: Statusa görə tapşırıqlar
+  es: Tareas por estado
+  fr: Tâches par statut
+  hy: Առաջադրանքներ ըստ կարգավիճակի
+  ka: დავალებები სტატუსის მიხედვით
+  kk: Күй бойынша тапсырмалар
+  pt: Tarefas por estado
+  ro: Sarcini după status
+  tr: Görevler duruma göre
+  uk: Завдання за статусом
+  uz: Holat bo'yicha vazifalar
+  zh: 按状态的任务
+dimensions:
+  - name: Задача
+    type: string
+    title: Задача
+    titles:
+      en: Task
+      de: Aufgabe
+      sr: Задатак
+      az: Tapşırıq
+      es: Tarea
+      fr: Tâche
+      hy: Առաջադրանք
+      ka: დავალება
+      kk: Тапсырма
+      pt: Tarefa
+      ro: Sarcină
+      tr: Görev
+      uk: Завдання
+      uz: Vazifa
+      zh: 任务
+  - name: Проект
+    type: string
+    title: Проект
+    titles:
+      en: Project
+      de: Projekt
+      sr: Пројекат
+      az: Layihə
+      es: Proyecto
+      fr: Projet
+      hy: Նախագիծ
+      ka: პროექტი
+      kk: Жоба
+      pt: Projeto
+      ro: Proiect
+      tr: Proje
+      uk: Проєкт
+      uz: Loyiha
+      zh: 项目
+  - name: Исполнитель
+    type: string
+    title: Исполнитель
+    titles:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+  - name: Статус
+    type: string
+    title: Статус
+    titles:
+      en: Status
+      de: Status
+      sr: Статус
+      az: Status
+      es: Estado
+      fr: Statut
+      hy: Կարգավիճակ
+      ka: სტატუსი
+      kk: Күй
+      pt: Estado
+      ro: Status
+      tr: Durum
+      uk: Статус
+      uz: Holat
+      zh: 状态
+  - name: Приоритет
+    type: string
+    title: Приоритет
+    titles:
+      en: Priority
+      de: Priorität
+      sr: Приоритет
+      az: Prioritet
+      es: Prioridad
+      fr: Priorité
+      hy: Առաջնահերթություն
+      ka: პრიორიტეტი
+      kk: Басымдылық
+      pt: Prioridade
+      ro: Prioritate
+      tr: Öncelik
+      uk: Пріоритет
+      uz: Ustuvorlik
+      zh: 优先级
+resources:
+  - name: Количество
+    type: number
+    title: Количество
+    titles:
+      en: Count
+      de: Anzahl
+      sr: Количина
+      az: Say
+      es: Cantidad
+      fr: Nombre
+      hy: Քանակ
+      ka: რაოდენობა
+      kk: Саны
+      pt: Quantidade
+      ro: Cantitate
+      tr: Sayı
+      uk: Кількість
+      uz: Soni
+      zh: 数量

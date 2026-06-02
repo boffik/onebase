@@ -1,8 +1,0 @@
-name: ЦеныНоменклатуры
-periodic: false
-dimensions:
-  - name: Номенклатура
-    type: reference:Номенклатура
-resources:
-  - name: Цена
-    type: number

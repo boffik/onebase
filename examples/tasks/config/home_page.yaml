@@ -1,0 +1,34 @@
+title: Главная — Задачи
+titles:
+  en: Home — Tasks
+  de: Start — Aufgaben
+  sr: Почетна — Задаци
+  az: Əsas — Tapşırıqlar
+  es: Inicio — Tareas
+  fr: Accueil — Tâches
+  hy: Գլխավոր — Առաջադրանքներ
+  ka: მთავარი — დავალებები
+  kk: Басты — Тапсырмалар
+  pt: Início — Tarefas
+  ro: Acasă — Sarcini
+  tr: Ana Sayfa — Görevler
+  uk: Головна — Завдання
+  uz: Bosh sahifa — Vazifalar
+  zh: 首页 — 任务
+layout: rows
+rows:
+  - widgets:
+      - КоличествоЗадач
+      - ЗадачиВРаботе
+      - Просроченные
+      - ЗавершённыеЗаМесяц
+  - widgets:
+      - ЗадачиПоСтатусам
+  - widgets:
+      - ЗадачиПоПриоритету
+      - ЗадачиПоИсполнителюChart
+  - widgets:
+      - BurndownChart
+  - widgets:
+      - МоиЗадачи
+      - БыстрыеДействия

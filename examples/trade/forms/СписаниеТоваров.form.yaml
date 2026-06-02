@@ -1,0 +1,77 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: СписаниеТоваров
+  title:
+    ru: "Списание товаров"
+    en: "Stock write-off"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.СписаниеТоваров
+    save: true
+    main: true
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Реквизиты"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеОрганизация
+                title:
+                  ru: "Организация"
+                data_path: Объект.Организация
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСклад
+                title:
+                  ru: "Склад"
+                data_path: Объект.Склад
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеПричинаСписания
+                title:
+                  ru: "Причина списания"
+                data_path: Объект.ПричинаСписания
+                choice: true
+      - kind: Страница
+        name: СтраницаТовары
+        title:
+          ru: "Товары"
+        children:
+          - kind: ТабличнаяЧасть
+            name: ТабТовары
+            title:
+              ru: "Товары к списанию"
+            data_path: Объект.Товары
+          - kind: ПолеВвода
+            name: ПолеКомментарий
+            title:
+              ru: "Комментарий"
+            data_path: Объект.Комментарий
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

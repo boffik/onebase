@@ -1,0 +1,7 @@
+name: ОстаткиПоСчетам
+dimensions:
+  - name: Счёт
+    type: reference:Счёт
+resources:
+  - name: Сумма
+    type: number

@@ -1,0 +1,52 @@
+name: СводкаПоСпринту
+title: Сводка по спринту
+titles:
+  en: Sprint summary
+  de: Sprint-Zusammenfassung
+  sr: Резиме спринта
+  az: Sprint xülasəsi
+  es: Resumen del sprint
+  fr: Résumé du sprint
+  hy: Սպրինտի ամփոփում
+  ka: სპრინტის შეჯამება
+  kk: Спринт қорытындысы
+  pt: Resumo do sprint
+  ro: Rezumat sprint
+  tr: Sprint özeti
+  uk: Зведення по спринту
+  uz: Sprint xulosasi
+  zh: 冲刺摘要
+params:
+  - name: Спринт
+    type: reference:Спринт
+    label: Спринт
+    labels:
+      en: Sprint
+      de: Sprint
+      sr: Спринт
+      az: Sprint
+      es: Sprint
+      fr: Sprint
+      hy: Սպրինտ
+      ka: სპრინტი
+      kk: Спринт
+      pt: Sprint
+      ro: Sprint
+      tr: Sprint
+      uk: Спринт
+      uz: Sprint
+      zh: 冲刺
+    required: true
+query: |
+  ВЫБРАТЬ
+    Заголовок,
+    Статус,
+    Приоритет,
+    Исполнитель,
+    Оценка,
+    Сложность,
+    Прогресс,
+    Срок
+  ИЗ Документ.Задача
+  ГДЕ Спринт = &Спринт
+  УПОРЯДОЧИТЬ ПО Статус, Приоритет УБЫВ

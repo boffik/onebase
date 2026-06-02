@@ -1,0 +1,124 @@
+name: МоиЗадачи
+type: list
+title: Мои задачи
+titles:
+  en: My tasks
+  de: Meine Aufgaben
+  sr: Моји задаци
+  az: Mənim tapşırıqlarım
+  es: Mis tareas
+  fr: Mes tâches
+  hy: Իմ առաջադրանքները
+  ka: ჩემი დავალებები
+  kk: Менің тапсырмаларым
+  pt: Minhas tarefas
+  ro: Sarcinile mele
+  tr: Görevlerim
+  uk: Мої завдання
+  uz: Mening vazifalarim
+  zh: 我的任务
+limit: 15
+params:
+  Сегодня: "{{today}}"
+query: |
+  ВЫБРАТЬ
+    Заголовок,
+    Проект,
+    Задача.Статус,
+    Приоритет,
+    Срок
+  ИЗ Документ.Задача
+  ГДЕ Задача.Статус НЕ В ("Готово", "Закрыто", "Отменено")
+  УПОРЯДОЧИТЬ ПО Срок, Приоритет УБЫВ
+columns:
+  - field: Заголовок
+    label: "Задача"
+    labels:
+      en: "Task"
+      de: "Aufgabe"
+      sr: "Задатак"
+      az: "Tapşırıq"
+      es: "Tarea"
+      fr: "Tâche"
+      hy: "Առաջադրանք"
+      ka: "დავალება"
+      kk: "Тапсырма"
+      pt: "Tarefa"
+      ro: "Sarcină"
+      tr: "Görev"
+      uk: "Завдання"
+      uz: "Vazifa"
+      zh: "任务"
+  - field: Проект
+    label: "Проект"
+    labels:
+      en: "Project"
+      de: "Projekt"
+      sr: "Пројекат"
+      az: "Layihə"
+      es: "Proyecto"
+      fr: "Projet"
+      hy: "Նախագիծ"
+      ka: "პროექტი"
+      kk: "Жоба"
+      pt: "Projeto"
+      ro: "Proiect"
+      tr: "Proje"
+      uk: "Проєкт"
+      uz: "Loyiha"
+      zh: "项目"
+  - field: Статус
+    label: "Статус"
+    labels:
+      en: "Status"
+      de: "Status"
+      sr: "Статус"
+      az: "Status"
+      es: "Estado"
+      fr: "Statut"
+      hy: "Կարգավիճակ"
+      ka: "სტატუსი"
+      kk: "Күй"
+      pt: "Estado"
+      ro: "Status"
+      tr: "Durum"
+      uk: "Статус"
+      uz: "Holat"
+      zh: "状态"
+  - field: Приоритет
+    label: "Приоритет"
+    labels:
+      en: "Priority"
+      de: "Priorität"
+      sr: "Приоритет"
+      az: "Prioritet"
+      es: "Prioridad"
+      fr: "Priorité"
+      hy: "Առաջնահերթություն"
+      ka: "პრიორიტეტი"
+      kk: "Басымдылық"
+      pt: "Prioridade"
+      ro: "Prioritate"
+      tr: "Öncelik"
+      uk: "Пріоритет"
+      uz: "Ustuvorlik"
+      zh: "优先级"
+  - field: Срок
+    label: "Срок"
+    labels:
+      en: "Deadline"
+      de: "Frist"
+      sr: "Рок"
+      az: "Son tarix"
+      es: "Fecha límite"
+      fr: "Date limite"
+      hy: "Վերջնաժամկետ"
+      ka: "ბოლო ვადა"
+      kk: "Мерзімі"
+      pt: "Prazo"
+      ro: "Termen"
+      tr: "Son tarih"
+      uk: "Термін"
+      uz: "Muddat"
+      zh: "截止日期"
+    format: date

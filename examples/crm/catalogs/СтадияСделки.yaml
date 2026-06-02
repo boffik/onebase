@@ -1,0 +1,13 @@
+name: СтадияСделки
+title: Стадия сделки
+fields:
+  - name: Наименование
+    type: string
+  - name: Воронка
+    type: reference:Воронка
+  - name: Порядок
+    type: number
+  - name: Вероятность
+    type: number
+  - name: Цвет
+    type: string

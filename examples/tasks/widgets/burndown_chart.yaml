@@ -1,0 +1,30 @@
+name: BurndownChart
+type: chart
+chart_kind: line
+title: Burndown спринта
+titles:
+  en: Sprint burndown
+  de: Sprint Burndown
+  sr: Burndown спринта
+  az: Sprint burndown
+  es: Burndown del sprint
+  fr: Burndown du sprint
+  hy: Sprint burndown
+  ka: სპრინტის burndown
+  kk: Sprint burndown
+  pt: Burndown do sprint
+  ro: Burndown sprint
+  tr: Sprint burndown
+  uk: Burndown спринту
+  uz: Sprint burndown
+  zh: 冲刺燃尽图
+query: |
+  ВЫБРАТЬ
+    date(Дата) КАК Дата,
+    КОЛИЧЕСТВО(*) КАК Остаток
+  ИЗ Документ.Задача
+  ГДЕ Задача.Статус НЕ В ("Готово", "Закрыто", "Отменено")
+  СГРУППИРОВАТЬ ПО date(Дата)
+  УПОРЯДОЧИТЬ ПО date(Дата)
+x_field: Дата
+y_fields: [Остаток]

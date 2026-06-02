@@ -1,0 +1,15 @@
+name: Накопления
+title: Накопления
+documents:
+  - ПополнениеЦели
+  - СнятиеСЦели
+columns:
+  - field: Дата
+    label: Дата
+    format: date
+  - field: Цель
+    label: Цель
+  - field: Счёт
+    label: Счёт
+  - field: Сумма
+    label: Сумма

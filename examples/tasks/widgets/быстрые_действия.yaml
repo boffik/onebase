@@ -1,0 +1,128 @@
+name: БыстрыеДействия
+type: actions
+title: Создать
+titles:
+  en: Create
+  de: Erstellen
+  sr: Креирај
+  az: Yarat
+  es: Crear
+  fr: Créer
+  hy: Ստեղծել
+  ka: შექმნა
+  kk: Құру
+  pt: Criar
+  ro: Creare
+  tr: Oluştur
+  uk: Створити
+  uz: Yaratish
+  zh: 新建
+items:
+  - label: "Задача"
+    labels:
+      en: "Task"
+      de: "Aufgabe"
+      sr: "Задатак"
+      az: "Tapşırıq"
+      es: "Tarea"
+      fr: "Tâche"
+      hy: "Առաջադրանք"
+      ka: "დავალება"
+      kk: "Тапсырма"
+      pt: "Tarefa"
+      ro: "Sarcină"
+      tr: "Görev"
+      uk: "Завдання"
+      uz: "Vazifa"
+      zh: "任务"
+    entity: Задача
+  - label: "Комментарий"
+    labels:
+      en: "Comment"
+      de: "Kommentar"
+      sr: "Коментар"
+      az: "Şərh"
+      es: "Comentario"
+      fr: "Commentaire"
+      hy: "Մեկնաբանություն"
+      ka: "კომენტარი"
+      kk: "Түсініктеме"
+      pt: "Comentário"
+      ro: "Comentariu"
+      tr: "Yorum"
+      uk: "Коментар"
+      uz: "Izoh"
+      zh: "评论"
+    entity: Комментарий
+  - label: "Учёт времени"
+    labels:
+      en: "Time log"
+      de: "Zeiterfassung"
+      sr: "Евиденција времена"
+      az: "Vaxt uçotu"
+      es: "Registro de tiempo"
+      fr: "Feuille de temps"
+      hy: "Ժամանակի հաշվառում"
+      ka: "დროის აღრიცხვა"
+      kk: "Уақыт есебі"
+      pt: "Registro de tempo"
+      ro: "Evidență timp"
+      tr: "Zaman kaydı"
+      uk: "Облік часу"
+      uz: "Vaqt hisobi"
+      zh: "工时记录"
+    entity: УчётВремени
+  - label: "Спринт"
+    labels:
+      en: "Sprint"
+      de: "Sprint"
+      sr: "Спринт"
+      az: "Sprint"
+      es: "Sprint"
+      fr: "Sprint"
+      hy: "Սպրինտ"
+      ka: "სპრინტი"
+      kk: "Спринт"
+      pt: "Sprint"
+      ro: "Sprint"
+      tr: "Sprint"
+      uk: "Спринт"
+      uz: "Sprint"
+      zh: "冲刺"
+    entity: Спринт
+  - label: "Проект"
+    labels:
+      en: "Project"
+      de: "Projekt"
+      sr: "Пројекат"
+      az: "Layihə"
+      es: "Proyecto"
+      fr: "Projet"
+      hy: "Նախագիծ"
+      ka: "პროექტი"
+      kk: "Жоба"
+      pt: "Projeto"
+      ro: "Proiect"
+      tr: "Proje"
+      uk: "Проєкт"
+      uz: "Loyiha"
+      zh: "项目"
+    entity: Проект
+  - label: "Исполнитель"
+    labels:
+      en: "Assignee"
+      de: "Bearbeiter"
+      sr: "Извођач"
+      az: "İcraçı"
+      es: "Asignado"
+      fr: "Assigné"
+      hy: "Կատարող"
+      ka: "შემსრულებელი"
+      kk: "Орындаушы"
+      pt: "Responsável"
+      ro: "Executant"
+      tr: "Atanan"
+      uk: "Виконавець"
+      uz: "Ijrochi"
+      zh: "执行人"
+    entity: Исполнитель

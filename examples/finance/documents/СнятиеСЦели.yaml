@@ -1,0 +1,20 @@
+name: СнятиеСЦели
+title: Снятие с цели накопления
+posting: true
+numerator:
+  prefix: "СН-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Цель
+    type: reference:ЦельНакопления
+  - name: Счёт
+    type: reference:Счёт
+  - name: Сумма
+    type: number
+  - name: Причина
+    type: string

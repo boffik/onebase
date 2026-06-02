@@ -1,0 +1,11 @@
+name: ЧленСемьи
+title: Член семьи
+fields:
+  - name: Наименование
+    type: string
+  - name: Роль
+    type: enum:РольВСемье
+  - name: ДатаРождения
+    type: date
+  - name: Основной
+    type: bool

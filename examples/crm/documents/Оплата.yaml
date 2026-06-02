@@ -1,0 +1,24 @@
+name: Оплата
+title: Оплата
+posting: true
+numerator:
+  prefix: "ОПЛ-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Клиент
+    type: reference:Клиент
+  - name: Сделка
+    type: reference:Сделка
+  - name: Сумма
+    type: number
+  - name: СпособОплаты
+    type: enum:СпособОплаты
+  - name: НазначениеПлатежа
+    type: string
+  - name: Ответственный
+    type: reference:Сотрудник

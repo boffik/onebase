@@ -1,0 +1,62 @@
+name: УведомлениеПросроченных
+title: Ежедневное уведомление о просроченных задачах
+titles:
+  en: Daily overdue tasks notification
+  de: Tägliche Benachrichtigung über überfällige Aufgaben
+  sr: Дневна обавештења о прекораченим задацима
+  az: Gündəlik gecikmiş tapşırıq bildirişi
+  es: Notificación diaria de tareas vencidas
+  fr: Notification quotidienne des tâches en retard
+  hy: Ամենօրյա ծանուցում ժամկետանց առաջադրանքների մասին
+  ka: დაგვიანებული დავალებების ყოველდღიური შეტყობინება
+  kk: Мерзімі өткен тапсырмалар туралы күнделікті хабарлама
+  pt: Notificação diária de tarefas atrasadas
+  ro: Notificare zilnică pentru sarcini restante
+  tr: Günlük gecikmiş görev bildirimi
+  uk: Щоденне сповіщення про прострочені завдання
+  uz: Kechikkan vazifalar haqida kunlik xabar berish
+  zh: 每日逾期任务通知
+schedule: "0 9 * * 1-5"
+processor: УведомлениеПросроченных
+params:
+  Кому:
+    value: "manager@company.ru"
+    label: Кому
+    labels:
+      en: To
+      de: An
+      sr: Коме
+      az: Kimə
+      es: A quién
+      fr: À qui
+      hy: Ում
+      ka: ვის
+      kk: Кімге
+      pt: Para quem
+      ro: Către
+      tr: Kime
+      uk: Кому
+      uz: Kimga
+      zh: 收件人
+  Сегодня:
+    value: "{{today}}"
+    label: На дату
+    labels:
+      en: To
+      de: An
+      sr: Коме
+      az: Kimə
+      es: A quién
+      fr: À qui
+      hy: Ում
+      ka: ვის
+      kk: Кімге
+      pt: Para quem
+      ro: Către
+      tr: Kime
+      uk: Кому
+      uz: Kimga
+      zh: 收件人
+enabled: false
+on_error: continue
+timeout: 30

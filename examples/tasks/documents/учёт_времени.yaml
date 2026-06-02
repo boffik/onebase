@@ -1,0 +1,141 @@
+name: УчётВремени
+title: Учёт времени
+titles:
+  en: Time log
+  de: Zeiterfassung
+  sr: Евиденција времена
+  az: Vaxt uçotu
+  es: Registro de tiempo
+  fr: Feuille de temps
+  hy: Ժամանակի հաշվառում
+  ka: დროის აღრიცხვა
+  kk: Уақыт есебі
+  pt: Registro de tempo
+  ro: Evidență timp
+  tr: Zaman kaydı
+  uk: Облік часу
+  uz: Vaqt hisobi
+  zh: 工时记录
+posting: true
+numerator:
+  prefix: "УВ-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+    title: Номер
+  - name: Задача
+    type: reference:Задача
+    title: Задача
+    titles:
+      en: Task
+      de: Aufgabe
+      sr: Задатак
+      az: Tapşırıq
+      es: Tarea
+      fr: Tâche
+      hy: Առաջադրանք
+      ka: დავალება
+      kk: Тапсырма
+      pt: Tarefa
+      ro: Sarcină
+      tr: Görev
+      uk: Завдання
+      uz: Vazifa
+      zh: 任务
+  - name: Исполнитель
+    type: reference:Исполнитель
+    title: Исполнитель
+    titles:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+  - name: Дата
+    type: date
+    title: Дата работы
+    titles:
+      en: Work date
+      de: Arbeitsdatum
+      sr: Датум рада
+      az: İş tarixi
+      es: Fecha de trabajo
+      fr: Date de travail
+      hy: Աշխատանքի ամսաթիվ
+      ka: სამუშაო თარიღი
+      kk: Жұмыс күні
+      pt: Data de trabalho
+      ro: Dată lucru
+      tr: Çalışma tarihi
+      uk: Дата роботи
+      uz: Ish sanasi
+      zh: 工作日期
+  - name: Часы
+    type: number
+    title: Количество часов
+    titles:
+      en: Hours
+      de: Stunden
+      sr: Сати
+      az: Saatlar
+      es: Horas
+      fr: Heures
+      hy: Ժամեր
+      ka: საათები
+      kk: Сағат
+      pt: Horas
+      ro: Ore
+      tr: Saat
+      uk: Години
+      uz: Soatlar
+      zh: 小时数
+  - name: Описание
+    type: string
+    title: Описание работы
+    titles:
+      en: Work description
+      de: Arbeitsbeschreibung
+      sr: Опис рада
+      az: İş təsviri
+      es: Descripción del trabajo
+      fr: Description du travail
+      hy: Աշխատանքի նկարագրություն
+      ka: სამუშაოს აღწერა
+      kk: Жұмыс сипаттамасы
+      pt: Descrição do trabalho
+      ro: Descriere lucru
+      tr: İş açıklaması
+      uk: Опис роботи
+      uz: Ish tavsifi
+      zh: 工作描述
+  - name: ТипРаботы
+    type: string
+    title: Тип работы
+    titles:
+      en: Work type
+      de: Arbeitstyp
+      sr: Тип рада
+      az: İş növü
+      es: Tipo de trabajo
+      fr: Type de travail
+      hy: Աշխատանքի տեսակ
+      ka: სამუშაოს ტიპი
+      kk: Жұмыс түрі
+      pt: Tipo de trabalho
+      ro: Tip lucru
+      tr: İş türü
+      uk: Тип роботи
+      uz: Ish turi
+      zh: 工作类型

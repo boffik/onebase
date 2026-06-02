@@ -1,0 +1,114 @@
+name: Исполнитель
+title: Исполнитель
+titles:
+  en: Assignee
+  de: Bearbeiter
+  sr: Извођач
+  az: İcraçı
+  es: Asignado
+  fr: Assigné
+  hy: Կատարող
+  ka: შემსრულებელი
+  kk: Орындаушы
+  pt: Responsável
+  ro: Executant
+  tr: Atanan
+  uk: Виконавець
+  uz: Ijrochi
+  zh: 执行人
+fields:
+  - name: Наименование
+    type: string
+    title: Наименование
+    titles:
+      en: Name
+      de: Name
+      sr: Назив
+      az: Adlandırma
+      es: Nombre
+      fr: Nom
+      hy: Անվանում
+      ka: დასახელება
+      kk: Атауы
+      pt: Nome
+      ro: Denumire
+      tr: Ad
+      uk: Найменування
+      uz: Nomi
+      zh: 名称
+  - name: Email
+    type: string
+    title: Email
+    titles:
+      en: Email
+      de: E-Mail
+      sr: Е-пошта
+      az: E-poçt
+      es: Correo
+      fr: Courriel
+      hy: Էլ. փոստ
+      ka: ელ. ფოსტა
+      kk: Email
+      pt: Email
+      ro: Email
+      tr: E-posta
+      uk: Email
+      uz: Email
+      zh: 邮箱
+  - name: Роль
+    type: string
+    title: Роль
+    titles:
+      en: Role
+      de: Rolle
+      sr: Улога
+      az: Rol
+      es: Rol
+      fr: Rôle
+      hy: Դեր
+      ka: როლი
+      kk: Рөл
+      pt: Papel
+      ro: Rol
+      tr: Rol
+      uk: Роль
+      uz: Rol
+      zh: 角色
+  - name: ЧасоваяСтавка
+    type: number
+    title: Часовая ставка
+    titles:
+      en: Hourly rate
+      de: Stundensatz
+      sr: Часовна стопа
+      az: Saatlıq dərəcə
+      es: Tarifa horaria
+      fr: Taux horaire
+      hy: Ժամային սակագին
+      ka: საათობრივი საფასური
+      kk: Сағаттық мөлшер
+      pt: Taxa horária
+      ro: Tarif orar
+      tr: Saatlik ücret
+      uk: Погодинна ставка
+      uz: Soatlik stavka
+      zh: 时薪
+  - name: Аватар
+    type: string
+    title: Аватар
+    titles:
+      en: Avatar
+      de: Avatar
+      sr: Аватар
+      az: Avatar
+      es: Avatar
+      fr: Avatar
+      hy: Ավատար
+      ka: ავატარი
+      kk: Аватар
+      pt: Avatar
+      ro: Avatar
+      tr: Avatar
+      uk: Аватар
+      uz: Avatar
+      zh: 头像

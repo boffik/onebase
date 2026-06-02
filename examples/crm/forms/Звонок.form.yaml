@@ -1,0 +1,118 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Звонок
+  title:
+    ru: "Звонок"
+    en: "Phone call"
+    de: "Anruf"
+  auto_save_settings: true
+
+attributes:
+  - name: Объект
+    type: DocumentRef.Звонок
+    save: true
+    main: true
+
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Параметры звонка"
+      en: "Call parameters"
+      de: "Anrufparameter"
+    children:
+      - kind: ПолеВвода
+        name: ПолеНомер
+        title:
+          ru: "Номер"
+          en: "Number"
+          de: "Nummer"
+        data_path: Объект.Номер
+        readonly: true
+      - kind: ПолеВвода
+        name: ПолеДата
+        title:
+          ru: "Дата"
+          en: "Date"
+          de: "Datum"
+        data_path: Объект.Дата
+        required: true
+      - kind: ПолеВвода
+        name: ПолеКлиент
+        title:
+          ru: "Клиент"
+          en: "Client"
+          de: "Kunde"
+        data_path: Объект.Клиент
+        choice: true
+        events:
+          ПриИзменении: КлиентПриИзменении
+      - kind: ПолеВвода
+        name: ПолеКонтактноеЛицо
+        title:
+          ru: "Контактное лицо"
+          en: "Contact person"
+          de: "Kontaktperson"
+        data_path: Объект.КонтактноеЛицо
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСделка
+        title:
+          ru: "Сделка"
+          en: "Deal"
+          de: "Geschäft"
+        data_path: Объект.Сделка
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеОтветственный
+        title:
+          ru: "Ответственный"
+          en: "Responsible"
+          de: "Verantwortlich"
+        data_path: Объект.Ответственный
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеНаправление
+        title:
+          ru: "Направление"
+          en: "Direction"
+          de: "Richtung"
+        data_path: Объект.Направление
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеДлительностьМинут
+        title:
+          ru: "Длительность (мин)"
+          en: "Duration (min)"
+          de: "Dauer (Min)"
+        data_path: Объект.ДлительностьМинут
+  - kind: ГруппаФормы
+    name: ГруппаРезультат
+    title:
+      ru: "Результат звонка"
+      en: "Call result"
+      de: "Anrufergebnis"
+    children:
+      - kind: ПолеВвода
+        name: ПолеРезультат
+        title:
+          ru: "Результат"
+          en: "Result"
+          de: "Ergebnis"
+        data_path: Объект.Результат
+        hint: "Краткий итог звонка"
+      - kind: ПолеВвода
+        name: ПолеОписание
+        title:
+          ru: "Описание"
+          en: "Description"
+          de: "Beschreibung"
+        data_path: Объект.Описание
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы
+  ПриИзменении: КлиентПриИзменении

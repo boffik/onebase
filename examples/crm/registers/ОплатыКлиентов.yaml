@@ -1,0 +1,14 @@
+name: ОплатыКлиентов
+dimensions:
+  - name: Клиент
+    type: reference:Клиент
+  - name: Сделка
+    type: reference:Сделка
+resources:
+  - name: Сумма
+    type: number
+attributes:
+  - name: Ответственный
+    type: reference:Сотрудник
+  - name: СпособОплаты
+    type: enum:СпособОплаты

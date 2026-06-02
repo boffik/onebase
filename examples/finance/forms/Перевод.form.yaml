@@ -1,0 +1,60 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Перевод
+  title:
+    ru: "Перевод между счетами"
+    en: "Transfer"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.Перевод
+    save: true
+    main: true
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Параметры перевода"
+    children:
+      - kind: ПолеВвода
+        name: ПолеДата
+        title:
+          ru: "Дата"
+        data_path: Объект.Дата
+        required: true
+      - kind: ПолеВвода
+        name: ПолеСчётОтправитель
+        title:
+          ru: "Со счёта"
+        data_path: Объект.СчётОтправитель
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСчётПолучатель
+        title:
+          ru: "На счёт"
+        data_path: Объект.СчётПолучатель
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСумма
+        title:
+          ru: "Сумма"
+        data_path: Объект.Сумма
+        required: true
+      - kind: ПолеВвода
+        name: ПолеКомиссия
+        title:
+          ru: "Комиссия"
+        data_path: Объект.Комиссия
+        hint: "Комиссия банка, если есть"
+      - kind: ПолеВвода
+        name: ПолеОписание
+        title:
+          ru: "Описание"
+        data_path: Объект.Описание
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

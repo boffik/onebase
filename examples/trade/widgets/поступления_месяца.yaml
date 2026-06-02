@@ -1,5 +1,5 @@
 name: ПоступленияМесяца
-type: metric
+type: kpi
 title: Поступления за месяц
 params:
   Начало: "{{today|start_of_month}}"

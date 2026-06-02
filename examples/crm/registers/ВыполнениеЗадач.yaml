@@ -1,0 +1,14 @@
+name: ВыполнениеЗадач
+dimensions:
+  - name: Исполнитель
+    type: reference:Сотрудник
+  - name: Статус
+    type: enum:СтатусЗадачиCRM
+resources:
+  - name: Количество
+    type: number
+attributes:
+  - name: Сделка
+    type: reference:Сделка
+  - name: Клиент
+    type: reference:Клиент

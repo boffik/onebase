@@ -1,0 +1,10 @@
+name: НакопленияПоЦелям
+dimensions:
+  - name: Цель
+    type: reference:ЦельНакопления
+resources:
+  - name: Сумма
+    type: number
+attributes:
+  - name: Счёт
+    type: reference:Счёт

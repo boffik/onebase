@@ -1,0 +1,54 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: СнятиеСЦели
+  title:
+    ru: "Снятие с цели"
+    en: "Savings withdrawal"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.СнятиеСЦели
+    save: true
+    main: true
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Параметры снятия"
+    children:
+      - kind: ПолеВвода
+        name: ПолеДата
+        title:
+          ru: "Дата"
+        data_path: Объект.Дата
+        required: true
+      - kind: ПолеВвода
+        name: ПолеЦель
+        title:
+          ru: "Цель"
+        data_path: Объект.Цель
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСчёт
+        title:
+          ru: "Счёт"
+        data_path: Объект.Счёт
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСумма
+        title:
+          ru: "Сумма"
+        data_path: Объект.Сумма
+        required: true
+      - kind: ПолеВвода
+        name: ПолеПричина
+        title:
+          ru: "Причина"
+        data_path: Объект.Причина
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

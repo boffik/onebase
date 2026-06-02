@@ -1,0 +1,17 @@
+name: Заказы
+title: Заказы
+documents:
+  - ЗаказПокупателя
+  - ЗаказПоставщику
+columns:
+  - field: Дата
+    label: Дата
+    format: date
+  - field: Номер
+    label: Номер
+  - field: Сумма
+    label: Сумма
+filters:
+  - field: Дата
+    label: Дата
+    type: date_range

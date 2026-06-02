@@ -1,0 +1,27 @@
+name: ВсеВзаимодействия
+title: Все взаимодействия
+documents:
+  - Активность
+  - Звонок
+columns:
+  - field: Дата
+    label: Дата
+    format: date
+  - field: Клиент
+    label: Клиент
+  - field: Тема
+    label: Тема
+  - field: Ответственный
+    label: Ответственный
+  - field: Статус
+    label: Статус
+filters:
+  - field: Дата
+    label: Дата
+    type: date_range
+  - field: Клиент
+    label: Клиент
+    type: reference:Клиент
+  - field: Ответственный
+    label: Ответственный
+    type: reference:Сотрудник

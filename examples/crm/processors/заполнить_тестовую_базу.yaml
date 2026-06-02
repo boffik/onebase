@@ -1,0 +1,14 @@
+name: ЗаполнитьТестовуюБазу
+title: Заполнить тестовую базу демо-данными (CRM-безумие)
+titles:
+  en: Fill demo database (CRM madness)
+  de: Demo-Datenbank füllen (CRM-Wahnsinn)
+  sr: Попуни демо базу (CRM лудило)
+params:
+  - name: Очистить
+    type: bool
+    label: "Очистить документы перед загрузкой"
+    labels:
+      en: "Clear documents before loading"
+      de: "Dokumente vor dem Laden löschen"
+    default: true

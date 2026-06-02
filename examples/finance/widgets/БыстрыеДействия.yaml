@@ -1,0 +1,14 @@
+name: БыстрыеДействия
+type: actions
+title: Создать
+items:
+  - label: "Расход"
+    entity: Расход
+  - label: "Доход"
+    entity: Доход
+  - label: "Перевод"
+    entity: Перевод
+  - label: "Пополнение цели"
+    entity: ПополнениеЦели
+  - label: "Снятие с цели"
+    entity: СнятиеСЦели

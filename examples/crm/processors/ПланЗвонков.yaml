@@ -1,0 +1,12 @@
+name: ПланЗвонков
+title: Сформировать план звонков на день
+params:
+  - name: Ответственный
+    type: reference:Сотрудник
+    label: Менеджер
+  - name: ДатаС
+    type: date
+    label: "С даты"
+  - name: ДатаПо
+    type: date
+    label: "По дату"

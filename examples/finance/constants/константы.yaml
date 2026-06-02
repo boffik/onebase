@@ -1,0 +1,12 @@
+constants:
+  - name: ОсновнаяВалюта
+    type: string
+    default: "RUB"
+    label: Основная валюта учёта
+  - name: ДатаНачалаУчёта
+    type: date
+    label: Дата начала учёта
+  - name: БюджетныйПериод
+    type: string
+    default: "Месяц"
+    label: Бюджетный период

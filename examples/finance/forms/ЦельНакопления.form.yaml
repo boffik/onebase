@@ -1,0 +1,88 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: ЦельНакопления
+  title:
+    ru: "Цель накопления"
+    en: "Savings goal"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: CatalogRef.ЦельНакопления
+    save: true
+    main: true
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Параметры цели"
+    children:
+      - kind: ПолеВвода
+        name: ПолеНаименование
+        title:
+          ru: "Название"
+        data_path: Объект.Наименование
+        required: true
+      - kind: ПолеВвода
+        name: ПолеЦелеваяСумма
+        title:
+          ru: "Целевая сумма"
+        data_path: Объект.ЦелеваяСумма
+        required: true
+      - kind: ПолеВвода
+        name: ПолеДатаНачала
+        title:
+          ru: "Дата начала"
+        data_path: Объект.ДатаНачала
+      - kind: ПолеВвода
+        name: ПолеДатаЦели
+        title:
+          ru: "Дата цели"
+        data_path: Объект.ДатаЦели
+      - kind: ПолеВвода
+        name: ПолеСчёт
+        title:
+          ru: "Счёт"
+        data_path: Объект.Счёт
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеОписание
+        title:
+          ru: "Описание"
+        data_path: Объект.Описание
+  - kind: ГруппаФормы
+    name: ГруппаПрогресс
+    title:
+      ru: "Прогресс"
+    children:
+      - kind: ПолеВвода
+        name: ПолеТекущаяСумма
+        title:
+          ru: "Накоплено"
+        data_path: Объект.ТекущаяСумма
+        readonly: true
+      - kind: ПолеВвода
+        name: ПолеПроцентВыполнения
+        title:
+          ru: "Выполнено, %"
+        data_path: Объект.ПроцентВыполнения
+        readonly: true
+        hint: "Рассчитывается автоматически"
+  - kind: ГруппаФормы
+    name: ГруппаОформление
+    title:
+      ru: "Оформление"
+    children:
+      - kind: ПолеВвода
+        name: ПолеЦвет
+        title:
+          ru: "Цвет"
+        data_path: Объект.Цвет
+      - kind: ПолеВвода
+        name: ПолеИконка
+        title:
+          ru: "Иконка"
+        data_path: Объект.Иконка
+events:
+  ПриОткрытии: ПриОткрытииФормы

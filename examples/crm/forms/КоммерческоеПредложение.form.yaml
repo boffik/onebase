@@ -1,0 +1,185 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: КоммерческоеПредложение
+  title:
+    ru: "Коммерческое предложение"
+    en: "Commercial offer"
+    de: "Kommerzielles Angebot"
+  auto_save_settings: true
+  vertical_scroll: auto
+
+attributes:
+  - name: Объект
+    type: DocumentRef.КоммерческоеПредложение
+    save: true
+    main: true
+
+commands:
+  - name: ПересчитатьКоманда
+    title:
+      ru: "Пересчитать итоги"
+      en: "Recalculate totals"
+      de: "Summen neu berechnen"
+    action: КнопкаПересчитатьНажатие
+    picture: stdpic:Refresh
+
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+          de: "Allgemein"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Реквизиты"
+              en: "Details"
+              de: "Details"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                  en: "Number"
+                  de: "Nummer"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                  en: "Date"
+                  de: "Datum"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеКлиент
+                title:
+                  ru: "Клиент"
+                  en: "Client"
+                  de: "Kunde"
+                data_path: Объект.Клиент
+                required: true
+                choice: true
+                events:
+                  ПриИзменении: КлиентПриИзменении
+              - kind: ПолеВвода
+                name: ПолеКонтактноеЛицо
+                title:
+                  ru: "Контактное лицо"
+                  en: "Contact person"
+                  de: "Kontaktperson"
+                data_path: Объект.КонтактноеЛицо
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСделка
+                title:
+                  ru: "Сделка"
+                  en: "Deal"
+                  de: "Geschäft"
+                data_path: Объект.Сделка
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеОтветственный
+                title:
+                  ru: "Ответственный"
+                  en: "Responsible"
+                  de: "Verantwortlich"
+                data_path: Объект.Ответственный
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                  en: "Status"
+                  de: "Status"
+                data_path: Объект.Статус
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеДатаДействияДо
+                title:
+                  ru: "Действительно до"
+                  en: "Valid until"
+                  de: "Gültig bis"
+                data_path: Объект.ДатаДействияДо
+                hint: "Дата окончания действия предложения"
+      - kind: Страница
+        name: СтраницаСтроки
+        title:
+          ru: "Строки"
+          en: "Lines"
+          de: "Positionen"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаСтроки
+            title:
+              ru: "Состав предложения"
+              en: "Offer contents"
+              de: "Angebotsinhalt"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабСтроки
+                title:
+                  ru: "Строки"
+                  en: "Lines"
+                  de: "Positionen"
+                data_path: Объект.Строки
+              - kind: Кнопка
+                name: КнопкаПересчитать
+                title:
+                  ru: "Пересчитать суммы"
+                  en: "Recalculate amounts"
+                  de: "Summen neu berechnen"
+                events:
+                  Нажатие: КнопкаПересчитатьНажатие
+          - kind: ГруппаФормы
+            name: ГруппаИтоги
+            title:
+              ru: "Итоги"
+              en: "Totals"
+              de: "Summen"
+            children:
+              - kind: ПолеВвода
+                name: ПолеСкидка
+                title:
+                  ru: "Скидка, %"
+                  en: "Discount, %"
+                  de: "Rabatt, %"
+                data_path: Объект.Скидка
+                events:
+                  ПриИзменении: СкидкаПриИзменении
+              - kind: ПолеВвода
+                name: ПолеСуммаБезСкидки
+                title:
+                  ru: "Сумма без скидки"
+                  en: "Amount before discount"
+                  de: "Betrag vor Rabatt"
+                data_path: Объект.СуммаБезСкидки
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеСуммаСоСкидкой
+                title:
+                  ru: "Итого со скидкой"
+                  en: "Total with discount"
+                  de: "Gesamt mit Rabatt"
+                data_path: Объект.СуммаСоСкидкой
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеКомментарий
+                title:
+                  ru: "Комментарий"
+                  en: "Comment"
+                  de: "Kommentar"
+                data_path: Объект.Комментарий
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

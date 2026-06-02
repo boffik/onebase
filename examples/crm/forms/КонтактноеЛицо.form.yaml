@@ -1,0 +1,121 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: КонтактноеЛицо
+  title:
+    ru: "Контактное лицо"
+    en: "Contact person"
+    de: "Kontaktperson"
+  auto_save_settings: true
+
+attributes:
+  - name: Объект
+    type: CatalogRef.КонтактноеЛицо
+    save: true
+    main: true
+
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Реквизиты"
+      en: "Details"
+      de: "Details"
+    children:
+      - kind: ПолеВвода
+        name: ПолеФамилия
+        title:
+          ru: "Фамилия"
+          en: "Last name"
+          de: "Nachname"
+        data_path: Объект.Фамилия
+        events:
+          ПриИзменении: ФИОПриИзменении
+      - kind: ПолеВвода
+        name: ПолеИмя
+        title:
+          ru: "Имя"
+          en: "First name"
+          de: "Vorname"
+        data_path: Объект.Имя
+        events:
+          ПриИзменении: ФИОПриИзменении
+      - kind: ПолеВвода
+        name: ПолеОтчество
+        title:
+          ru: "Отчество"
+          en: "Middle name"
+          de: "Vatersname"
+        data_path: Объект.Отчество
+        events:
+          ПриИзменении: ФИОПриИзменении
+      - kind: ПолеВвода
+        name: ПолеДолжность
+        title:
+          ru: "Должность"
+          en: "Position"
+          de: "Position"
+        data_path: Объект.Должность
+      - kind: ПолеВвода
+        name: ПолеКлиент
+        title:
+          ru: "Клиент"
+          en: "Client"
+          de: "Kunde"
+        data_path: Объект.Клиент
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеОсновнойКонтакт
+        title:
+          ru: "Основной контакт"
+          en: "Primary contact"
+          de: "Hauptkontakt"
+        data_path: Объект.ОсновнойКонтакт
+      - kind: ПолеВвода
+        name: ПолеДатаРождения
+        title:
+          ru: "Дата рождения"
+          en: "Birthday"
+          de: "Geburtstag"
+        data_path: Объект.ДатаРождения
+  - kind: ГруппаФормы
+    name: ГруппаКонтакты
+    title:
+      ru: "Контакты"
+      en: "Contacts"
+      de: "Kontakte"
+    children:
+      - kind: ПолеВвода
+        name: ПолеЕMail
+        title:
+          ru: "Email"
+          en: "Email"
+          de: "E-Mail"
+        data_path: Объект.Email
+      - kind: ПолеВвода
+        name: ПолеТелефон
+        title:
+          ru: "Телефон"
+          en: "Phone"
+          de: "Telefon"
+        data_path: Объект.Телефон
+      - kind: ПолеВвода
+        name: ПолеМобильныйТелефон
+        title:
+          ru: "Мобильный"
+          en: "Mobile"
+          de: "Mobil"
+        data_path: Объект.МобильныйТелефон
+  - kind: ПолеВвода
+    name: ПолеКомментарий
+    title:
+      ru: "Комментарий"
+      en: "Comment"
+      de: "Kommentar"
+    data_path: Объект.Комментарий
+
+events:
+  ПриОткрытии: ПриОткрытииФормы

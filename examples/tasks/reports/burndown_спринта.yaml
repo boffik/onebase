@@ -1,0 +1,25 @@
+name: BurndownСпринта
+title: Burndown спринта
+titles:
+  en: Sprint burndown
+  de: Sprint Burndown
+  sr: Burndown спринта
+  az: Sprint burndown
+  es: Burndown del sprint
+  fr: Burndown du sprint
+  hy: Sprint burndown
+  ka: სპრინტის burndown
+  kk: Sprint burndown
+  pt: Burndown do sprint
+  ro: Burndown sprint
+  tr: Sprint burndown
+  uk: Burndown спринту
+  uz: Sprint burndown
+  zh: 冲刺燃尽图
+query: |
+  ВЫБРАТЬ
+    date(Период) КАК Дата,
+    СУММА(Количество) КАК ОстатокЗадач
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам
+  СГРУППИРОВАТЬ ПО date(Период)
+  УПОРЯДОЧИТЬ ПО date(Период)

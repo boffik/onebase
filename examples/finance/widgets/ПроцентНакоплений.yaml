@@ -1,0 +1,15 @@
+name: ПроцентНакоплений
+type: kpi
+title: Норма накоплений (%)
+format: number
+params:
+  Начало: "{{today|start_of_month}}"
+query: |
+  ВЫБРАТЬ
+    СУММА(CASE WHEN ТипОперации = 'Приход' THEN Сумма ELSE 0 END) КАК Доходы,
+    СУММА(CASE WHEN ТипОперации = 'Расход' THEN Сумма ELSE 0 END) КАК Расходы
+  ИЗ РегистрНакопления.ДвижениеСредств
+  ГДЕ period >= &Начало
+columns:
+  - name: Значение
+    expression: "CASE WHEN Доходы > 0 THEN CAST((Доходы - Расходы) * 100.0 / Доходы AS INTEGER) ELSE 0 END"

@@ -1,0 +1,11 @@
+name: Контрагент
+title: Контрагент
+fields:
+  - name: Наименование
+    type: string
+  - name: Тип
+    type: enum:ТипКонтрагента
+  - name: ИНН
+    type: string
+  - name: Сайт
+    type: string

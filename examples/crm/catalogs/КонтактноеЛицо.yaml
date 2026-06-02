@@ -1,0 +1,27 @@
+name: КонтактноеЛицо
+title: Контактное лицо
+fields:
+  - name: Наименование
+    type: string
+  - name: Фамилия
+    type: string
+  - name: Имя
+    type: string
+  - name: Отчество
+    type: string
+  - name: Должность
+    type: string
+  - name: Email
+    type: string
+  - name: Телефон
+    type: string
+  - name: МобильныйТелефон
+    type: string
+  - name: Клиент
+    type: reference:Клиент
+  - name: ДатаРождения
+    type: date
+  - name: Комментарий
+    type: string
+  - name: ОсновнойКонтакт
+    type: bool

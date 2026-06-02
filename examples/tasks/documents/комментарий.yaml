@@ -1,0 +1,122 @@
+name: Комментарий
+title: Комментарий
+titles:
+  en: Comment
+  de: Kommentar
+  sr: Коментар
+  az: Şərh
+  es: Comentario
+  fr: Commentaire
+  hy: Մեկնաբանություն
+  ka: კომენტარი
+  kk: Түсініктеме
+  pt: Comentário
+  ro: Comentariu
+  tr: Yorum
+  uk: Коментар
+  uz: Izoh
+  zh: 评论
+posting: false
+numerator:
+  prefix: "КМ-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+    title: Номер
+  - name: Задача
+    type: reference:Задача
+    title: Задача
+    titles:
+      en: Task
+      de: Aufgabe
+      sr: Задатак
+      az: Tapşırıq
+      es: Tarea
+      fr: Tâche
+      hy: Առաջադրանք
+      ka: დავალება
+      kk: Тапсырма
+      pt: Tarefa
+      ro: Sarcină
+      tr: Görev
+      uk: Завдання
+      uz: Vazifa
+      zh: 任务
+  - name: Автор
+    type: reference:Исполнитель
+    title: Автор
+    titles:
+      en: Author
+      de: Autor
+      sr: Аутор
+      az: Müəllif
+      es: Autor
+      fr: Auteur
+      hy: Հեղինակ
+      ka: ავტორი
+      kk: Авторы
+      pt: Autor
+      ro: Autor
+      tr: Yazar
+      uk: Автор
+      uz: Muallif
+      zh: 作者
+  - name: Текст
+    type: string
+    title: Текст комментария
+    titles:
+      en: Comment text
+      de: Kommentartext
+      sr: Текст коментара
+      az: Şərh mətni
+      es: Texto del comentario
+      fr: Texte du commentaire
+      hy: Մեկնաբանության տեքստ
+      ka: კომენტარის ტექსტი
+      kk: Түсініктеме мәтіні
+      pt: Texto do comentário
+      ro: Text comentariu
+      tr: Yorum metni
+      uk: Текст коментаря
+      uz: Izoh matni
+      zh: 评论内容
+  - name: ДатаСоздания
+    type: date
+    title: Дата создания
+    titles:
+      en: Created date
+      de: Erstellungsdatum
+      sr: Датум креирања
+      az: Yaradılma tarixi
+      es: Fecha de creación
+      fr: Date de création
+      hy: Ստեղծման ամսաթիվ
+      ka: შექმნის თარიღი
+      kk: Құрылған күні
+      pt: Data de criação
+      ro: Dată creare
+      tr: Oluşturulma tarihi
+      uk: Дата створення
+      uz: Yaratilgan sana
+      zh: 创建日期
+  - name: ВремяЗатрачено
+    type: number
+    title: Затрачено часов
+    titles:
+      en: Hours spent
+      de: Aufgewendete Stunden
+      sr: Потрошени сати
+      az: Sərf olunan saatlar
+      es: Horas gastadas
+      fr: Heures passées
+      hy: Ծախսված ժամեր
+      ka: დახარჯული საათები
+      kk: Жұмсалған сағат
+      pt: Horas gastas
+      ro: Ore consumate
+      tr: Harcanan saatler
+      uk: Витрачено годин
+      uz: Sarflangan soatlar
+      zh: 耗时（小时）

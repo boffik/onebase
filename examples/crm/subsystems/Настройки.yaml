@@ -1,0 +1,7 @@
+name: Настройки
+title: Настройки
+order: 50
+contents:
+  constants: true
+  processors:
+    - ЗаполнитьТестовуюБазу

@@ -1,0 +1,29 @@
+name: Отчёты
+title: Аналитика
+titles:
+  en: Analytics
+  de: Analytik
+  sr: Аналитика
+  az: Analitika
+  es: Analítica
+  fr: Analytique
+  hy: Վերլուծություն
+  ka: ანალიტიკა
+  kk: Аналитика
+  pt: Análise
+  ro: Analitică
+  tr: Analitik
+  uk: Аналітика
+  uz: Tahlil
+  zh: 分析
+order: 30
+contents:
+  reports: [СводкаПоСпринту, BurndownСпринта]
+  documents: [Спринт]
+home_page:
+  rows:
+    - widgets:
+        - BurndownChart
+    - widgets:
+        - ЗадачиПоСтатусам
+        - ЗадачиПоПриоритету

@@ -1,0 +1,18 @@
+name: ВоронкаПродаж
+dimensions:
+  - name: Стадия
+    type: reference:СтадияСделки
+  - name: Ответственный
+    type: reference:Сотрудник
+  - name: Клиент
+    type: reference:Клиент
+resources:
+  - name: Количество
+    type: number
+  - name: Сумма
+    type: number
+attributes:
+  - name: Сделка
+    type: reference:Сделка
+  - name: Результат
+    type: enum:РезультатСделки

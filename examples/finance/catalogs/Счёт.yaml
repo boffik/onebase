@@ -1,0 +1,23 @@
+name: Счёт
+title: Счёт
+fields:
+  - name: Наименование
+    type: string
+  - name: ТипСчёта
+    type: enum:ТипСчёта
+  - name: Валюта
+    type: string
+  - name: НачальныйБаланс
+    type: number
+  - name: Цвет
+    type: string
+  - name: Иконка
+    type: string
+  - name: ВключитьВБюджет
+    type: bool
+  - name: Активный
+    type: bool
+  - name: Банк
+    type: string
+  - name: НомерСчёта
+    type: string

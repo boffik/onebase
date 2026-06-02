@@ -1,0 +1,22 @@
+name: ЧленСемьи
+title: Член семьи
+description: Ограниченный доступ к справочникам, создание и проведение документов
+permissions:
+  catalogs:
+    Счёт: [read]
+    КатегорияРасхода: [read]
+    КатегорияДохода: [read]
+    Контрагент: [read, write]
+    ЧленСемьи: [read]
+    ЦельНакопления: [read]
+  documents:
+    Расход: [read, write, post]
+    Доход: [read, write, post]
+    Перевод: [read, write, post]
+    ПополнениеЦели: [read, write, post]
+    СнятиеСЦели: [read, write, post]
+  registers:
+    ОстаткиПоСчетам: [read]
+    ДвижениеСредств: [read]
+    НакопленияПоЦелям: [read]
+  printforms: [run]

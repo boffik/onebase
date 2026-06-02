@@ -1,0 +1,38 @@
+name: Активность
+title: Активность
+posting: true
+numerator:
+  prefix: "АКТ-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: ДатаНачала
+    type: date
+  - name: ДатаОкончания
+    type: date
+  - name: ТипАктивности
+    type: reference:ТипАктивности
+  - name: Тема
+    type: string
+  - name: Описание
+    type: string
+  - name: Клиент
+    type: reference:Клиент
+  - name: КонтактноеЛицо
+    type: reference:КонтактноеЛицо
+  - name: Сделка
+    type: reference:Сделка
+  - name: Ответственный
+    type: reference:Сотрудник
+  - name: Статус
+    type: enum:СтатусАктивности
+  - name: КаналСвязи
+    type: reference:КаналСвязи
+  - name: Результат
+    type: string
+  - name: ДлительностьМинут
+    type: number

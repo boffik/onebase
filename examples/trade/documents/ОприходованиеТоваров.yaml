@@ -1,0 +1,31 @@
+name: ОприходованиеТоваров
+title: Оприходование товаров
+posting: true
+numerator:
+  prefix: "ОП-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Организация
+    type: reference:Организация
+  - name: Склад
+    type: reference:Склад
+  - name: Причина
+    type: string
+  - name: Комментарий
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Номенклатура
+        type: reference:Номенклатура
+      - name: Количество
+        type: number
+      - name: Цена
+        type: number
+      - name: Сумма
+        type: number

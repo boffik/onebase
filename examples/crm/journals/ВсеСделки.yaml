@@ -1,0 +1,28 @@
+name: ВсеСделки
+title: Все сделки
+documents:
+  - Сделка
+  - КоммерческоеПредложение
+  - Оплата
+columns:
+  - field: Дата
+    label: Дата
+    format: date
+  - field: Номер
+    label: Номер
+  - field: Клиент
+    label: Клиент
+  - field: Сумма
+    label: Сумма
+  - field: Ответственный
+    label: Ответственный
+filters:
+  - field: Дата
+    label: Дата
+    type: date_range
+  - field: Клиент
+    label: Клиент
+    type: reference:Клиент
+  - field: Ответственный
+    label: Ответственный
+    type: reference:Сотрудник

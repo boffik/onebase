@@ -1,0 +1,37 @@
+name: ЗаказПоставщику
+title: Заказ поставщику
+posting: true
+numerator:
+  prefix: "ЗПст-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Организация
+    type: reference:Организация
+  - name: Поставщик
+    type: reference:Контрагент
+  - name: Статус
+    type: enum:СтатусЗаказаПоставщику
+  - name: ОжидаемаяДата
+    type: date
+  - name: СкладНазначения
+    type: reference:Склад
+  - name: Сумма
+    type: number
+  - name: Комментарий
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Номенклатура
+        type: reference:Номенклатура
+      - name: Количество
+        type: number
+      - name: Цена
+        type: number
+      - name: Сумма
+        type: number

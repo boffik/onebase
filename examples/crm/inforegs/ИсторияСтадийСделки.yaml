@@ -1,0 +1,11 @@
+name: ИсторияСтадийСделки
+dimensions:
+  - name: Сделка
+    type: reference:Сделка
+  - name: Период
+    type: date
+resources:
+  - name: Стадия
+    type: reference:СтадияСделки
+  - name: Ответственный
+    type: reference:Сотрудник

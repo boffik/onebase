@@ -1,0 +1,11 @@
+name: ДоходыЗаМесяц
+type: kpi
+title: Доходы за месяц
+format: number
+params:
+  Начало: "{{today|start_of_month}}"
+query: |
+  ВЫБРАТЬ CAST(СУММА(Сумма) AS INTEGER) КАК Значение
+  ИЗ РегистрНакопления.ДвижениеСредств
+  ГДЕ ТипОперации = 'Приход'
+    И period >= &Начало

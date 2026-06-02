@@ -1,0 +1,28 @@
+name: ЗадачиПоСтатусам
+type: chart
+chart_kind: donut
+title: Задачи по статусам
+titles:
+  en: Tasks by status
+  de: Aufgaben nach Status
+  sr: Задаци по статусу
+  az: Statusa görə tapşırıqlar
+  es: Tareas por estado
+  fr: Tâches par statut
+  hy: Առաջադրանքներ ըստ կարգավիճակի
+  ka: დავალებები სტატუსის მიხედვით
+  kk: Күй бойынша тапсырмалар
+  pt: Tarefas por estado
+  ro: Sarcini după status
+  tr: Görevler duruma göre
+  uk: Завдання за статусом
+  uz: Holat bo'yicha vazifalar
+  zh: 按状态分布
+query: |
+  ВЫБРАТЬ
+    Статус,
+    СУММА(Количество) КАК Количество
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам
+  СГРУППИРОВАТЬ ПО Статус
+x_field: Статус
+y_fields: [Количество]

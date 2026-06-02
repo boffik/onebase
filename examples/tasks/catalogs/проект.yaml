@@ -1,0 +1,153 @@
+name: Проект
+title: Проект
+titles:
+  en: Project
+  de: Projekt
+  sr: Пројекат
+  az: Layihə
+  es: Proyecto
+  fr: Projet
+  hy: Նախագիծ
+  ka: პროექტი
+  kk: Жоба
+  pt: Projeto
+  ro: Proiect
+  tr: Proje
+  uk: Проєкт
+  uz: Loyiha
+  zh: 项目
+hierarchical: true
+fields:
+  - name: Наименование
+    type: string
+    title: Наименование
+    titles:
+      en: Name
+      de: Name
+      sr: Назив
+      az: Adlandırma
+      es: Nombre
+      fr: Nom
+      hy: Անվանում
+      ka: დასახელება
+      kk: Атауы
+      pt: Nome
+      ro: Denumire
+      tr: Ad
+      uk: Найменування
+      uz: Nomi
+      zh: 名称
+  - name: Описание
+    type: string
+    title: Описание
+    titles:
+      en: Description
+      de: Beschreibung
+      sr: Опис
+      az: Təsvir
+      es: Descripción
+      fr: Description
+      hy: Նկարագրություն
+      ka: აღწერა
+      kk: Сипаттамасы
+      pt: Descrição
+      ro: Descriere
+      tr: Açıklama
+      uk: Опис
+      uz: Tavsif
+      zh: 描述
+  - name: Руководитель
+    type: reference:Исполнитель
+    title: Руководитель проекта
+    titles:
+      en: Project lead
+      de: Projektleiter
+      sr: Вођа пројекта
+      az: Layihə rəhbəri
+      es: Líder del proyecto
+      fr: Chef de projet
+      hy: Նախագծի ղեկավար
+      ka: პროექტის ხელმძღვანელი
+      kk: Жоба жетекшісі
+      pt: Líder do projeto
+      ro: Lider proiect
+      tr: Proje yöneticisi
+      uk: Керівник проєкту
+      uz: Loyiha rahbari
+      zh: 项目负责人
+  - name: ДатаНачала
+    type: date
+    title: Дата начала
+    titles:
+      en: Start date
+      de: Startdatum
+      sr: Датум почетка
+      az: Başlama tarixi
+      es: Fecha de inicio
+      fr: Date de début
+      hy: Սկզբի ամսաթիվ
+      ka: დაწყების თარიღი
+      kk: Басталу күні
+      pt: Data de início
+      ro: Dată de început
+      tr: Başlangıç tarihi
+      uk: Дата початку
+      uz: Boshlanish sanasi
+      zh: 开始日期
+  - name: ДатаЗавершения
+    type: date
+    title: Плановая дата завершения
+    titles:
+      en: Planned end date
+      de: Geplantes Enddatum
+      sr: Планирани крајњи датум
+      az: Planlaşdırılan yekun tarix
+      es: Fecha fin planificada
+      fr: Date de fin prévue
+      hy: Պլանային ավարտի ամսաթիվ
+      ka: დაგეგმილი დასრულების თარიღი
+      kk: Жоспарлы аяқталу күні
+      pt: Data de fim planeada
+      ro: Dată de sfârșit planificată
+      tr: Planlanan bitiş tarihi
+      uk: Планова дата завершення
+      uz: Rejalashtirilgan tugash sanasi
+      zh: 计划结束日期
+  - name: Статус
+    type: string
+    title: Статус проекта
+    titles:
+      en: Project status
+      de: Projektstatus
+      sr: Статус пројекта
+      az: Layihə statusu
+      es: Estado del proyecto
+      fr: Statut du projet
+      hy: Նախագծի կարգավիճակ
+      ka: პროექტის სტატუსი
+      kk: Жоба күйі
+      pt: Estado do projeto
+      ro: Status proiect
+      tr: Proje durumu
+      uk: Статус проєкту
+      uz: Loyiha holati
+      zh: 项目状态
+  - name: Цвет
+    type: string
+    title: Цвет
+    titles:
+      en: Color
+      de: Farbe
+      sr: Боја
+      az: Rəng
+      es: Color
+      fr: Couleur
+      hy: Գույն
+      ka: ფერი
+      kk: Түс
+      pt: Cor
+      ro: Culoare
+      tr: Renk
+      uk: Колір
+      uz: Rang
+      zh: 颜色

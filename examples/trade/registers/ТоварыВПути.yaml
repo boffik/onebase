@@ -1,0 +1,18 @@
+name: ТоварыВПути
+dimensions:
+  - name: Номенклатура
+    type: reference:Номенклатура
+  - name: ЗаказПоставщику
+    type: string
+  - name: СкладНазначения
+    type: reference:Склад
+resources:
+  - name: Количество
+    type: number
+  - name: Сумма
+    type: number
+attributes:
+  - name: Организация
+    type: reference:Организация
+  - name: ОжидаемаяДата
+    type: date

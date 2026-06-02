@@ -1,8 +1,14 @@
 constants:
   - name: НашаОрганизация
-    type: reference:Контрагент
+    type: reference:Организация
     label: Наша организация
-  - name: ОсновнаяВалюта
-    type: string
-    default: "RUB"
-    label: Основная валюта учёта
+  - name: ОсновнойСклад
+    type: reference:Склад
+    label: Основной склад
+  - name: КонтролироватьОстатки
+    type: bool
+    default: true
+    label: Контролировать остатки при проведении
+  - name: ДатаЗапретаРедактирования
+    type: date
+    label: Дата запрета редактирования

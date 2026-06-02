@@ -1,0 +1,133 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: ПоступлениеТоваров
+  title:
+    ru: "Поступление товаров"
+    en: "Goods receipt"
+    de: "Warenaingang"
+  auto_save_settings: true
+  vertical_scroll: auto
+attributes:
+  - name: Объект
+    type: DocumentRef.ПоступлениеТоваров
+    save: true
+    main: true
+commands:
+  - name: ПересчитатьКоманда
+    title:
+      ru: "Пересчитать итоги"
+      en: "Recalculate"
+    action: КнопкаПересчитатьНажатие
+    picture: stdpic:Refresh
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Шапка документа"
+              en: "Document header"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                  en: "Number"
+                data_path: Объект.Номер
+                readonly: true
+                hint: "ПТ-NNNNNN"
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                  en: "Date"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеОрганизация
+                title:
+                  ru: "Организация"
+                  en: "Organization"
+                data_path: Объект.Организация
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеПоставщик
+                title:
+                  ru: "Поставщик"
+                  en: "Supplier"
+                data_path: Объект.Поставщик
+                required: true
+                choice: true
+                hint: "Поставщик товаров"
+              - kind: ПолеВвода
+                name: ПолеСклад
+                title:
+                  ru: "Склад"
+                  en: "Warehouse"
+                data_path: Объект.Склад
+                required: true
+                choice: true
+          - kind: ГруппаФормы
+            name: ГруппаИтоги
+            title:
+              ru: "Итоги"
+              en: "Totals"
+            children:
+              - kind: ПолеВвода
+                name: ПолеСумма
+                title:
+                  ru: "Сумма"
+                  en: "Amount"
+                data_path: Объект.Сумма
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеСуммаНДС
+                title:
+                  ru: "Сумма НДС"
+                  en: "VAT amount"
+                data_path: Объект.СуммаНДС
+                readonly: true
+      - kind: Страница
+        name: СтраницаТовары
+        title:
+          ru: "Товары"
+          en: "Items"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаСостав
+            title:
+              ru: "Состав поступления"
+              en: "Receipt contents"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабТовары
+                title:
+                  ru: "Товары"
+                  en: "Items"
+                data_path: Объект.Товары
+              - kind: Кнопка
+                name: КнопкаПересчитать
+                title:
+                  ru: "Пересчитать суммы"
+                  en: "Recalculate"
+                events:
+                  Нажатие: КнопкаПересчитатьНажатие
+          - kind: ПолеВвода
+            name: ПолеКомментарий
+            title:
+              ru: "Комментарий"
+              en: "Comment"
+            data_path: Объект.Комментарий
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы
+  ПриЗаписи: ПриЗаписиФормы

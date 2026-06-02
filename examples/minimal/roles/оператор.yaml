@@ -1,0 +1,14 @@
+name: Оператор
+description: Базовая роль — работа с документами и справочниками
+permissions:
+  catalogs:
+    Контрагент: [read, write]
+  documents:
+    Поступление: [read, write, post, unpost]
+    Списание: [read, write, post, unpost]
+    Счёт: [read, write]
+  registers:
+    ТоварноеДвижение: [read]
+  reports:
+    ОстаткиТоваров: [run]
+    ДвиженияТоваров: [run]

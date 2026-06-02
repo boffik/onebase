@@ -1,0 +1,59 @@
+constants:
+  - name: ПроектПоУмолчанию
+    type: reference:Проект
+    label: Проект по умолчанию
+    labels:
+      en: Default project
+      de: Standardprojekt
+      sr: Подразумевани пројекат
+      az: Susmaya görə layihə
+      es: Proyecto predeterminado
+      fr: Projet par défaut
+      hy: Լռելյայն նախագիծ
+      ka: ნაგულისხმევი პროექტი
+      kk: Әдепкі жоба
+      pt: Projeto padrão
+      ro: Proiect implicit
+      tr: Varsayılan proje
+      uk: Проєкт за замовчуванням
+      uz: Standart loyiha
+      zh: 默认项目
+  - name: ИсполнительПоУмолчанию
+    type: reference:Исполнитель
+    label: Текущий пользователь (по умолчанию)
+    labels:
+      en: Current user (default)
+      de: Aktueller Benutzer (Standard)
+      sr: Тренутни корисник (подразумевано)
+      az: Cari istifadəçi (susbmaya görə)
+      es: Usuario actual (predeterminado)
+      fr: Utilisateur actuel (par défaut)
+      hy: Ընթացիկ օգտատեր (լռելյայն)
+      ka: მიმდინარე მომხმარებელი (ნაგულისხმევი)
+      kk: Ағымдағы пайдаланушы (әдепкі)
+      pt: Usuário atual (padrão)
+      ro: Utilizator curent (implicit)
+      tr: Mevcut kullanıcı (varsayılan)
+      uk: Поточний користувач (за замовчуванням)
+      uz: Joriy foydalanuvchi (standart)
+      zh: 当前用户（默认）
+  - name: ДлительностьСпринта
+    type: number
+    default: 14
+    label: Длительность спринта (дней)
+    labels:
+      en: Sprint duration (days)
+      de: Sprint-Dauer (Tage)
+      sr: Трајање спринта (дана)
+      az: Sprint müddəti (gün)
+      es: Duración del sprint (días)
+      fr: Durée du sprint (jours)
+      hy: Սպրինտի տևողություն (օր)
+      ka: სპრინტის ხანგრძლივობა (დღე)
+      kk: Спринт ұзақтығы (күн)
+      pt: Duração do sprint (dias)
+      ro: Durata sprint (zile)
+      tr: Sprint süresi (gün)
+      uk: Тривалість спринту (днів)
+      uz: Sprint davomiyligi (kun)
+      zh: 冲刺时长（天）

@@ -1,0 +1,29 @@
+name: ЗадачиПоИсполнителюChart
+type: chart
+chart_kind: bar
+title: Задачи по исполнителям
+titles:
+  en: Tasks by assignee
+  de: Aufgaben nach Bearbeiter
+  sr: Задаци по извођачу
+  az: İcraçıya görə tapşırıqlar
+  es: Tareas por asignado
+  fr: Tâches par assigné
+  hy: Առաջադրանքներ ըստ կատարողի
+  ka: დავალებები შემსრულებლის მიხედვით
+  kk: Орындаушы бойынша тапсырмалар
+  pt: Tarefas por responsável
+  ro: Sarcini după executant
+  tr: Görevler atanan kişiye göre
+  uk: Завдання за виконавцями
+  uz: Ijrochiga ko'ra vazifalar
+  zh: 按执行人分布
+query: |
+  ВЫБРАТЬ
+    Исполнитель,
+    СУММА(Количество) КАК Количество
+  ИЗ РегистрНакопления.ЗадачиПоСтатусам
+  СГРУППИРОВАТЬ ПО Исполнитель
+  УПОРЯДОЧИТЬ ПО Количество УБЫВ
+x_field: Исполнитель
+y_fields: [Количество]

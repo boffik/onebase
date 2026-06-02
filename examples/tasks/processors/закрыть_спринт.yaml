@@ -1,0 +1,58 @@
+name: ЗакрытьСпринт
+title: Закрыть спринт
+titles:
+  en: Close sprint
+  de: Sprint abschließen
+  sr: Затвори спринт
+  az: Sprinti bağla
+  es: Cerrar sprint
+  fr: Fermer le sprint
+  hy: Փակել սպրինտը
+  ka: სპრინტის დახურვა
+  kk: Спринтті жабу
+  pt: Fechar sprint
+  ro: Închide sprint
+  tr: Sprinti kapat
+  uk: Закрити спринт
+  uz: Sprintni yopish
+  zh: 关闭冲刺
+params:
+  - name: Спринт
+    type: reference:Спринт
+    label: Закрываемый спринт
+    labels:
+      en: Sprint to close
+      de: Zu schließender Sprint
+      sr: Спринт за затварање
+      az: Bağlanacaq sprint
+      es: Sprint a cerrar
+      fr: Sprint à fermer
+      hy: Փակվող սպրինտ
+      ka: დასახური სპრინტი
+      kk: Жабылатын спринт
+      pt: Sprint a fechar
+      ro: Sprint de închis
+      tr: Kapatılacak sprint
+      uk: Спринт для закриття
+      uz: Yopiladigan sprint
+      zh: 要关闭的冲刺
+    required: true
+  - name: СледующийСпринт
+    type: reference:Спринт
+    label: Следующий спринт (для переноса)
+    labels:
+      en: Next sprint (for migration)
+      de: Nächster Sprint (für Migration)
+      sr: Следећи спринт (за миграцију)
+      az: Növbəti sprint (köçürmə üçün)
+      es: Siguiente sprint (para migración)
+      fr: Sprint suivant (pour migration)
+      hy: Հաջորդ սպրինտ (տեղափոխման համար)
+      ka: შემდეგი სპრინტი (გადატანისთვის)
+      kk: Келесі спринт (көшіру үшін)
+      pt: Próximo sprint (para migração)
+      ro: Sprint următor (pentru migrare)
+      tr: Sonraki sprint (taşıma için)
+      uk: Наступний спринт (для перенесення)
+      uz: Keyingi sprint (ko'chirish uchun)
+      zh: 下一个冲刺（用于迁移）

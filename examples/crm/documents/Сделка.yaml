@@ -1,0 +1,59 @@
+name: Сделка
+title: Сделка
+posting: true
+numerator:
+  prefix: "СД-"
+  length: 5
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Заголовок
+    type: string
+  - name: Клиент
+    type: reference:Клиент
+  - name: КонтактноеЛицо
+    type: reference:КонтактноеЛицо
+  - name: Ответственный
+    type: reference:Сотрудник
+  - name: Воронка
+    type: reference:Воронка
+  - name: Стадия
+    type: reference:СтадияСделки
+  - name: Сумма
+    type: number
+  - name: Валюта
+    type: string
+  - name: Вероятность
+    type: number
+  - name: ОжидаемаяДата
+    type: date
+  - name: ДатаЗакрытия
+    type: date
+  - name: Результат
+    type: enum:РезультатСделки
+  - name: ПричинаПроигрыша
+    type: string
+  - name: Описание
+    type: string
+  - name: Источник
+    type: enum:ИсточникКлиента
+tableparts:
+  - name: ТоварыУслуги
+    fields:
+      - name: Номенклатура
+        type: string
+      - name: Количество
+        type: number
+      - name: Цена
+        type: number
+      - name: Сумма
+        type: number
+  - name: Участники
+    fields:
+      - name: Сотрудник
+        type: reference:Сотрудник
+      - name: Роль
+        type: string

@@ -1,0 +1,7 @@
+name: СтавкаНДС
+title: Ставка НДС
+fields:
+  - name: Наименование
+    type: string
+  - name: Процент
+    type: number

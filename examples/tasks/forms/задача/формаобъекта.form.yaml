@@ -1,0 +1,308 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Задача
+  title:
+    ru: "Задача"
+    en: "Task"
+    de: "Aufgabe"
+    sr: "Задатак"
+  auto_save_settings: true
+  vertical_scroll: auto
+
+attributes:
+  - name: Объект
+    type: DocumentRef.Задача
+    save: true
+    main: true
+
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+          de: "Allgemein"
+          sr: "Опште"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Шапка задачи"
+              en: "Task header"
+              de: "Aufgabenkopf"
+              sr: "Заглавље задатка"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                  en: "Number"
+                  de: "Nummer"
+                  sr: "Број"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата создания"
+                  en: "Created date"
+                  de: "Erstellungsdatum"
+                  sr: "Датум креирања"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеЗаголовок
+                title:
+                  ru: "Заголовок"
+                  en: "Title"
+                  de: "Titel"
+                  sr: "Наслов"
+                data_path: Объект.Заголовок
+                required: true
+              - kind: ПолеВвода
+                name: ПолеОписание
+                title:
+                  ru: "Описание"
+                  en: "Description"
+                  de: "Beschreibung"
+                  sr: "Опис"
+                data_path: Объект.Описание
+                multiline: true
+
+          - kind: ГруппаФормы
+            name: ГруппаПараметры
+            title:
+              ru: "Параметры"
+              en: "Parameters"
+              de: "Parameter"
+              sr: "Параметри"
+            children:
+              - kind: ПолеВвода
+                name: ПолеПроект
+                title:
+                  ru: "Проект"
+                  en: "Project"
+                  de: "Projekt"
+                  sr: "Пројекат"
+                data_path: Объект.Проект
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеТипЗадачи
+                title:
+                  ru: "Тип задачи"
+                  en: "Task type"
+                  de: "Aufgabentyp"
+                  sr: "Тип задатка"
+                data_path: Объект.ТипЗадачи
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеПриоритет
+                title:
+                  ru: "Приоритет"
+                  en: "Priority"
+                  de: "Priorität"
+                  sr: "Приоритет"
+                data_path: Объект.Приоритет
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                  en: "Status"
+                  de: "Status"
+                  sr: "Статус"
+                data_path: Объект.Статус
+                choice: true
+                events:
+                  ПриИзменении: СтатусПриИзменении
+
+      - kind: Страница
+        name: СтраницаИсполнение
+        title:
+          ru: "Исполнение"
+          en: "Execution"
+          de: "Ausführung"
+          sr: "Извршење"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаИсполнение
+            title:
+              ru: "Исполнение и сроки"
+              en: "Assignment and deadlines"
+              de: "Zuweisung und Fristen"
+              sr: "Додела и рокови"
+            children:
+              - kind: ПолеВвода
+                name: ПолеИсполнитель
+                title:
+                  ru: "Исполнитель"
+                  en: "Assignee"
+                  de: "Bearbeiter"
+                  sr: "Извођач"
+                data_path: Объект.Исполнитель
+                required: true
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеАвтор
+                title:
+                  ru: "Автор"
+                  en: "Author"
+                  de: "Autor"
+                  sr: "Аутор"
+                data_path: Объект.Автор
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСпринт
+                title:
+                  ru: "Спринт"
+                  en: "Sprint"
+                  de: "Sprint"
+                  sr: "Спринт"
+                data_path: Объект.Спринт
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеВеха
+                title:
+                  ru: "Веха"
+                  en: "Milestone"
+                  de: "Meilenstein"
+                  sr: "Мељок"
+                data_path: Объект.Веха
+                choice: true
+
+          - kind: ГруппаФормы
+            name: ГруппаСроки
+            title:
+              ru: "Сроки и оценка"
+              en: "Deadlines and estimates"
+              de: "Fristen und Schätzungen"
+              sr: "Рокови и процене"
+            children:
+              - kind: ПолеВвода
+                name: ПолеДатаНачала
+                title:
+                  ru: "Плановое начало"
+                  en: "Planned start"
+                  de: "Geplanter Start"
+                  sr: "Планирани почетак"
+                data_path: Объект.ДатаНачала
+              - kind: ПолеВвода
+                name: ПолеСрок
+                title:
+                  ru: "Дедлайн"
+                  en: "Deadline"
+                  de: "Frist"
+                  sr: "Рок"
+                data_path: Объект.Срок
+              - kind: ПолеВвода
+                name: ПолеОценка
+                title:
+                  ru: "Оценка (часы)"
+                  en: "Estimate (hours)"
+                  de: "Schätzung (Stunden)"
+                  sr: "Процена (сати)"
+                data_path: Объект.Оценка
+              - kind: ПолеВвода
+                name: ПолеСложность
+                title:
+                  ru: "Story points"
+                  en: "Story points"
+                  de: "Story Points"
+                  sr: "Стори поени"
+                data_path: Объект.Сложность
+              - kind: ПолеВвода
+                name: ПолеПрогресс
+                title:
+                  ru: "Прогресс (%)"
+                  en: "Progress (%)"
+                  de: "Fortschritt (%)"
+                  sr: "Напредак (%)"
+                data_path: Объект.Прогресс
+
+      - kind: Страница
+        name: СтраницаСвязи
+        title:
+          ru: "Связи и подзадачи"
+          en: "Links and subtasks"
+          de: "Verknüpfungen und Teilaufgaben"
+          sr: "Везе и подзадаци"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаПодзадачи
+            title:
+              ru: "Подзадачи"
+              en: "Subtasks"
+              de: "Teilaufgaben"
+              sr: "Подзадаци"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабПодзадачи
+                title:
+                  ru: "Подзадачи"
+                  en: "Subtasks"
+                  de: "Teilaufgaben"
+                  sr: "Подзадаци"
+                data_path: Объект.Подзадачи
+
+          - kind: ГруппаФормы
+            name: ГруппаМетки
+            title:
+              ru: "Метки"
+              en: "Labels"
+              de: "Labels"
+              sr: "Ознаке"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабМетки
+                title:
+                  ru: "Метки"
+                  en: "Labels"
+                  de: "Labels"
+                  sr: "Ознаке"
+                data_path: Объект.Метки
+
+          - kind: ГруппаФормы
+            name: ГруппаСвязи
+            title:
+              ru: "Связанные задачи"
+              en: "Linked tasks"
+              de: "Verknüpfte Aufgaben"
+              sr: "Повезани задаци"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабСвязи
+                title:
+                  ru: "Связи"
+                  en: "Links"
+                  de: "Verknüpfungen"
+                  sr: "Везе"
+                data_path: Объект.Связи
+
+          - kind: ГруппаФормы
+            name: ГруппаФайлы
+            title:
+              ru: "Вложения"
+              en: "Attachments"
+              de: "Anhänge"
+              sr: "Прилози"
+            children:
+              - kind: ТабличнаяЧасть
+                name: ТабФайлы
+                title:
+                  ru: "Файлы"
+                  en: "Files"
+                  de: "Dateien"
+                  sr: "Фајлови"
+                data_path: Объект.Файлы
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы
+  ПриЗаписи: ПриЗаписиФормы

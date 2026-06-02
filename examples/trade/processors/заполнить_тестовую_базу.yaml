@@ -1,0 +1,14 @@
+name: ЗаполнитьТестовуюБазу
+title: Заполнить тестовую базу демо-данными (складской хаос)
+titles:
+  en: Fill demo database (warehouse chaos)
+  de: Demo-Datenbank füllen (Lagerchaos)
+  sr: Попуни демо базу (складски хаос)
+params:
+  - name: Очистить
+    type: bool
+    label: "Очистить документы перед загрузкой"
+    labels:
+      en: "Clear documents before loading"
+      de: "Dokumente vor dem Laden löschen"
+    default: true

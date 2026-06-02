@@ -1,0 +1,72 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Доход
+  title:
+    ru: "Доход"
+    en: "Income"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: DocumentRef.Доход
+    save: true
+    main: true
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Параметры дохода"
+    children:
+      - kind: ПолеВвода
+        name: ПолеДата
+        title:
+          ru: "Дата"
+        data_path: Объект.Дата
+        required: true
+      - kind: ПолеВвода
+        name: ПолеСчёт
+        title:
+          ru: "Счёт"
+        data_path: Объект.Счёт
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеКатегорияДохода
+        title:
+          ru: "Категория"
+        data_path: Объект.КатегорияДохода
+        required: true
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеСумма
+        title:
+          ru: "Сумма"
+        data_path: Объект.Сумма
+        required: true
+      - kind: ПолеВвода
+        name: ПолеКонтрагент
+        title:
+          ru: "Контрагент"
+        data_path: Объект.Контрагент
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеЧленСемьи
+        title:
+          ru: "Член семьи"
+        data_path: Объект.ЧленСемьи
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеОжидаемый
+        title:
+          ru: "Плановый"
+        data_path: Объект.Ожидаемый
+        hint: "Отметьте для планового дохода"
+      - kind: ПолеВвода
+        name: ПолеОписание
+        title:
+          ru: "Описание"
+        data_path: Объект.Описание
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

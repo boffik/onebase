@@ -1,0 +1,36 @@
+name: Клиент
+title: Клиент
+hierarchical: false
+fields:
+  - name: Наименование
+    type: string
+  - name: ПолноеНаименование
+    type: string
+  - name: ТипКлиента
+    type: enum:ТипКлиента
+  - name: ИНН
+    type: string
+  - name: Email
+    type: string
+  - name: Телефон
+    type: string
+  - name: МобильныйТелефон
+    type: string
+  - name: Сайт
+    type: string
+  - name: ЮридическийАдрес
+    type: string
+  - name: ФактическийАдрес
+    type: string
+  - name: Комментарий
+    type: string
+  - name: Ответственный
+    type: reference:Сотрудник
+  - name: ИсточникКлиента
+    type: enum:ИсточникКлиента
+  - name: Отрасль
+    type: string
+  - name: ДатаРегистрации
+    type: date
+  - name: Статус
+    type: enum:СтатусКлиента

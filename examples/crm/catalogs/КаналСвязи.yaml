@@ -1,0 +1,7 @@
+name: КаналСвязи
+title: Канал связи
+fields:
+  - name: Наименование
+    type: string
+  - name: Описание
+    type: string

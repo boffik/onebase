@@ -1,0 +1,35 @@
+name: Инвентаризация
+title: Инвентаризация
+posting: true
+numerator:
+  prefix: "ИНВ-"
+  length: 6
+  period: year
+fields:
+  - name: Номер
+    type: string
+  - name: Дата
+    type: date
+  - name: Организация
+    type: reference:Организация
+  - name: Склад
+    type: reference:Склад
+  - name: Статус
+    type: enum:СтатусИнвентаризации
+  - name: Комментарий
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Номенклатура
+        type: reference:Номенклатура
+      - name: МестоХранения
+        type: reference:МестоХранения
+      - name: КоличествоУчётное
+        type: number
+      - name: КоличествоФактическое
+        type: number
+      - name: Отклонение
+        type: number
+      - name: СуммаОтклонения
+        type: number

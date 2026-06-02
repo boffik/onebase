@@ -1,0 +1,84 @@
+schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Счёт
+  title:
+    ru: "Карточка счёта"
+    en: "Account"
+  auto_save_settings: true
+attributes:
+  - name: Объект
+    type: CatalogRef.Счёт
+    save: true
+    main: true
+elements:
+  - kind: ГруппаФормы
+    name: ГруппаОсновное
+    title:
+      ru: "Реквизиты счёта"
+    children:
+      - kind: ПолеВвода
+        name: ПолеНаименование
+        title:
+          ru: "Наименование"
+        data_path: Объект.Наименование
+        required: true
+      - kind: ПолеВвода
+        name: ПолеТипСчёта
+        title:
+          ru: "Тип счёта"
+        data_path: Объект.ТипСчёта
+        choice: true
+      - kind: ПолеВвода
+        name: ПолеВалюта
+        title:
+          ru: "Валюта"
+        data_path: Объект.Валюта
+      - kind: ПолеВвода
+        name: ПолеНачальныйБаланс
+        title:
+          ru: "Начальный баланс"
+        data_path: Объект.НачальныйБаланс
+      - kind: ПолеВвода
+        name: ПолеВключитьВБюджет
+        title:
+          ru: "Включить в бюджет"
+        data_path: Объект.ВключитьВБюджет
+      - kind: ПолеВвода
+        name: ПолеАктивный
+        title:
+          ru: "Активный"
+        data_path: Объект.Активный
+  - kind: ГруппаФормы
+    name: ГруппаБанк
+    title:
+      ru: "Банк"
+    children:
+      - kind: ПолеВвода
+        name: ПолеБанк
+        title:
+          ru: "Название банка"
+        data_path: Объект.Банк
+      - kind: ПолеВвода
+        name: ПолеНомерСчёта
+        title:
+          ru: "Номер счёта"
+        data_path: Объект.НомерСчёта
+  - kind: ГруппаФормы
+    name: ГруппаОформление
+    title:
+      ru: "Оформление"
+    children:
+      - kind: ПолеВвода
+        name: ПолеЦвет
+        title:
+          ru: "Цвет"
+        data_path: Объект.Цвет
+      - kind: ПолеВвода
+        name: ПолеИконка
+        title:
+          ru: "Иконка"
+        data_path: Объект.Иконка
+events:
+  ПриОткрытии: ПриОткрытииФормы

@@ -1,0 +1,15 @@
+name: Организация
+title: Организация
+fields:
+  - name: Наименование
+    type: string
+  - name: ИНН
+    type: string
+  - name: КПП
+    type: string
+  - name: ОГРН
+    type: string
+  - name: ЮридическийАдрес
+    type: string
+  - name: Телефон
+    type: string

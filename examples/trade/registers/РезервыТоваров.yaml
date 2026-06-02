@@ -1,0 +1,11 @@
+name: РезервыТоваров
+dimensions:
+  - name: Номенклатура
+    type: reference:Номенклатура
+  - name: Склад
+    type: reference:Склад
+  - name: ЗаказПокупателя
+    type: string
+resources:
+  - name: Количество
+    type: number

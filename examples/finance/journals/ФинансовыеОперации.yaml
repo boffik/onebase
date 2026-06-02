@@ -1,0 +1,18 @@
+name: ФинансовыеОперации
+title: Финансовые операции
+documents:
+  - Расход
+  - Доход
+  - Перевод
+  - ПополнениеЦели
+  - СнятиеСЦели
+columns:
+  - field: Дата
+    label: Дата
+    format: date
+  - field: Номер
+    label: Номер
+  - field: Счёт
+    label: Счёт
+  - field: Сумма
+    label: Сумма

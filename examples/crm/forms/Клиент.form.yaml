@@ -1,0 +1,177 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Клиент
+  title:
+    ru: "Карточка клиента"
+    en: "Client card"
+    de: "Kundenkarte"
+  auto_save_settings: true
+
+attributes:
+  - name: Объект
+    type: CatalogRef.Клиент
+    save: true
+    main: true
+
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+          de: "Allgemein"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаРеквизиты
+            title:
+              ru: "Реквизиты"
+              en: "Details"
+              de: "Details"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНаименование
+                title:
+                  ru: "Наименование"
+                  en: "Name"
+                  de: "Name"
+                data_path: Объект.Наименование
+                required: true
+              - kind: ПолеВвода
+                name: ПолеТипКлиента
+                title:
+                  ru: "Тип клиента"
+                  en: "Client type"
+                  de: "Kundentyp"
+                data_path: Объект.ТипКлиента
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                  en: "Status"
+                  de: "Status"
+                data_path: Объект.Статус
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеИНН
+                title:
+                  ru: "ИНН"
+                  en: "Tax ID"
+                  de: "Steuernummer"
+                data_path: Объект.ИНН
+              - kind: ПолеВвода
+                name: ПолеОтветственный
+                title:
+                  ru: "Ответственный"
+                  en: "Responsible"
+                  de: "Verantwortlich"
+                data_path: Объект.Ответственный
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеИсточникКлиента
+                title:
+                  ru: "Источник"
+                  en: "Source"
+                  de: "Quelle"
+                data_path: Объект.ИсточникКлиента
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеОтрасль
+                title:
+                  ru: "Отрасль"
+                  en: "Industry"
+                  de: "Branche"
+                data_path: Объект.Отрасль
+      - kind: Страница
+        name: СтраницаКонтакты
+        title:
+          ru: "Контакты"
+          en: "Contacts"
+          de: "Kontakte"
+        children:
+          - kind: ПолеВвода
+            name: ПолеТелефон
+            title:
+              ru: "Телефон"
+              en: "Phone"
+              de: "Telefon"
+            data_path: Объект.Телефон
+          - kind: ПолеВвода
+            name: ПолеМобильныйТелефон
+            title:
+              ru: "Мобильный"
+              en: "Mobile"
+              de: "Mobil"
+            data_path: Объект.МобильныйТелефон
+          - kind: ПолеВвода
+            name: ПолеЕMail
+            title:
+              ru: "Email"
+              en: "Email"
+              de: "E-Mail"
+            data_path: Объект.Email
+          - kind: ПолеВвода
+            name: ПолеСайт
+            title:
+              ru: "Сайт"
+              en: "Website"
+              de: "Website"
+            data_path: Объект.Сайт
+      - kind: Страница
+        name: СтраницаАдреса
+        title:
+          ru: "Адреса"
+          en: "Addresses"
+          de: "Adressen"
+        children:
+          - kind: ПолеВвода
+            name: ПолеЮридическийАдрес
+            title:
+              ru: "Юридический адрес"
+              en: "Legal address"
+              de: "Rechtliche Adresse"
+            data_path: Объект.ЮридическийАдрес
+          - kind: ПолеВвода
+            name: ПолеФактическийАдрес
+            title:
+              ru: "Фактический адрес"
+              en: "Actual address"
+              de: "Tatsächliche Adresse"
+            data_path: Объект.ФактическийАдрес
+      - kind: Страница
+        name: СтраницаДополнительно
+        title:
+          ru: "Дополнительно"
+          en: "Additional"
+          de: "Zusätzlich"
+        children:
+          - kind: ПолеВвода
+            name: ПолеПолноеНаименование
+            title:
+              ru: "Полное наименование"
+              en: "Full name"
+              de: "Vollständiger Name"
+            data_path: Объект.ПолноеНаименование
+          - kind: ПолеВвода
+            name: ПолеДатаРегистрации
+            title:
+              ru: "Дата регистрации"
+              en: "Registration date"
+              de: "Registrierungsdatum"
+            data_path: Объект.ДатаРегистрации
+          - kind: ПолеВвода
+            name: ПолеКомментарий
+            title:
+              ru: "Комментарий"
+              en: "Comment"
+              de: "Kommentar"
+            data_path: Объект.Комментарий
+
+events:
+  ПриОткрытии: ПриОткрытииФормы

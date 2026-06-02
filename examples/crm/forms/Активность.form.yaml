@@ -1,0 +1,193 @@
+schema: onebase.form/v1
+
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Активность
+  title:
+    ru: "Активность"
+    en: "Activity"
+    de: "Aktivität"
+  auto_save_settings: true
+  vertical_scroll: auto
+
+attributes:
+  - name: Объект
+    type: DocumentRef.Активность
+    save: true
+    main: true
+
+elements:
+  - kind: СтраницыФормы
+    name: ОсновныеЗакладки
+    children:
+      - kind: Страница
+        name: СтраницаОсновное
+        title:
+          ru: "Основное"
+          en: "General"
+          de: "Allgemein"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаШапка
+            title:
+              ru: "Параметры активности"
+              en: "Activity parameters"
+              de: "Aktivitätsparameter"
+            children:
+              - kind: ПолеВвода
+                name: ПолеНомер
+                title:
+                  ru: "Номер"
+                  en: "Number"
+                  de: "Nummer"
+                data_path: Объект.Номер
+                readonly: true
+              - kind: ПолеВвода
+                name: ПолеДата
+                title:
+                  ru: "Дата"
+                  en: "Date"
+                  de: "Datum"
+                data_path: Объект.Дата
+                required: true
+              - kind: ПолеВвода
+                name: ПолеТема
+                title:
+                  ru: "Тема"
+                  en: "Subject"
+                  de: "Betreff"
+                data_path: Объект.Тема
+                required: true
+                hint: "Краткое описание активности"
+              - kind: ПолеВвода
+                name: ПолеТипАктивности
+                title:
+                  ru: "Тип активности"
+                  en: "Activity type"
+                  de: "Aktivitätstyp"
+                data_path: Объект.ТипАктивности
+                choice: true
+                required: true
+              - kind: ПолеВвода
+                name: ПолеСтатус
+                title:
+                  ru: "Статус"
+                  en: "Status"
+                  de: "Status"
+                data_path: Объект.Статус
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеКаналСвязи
+                title:
+                  ru: "Канал связи"
+                  en: "Channel"
+                  de: "Kanal"
+                data_path: Объект.КаналСвязи
+                choice: true
+          - kind: ГруппаФормы
+            name: ГруппаВремя
+            title:
+              ru: "Время"
+              en: "Time"
+              de: "Zeit"
+            children:
+              - kind: ПолеВвода
+                name: ПолеДатаНачала
+                title:
+                  ru: "Дата начала"
+                  en: "Start date"
+                  de: "Beginndatum"
+                data_path: Объект.ДатаНачала
+              - kind: ПолеВвода
+                name: ПолеДатаОкончания
+                title:
+                  ru: "Дата окончания"
+                  en: "End date"
+                  de: "Enddatum"
+                data_path: Объект.ДатаОкончания
+                events:
+                  ПриИзменении: ДатаОкончанияПриИзменении
+              - kind: ПолеВвода
+                name: ПолеДлительностьМинут
+                title:
+                  ru: "Длительность (мин)"
+                  en: "Duration (min)"
+                  de: "Dauer (Min)"
+                data_path: Объект.ДлительностьМинут
+                hint: "Заполняется автоматически при указании дат начала и окончания"
+      - kind: Страница
+        name: СтраницаСвязи
+        title:
+          ru: "Связи"
+          en: "Relations"
+          de: "Beziehungen"
+        children:
+          - kind: ГруппаФормы
+            name: ГруппаСвязи
+            title:
+              ru: "Связанные объекты"
+              en: "Related objects"
+              de: "Verknüpfte Objekte"
+            children:
+              - kind: ПолеВвода
+                name: ПолеКлиент
+                title:
+                  ru: "Клиент"
+                  en: "Client"
+                  de: "Kunde"
+                data_path: Объект.Клиент
+                choice: true
+                events:
+                  ПриИзменении: КлиентПриИзменении
+              - kind: ПолеВвода
+                name: ПолеКонтактноеЛицо
+                title:
+                  ru: "Контактное лицо"
+                  en: "Contact person"
+                  de: "Kontaktperson"
+                data_path: Объект.КонтактноеЛицо
+                choice: true
+              - kind: ПолеВвода
+                name: ПолеСделка
+                title:
+                  ru: "Сделка"
+                  en: "Deal"
+                  de: "Geschäft"
+                data_path: Объект.Сделка
+                choice: true
+                hint: "Связанная сделка"
+              - kind: ПолеВвода
+                name: ПолеОтветственный
+                title:
+                  ru: "Ответственный"
+                  en: "Responsible"
+                  de: "Verantwortlich"
+                data_path: Объект.Ответственный
+                choice: true
+      - kind: Страница
+        name: СтраницаРезультат
+        title:
+          ru: "Результат"
+          en: "Result"
+          de: "Ergebnis"
+        children:
+          - kind: ПолеВвода
+            name: ПолеРезультат
+            title:
+              ru: "Результат"
+              en: "Result"
+              de: "Ergebnis"
+            data_path: Объект.Результат
+            hint: "Краткое описание результата активности"
+          - kind: ПолеВвода
+            name: ПолеОписание
+            title:
+              ru: "Описание"
+              en: "Description"
+              de: "Beschreibung"
+            data_path: Объект.Описание
+
+events:
+  ПриОткрытии: ПриОткрытииФормы
+  ПередЗаписью: ПередЗаписьюФормы

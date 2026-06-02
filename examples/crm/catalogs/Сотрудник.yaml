@@ -1,0 +1,17 @@
+name: Сотрудник
+title: Сотрудник
+fields:
+  - name: Наименование
+    type: string
+  - name: Должность
+    type: string
+  - name: Email
+    type: string
+  - name: Телефон
+    type: string
+  - name: Отдел
+    type: string
+  - name: ДатаПриёмаНаРаботу
+    type: date
+  - name: Активный
+    type: bool

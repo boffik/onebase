@@ -1,0 +1,89 @@
+name: ЗадачиПоИсполнителю
+title: Задачи по исполнителю
+titles:
+  en: Tasks by assignee
+  de: Aufgaben nach Bearbeiter
+  sr: Задаци по извођачу
+  az: İcraçıya görə tapşırıqlar
+  es: Tareas por asignado
+  fr: Tâches par assigné
+  hy: Առաջադրանքներ ըստ կատարողի
+  ka: დავალებები შემსრულებლის მიხედვით
+  kk: Орындаушы бойынша тапсырмалар
+  pt: Tarefas por responsável
+  ro: Sarcini după executant
+  tr: Görevler atanan kişiye göre
+  uk: Завдання за виконавцями
+  uz: Ijrochi bo'yicha vazifalar
+  zh: 按执行人的任务
+params:
+  - name: НачалоПериода
+    type: date
+    label: Начало периода
+    labels:
+      en: Period start
+      de: Zeitraum Beginn
+      sr: Почетак периода
+      az: Dövrün başlanğıcı
+      es: Inicio del período
+      fr: Début de période
+      hy: Շրջանի սկիզբ
+      ka: პერიოდის დასაწყისი
+      kk: Кезең басы
+      pt: Início do período
+      ro: Început perioadă
+      tr: Dönem başı
+      uk: Початок періоду
+      uz: Davr boshlanishi
+      zh: 开始日期
+  - name: КонецПериода
+    type: date
+    label: Конец периода
+    labels:
+      en: Period end
+      de: Zeitraum Ende
+      sr: Крај периода
+      az: Dövrün sonu
+      es: Fin del período
+      fr: Fin de période
+      hy: Շրջանի վերջ
+      ka: პერიოდის დასრულება
+      kk: Кезең соңы
+      pt: Fim do período
+      ro: Sfârșit perioadă
+      tr: Dönem sonu
+      uk: Кінець періоду
+      uz: Davr oxiri
+      zh: 结束日期
+  - name: Исполнитель
+    type: reference:Исполнитель
+    label: Исполнитель
+    labels:
+      en: Assignee
+      de: Bearbeiter
+      sr: Извођач
+      az: İcraçı
+      es: Asignado
+      fr: Assigné
+      hy: Կատարող
+      ka: შემსრულებელი
+      kk: Орындаушы
+      pt: Responsável
+      ro: Executant
+      tr: Atanan
+      uk: Виконавець
+      uz: Ijrochi
+      zh: 执行人
+query: |
+  ВЫБРАТЬ
+    Исполнитель,
+    Заголовок,
+    Проект,
+    Статус,
+    Приоритет,
+    Срок,
+    Оценка,
+    Прогресс
+  ИЗ Документ.Задача
+  ГДЕ Дата >= &НачалоПериода И Дата <= &КонецПериода
+  УПОРЯДОЧИТЬ ПО Исполнитель, Приоритет УБЫВ, Срок

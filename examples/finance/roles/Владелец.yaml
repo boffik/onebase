@@ -1,0 +1,33 @@
+name: Владелец
+title: Владелец
+description: Полный доступ ко всем объектам конфигурации
+permissions:
+  catalogs:
+    Счёт: [read, write]
+    КатегорияРасхода: [read, write]
+    КатегорияДохода: [read, write]
+    Контрагент: [read, write]
+    ЧленСемьи: [read, write]
+    ЦельНакопления: [read, write]
+  documents:
+    Расход: [read, write, post, unpost]
+    Доход: [read, write, post, unpost]
+    Перевод: [read, write, post, unpost]
+    ПополнениеЦели: [read, write, post, unpost]
+    СнятиеСЦели: [read, write, post, unpost]
+  registers:
+    ОстаткиПоСчетам: [read]
+    ДвижениеСредств: [read]
+    НакопленияПоЦелям: [read]
+  reports:
+    ОстаткиПоСчетам: [run]
+    ДвижениеСредств: [run]
+    РасходыПоКатегориям: [run]
+    ДоходыПоКатегориям: [run]
+    ДинамикаБаланса: [run]
+    Бюджет: [run]
+    ПрогрессНакоплений: [run]
+    РасходыПоКонтрагентам: [run]
+    СравнениеМесяцев: [run]
+    ОбязательныеРасходы: [run]
+  printforms: [run]

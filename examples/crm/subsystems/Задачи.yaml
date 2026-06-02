@@ -1,0 +1,13 @@
+name: Задачи
+title: Задачи
+order: 30
+contents:
+  documents: [ЗадачаCRM]
+  reports: [ЗагруженностьСотрудников]
+  processors: [НапоминанияОЗадачах]
+home_page:
+  rows:
+    - widgets:
+        - НовыеЗаНеделю
+    - widgets:
+        - ПросроченныеЗадачи

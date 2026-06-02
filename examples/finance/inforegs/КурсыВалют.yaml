@@ -1,0 +1,8 @@
+name: КурсыВалют
+periodic: true
+dimensions:
+  - name: Валюта
+    type: string
+resources:
+  - name: Курс
+    type: number
