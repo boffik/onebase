@@ -65,8 +65,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// writeAIGuide кладёт AGENTS.md в новую конфигурацию, чтобы ИИ разработчика
-// сразу знал структуру, рабочий цикл и встроенные функции (best-effort).
+// writeAIGuide кладёт AGENTS.md (полное руководство) и CLAUDE.md (заглушка-
+// указатель для авто-загрузки ИИ-ассистентами) в новую конфигурацию, чтобы ИИ
+// разработчика сразу видел структуру, рабочий цикл и встроенные функции —
+// без ручных подсказок от пользователя (best-effort).
 func writeAIGuide(dir string) {
 	_ = os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(generateAIGuide()), 0o644)
+	// CLAUDE.md не перезаписываем, если он уже есть (мог быть кастомизирован).
+	claudePath := filepath.Join(dir, "CLAUDE.md")
+	if _, err := os.Stat(claudePath); os.IsNotExist(err) {
+		_ = os.WriteFile(claudePath, []byte(claudePointer), 0o644)
+	}
 }
