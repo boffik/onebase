@@ -349,11 +349,12 @@ type translator struct {
 	paramValues map[string]any
 	opts        CompileOpts
 	parts       []string
-	prevWasDot  bool              // true after emitting "." — used to resolve .Ссылка → .id
-	colMap      map[string]string // lowercase field name → actual column name (for reference dims)
-	refDims     []refDimInfo      // reference dimensions with auto-JOIN info
-	mainTable   string            // main FROM table (set when source is emitted)
-	section     querySection      // current clause context
+	prevWasDot  bool                          // true after emitting "." — used to resolve .Ссылка → .id
+	colMap      map[string]string             // lowercase field name → actual column name (for reference dims)
+	colTypes    map[string]metadata.FieldType // lowercase field name → type (для квалификации и CAST number)
+	refDims     []refDimInfo                  // reference dimensions with auto-JOIN info
+	mainTable   string                        // main FROM table/alias (set when source is emitted)
+	section     querySection                  // current clause context
 }
 
 func (tr *translator) peek(offset int) tok {
@@ -1224,6 +1225,147 @@ func buildColMap(tokens []tok, opts CompileOpts) map[string]string {
 	return m
 }
 
+// buildColTypes маппит имя поля (lowercase) → его тип для запрашиваемого
+// источника (справочник/документ ИЛИ регистр). В отличие от buildColMap (только
+// поля с переименованной колонкой), здесь — ВСЕ поля, чтобы:
+//   - п.48: квалифицировать собственные колонки префиксом таблицы при авто-JOIN
+//     (иначе одноимённая колонка присоединённого каталога даёт ambiguous column);
+//   - п.49: на SQLite оборачивать number-колонки в CAST(... AS NUMERIC) в
+//     сравнениях/сортировке (number хранится как TEXT → иначе строковое сравнение).
+func buildColTypes(tokens []tok, opts CompileOpts) map[string]metadata.FieldType {
+	m := map[string]metadata.FieldType{}
+	add := func(fields []metadata.Field) {
+		for _, f := range fields {
+			m[strings.ToLower(f.Name)] = f.Type
+		}
+	}
+	for i := 0; i+2 < len(tokens); i++ {
+		t := tokens[i]
+		if t.kind != tIdent {
+			continue
+		}
+		upper := strings.ToUpper(t.val)
+		if !isSourceType(upper) || tokens[i+1].kind != tDot || tokens[i+2].kind != tIdent {
+			continue
+		}
+		if i+3 < len(tokens) && tokens[i+3].kind == tDot {
+			return m // VT-источник: внешний запрос работает по логическим алиасам
+		}
+		name := tokens[i+2].val
+		switch {
+		case isAccumRegType(upper):
+			for _, reg := range opts.Registers {
+				if strings.EqualFold(reg.Name, name) {
+					add(reg.Dimensions)
+					add(reg.Resources)
+					add(reg.Attributes)
+					return m
+				}
+			}
+		case isInfoRegType(upper):
+			for _, ir := range opts.InfoRegs {
+				if strings.EqualFold(ir.Name, name) {
+					add(ir.Dimensions)
+					add(ir.Resources)
+					return m
+				}
+			}
+		default: // справочник / документ
+			for _, e := range opts.Entities {
+				if strings.EqualFold(e.Name, name) {
+					add(e.Fields)
+					return m
+				}
+			}
+		}
+		return m
+	}
+	return m
+}
+
+// needsNumberCast — true, если колонку поля number нужно обернуть в
+// CAST(... AS NUMERIC): только на SQLite (там number хранится как TEXT) и только
+// в позициях сравнения/сортировки (WHERE/HAVING/ORDER BY). В ВЫБРАТЬ не кастим —
+// вывод остаётся точным TEXT.
+func (tr *translator) needsNumberCast(lower string) bool {
+	if tr.colTypes[lower] != metadata.FieldTypeNumber {
+		return false
+	}
+	if dialectOrDefault(tr.opts.Dialect).Name() != "sqlite" {
+		return false
+	}
+	switch tr.section {
+	case sectionWhere, sectionHaving, sectionOrderBy:
+		return true
+	}
+	return false
+}
+
+// qualifyOwn префиксует собственную колонку основной таблицы её именем/алиасом,
+// когда активны авто-JOIN'ы (п.48) — иначе одноимённая колонка присоединённого
+// каталога вызывает ambiguous column. Неизвестные идентификаторы не трогаем.
+func (tr *translator) qualifyOwn(col, lower string) string {
+	if len(tr.refDims) > 0 && tr.mainTable != "" {
+		if _, own := tr.colTypes[lower]; own {
+			return tr.mainTable + "." + col
+		}
+	}
+	return col
+}
+
+// emitOwnColumn эмитит неквалифицированную собственную колонку с учётом п.48/п.49.
+func (tr *translator) emitOwnColumn(col, lower string) {
+	col = tr.qualifyOwn(col, lower)
+	if tr.needsNumberCast(lower) {
+		tr.emit("CAST(" + col + " AS NUMERIC)")
+		return
+	}
+	tr.emit(col)
+}
+
+// emitQualifiedColumn эмитит колонку после точки (алиас.поле). Для number на
+// SQLite оборачивает весь `алиас.поле` в CAST, забирая уже эмитнутые алиас и "."
+// из tr.parts (build() не ставит пробелов вокруг точки).
+func (tr *translator) emitQualifiedColumn(col, lower string) {
+	if tr.needsNumberCast(lower) && len(tr.parts) >= 2 && tr.parts[len(tr.parts)-1] == "." {
+		alias := tr.parts[len(tr.parts)-2]
+		tr.parts = tr.parts[:len(tr.parts)-2]
+		tr.emit("CAST(" + alias + "." + col + " AS NUMERIC)")
+		return
+	}
+	tr.emit(col)
+}
+
+// preScanMainTable заранее (до основного прохода) находит имя основной таблицы
+// или её алиас (КАК/AS). Нужно для п.48: колонки секции ВЫБРАТЬ эмитятся раньше
+// ИЗ, поэтому без пред-скана mainTable там ещё пуст и квалификация не сработала бы.
+// Для VT-источника возвращает "" (внешний запрос работает по логическим алиасам).
+func preScanMainTable(tokens []tok) string {
+	for i := 0; i+2 < len(tokens); i++ {
+		t := tokens[i]
+		if t.kind != tIdent {
+			continue
+		}
+		upper := strings.ToUpper(t.val)
+		if !isSourceType(upper) || tokens[i+1].kind != tDot || tokens[i+2].kind != tIdent {
+			continue
+		}
+		if i+3 < len(tokens) && tokens[i+3].kind == tDot {
+			return ""
+		}
+		table := sourceToTable(upper, tokens[i+2].val)
+		if j := i + 3; j+1 < len(tokens) && tokens[j].kind == tIdent {
+			if u := strings.ToUpper(tokens[j].val); u == "КАК" || u == "AS" {
+				if tokens[j+1].kind == tIdent {
+					return strings.ToLower(tokens[j+1].val)
+				}
+			}
+		}
+		return table
+	}
+	return ""
+}
+
 func translate(tokens []tok, opts CompileOpts) (Result, error) {
 	if opts.Params == nil {
 		opts.Params = map[string]any{}
@@ -1237,6 +1379,8 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		paramValues: opts.Params,
 		opts:        opts,
 		colMap:      buildColMap(tokens, opts),
+		colTypes:    buildColTypes(tokens, opts),
+		mainTable:   preScanMainTable(tokens),
 		refDims:     preScanRefDims(tokens, opts),
 		section:     sectionOther,
 	}
@@ -1318,7 +1462,11 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				if pUpper == "КАК" || pUpper == "AS" {
 					tr.advance()
 					if a := tr.peek(0); a.kind == tIdent {
-						tr.emit("AS " + strings.ToLower(tr.advance().val))
+						aliasName := strings.ToLower(tr.advance().val)
+						tr.emit("AS " + aliasName)
+						// Собственные колонки квалифицируем алиасом, а не именем
+						// таблицы (иначе `таблица.col` не совпадёт с `AS алиас`).
+						tr.mainTable = aliasName
 					}
 				}
 			}
@@ -1442,17 +1590,17 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 						}
 					}
 				} else if col, ok := tr.colMap[lower]; ok && !prevDot {
-					tr.emit(col)
+					tr.emitOwnColumn(col, lower)
 				} else if prevDot {
 					if rd := tr.findRefDim(lower); rd != nil {
 						tr.emit(rd.idCol)
 					} else if c, ok2 := tr.colMap[lower]; ok2 {
-						tr.emit(c)
+						tr.emitQualifiedColumn(c, lower)
 					} else {
-						tr.emit(lower)
+						tr.emitQualifiedColumn(lower, lower)
 					}
 				} else {
-					tr.emit(lower)
+					tr.emitOwnColumn(lower, lower)
 				}
 			}
 			continue
