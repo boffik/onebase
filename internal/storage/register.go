@@ -78,30 +78,41 @@ func (db *DB) OrphanMovements(ctx context.Context, registers []*metadata.Registe
 	var stats []OrphanStat
 	for _, reg := range registers {
 		table := metadata.RegisterTableName(reg.Name)
+		// Сначала полностью считываем типы регистраторов и закрываем курсор.
+		// Вложенный QueryRow ниже нельзя выполнять при открытом rows: на
+		// единственном SQLite-соединении (SetMaxOpenConns(1)) он зависнет,
+		// ожидая соединение, которое держит незакрытый внешний курсор.
 		rows, err := db.Query(ctx, fmt.Sprintf(
 			"SELECT recorder_type, COUNT(*) FROM %s GROUP BY recorder_type", table))
 		if err != nil {
 			continue
 		}
+		type recTotal struct {
+			recType string
+			total   int
+		}
+		var recTypes []recTotal
 		for rows.Next() {
-			var recType string
-			var total int
-			rows.Scan(&recType, &total)
+			var rt recTotal
+			rows.Scan(&rt.recType, &rt.total)
+			recTypes = append(recTypes, rt)
+		}
+		rows.Close()
 
-			tbl, exists := entityTable[strings.ToLower(recType)]
+		for _, rt := range recTypes {
+			tbl, exists := entityTable[strings.ToLower(rt.recType)]
 			var count int
 			if !exists {
-				count = total
+				count = rt.total
 			} else {
 				db.QueryRow(ctx, fmt.Sprintf(
 					"SELECT COUNT(*) FROM %s WHERE recorder_type = %s AND recorder NOT IN (SELECT id FROM %s)",
-					table, d.Placeholder(1), tbl), recType).Scan(&count)
+					table, d.Placeholder(1), tbl), rt.recType).Scan(&count)
 			}
 			if count > 0 {
-				stats = append(stats, OrphanStat{RegisterName: reg.Name, RecorderType: recType, Count: count})
+				stats = append(stats, OrphanStat{RegisterName: reg.Name, RecorderType: rt.recType, Count: count})
 			}
 		}
-		rows.Close()
 	}
 	return stats
 }
