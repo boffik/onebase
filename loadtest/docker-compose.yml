@@ -1,0 +1,86 @@
+# Нагрузочный стенд onebase: PostgreSQL + onebase (метрики/pprof включены) +
+# Prometheus + Grafana, и k6 как запускаемый по требованию раннер (профиль k6).
+#
+# Поднять стенд:        docker compose -f loadtest/docker-compose.yml up -d --build
+# Засеять данные:       go run ./loadtest/seed -url http://localhost:8080 -out loadtest/seed/counterparties.json
+# Прогнать сценарий:    docker compose -f loadtest/docker-compose.yml run --rm k6 run /scripts/scenarios/post_document.js
+# Метрики:              http://localhost:9090 (Prometheus), http://localhost:3000 (Grafana, admin/admin)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: onebase
+      POSTGRES_PASSWORD: onebase
+      POSTGRES_DB: loadtest
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onebase -d loadtest"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  onebase:
+    build:
+      context: ..
+      dockerfile: loadtest/Dockerfile
+    image: onebase:loadtest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://onebase:onebase@postgres:5432/loadtest?sslmode=disable
+      # Токен включает /metrics и /debug/pprof (см. internal/api/server.go).
+      ONEBASE_DEBUG_TOKEN: loadtest
+      ONEBASE_NO_GUI: "1"
+    # migrate один раз, затем run. Entrypoint образа — onebase, поэтому
+    # переопределяем на shell для цепочки.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        onebase migrate --project /app/examples/simple-erp --db "$$DATABASE_URL" &&
+        onebase run --project /app/examples/simple-erp --db "$$DATABASE_URL" --port 8080
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  prometheus:
+    image: prom/prometheus:latest
+    depends_on:
+      - onebase
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    ports:
+      - "3000:3000"
+
+  # k6 не стартует с `up` — только по требованию (docker compose run k6 ...).
+  k6:
+    image: grafana/k6:latest
+    profiles: ["k6"]
+    depends_on:
+      onebase:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://onebase:8080
+      SEED_FILE: /seed/counterparties.json
+      # k6 умеет слать метрики прогона в тот же Prometheus (remote write).
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+    volumes:
+      - ./k6:/scripts:ro
+      - ./seed:/seed:ro
+    working_dir: /scripts

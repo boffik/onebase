@@ -1,0 +1,12 @@
+# Prometheus скрейпит /metrics onebase. Эндпоинт закрыт токеном
+# (ONEBASE_DEBUG_TOKEN), поэтому токен передаём query-параметром через params.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: onebase
+    metrics_path: /metrics
+    params:
+      token: ["loadtest"]
+    static_configs:
+      - targets: ["onebase:8080"]

@@ -12,6 +12,7 @@ import (
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/metrics"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -33,6 +34,15 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
+	// Сбор HTTP-метрик включаем тем же знаком, что и debug-поверхность: если
+	// задан ONEBASE_DEBUG_TOKEN. Middleware ставим до маршрутов, чтобы он
+	// оборачивал весь роутер; сам /metrics монтируется ниже под токен-гейтом.
+	var metricsReg *metrics.Registry
+	if debugToken != "" {
+		metricsReg = metrics.New()
+		r.Use(metricsReg.Middleware)
+	}
 
 	// Public auth routes (no authentication required)
 	authH := &auth.Handlers{Repo: authRepo, Auditor: store}
@@ -73,8 +83,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 
 	// Debug API — токен-гейт (см. MountDebug). Монтируем только если токен
 	// задан: без него опубликованная база не имеет debug-поверхности.
+	// Туда же вешаем pprof — профилирование под тем же токеном (см. mountPprof).
 	if debugToken != "" {
 		uiSrv.MountDebug(r)
+		mountPprof(r, debugToken)
+		mountMetrics(r, debugToken, metricsReg, store)
 	}
 
 	addr := fmt.Sprintf(":%d", port)
