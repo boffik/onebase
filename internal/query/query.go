@@ -858,8 +858,10 @@ func (tr *translator) genTurnovers(reg *metadata.Register, args [][]tok) (string
 
 	var cols []string
 	// Period column (truncated) — first, before dimensions, matching 1C convention.
+	// Alias is the physical "period" column name (Latin), so that the outer query's
+	// Период → systemColAlias → "period" reference resolves on both engines.
 	if periodLevel != "" {
-		cols = append(cols, periodTruncSQL(periodLevel, d)+" AS Период")
+		cols = append(cols, periodTruncSQL(periodLevel, d)+" AS period")
 	}
 	cols = append(cols, selDims...)
 	for _, r := range reg.Resources {

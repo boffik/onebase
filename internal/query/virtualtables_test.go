@@ -331,7 +331,7 @@ func TestCompile_Turnovers_Periodicity_Month_PG(t *testing.T) {
 		t.Fatal(err)
 	}
 	sql := r.SQL
-	if !strings.Contains(sql, "date_trunc('month', period) AS Период") {
+	if !strings.Contains(sql, "date_trunc('month', period) AS period") {
 		t.Errorf("expected date_trunc month in SELECT, got:\n%s", sql)
 	}
 	if !strings.Contains(sql, "GROUP BY date_trunc('month', period)") {
@@ -354,7 +354,7 @@ func TestCompile_Turnovers_Periodicity_Month_SQLite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sql := r.SQL
-	if !strings.Contains(sql, "strftime('%Y-%m', period) AS Период") {
+	if !strings.Contains(sql, "strftime('%Y-%m', period) AS period") {
 		t.Errorf("expected strftime month in SELECT, got:\n%s", sql)
 	}
 	if !strings.Contains(sql, "GROUP BY strftime('%Y-%m', period)") {
@@ -372,7 +372,7 @@ func TestCompile_Turnovers_Periodicity_Day(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(r.SQL, "date_trunc('day', period) AS Период") {
+	if !strings.Contains(r.SQL, "date_trunc('day', period) AS period") {
 		t.Errorf("expected date_trunc day, got:\n%s", r.SQL)
 	}
 }
@@ -387,7 +387,7 @@ func TestCompile_Turnovers_Periodicity_Year(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(r.SQL, "date_trunc('year', period) AS Период") {
+	if !strings.Contains(r.SQL, "date_trunc('year', period) AS period") {
 		t.Errorf("expected date_trunc year, got:\n%s", r.SQL)
 	}
 }
@@ -402,7 +402,7 @@ func TestCompile_Turnovers_Periodicity_Record(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(r.SQL, "period AS Период") {
+	if !strings.Contains(r.SQL, "period AS period") {
 		t.Errorf("expected raw period (no truncation), got:\n%s", r.SQL)
 	}
 }
@@ -420,7 +420,7 @@ func TestCompile_Turnovers_PeriodicityWithFilter(t *testing.T) {
 	}
 	sql := r.SQL
 	// Periodicity should be present
-	if !strings.Contains(sql, "date_trunc('month', period) AS Период") {
+	if !strings.Contains(sql, "date_trunc('month', period) AS period") {
 		t.Errorf("expected period column, got:\n%s", sql)
 	}
 	// Filter should be applied from args[3]
@@ -442,7 +442,7 @@ func TestCompile_Turnovers_FilterBackwardCompat(t *testing.T) {
 	}
 	sql := r.SQL
 	// No period column — backward compatible
-	if strings.Contains(sql, "AS Период") {
+	if strings.Contains(sql, "AS period") {
 		t.Errorf("should NOT have period column when no periodicity, got:\n%s", sql)
 	}
 	// Filter should still work from args[2]
@@ -462,10 +462,50 @@ func TestCompile_Turnovers_Periodicity_NoDate(t *testing.T) {
 		t.Fatal(err)
 	}
 	sql := r.SQL
-	if !strings.Contains(sql, "date_trunc('month', period) AS Период") {
+	if !strings.Contains(sql, "date_trunc('month', period) AS period") {
 		t.Errorf("expected period column even without dates, got:\n%s", sql)
 	}
 	if strings.Contains(sql, "period >=") || strings.Contains(sql, "period <=") {
 		t.Errorf("no date args → no period WHERE conditions, got:\n%s", sql)
+	}
+}
+
+// Round-trip: the outer query must be able to SELECT/ORDER BY the Период column.
+// systemColAlias("Период") → "period", so the subquery must expose "AS period"
+// (Latin), otherwise the outer reference is unresolvable on both engines.
+func TestCompile_Turnovers_Periodicity_SelectPeriodColumn(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		dia   storage.Dialect
+		trunc string
+	}{
+		{"pg", nil, "date_trunc('month', period)"},
+		{"sqlite", storage.SQLiteDialect{}, "strftime('%Y-%m', period)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `ВЫБРАТЬ Период, Номенклатура, КоличествоПриход
+ИЗ РегистрНакопления.ТоварноеДвижение.Обороты(, , Месяц)
+УПОРЯДОЧИТЬ ПО Период`
+			r, err := query.Compile(src, query.CompileOpts{
+				Registers: []*metadata.Register{testReg()},
+				Dialect:   tc.dia,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sql := r.SQL
+			// Subquery exposes the period column under the Latin "period" alias.
+			if !strings.Contains(sql, tc.trunc+" AS period") {
+				t.Errorf("expected '%s AS period', got:\n%s", tc.trunc, sql)
+			}
+			// Outer query selects it as "period" (resolved via systemColAlias).
+			if !strings.Contains(sql, "SELECT period,") {
+				t.Errorf("outer SELECT should reference 'period', got:\n%s", sql)
+			}
+			// And orders by it — must resolve, not error.
+			if !strings.Contains(sql, "ORDER BY period") {
+				t.Errorf("outer ORDER BY should reference 'period', got:\n%s", sql)
+			}
+		})
 	}
 }
