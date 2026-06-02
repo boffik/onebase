@@ -12,6 +12,9 @@ dbquery.exe
 coverage.out
 *.log
 
+# Артефакты аудита конфигураций (onebase describe --json)
+desc_*.json
+
 # Temp files
 __*.py
 __*.go
