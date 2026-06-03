@@ -3699,8 +3699,8 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 	refs := s.buildPrintRefs(r.Context(), row, entity, tpRows)
 	s.resolveDSLRefs(row, entity.Fields, refs)
 	for _, tp := range entity.TableParts {
-		for _, r := range tpRows[tp.Name] {
-			s.resolveDSLRefs(r, tp.Fields, refs)
+		for _, tpRow := range tpRows[tp.Name] {
+			s.resolveDSLRefs(tpRow, tp.Fields, refs)
 		}
 	}
 

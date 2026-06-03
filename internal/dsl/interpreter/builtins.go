@@ -226,6 +226,13 @@ func strArg(args []any, i int) string {
 		if t, ok := v.(time.Time); ok {
 			return t.Format("02.01.2006")
 		}
+		// Resolved reference (MapThis) — return display name
+		if m, ok := v.(*MapThis); ok {
+			if name := m.Get("наименование"); name != nil {
+				return fmt.Sprintf("%v", name)
+			}
+			return ""
+		}
 		return fmt.Sprintf("%v", v)
 	}
 	return ""
