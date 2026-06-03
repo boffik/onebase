@@ -7,6 +7,8 @@ posting: true
 fields:
   - name: Дата
     type: date
+  - name: Номер
+    type: string
   - name: Поставщик
     type: reference:Контрагент
   - name: Организация

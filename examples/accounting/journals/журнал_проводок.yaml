@@ -15,5 +15,3 @@ columns:
     format: date
   - field: Номер
     label: Номер
-  - field: recorder_type
-    label: Документ
