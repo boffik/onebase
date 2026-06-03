@@ -423,6 +423,7 @@ type translator struct {
 	colTypes    map[string]metadata.FieldType // lowercase field name → type (для квалификации и CAST number)
 	refDims     []refDimInfo                  // reference dimensions with auto-JOIN info
 	mainTable   string                        // main FROM table/alias (set when source is emitted)
+	mainEmitted bool                          // главная таблица FROM уже эмитирована (refDims авто-JOIN — только для неё)
 	section     querySection                  // current clause context
 	aliases     map[string]struct{}           // имена алиасов вывода (КАК ...) — их не квалифицируем и не CAST'им
 }
@@ -1255,7 +1256,10 @@ func (tr *translator) emitVTSubquery(subq, defaultAlias string) {
 		}
 	}
 	tr.emit("(" + subq + ") AS " + alias)
-	if tr.section == sectionFrom {
+	// Авто-JOIN refDims — только для главной таблицы (первого источника FROM),
+	// иначе при присоединении через явный JOIN авто-JOIN вклинивается перед ON
+	// присоединяемого источника (план 39, п.50).
+	if tr.section == sectionFrom && !tr.mainEmitted {
 		for _, rd := range tr.refDims {
 			if rd.isVT {
 				tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
@@ -1263,6 +1267,7 @@ func (tr *translator) emitVTSubquery(subq, defaultAlias string) {
 			}
 		}
 	}
+	tr.mainEmitted = true
 }
 
 // --- main translator loop ---
@@ -1588,7 +1593,15 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			tr.advance()
 			entity := tr.advance()
 			tableName := sourceToTable(upper, entity.val)
-			tr.mainTable = tableName
+			// Главная таблица — первый источник FROM. Присоединяемые через явный
+			// JOIN (ЛЕВОЕ СОЕДИНЕНИЕ ... ПО ...) не должны перезаписывать mainTable
+			// и не порождают повторных авто-JOIN'ов refDims (это поля главной
+			// таблицы) — иначе авто-JOIN вклинивается между присоединяемой таблицей
+			// и её ON, ломая SQL (план 39, п.50).
+			isMain := !tr.mainEmitted
+			if isMain {
+				tr.mainTable = tableName
+			}
 			tr.emit(tableName)
 			// Consume optional КАК/AS alias before auto-JOINs
 			if p := tr.peek(0); p.kind == tIdent {
@@ -1600,11 +1613,13 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 						tr.emit("AS " + aliasName)
 						// Собственные колонки квалифицируем алиасом, а не именем
 						// таблицы (иначе `таблица.col` не совпадёт с `AS алиас`).
-						tr.mainTable = aliasName
+						if isMain {
+							tr.mainTable = aliasName
+						}
 					}
 				}
 			}
-			if tr.section == sectionFrom {
+			if tr.section == sectionFrom && isMain {
 				// ON ссылается на источник через tr.mainTable: это имя таблицы
 				// либо её алиас (КАК р). Использование сырого tableName при
 				// наличии алиаса давало `no such column: таблица.col`.
@@ -1613,6 +1628,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 						rd.joinTable, rd.joinAlias, rd.joinAlias, tr.mainTable, rd.idCol))
 				}
 			}
+			tr.mainEmitted = true
 			continue
 		}
 
