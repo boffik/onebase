@@ -314,6 +314,7 @@ type SpreadsheetDocument struct {
 	fileName     string
 	repeatHeader bool
 	headerArea   *SpreadsheetDocumentArea
+	BackURL      string // URL for the "Назад" button
 }
 
 // NewSpreadsheetDocument creates a new empty spreadsheet document.
@@ -610,8 +611,8 @@ func (d *SpreadsheetDocument) toHTML() string {
 @page{margin:1cm}
 body{font-family:'Times New Roman',Times,serif;font-size:10pt;color:#000;padding:0}
 .doc-toolbar{position:sticky;top:0;z-index:10;background:#f5f5f5;border-bottom:1px solid #ddd;padding:8px 16px;display:flex;gap:8px;align-items:center;font-family:Arial,sans-serif;font-size:13px}
-.doc-toolbar button{padding:6px 16px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;font-size:13px}
-.doc-toolbar button:hover{background:#e8e8e8}
+.doc-toolbar button,.doc-toolbar a.btn{padding:6px 16px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;font-size:13px;text-decoration:none;color:#333;display:inline-block}
+.doc-toolbar button:hover,.doc-toolbar a.btn:hover{background:#e8e8e8}
 .doc-toolbar .btn-back{margin-right:auto}
 .doc-toolbar .btn-print{background:#4a9;color:#fff;border-color:#4a9}
 .doc-toolbar .btn-print:hover{background:#398}
@@ -623,7 +624,14 @@ td,th{border:1px solid #000;padding:2px 4px;empty-cells:show}
 </head>
 <body>
 <div class="doc-toolbar">
-<button class="btn-back" onclick="history.back()">&#8592; Назад</button>
+`)
+	// Back button: link to document if BackURL is set, otherwise history.back()
+	if d.BackURL != "" {
+		sb.WriteString(`<a class="btn btn-back" href="` + escapeHTML(d.BackURL) + `">&#8592; Назад</a>`)
+	} else {
+		sb.WriteString(`<button class="btn-back" onclick="history.back()">&#8592; Назад</button>`)
+	}
+	sb.WriteString(`
 <button class="btn-print" onclick="window.print()">&#128424; Печать</button>
 <button onclick="window.print()">&#128196; PDF</button>
 </div>

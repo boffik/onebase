@@ -222,7 +222,11 @@ var builtins = map[string]func(args []any, file string, line int) (any, error){
 
 func strArg(args []any, i int) string {
 	if i < len(args) && args[i] != nil {
-		return fmt.Sprintf("%v", args[i])
+		v := args[i]
+		if t, ok := v.(time.Time); ok {
+			return t.Format("02.01.2006")
+		}
+		return fmt.Sprintf("%v", v)
 	}
 	return ""
 }
@@ -262,6 +266,16 @@ func builtinToString(args []any, file string, line int) (any, error) {
 	}
 	if t, ok := args[0].(time.Time); ok {
 		return t.Format("02.01.2006 15:04:05"), nil
+	}
+	// Resolved reference (MapThis) — return its "наименование" field
+	if m, ok := args[0].(*MapThis); ok {
+		if name := m.Get("наименование"); name != nil {
+			return fmt.Sprintf("%v", name), nil
+		}
+		if name := m.Get("name"); name != nil {
+			return fmt.Sprintf("%v", name), nil
+		}
+		return "", nil
 	}
 	return fmt.Sprintf("%v", args[0]), nil
 }

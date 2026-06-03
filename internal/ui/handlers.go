@@ -3034,6 +3034,30 @@ func (s *Server) buildPrintRefs(ctx context.Context, row map[string]any, entity 
 	return refs
 }
 
+// resolveDSLRefs replaces reference UUID strings in row with MapThis objects
+// so that DSL dot-notation like Документ.Организация.Наименование works.
+func (s *Server) resolveDSLRefs(row map[string]any, fields []metadata.Field, refs map[string]map[string]any) {
+	for _, f := range fields {
+		if f.RefEntity == "" {
+			continue
+		}
+		v, ok := row[f.Name]
+		if !ok {
+			continue
+		}
+		idStr, ok := v.(string)
+		if !ok || idStr == "" {
+			continue
+		}
+		refData, ok := refs[idStr]
+		if !ok {
+			continue
+		}
+		// Wrap ref data as MapThis for DSL dot-notation access
+		row[f.Name] = &interpreter.MapThis{M: refData}
+	}
+}
+
 // buildHierarchyBreadcrumbs returns the ancestor chain from root to parentID (inclusive).
 func (s *Server) buildHierarchyBreadcrumbs(ctx context.Context, entity *metadata.Entity, parentID string) []map[string]string {
 	id, err := uuid.Parse(parentID)
@@ -3671,7 +3695,16 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 		tpRows[tp.Name] = rows
 	}
 
-	// 5. Build DSL environment
+	// 5. Resolve references so DSL can access Документ.Организация.Наименование etc.
+	refs := s.buildPrintRefs(r.Context(), row, entity, tpRows)
+	s.resolveDSLRefs(row, entity.Fields, refs)
+	for _, tp := range entity.TableParts {
+		for _, r := range tpRows[tp.Name] {
+			s.resolveDSLRefs(r, tp.Fields, refs)
+		}
+	}
+
+	// 6. Build DSL environment
 	mc := runtime.NewMovementsCollector(entity.Name, id)
 	dslVars := s.buildDSLVars(r.Context(), mc)
 
@@ -3690,7 +3723,7 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 		dslVars["Макет"] = interpreter.NewMaket(dslForm.Layout)
 	}
 
-	// 6. Execute the DSL function
+	// 7. Execute the DSL function
 	var result any
 	err = s.interp.RunWithResult(procDecl, docData, &result, dslVars)
 	if err != nil {
@@ -3698,12 +3731,16 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 7. Render result
+	// 8. Render result
 	sd, ok := result.(*interpreter.SpreadsheetDocument)
 	if !ok {
 		http.Error(w, "Процедура должна возвращать ТабличныйДокумент", 500)
 		return
 	}
+
+	// Set back URL for the Назад button
+	backPath := fmt.Sprintf("/ui/%s/%s/%s", strings.ToLower(string(entity.Kind)), strings.ToLower(entity.Name), id.String())
+	sd.BackURL = backPath
 
 	html := sd.HTMLString()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
