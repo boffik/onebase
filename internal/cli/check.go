@@ -49,10 +49,14 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 		// метаданных (best-effort — при сбое настройки схемы просто пропускаем,
 		// чтобы не ломать обычную проверку компиляции).
 		if db, closeDB, derr := buildSchemaDB(proj); derr == nil {
-			issues = append(issues, configcheck.CheckQueriesExecutable(proj, func(sql string) error {
-				return db.ValidateQuery(context.Background(), sql)
-			})...)
+			validate := func(sql string) error { return db.ValidateQuery(context.Background(), sql) }
+			issues = append(issues, configcheck.CheckQueriesExecutable(proj, validate)...)
+			// Запросы внутри .os-модулей (Запрос.Текст = "...") — компиляция + PREPARE.
+			issues = append(issues, configcheck.CheckModuleQueries(proj, validate)...)
 			closeDB()
+		} else {
+			// Схему поднять не удалось — хотя бы проверим компиляцию модульных запросов.
+			issues = append(issues, configcheck.CheckModuleQueries(proj, nil)...)
 		}
 		proj.Close()
 	} else if !configcheck.AlreadyReported(issues, lerr.Error()) {
