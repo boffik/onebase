@@ -77,6 +77,50 @@ query: SELECT 1`)
 	}
 }
 
+// CheckDir должен валидировать журналы/роли/печатные формы пофайлово, с
+// указанием конкретного файла (раньше эти типы проверял только project.Load,
+// который падал на первой ошибке без локации).
+func TestCheckDir_NewObjectTypes(t *testing.T) {
+	dir := t.TempDir()
+	// журнал: columns строками вместо структур {field: ...} — роняет парсинг
+	mkFile(t, filepath.Join(dir, "journals", "j.yaml"), `name: J
+documents: [Док]
+columns:
+  - Дата
+  - Сумма`)
+	// роль: documents списком вместо map — невалидный формат прав
+	mkFile(t, filepath.Join(dir, "roles", "r.yaml"), `name: R
+permissions:
+  documents: [a, b, c]`)
+	// печатная форма: выдуманный «layout:» — парсится, но форма пустая
+	mkFile(t, filepath.Join(dir, "printforms", "p.yaml"), `name: P
+document: Док
+layout: |
+  Область Шапка
+    Поле Дата`)
+	// корректная печатная форма — не должна попасть в issues
+	mkFile(t, filepath.Join(dir, "printforms", "ok.yaml"), `name: OK
+document: Док
+title: OK
+header: "**X**: {{X}}"`)
+
+	issues := CheckDir(dir)
+	want := map[string]bool{"journals/j.yaml": false, "roles/r.yaml": false, "printforms/p.yaml": false}
+	for _, i := range issues {
+		if _, ok := want[i.File]; ok {
+			want[i.File] = true
+		}
+		if i.File == "printforms/ok.yaml" {
+			t.Errorf("корректная печатная форма не должна давать ошибку: %+v", i)
+		}
+	}
+	for f, found := range want {
+		if !found {
+			t.Errorf("ожидалась ошибка для %s, не найдена. issues=%+v", f, issues)
+		}
+	}
+}
+
 func mkFile(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -1,6 +1,8 @@
 package printform
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -161,11 +163,33 @@ func TestPreviewHTMLNewFields(t *testing.T) {
 	}
 }
 
-// TestLayoutAcceptsRealExample loads the bundled trade-example layout and
-// makes sure the new model parses it cleanly, renders preview, and survives
-// a yaml round-trip without dropping any of the legacy fields.
+// TestLayoutAcceptsRealExample parses a representative legacy layout (areas /
+// rows / cells with a parameter placeholder) and makes sure the model loads it
+// cleanly and renders a preview. Inlined into a temp file so the test does not
+// depend on example files under examples/ (which get reorganized).
 func TestLayoutAcceptsRealExample(t *testing.T) {
-	lt, err := LoadLayout("../../examples/trade/printforms/РеализацияТоваров/накладная.layout.yaml")
+	const src = `name: Накладная
+document: РеализацияТоваров
+columns:
+  - width: 120px
+  - width: auto
+areas:
+  Заголовок:
+    rows:
+      - height: 24px
+        cells:
+          - text: "Накладная"
+            bold: true
+            colspan: 4
+            align: center
+            fontSize: 16
+          - parameter: НомерПП
+`
+	path := filepath.Join(t.TempDir(), "накладная.layout.yaml")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lt, err := LoadLayout(path)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

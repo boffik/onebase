@@ -13,14 +13,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/query"
+	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
 )
@@ -67,6 +70,13 @@ func CheckDir(dir string) []Issue {
 		{"enums", "Перечисление", func(p string) error { _, err := metadata.LoadEnumFile(p); return err }},
 		{"constants", "Константы", func(p string) error { _, err := metadata.LoadConstantsFile(p); return err }},
 		{"widgets", "Виджет", func(p string) error { _, err := metadata.LoadWidgetFile(p); return err }},
+		{"accounts", "План счетов", func(p string) error { _, err := metadata.LoadChartOfAccountsFile(p); return err }},
+		{"accountregs", "Регистр бухгалтерии", func(p string) error { _, err := metadata.LoadAccountRegisterFile(p); return err }},
+		{"journals", "Журнал", func(p string) error { _, err := metadata.LoadJournalFile(p); return err }},
+		{"subsystems", "Подсистема", func(p string) error { _, err := metadata.LoadSubsystemFile(p); return err }},
+		{"scheduled", "Регламентное задание", func(p string) error { _, err := metadata.LoadScheduledFile(p); return err }},
+		{"reports", "Отчёт", func(p string) error { _, err := report.LoadFile(p); return err }},
+		{"roles", "Роль", func(p string) error { _, err := auth.LoadRoleFile(p); return err }},
 	}
 	for _, g := range groups {
 		gdir := filepath.Join(dir, g.subdir)
@@ -110,6 +120,34 @@ func CheckDir(dir string) []Issue {
 				Object:  object,
 				Kind:    "Обработка",
 				Message: fmt.Sprintf("ключ %q не поддерживается: многошаговые мастера не реализованы, опишите параметры плоским списком «params» (иначе форма покажет только кнопку «Выполнить»)", key),
+			})
+		}
+	}
+
+	// printforms/*.yaml — валидность + предупреждение о пустой форме. yaml.v3 молча
+	// игнорирует неизвестные ключи, поэтому форма в выдуманном формате (напр.
+	// «layout:» вместо header/table/footer) парсится без ошибки, но выводится
+	// пустой. Сообщаем явно: ни заголовка, ни шапки, ни таблицы, ни подвала.
+	pfDir := filepath.Join(dir, "printforms")
+	pfEntries, _ := os.ReadDir(pfDir)
+	for _, e := range pfEntries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".yaml") {
+			continue
+		}
+		path := filepath.Join(pfDir, e.Name())
+		label := "printforms/" + e.Name()
+		object := strings.TrimSuffix(e.Name(), ".yaml")
+		pf, err := printform.LoadFile(path)
+		if err != nil {
+			issues = append(issues, Issue{File: label, Object: object, Kind: "Печатная форма", Message: err.Error()})
+			continue
+		}
+		if pf.Title == "" && pf.Header == "" && pf.Footer == "" && pf.Table == nil {
+			issues = append(issues, Issue{
+				File:    label,
+				Object:  object,
+				Kind:    "Печатная форма",
+				Message: "форма пустая: не заданы ни title, ни header, ни table, ни footer (проверьте формат — поддерживаются эти ключи, а не «layout»)",
 			})
 		}
 	}

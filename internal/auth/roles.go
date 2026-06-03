@@ -211,6 +211,19 @@ func (r *Repo) DeleteRoleByName(ctx context.Context, name string) error {
 }
 
 // LoadRolesYAML reads all *.yaml files from dir and returns Role slices.
+// LoadRoleFile парсит один YAML-файл роли.
+func LoadRoleFile(path string) (*Role, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var role Role
+	if err := yaml.Unmarshal(data, &role); err != nil {
+		return nil, fmt.Errorf("auth: parse role %s: %w", filepath.Base(path), err)
+	}
+	return &role, nil
+}
+
 func LoadRolesYAML(dir string) ([]*Role, error) {
 	items, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -224,15 +237,11 @@ func LoadRolesYAML(dir string) ([]*Role, error) {
 		if item.IsDir() || !strings.HasSuffix(item.Name(), ".yaml") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, item.Name()))
+		role, err := LoadRoleFile(filepath.Join(dir, item.Name()))
 		if err != nil {
 			return nil, err
 		}
-		var role Role
-		if err := yaml.Unmarshal(data, &role); err != nil {
-			return nil, fmt.Errorf("auth: parse role %s: %w", item.Name(), err)
-		}
-		roles = append(roles, &role)
+		roles = append(roles, role)
 	}
 	return roles, nil
 }
