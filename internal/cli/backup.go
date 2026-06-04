@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/backup"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 var (
@@ -66,5 +67,49 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stdout, "Восстановление завершено.")
+	return nil
+}
+
+var (
+	demoResetDB   string
+	demoResetFile string
+)
+
+var demoResetCmd = &cobra.Command{
+	Use:   "demo-reset",
+	Short: "Restore demo business data from a .obz backup (keeps users, roles and sessions)",
+	Long: "Восстанавливает бизнес-данные из .obz, сохраняя таблицы авторизации " +
+		"(_users, _sessions, _roles, _user_roles). Та же операция, что выполняет " +
+		"регламентное задание DemoReset по расписанию — но запускается немедленно. " +
+		"Удобно дёргать из деплой-скрипта после заливки свежего .obz.",
+	Example: "  onebase demo-reset --db postgres://localhost/mydb --file ./demo.obz",
+	RunE:    runDemoReset,
+}
+
+func init() {
+	demoResetCmd.Flags().StringVar(&demoResetDB, "db", "", "PostgreSQL connection string (required)")
+	demoResetCmd.Flags().StringVar(&demoResetFile, "file", "", "path to the .obz backup file (required)")
+	_ = demoResetCmd.MarkFlagRequired("db")
+	_ = demoResetCmd.MarkFlagRequired("file")
+}
+
+func runDemoReset(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	db, err := storage.Connect(ctx, demoResetDB)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	fmt.Fprintf(os.Stdout, "Сброс демо-данных из %s ...\n", demoResetFile)
+	report, err := backup.DemoReset(ctx, db, demoResetFile)
+	if err != nil {
+		return err
+	}
+	rows := 0
+	for _, n := range report.Tables {
+		rows += n
+	}
+	fmt.Fprintf(os.Stdout, "Готово: таблиц %d, строк %d.\n", len(report.Tables), rows)
 	return nil
 }
