@@ -374,6 +374,13 @@ func (s *Server) handleProcessorFormEvent(w http.ResponseWriter, r *http.Request
 				vars["ЭтотОбъект"] = thisObj
 				vars["Параметры"] = thisObj
 
+				// Передаём все процедуры формы для вызовов из .form.os.
+				formProcs := make(map[string]*ast.ProcedureDecl, len(program.Procedures))
+				for _, p := range program.Procedures {
+					formProcs[strings.ToLower(p.Name.Literal)] = p
+				}
+				vars["__form_procs__"] = formProcs
+
 				if runErr := s.interp.Run(decl, thisObj, vars); runErr != nil {
 					enc.Encode(formEventResponse{
 						OK:     false,
