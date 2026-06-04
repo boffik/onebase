@@ -44,6 +44,12 @@ func init() {
 	// hot reload .os/.yaml без перезапуска. По умолчанию off,
 	// для прода обычно не нужен. Включается флагом --watch.
 	runCmd.Flags().Bool("watch", false, "reload project metadata when files change (.os/.yaml)")
+	// Демо-режим через флаги — работает независимо от источника конфигурации.
+	// Удобно для --config-source database, где app.yaml не лежит файлом и
+	// блок demo: некуда вписать. Флаги имеют приоритет над app.yaml.
+	runCmd.Flags().String("demo-backup", "", "путь к .obz; включает демо-режим (сброс данных по расписанию)")
+	runCmd.Flags().String("demo-schedule", "", "cron-расписание сброса демо-данных (по умолчанию '0 2 * * *')")
+	runCmd.Flags().String("demo-message", "", "текст баннера демо-режима")
 }
 
 func runServer(cmd *cobra.Command, _ []string) error {
@@ -212,6 +218,30 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("scheduler: %w", err)
 	}
 
+	// Флаги --demo-* включают демо-режим независимо от источника конфига и
+	// имеют приоритет над блоком demo: в app.yaml.
+	demoBackupFlag, _ := cmd.Flags().GetString("demo-backup")
+	demoScheduleFlag, _ := cmd.Flags().GetString("demo-schedule")
+	demoMessageFlag, _ := cmd.Flags().GetString("demo-message")
+	if demoBackupFlag != "" || demoScheduleFlag != "" || demoMessageFlag != "" {
+		if appCfg == nil {
+			appCfg = &project.AppConfig{}
+		}
+		if appCfg.Demo == nil {
+			appCfg.Demo = &project.DemoConfig{}
+		}
+		appCfg.Demo.Enabled = true
+		if demoBackupFlag != "" {
+			appCfg.Demo.ResetBackup = demoBackupFlag
+		}
+		if demoScheduleFlag != "" {
+			appCfg.Demo.ResetSchedule = demoScheduleFlag
+		}
+		if demoMessageFlag != "" {
+			appCfg.Demo.Message = demoMessageFlag
+		}
+	}
+
 	if appCfg != nil && appCfg.Demo != nil && appCfg.Demo.Enabled {
 		// защита от случайной активации демо-режима на проде.
 		if err := checkDemoEnv(os.Getenv("ONEBASE_ENV")); err != nil {
@@ -236,7 +266,14 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		}
 		backupPath := ""
 		if appCfg.Demo.ResetBackup != "" {
-			backupPath = filepath.Join(dir, appCfg.Demo.ResetBackup)
+			// Абсолютный путь берём как есть; относительный — от каталога проекта.
+			// Важно для --config-source database (dir = "."), где иначе абсолютный
+			// путь превратился бы в относительный.
+			if filepath.IsAbs(appCfg.Demo.ResetBackup) {
+				backupPath = appCfg.Demo.ResetBackup
+			} else {
+				backupPath = filepath.Join(dir, appCfg.Demo.ResetBackup)
+			}
 		}
 		dbRef := db // capture
 		if err := sched.RegisterGoJob("DemoReset", "Сброс демо-данных", schedule, func(ctx context.Context) error {
