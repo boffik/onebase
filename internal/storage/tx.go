@@ -69,6 +69,7 @@ func (db *DB) BeginTx(ctx context.Context) (Tx, context.Context, error) {
 // Exec runs a non-query SQL statement, respecting any transaction in ctx.
 func (db *DB) Exec(ctx context.Context, sqlText string, args ...any) (CommandTag, error) {
 	if db.sqlDB != nil {
+		args = normalizeSQLiteArgs(args)
 		if tx, ok := ctx.Value(txKey{}).(*sql.Tx); ok {
 			res, err := tx.ExecContext(ctx, sqlText, args...)
 			if err != nil {
@@ -93,6 +94,7 @@ func (db *DB) Exec(ctx context.Context, sqlText string, args ...any) (CommandTag
 // Query runs a SQL query and returns multiple rows, respecting any transaction in ctx.
 func (db *DB) Query(ctx context.Context, sqlText string, args ...any) (Rows, error) {
 	if db.sqlDB != nil {
+		args = normalizeSQLiteArgs(args)
 		if tx, ok := ctx.Value(txKey{}).(*sql.Tx); ok {
 			rows, err := tx.QueryContext(ctx, sqlText, args...)
 			if err != nil {
@@ -124,6 +126,7 @@ func (db *DB) Query(ctx context.Context, sqlText string, args ...any) (Rows, err
 // transaction in ctx.
 func (db *DB) QueryRow(ctx context.Context, sqlText string, args ...any) Row {
 	if db.sqlDB != nil {
+		args = normalizeSQLiteArgs(args)
 		if tx, ok := ctx.Value(txKey{}).(*sql.Tx); ok {
 			return sqlRow{r: tx.QueryRowContext(ctx, sqlText, args...)}
 		}

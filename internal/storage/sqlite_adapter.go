@@ -32,6 +32,7 @@ type sqlTx struct {
 }
 
 func (t *sqlTx) Exec(ctx context.Context, sql string, args ...any) (CommandTag, error) {
+	args = normalizeSQLiteArgs(args)
 	res, err := t.tx.ExecContext(ctx, sql, args...)
 	if err != nil {
 		return CommandTag{}, err
@@ -41,6 +42,7 @@ func (t *sqlTx) Exec(ctx context.Context, sql string, args ...any) (CommandTag, 
 }
 
 func (t *sqlTx) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
+	args = normalizeSQLiteArgs(args)
 	rows, err := t.tx.QueryContext(ctx, sql, args...)
 	if err != nil {
 		return nil, err
@@ -49,6 +51,7 @@ func (t *sqlTx) Query(ctx context.Context, sql string, args ...any) (Rows, error
 }
 
 func (t *sqlTx) QueryRow(ctx context.Context, sql string, args ...any) Row {
+	args = normalizeSQLiteArgs(args)
 	return sqlRow{r: t.tx.QueryRowContext(ctx, sql, args...)}
 }
 

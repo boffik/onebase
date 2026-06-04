@@ -233,17 +233,24 @@ var periodicityLevels = map[string]string{
 func periodTruncSQL(level string, d storage.Dialect) string {
 	switch d.Name() {
 	case "sqlite":
+		// p — нормализованное представление period для функций дат SQLite.
+		// Берём первые 19 символов (`YYYY-MM-DD HH:MM:SS`), что отсекает хвост
+		// таймзоны вида ` +0300 MSK`, который мог попасть в старые базы (см.
+		// storage.sqliteTimeLayout): без этого strftime/date вернули бы NULL и
+		// группировка по периоду молча схлопнулась бы. Для новых, уже ISO-данных
+		// substr — это no-op.
+		p := "substr(period,1,19)"
 		switch level {
 		case "day":
-			return "date(period)"
+			return "date(" + p + ")"
 		case "week":
-			return "strftime('%Y-W%W', period)"
+			return "strftime('%Y-W%W', " + p + ")"
 		case "month":
-			return "strftime('%Y-%m', period)"
+			return "strftime('%Y-%m', " + p + ")"
 		case "quarter":
-			return "(strftime('%Y', period) || '-Q' || CAST((CAST(strftime('%m', period) AS INTEGER)-1)/3+1 AS TEXT))"
+			return "(strftime('%Y', " + p + ") || '-Q' || CAST((CAST(strftime('%m', " + p + ") AS INTEGER)-1)/3+1 AS TEXT))"
 		case "year":
-			return "strftime('%Y', period)"
+			return "strftime('%Y', " + p + ")"
 		case "record":
 			return "period"
 		}

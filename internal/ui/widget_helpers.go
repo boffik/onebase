@@ -84,48 +84,9 @@ func widgetCell(row map[string]any, field, format string) string {
 // as a JavaScript expression, not an attribute, which avoids quote-escaping
 // pitfalls.
 func echartsJSON(chart *widget.ChartData) template.JS {
-	if chart == nil {
+	opt := widget.EChartsOption(chart)
+	if opt == nil {
 		return template.JS("null")
-	}
-	opt := map[string]any{
-		"tooltip": map[string]any{"trigger": "axis"},
-		"grid":    map[string]any{"left": 56, "right": 16, "top": 24, "bottom": 30},
-	}
-	switch strings.ToLower(chart.Kind) {
-	case "pie":
-		var data []map[string]any
-		if len(chart.Series) > 0 {
-			s := chart.Series[0]
-			for i, label := range chart.XAxis {
-				if i >= len(s.Data) {
-					break
-				}
-				data = append(data, map[string]any{"name": label, "value": s.Data[i]})
-			}
-		}
-		opt["tooltip"] = map[string]any{"trigger": "item"}
-		opt["series"] = []map[string]any{{
-			"type":   "pie",
-			"radius": []string{"40%", "70%"},
-			"data":   data,
-		}}
-	default:
-		seriesType := "bar"
-		if strings.EqualFold(chart.Kind, "line") {
-			seriesType = "line"
-		}
-		var series []map[string]any
-		for _, s := range chart.Series {
-			series = append(series, map[string]any{
-				"name":   s.Name,
-				"type":   seriesType,
-				"data":   s.Data,
-				"smooth": seriesType == "line",
-			})
-		}
-		opt["xAxis"] = map[string]any{"type": "category", "data": chart.XAxis}
-		opt["yAxis"] = map[string]any{"type": "value"}
-		opt["series"] = series
 	}
 	b, err := json.Marshal(opt)
 	if err != nil {

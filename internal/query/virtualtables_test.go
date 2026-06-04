@@ -354,10 +354,10 @@ func TestCompile_Turnovers_Periodicity_Month_SQLite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sql := r.SQL
-	if !strings.Contains(sql, "strftime('%Y-%m', period) AS period") {
+	if !strings.Contains(sql, "strftime('%Y-%m', substr(period,1,19)) AS period") {
 		t.Errorf("expected strftime month in SELECT, got:\n%s", sql)
 	}
-	if !strings.Contains(sql, "GROUP BY strftime('%Y-%m', period)") {
+	if !strings.Contains(sql, "GROUP BY strftime('%Y-%m', substr(period,1,19))") {
 		t.Errorf("expected strftime month in GROUP BY, got:\n%s", sql)
 	}
 }
@@ -480,7 +480,7 @@ func TestCompile_Turnovers_Periodicity_SelectPeriodColumn(t *testing.T) {
 		trunc string
 	}{
 		{"pg", nil, "date_trunc('month', period)"},
-		{"sqlite", storage.SQLiteDialect{}, "strftime('%Y-%m', period)"},
+		{"sqlite", storage.SQLiteDialect{}, "strftime('%Y-%m', substr(period,1,19))"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := `ВЫБРАТЬ Период, Номенклатура, КоличествоПриход

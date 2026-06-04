@@ -81,6 +81,9 @@ func (s *Server) ListenAndServe() error {
 	// конфликтовать с catch-all /static/*. Конфигуратор и редактор форм
 	// грузят его офлайн вместо CDN.
 	r.Handle("/vendor/monaco/*", http.StripPrefix("/vendor/monaco/", webassets.MonacoHandler()))
+	// ECharts (тот же вендоренный пакет, что и у базы) — предпросмотр виджета
+	// в конфигураторе рисуется тем же графическим движком, что и рабочий стол.
+	r.Handle("/vendor/echarts/*", http.StripPrefix("/vendor/echarts/", webassets.EChartsHandler()))
 
 	// Launcher pages (no auth)
 	r.Get("/", s.h.index)
@@ -137,6 +140,7 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/subsystem", s.h.configuratorSaveSubsystem)
 		r.Post("/bases/{id}/configurator/widget", s.h.configuratorSaveWidget)
 		r.Post("/bases/{id}/configurator/widget-delete", s.h.configuratorDeleteWidget)
+		r.Post("/bases/{id}/configurator/widget-preview", s.h.configuratorWidgetPreview)
 		r.Post("/bases/{id}/configurator/home-page", s.h.configuratorSaveHomePage)
 		r.Post("/bases/{id}/configurator/home-page-yaml", s.h.configuratorSaveHomePageYAML)
 		r.Post("/bases/{id}/configurator/check", s.h.configuratorCheck)

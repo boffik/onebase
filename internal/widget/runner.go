@@ -68,6 +68,58 @@ type ChartSeries struct {
 	Data []float64
 }
 
+// EChartsOption builds the ECharts option map for a chart widget. It is the
+// single source of truth for how dashboard charts look: both the base UI
+// (рабочий стол) and the launcher's configurator (предпросмотр виджета)
+// serialize this same map, so the preview matches what the user will see —
+// включая сглаживание линий (smooth) и круговую диаграмму.
+func EChartsOption(chart *ChartData) map[string]any {
+	if chart == nil {
+		return nil
+	}
+	opt := map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
+		"grid":    map[string]any{"left": 56, "right": 16, "top": 24, "bottom": 30},
+	}
+	switch strings.ToLower(chart.Kind) {
+	case "pie":
+		var data []map[string]any
+		if len(chart.Series) > 0 {
+			s := chart.Series[0]
+			for i, label := range chart.XAxis {
+				if i >= len(s.Data) {
+					break
+				}
+				data = append(data, map[string]any{"name": label, "value": s.Data[i]})
+			}
+		}
+		opt["tooltip"] = map[string]any{"trigger": "item"}
+		opt["series"] = []map[string]any{{
+			"type":   "pie",
+			"radius": []string{"40%", "70%"},
+			"data":   data,
+		}}
+	default:
+		seriesType := "bar"
+		if strings.EqualFold(chart.Kind, "line") {
+			seriesType = "line"
+		}
+		var series []map[string]any
+		for _, s := range chart.Series {
+			series = append(series, map[string]any{
+				"name":   s.Name,
+				"type":   seriesType,
+				"data":   s.Data,
+				"smooth": seriesType == "line",
+			})
+		}
+		opt["xAxis"] = map[string]any{"type": "category", "data": chart.XAxis}
+		opt["yAxis"] = map[string]any{"type": "value"}
+		opt["series"] = series
+	}
+	return opt
+}
+
 // ActionLink is a single rendered button on the actions widget.
 type ActionLink struct {
 	Label string
@@ -168,18 +220,23 @@ func (r *Runner) runChart(ctx context.Context, w *metadata.Widget, res *Result) 
 	if x == "" && len(cols) > 0 {
 		x = cols[0]
 	}
-	yFields := make([]string, 0, len(w.YFields))
+	// Для каждой серии храним подпись (label — как объявлено в y_fields, с
+	// исходным регистром) отдельно от ключа данных (key — фактическое имя
+	// колонки, которое SQLite мог привести к нижнему регистру). Иначе в легенде
+	// «Приход» превращался бы в «приход».
+	type chartY struct{ label, key string }
+	yFields := make([]chartY, 0, len(w.YFields))
 	if len(w.YFields) > 0 {
 		for _, yf := range w.YFields {
 			if resolved := resolveFieldName(cols, yf); resolved != "" {
-				yFields = append(yFields, resolved)
+				yFields = append(yFields, chartY{label: yf, key: resolved})
 			}
 		}
 	}
 	if len(yFields) == 0 {
 		for _, c := range cols {
 			if !strings.EqualFold(c, x) {
-				yFields = append(yFields, c)
+				yFields = append(yFields, chartY{label: c, key: c})
 			}
 		}
 	}
@@ -196,9 +253,9 @@ func (r *Runner) runChart(ctx context.Context, w *metadata.Widget, res *Result) 
 		chart.XAxis = append(chart.XAxis, label)
 	}
 	for _, yf := range yFields {
-		s := ChartSeries{Name: yf}
+		s := ChartSeries{Name: yf.label}
 		for _, row := range rows {
-			s.Data = append(s.Data, toFloat(row[yf]))
+			s.Data = append(s.Data, toFloat(row[yf.key]))
 		}
 		chart.Series = append(chart.Series, s)
 	}
