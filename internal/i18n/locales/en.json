@@ -621,5 +621,10 @@
   "Форма объекта": "Object form",
   "есть": "yes",
   "нет управляемых форм.": "no managed forms.",
-  "Длина, Точность": "Length, Precision"
+  "Длина, Точность": "Length, Precision",
+  "Предпросмотр": "Preview",
+  "Тип графика": "Chart type",
+  "Ось X": "X axis",
+  "Серии": "Series",
+  "Заполняется из колонок запроса после предпросмотра; изменение правит YAML ниже.": "Filled from query columns after preview; editing updates the YAML below."
 }
