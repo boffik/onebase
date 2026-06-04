@@ -27,7 +27,7 @@ func (s *Server) objectAttributeValue(ctx context.Context, args []any) (any, err
 	}
 	ref, ok := args[0].(*interpreter.Ref)
 	if !ok {
-		return nil, fmt.Errorf("ЗначениеРеквизитаОбъекта: первый аргумент должен быть ссылкой, получено %T", args[0])
+		return nil, nil // не ссылка (например, строка из формы) — пропускаем
 	}
 	attrName := strings.TrimSpace(fmt.Sprint(args[1]))
 	if attrName == "" {
