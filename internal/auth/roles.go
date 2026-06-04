@@ -268,18 +268,20 @@ func LoadRolesYAML(dir string) ([]*Role, error) {
 // marshalPermissions converts Permission to JSON string.
 func marshalPermissions(p Permission) (string, error) {
 	type permJSON struct {
-		Catalogs  map[string][]string `json:"catalogs,omitempty"`
-		Documents map[string][]string `json:"documents,omitempty"`
-		Registers map[string][]string `json:"registers,omitempty"`
-		InfoRegs  map[string][]string `json:"inforegs,omitempty"`
-		Reports   map[string][]string `json:"reports,omitempty"`
+		Catalogs   map[string][]string `json:"catalogs,omitempty"`
+		Documents  map[string][]string `json:"documents,omitempty"`
+		Registers  map[string][]string `json:"registers,omitempty"`
+		InfoRegs   map[string][]string `json:"inforegs,omitempty"`
+		Reports    map[string][]string `json:"reports,omitempty"`
+		Processors map[string][]string `json:"processors"`
 	}
 	b, err := jsonMarshal(permJSON{
-		Catalogs:  p.Catalogs,
-		Documents: p.Documents,
-		Registers: p.Registers,
-		InfoRegs:  p.InfoRegs,
-		Reports:   p.Reports,
+		Catalogs:   p.Catalogs,
+		Documents:  p.Documents,
+		Registers:  p.Registers,
+		InfoRegs:   p.InfoRegs,
+		Reports:    p.Reports,
+		Processors: p.Processors,
 	})
 	if err != nil {
 		return "{}", err
@@ -293,20 +295,22 @@ func unmarshalPermissions(data []byte) Permission {
 		return Permission{}
 	}
 	var raw struct {
-		Catalogs  map[string][]string `json:"catalogs"`
-		Documents map[string][]string `json:"documents"`
-		Registers map[string][]string `json:"registers"`
-		InfoRegs  map[string][]string `json:"inforegs"`
-		Reports   map[string][]string `json:"reports"`
+		Catalogs   map[string][]string `json:"catalogs"`
+		Documents  map[string][]string `json:"documents"`
+		Registers  map[string][]string `json:"registers"`
+		InfoRegs   map[string][]string `json:"inforegs"`
+		Reports    map[string][]string `json:"reports"`
+		Processors map[string][]string `json:"processors"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return Permission{}
 	}
 	return Permission{
-		Catalogs:  raw.Catalogs,
-		Documents: raw.Documents,
-		Registers: raw.Registers,
-		InfoRegs:  raw.InfoRegs,
-		Reports:   raw.Reports,
+		Catalogs:   raw.Catalogs,
+		Documents:  raw.Documents,
+		Registers:  raw.Registers,
+		InfoRegs:   raw.InfoRegs,
+		Reports:    raw.Reports,
+		Processors: raw.Processors,
 	}
 }
