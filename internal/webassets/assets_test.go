@@ -48,3 +48,19 @@ func TestMonacoHandlerServesCriticalFiles(t *testing.T) {
 		t.Errorf("Cache-Control = %q, want max-age", cc)
 	}
 }
+
+// TestEChartsHandlerServesBundle guards that the shared ECharts bundle is
+// embedded and served — both the base UI and the configurator load it from
+// /vendor/echarts/echarts.min.js.
+func TestEChartsHandlerServesBundle(t *testing.T) {
+	h := http.StripPrefix("/vendor/echarts/", EChartsHandler())
+	req := httptest.NewRequest(http.MethodGet, "/vendor/echarts/echarts.min.js", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("echarts.min.js: status = %d, want 200", rec.Code)
+	}
+	if rec.Body.Len() == 0 {
+		t.Error("echarts.min.js: empty body")
+	}
+}

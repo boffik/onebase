@@ -258,6 +258,27 @@ pre.os-code{
 .fg input[type=text],.fg textarea{width:100%;padding:7px 10px;border:1px solid #c8d0de;border-radius:4px;font-size:13px}
 .fg input:focus,.fg textarea:focus{border-color:#1a4a80;outline:none}
 .fg .hint{font-size:11px;color:#888;margin-top:3px}
+.wdg-map{background:#f6f8fb;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;margin:6px 0;font-size:12px}
+.wdg-map .row{display:flex;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap}
+.wdg-map label{font-weight:700;color:#475569;min-width:80px}
+.wdg-map select{padding:4px 8px;border:1px solid #c8d0de;border-radius:4px;font-size:12px}
+.wdg-map .yopt{display:inline-flex;align-items:center;gap:3px;margin-right:10px;font-weight:400;min-width:0}
+.wdg-preview{margin-top:10px;border:1px solid #e2e8f0;border-radius:6px;padding:10px;background:#fff}
+.wdg-mapping{font-size:12px;color:#1e293b;background:#eef4ff;border-radius:4px;padding:6px 8px;margin-bottom:8px}
+.wdg-err{color:#b3343a;font-size:12px;white-space:pre-wrap}
+.wdg-table{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
+.wdg-table th,.wdg-table td{border:1px solid #e2e8f0;padding:3px 8px;text-align:right}
+.wdg-table th:first-child,.wdg-table td:first-child{text-align:left}
+.wdg-table th{background:#f1f5f9;color:#475569}
+.wdg-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:4px}
+.wdg-leg{display:inline-flex;align-items:center;gap:4px}
+.wdg-leg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.wdg-chart{display:flex;gap:10px;align-items:flex-end;height:110px;padding:6px 2px;overflow-x:auto;border-bottom:1px solid #e2e8f0}
+.wdg-grp{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:34px}
+.wdg-echart{width:100%;height:220px;margin-bottom:8px}
+.wdg-bars{display:flex;align-items:flex-end;gap:2px;height:84px}
+.wdg-bar{width:10px;border-radius:2px 2px 0 0;min-height:1px}
+.wdg-xlab{font-size:10px;color:#64748b;white-space:nowrap}
 .input-browse{display:flex;gap:4px}.input-browse input{flex:1;padding:7px 10px;border:1px solid #c8d0de;border-radius:4px;font-size:13px}
 .btn-browse{flex-shrink:0;padding:7px 10px;border:1px solid #ACA899;border-radius:4px;background:linear-gradient(to bottom,#F5F4EE,#E0DDD2);cursor:pointer;font-size:13px}
 .btn-browse:hover{background:linear-gradient(to bottom,#EAF3FF,#C5DCFF);border-color:#7EAFF5}
@@ -392,6 +413,11 @@ window.MonacoEnvironment = { getWorkerUrl: function () {
     "importScripts('" + location.origin + "/vendor/monaco/vs/base/worker/workerMain.js');");
 }};
 </script>
+<!-- ECharts: тот же движок, что рисует графики в пользовательском режиме —
+     предпросмотр виджета выглядит как у пользователя. Грузим ДО AMD-загрузчика
+     Monaco: иначе UMD-бандл ECharts увидит define.amd и зарегистрируется как
+     AMD-модуль вместо window.echarts (тогда график «недоступен»). -->
+<script src="/vendor/echarts/echarts.min.js" onerror="window._echartsLoadErr=1"></script>
 <script src="/vendor/monaco/vs/loader.js" onerror="window._monacoLoadErr='loader.js failed'"></script>
 <script>{{.InlineJSYaml}}</script>
 <title>{{t $.Lang "Конфигуратор"}} — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</title>
@@ -993,6 +1019,143 @@ function runCheck(kind, key, name) {
       result.className = 'check-result check-err';
       result.textContent = '⚠ ' + e.message;
     });
+}
+
+// ── Виджеты: предпросмотр данных и структурная карта (ось X / серии) ──
+function _wdgEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+function _wdgTa(name){ return document.getElementById('ta-wdg-' + name); }
+
+function previewWidget(name){
+  var ta = _wdgTa(name);
+  var out = document.getElementById('wdg-preview-' + name);
+  if (!ta || !out) return;
+  if (typeof monacoEditors !== 'undefined' && monacoEditors['wdg-' + name]) {
+    ta.value = monacoEditors['wdg-' + name].getValue();
+  }
+  out.style.display = 'block';
+  out.innerHTML = '<div class="hint">⏳ Прогон виджета по данным базы…</div>';
+  var body = new URLSearchParams();
+  body.set('yaml', ta.value);
+  fetch('/bases/' + _dbgBase + '/configurator/widget-preview', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+    body: body.toString()
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ renderWidgetPreview(name, d); })
+    .catch(function(e){ out.innerHTML = '<div class="wdg-err">⚠ ' + _wdgEsc(e.message) + '</div>'; });
+}
+
+function renderWidgetPreview(name, d){
+  var out = document.getElementById('wdg-preview-' + name);
+  if (!out) return;
+  if (d.error){ out.innerHTML = '<div class="wdg-err">⚠ ' + _wdgEsc(d.error) + '</div>'; return; }
+  var html = '';
+  if (d.mapping) html += '<div class="wdg-mapping">🧭 ' + _wdgEsc(d.mapping) + '</div>';
+  var chartId = 'wdg-echart-' + name;
+  if (d.echarts_option) html += '<div id="' + chartId + '" class="wdg-echart"></div>';
+  if (d.columns && d.columns.length){
+    html += '<table class="wdg-table"><thead><tr>';
+    d.columns.forEach(function(c){ html += '<th>' + _wdgEsc(c) + '</th>'; });
+    html += '</tr></thead><tbody>';
+    (d.rows || []).forEach(function(row){
+      html += '<tr>';
+      row.forEach(function(cell){ html += '<td>' + _wdgEsc(cell) + '</td>'; });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    if (!(d.rows || []).length) html += '<div class="hint">Запрос вернул 0 строк.</div>';
+  }
+  out.innerHTML = html || '<div class="hint">Нет данных для предпросмотра.</div>';
+  // Рисуем тем же ECharts и той же опцией, что и рабочий стол — предпросмотр
+  // совпадает с тем, что увидит пользователь.
+  if (d.echarts_option){
+    var el = document.getElementById(chartId);
+    if (el && window.echarts){
+      echarts.init(el).setOption(d.echarts_option);
+    } else if (el){
+      el.innerHTML = '<div class="hint">График: библиотека ECharts недоступна.</div>';
+    }
+  }
+  _wdgPopulateMap(name, d);
+}
+
+// _wdgPopulateMap заполняет селекты «Ось X» и чекбоксы серий колонками запроса,
+// предвыбирая текущие значения из YAML. Только для графиков.
+function _wdgPopulateMap(name, d){
+  var ctl = document.getElementById('wdg-ctl-' + name);
+  if (!ctl) return;
+  if (d.type !== 'chart' || !d.columns || !d.columns.length){ ctl.style.display = 'none'; return; }
+  ctl.style.display = 'block';
+  var yaml = (_wdgTa(name) || {}).value || '';
+  var curKind = _wdgYamlGet(yaml, 'chart_kind') || (d.chart ? d.chart.kind : 'bar');
+  var curX = _wdgYamlGet(yaml, 'x_field');
+  var curY = _wdgYamlGetList(yaml, 'y_fields');
+
+  var kindSel = document.getElementById('wdg-kind-' + name);
+  if (kindSel) kindSel.value = curKind;
+
+  var xSel = document.getElementById('wdg-x-' + name);
+  if (xSel){
+    xSel.innerHTML = '';
+    d.columns.forEach(function(c){
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      if (c === curX) o.selected = true;
+      xSel.appendChild(o);
+    });
+  }
+  var yBox = document.getElementById('wdg-y-' + name);
+  if (yBox){
+    yBox.innerHTML = '';
+    d.columns.forEach(function(c){
+      var checked = curY.indexOf(c) >= 0 ? ' checked' : '';
+      var lbl = document.createElement('label');
+      lbl.className = 'yopt';
+      lbl.innerHTML = '<input type="checkbox" value="' + _wdgEsc(c) + '"' + checked + ' onchange="applyWidgetMapping(\'' + name + '\')"> ' + _wdgEsc(c);
+      yBox.appendChild(lbl);
+    });
+  }
+}
+
+// applyWidgetMapping записывает выбор из контролов обратно в YAML (точечно
+// правит строки chart_kind/x_field/y_fields, остальное не трогает).
+function applyWidgetMapping(name){
+  var ta = _wdgTa(name);
+  if (!ta) return;
+  var kind = (document.getElementById('wdg-kind-' + name) || {}).value || 'bar';
+  var x = (document.getElementById('wdg-x-' + name) || {}).value || '';
+  var ys = [];
+  document.querySelectorAll('#wdg-y-' + name + ' input:checked').forEach(function(cb){ ys.push(cb.value); });
+  var yaml = ta.value;
+  yaml = _wdgYamlSet(yaml, 'chart_kind', kind);
+  yaml = _wdgYamlSet(yaml, 'x_field', x);
+  yaml = _wdgYamlSet(yaml, 'y_fields', '[' + ys.join(', ') + ']');
+  ta.value = yaml;
+  if (typeof monacoEditors !== 'undefined' && monacoEditors['wdg-' + name]) {
+    monacoEditors['wdg-' + name].setValue(yaml);
+  }
+}
+
+function _wdgYamlGet(yaml, key){
+  var m = yaml.match(new RegExp('^' + key + ':[ \\t]*(.+)$', 'm'));
+  return m ? m[1].trim() : '';
+}
+function _wdgYamlGetList(yaml, key){
+  var raw = _wdgYamlGet(yaml, key);
+  if (!raw) return [];
+  raw = raw.replace(/^\[|\]$/g, '');
+  return raw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+}
+function _wdgYamlSet(yaml, key, val){
+  var re = new RegExp('^' + key + ':.*$', 'm');
+  if (re.test(yaml)) return yaml.replace(re, key + ': ' + val);
+  if (yaml.length && yaml[yaml.length - 1] !== '\n') yaml += '\n';
+  return yaml + key + ': ' + val + '\n';
 }
 
 function runCheckAll() {
@@ -4176,17 +4339,32 @@ const cfgTabTree = `{{define "tab-tree"}}
       <input type="hidden" name="widget_name" value="{{.Name}}">
       <div style="font-size:12px;color:#64748b;margin:6px 0">
         {{t $.Lang "Поля виджета"}}: <code>name</code>, <code>type</code> (kpi/list/chart/actions/recent), <code>title</code>, <code>query</code>, <code>params</code>.
+        Для графиков: <code>chart_kind</code> (bar/line/pie), <code>x_field</code> (ось X), <code>y_fields</code> (серии).
         Шаблоны параметров записывайте как <code>&#123;&#123;today|start_of_month&#125;&#125;</code> или <code>&#123;&#123;today|minus_days:30&#125;&#125;</code>.
       </div>
+      <div class="wdg-map" id="wdg-ctl-{{.Name}}" style="display:none">
+        <div class="row"><label>{{t $.Lang "Тип графика"}}</label>
+          <select id="wdg-kind-{{.Name}}" onchange="applyWidgetMapping('{{.Name}}')">
+            <option value="bar">столбцы (bar)</option>
+            <option value="line">линии (line)</option>
+            <option value="pie">круг (pie)</option>
+          </select>
+        </div>
+        <div class="row"><label>{{t $.Lang "Ось X"}}</label><select id="wdg-x-{{.Name}}" onchange="applyWidgetMapping('{{.Name}}')"></select></div>
+        <div class="row"><label>{{t $.Lang "Серии"}}</label><span id="wdg-y-{{.Name}}"></span></div>
+        <div class="hint">{{t $.Lang "Заполняется из колонок запроса после предпросмотра; изменение правит YAML ниже."}}</div>
+      </div>
       <div class="code-wrap">
-        <textarea name="yaml" id="ta-wdg-{{.Name}}" style="width:100%;min-height:380px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.YAML}}</textarea>
+        <textarea name="yaml" id="ta-wdg-{{.Name}}" style="width:100%;height:380px;min-height:120px;resize:both;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.YAML}}</textarea>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+        <button type="button" class="btn-check" onclick="previewWidget('{{.Name}}')">▶ {{t $.Lang "Предпросмотр"}}</button>
         <button type="button" class="btn-check" onclick="runCheck('widget','wdg-{{.Name}}','{{.Name}}')">{{t $.Lang "Проверить"}}</button>
         <span class="check-result" id="check-wdg-{{.Name}}"></span>
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
+      <div class="wdg-preview" id="wdg-preview-{{.Name}}" style="display:none"></div>
     </form>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/widget-delete" style="margin-top:8px" onsubmit="return confirm('Удалить виджет {{.Name}}?')">
       <input type="hidden" name="widget_name" value="{{.Name}}">
@@ -4231,7 +4409,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           Если файл пуст, на главной показываются все зарегистрированные виджеты.
         </div>
         <div class="code-wrap">
-          <textarea name="yaml" id="ta-home-page" style="width:100%;min-height:260px;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.HomePageYAML}}</textarea>
+          <textarea name="yaml" id="ta-home-page" style="width:100%;height:260px;min-height:120px;resize:both;font-family:Consolas,monospace;font-size:12px;border:1px solid #ccd0d8;border-radius:4px;padding:8px;tab-size:2">{{.HomePageYAML}}</textarea>
         </div>
         <div class="module-save-row">
           <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>

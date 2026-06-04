@@ -24,6 +24,14 @@ import (
 //go:embed monaco
 var monacoFS embed.FS
 
+// ECharts vendored once here so both the base UI (dashboard charts) and the
+// launcher's configurator (widget preview) serve the same library from the same
+// URL — предпросмотр виджета рисуется тем же ECharts, что и рабочий стол, без
+// расхождений. Самохостинг вместо CDN: графики работают офлайн.
+//
+//go:embed echarts
+var echartsFS embed.FS
+
 // MonacoHandler serves the embedded Monaco tree. Mount it under
 // /vendor/monaco/ in every server that renders a Monaco editor.
 func MonacoHandler() http.Handler {
@@ -34,6 +42,20 @@ func MonacoHandler() http.Handler {
 	fileSrv := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Версионируется в URL (vendor/monaco) — кэшируем надолго.
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		fileSrv.ServeHTTP(w, req)
+	})
+}
+
+// EChartsHandler serves the embedded ECharts bundle. Mount it under
+// /vendor/echarts/ in every server that renders charts (base UI, configurator).
+func EChartsHandler() http.Handler {
+	sub, err := fs.Sub(echartsFS, "echarts")
+	if err != nil {
+		return http.NotFoundHandler()
+	}
+	fileSrv := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		fileSrv.ServeHTTP(w, req)
 	})
