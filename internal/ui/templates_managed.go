@@ -210,7 +210,7 @@ const tplManagedForm = `
 {{if not .IsPopup}}
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
   {{if .IsProcessor}}
-  <button class="btn btn-primary" type="submit" form="main-form">{{t $.Lang "Выполнить"}}</button>
+  {{/* Кнопка «Выполнить» скрыта: managed-форма использует свои кнопки (Предпросмотр, Записать, ЗаписатьИПровести) */}}
   {{else}}
   {{if .Entity.Posting}}
     {{if not .IsNew}}
