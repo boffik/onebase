@@ -317,7 +317,7 @@ const tplManagedForm = `
   {{if .CanWrite}}<button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">Записать и выбрать</button>{{end}}
   <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" class="btn btn-cancel">Отмена</a>
   {{else if .IsProcessor}}
-  <button class="btn btn-primary" type="submit">{{t $.Lang "Выполнить"}}</button>
+  {{/* Кнопка «Выполнить» скрыта: managed-форма использует свои кнопки */}}
   <a href="/ui/" class="btn btn-cancel">Отмена</a>
   {{else}}
   {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>{{end}}
