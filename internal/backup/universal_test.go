@@ -4,13 +4,19 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -454,5 +460,318 @@ func TestExportConfig_FileSourceExcludesGit(t *testing.T) {
 	}
 	if !got["config/.gitignore"] {
 		t.Errorf(".gitignore (a regular file) should be exported, entries: %v", got)
+	}
+}
+
+// TestJSONBRoundTripSQLite checks the import side of the JSONB double-
+// encoding fix. It crafts a JSONL line in the LEGACY shape — the JSONB
+// value is stored as a JSON-escaped string, the way old universal.go
+// exported PostgreSQL jsonb columns — and verifies that importTableJSONL
+// unwraps it back to the original JSON text. The export side of the
+// fix (marshalValue returning json.RawMessage instead of string) only
+// applies to drivers that surface JSONB as []byte, which is the
+// pgx / PG path; SQLite hands TEXT back as Go string and so cannot
+// exercise that branch — see TestJSONColValue_PassesThroughObject for
+// the import-side counterpart.
+func TestJSONBRoundTripSQLite(t *testing.T) {
+	ctx := context.Background()
+	dst := newSQLite(t, "jsonb-dst")
+	if _, err := dst.Exec(ctx, `CREATE TABLE perms (id TEXT PRIMARY KEY, data TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hand-craft a JSONL file in the legacy double-encoded shape.
+	want := `{"catalogs":{"ЕдиницаИзмерения":["read"]},"documents":{}}`
+	// The "data" field is a JSON string literal whose content is the
+	// escaped JSON object — i.e. exactly what marshalValue used to emit
+	// for a jsonb column read by pgx as []byte.
+	legacyLine := []byte(`{"_schema":1}` + "\n" +
+		`{"id":"p1","data":"` + strings.ReplaceAll(want, `"`, `\"`) + `"}` + "\n")
+	jsonlPath := filepath.Join(t.TempDir(), "perms.jsonl")
+	if err := os.WriteFile(jsonlPath, legacyLine, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := importTableJSONL(ctx, dst, "perms", jsonlPath); err != nil {
+		t.Fatalf("importTableJSONL: %v", err)
+	}
+	var got string
+	if err := dst.QueryRow(ctx, `SELECT data FROM perms WHERE id='p1'`).Scan(&got); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if got != want {
+		t.Errorf("legacy double-encoded import was not unwrapped:\n got  %s\n want %s", got, want)
+	}
+}
+
+// TestJSONColValue_UnwrapsEscapedString pins down the unwrap behaviour
+// used by insertRow for JSON/JSONB columns: a JSONL line that stores the
+// value as a JSON-escaped string (the legacy shape produced by the old
+// marshalValue) must be unescaped before being handed to the driver so
+// that the ::jsonb cast in PostgreSQL stores a real object.
+func TestJSONColValue_UnwrapsEscapedString(t *testing.T) {
+	raw := json.RawMessage(`"{\"x\":1}"`)
+	got, ok := jsonColValue(raw).(string)
+	if !ok {
+		t.Fatalf("jsonColValue: want string, got %T", jsonColValue(raw))
+	}
+	if got != `{"x":1}` {
+		t.Errorf("jsonColValue: want %q, got %q", `{"x":1}`, got)
+	}
+}
+
+// TestJSONColValue_PassesThroughObject pins down the modern path: when
+// the JSONL stores the value as a nested JSON object, the raw bytes
+// are passed straight through (as a string) to the driver.
+func TestJSONColValue_PassesThroughObject(t *testing.T) {
+	raw := json.RawMessage(`{"x":1}`)
+	got, ok := jsonColValue(raw).(string)
+	if !ok {
+		t.Fatalf("jsonColValue: want string, got %T", jsonColValue(raw))
+	}
+	if got != `{"x":1}` {
+		t.Errorf("jsonColValue: want %q, got %q", `{"x":1}`, got)
+	}
+}
+
+// zipOpen returns the contents of name from a zip archive in memory.
+func zipOpen(data []byte, name string) ([]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range zr.File {
+		if f.Name == name {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			defer rc.Close()
+			return io.ReadAll(rc)
+		}
+	}
+	return nil, fs.ErrNotExist
+}
+
+// TestImportTableJSONL_CP1251StringColumn pins down the deploy failure
+// for _audit: a row in the JSONL has a TEXT column whose value is a
+// JSON string literal that contains raw Windows-1251 bytes (e.g. a
+// Russian legacy export). PostgreSQL rejects the value with
+// SQLSTATE 22021 "invalid byte sequence for encoding UTF8: 0x9E".
+// insertRow must transcode the value from CP1251 to UTF-8 before the
+// driver hands it to PG.
+func TestImportTableJSONL_CP1251StringColumn(t *testing.T) {
+	ctx := context.Background()
+	dst := newSQLite(t, "cp1251-dst")
+	if _, err := dst.Exec(ctx, `CREATE TABLE _audit (
+		id          TEXT PRIMARY KEY,
+		entity_name TEXT
+	)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build a JSONL row where entity_name carries raw CP1251 bytes for
+	// the word "Привет" (0xCF 0xF0 0xE8 0xE2 0xE5 0xF2) — exactly the
+	// shape an old export would write, with the bytes appearing as-is
+	// between the JSON quotes (no \uXXXX escaping).
+	cp1251 := []byte{0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2}
+	var dataLine []byte
+	dataLine = append(dataLine, []byte(`{"id":"91166c0a-a802-49c2-9efd-b2d70a0ec793","entity_name":"`)...)
+	dataLine = append(dataLine, cp1251...)
+	dataLine = append(dataLine, '"', '}')
+
+	// importTableJSONL expects the first line to be a schema header.
+	// No btypes here — entity_name is a regular TEXT column.
+	schema := []byte(`{"_schema":1}` + "\n")
+	tmpDir := t.TempDir()
+	jsonlPath := filepath.Join(tmpDir, "_audit.jsonl")
+	if err := os.WriteFile(jsonlPath, append(schema, dataLine...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := importTableJSONL(ctx, dst, "_audit", jsonlPath); err != nil {
+		t.Fatalf("importTableJSONL: %v", err)
+	}
+	var got string
+	if err := dst.QueryRow(ctx, `SELECT entity_name FROM _audit WHERE id='91166c0a-a802-49c2-9efd-b2d70a0ec793'`).Scan(&got); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if got != "Привет" {
+		t.Errorf("CP1251 entity_name was not transcoded:\n got  %q (% x)\n want %q",
+			got, []byte(got), "Привет")
+	}
+}
+
+// TestImportTableJSONL_TranscodesNonUTF8Line is a higher-level
+// regression test: a JSONL row whose bytes aren't valid UTF-8 (the
+// signature of a Windows-1251 source) must be transcoded to UTF-8
+// before the JSON parser sees it, so the values land in the target
+// columns as readable Cyrillic — not as U+FFFD garbage from the
+// json package's automatic replacement of invalid UTF-8, and not as
+// "invalid byte sequence for encoding UTF8: 0x9E" from PostgreSQL.
+// TestImportTableJSONL_CP1251StringColumn above already covers the
+// happy path; this one additionally guards the line-level guard.
+func TestImportTableJSONL_TranscodesNonUTF8Line(t *testing.T) {
+	// Sanity check: a freshly read line that doesn't pass utf8.Valid
+	// must be transcodable via the same code path the import uses.
+	cp1251 := []byte{0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2}
+	if utf8.Valid(cp1251) {
+		t.Fatal("CP1251 bytes should NOT be valid UTF-8")
+	}
+	decoded, err := charmap.Windows1251.NewDecoder().Bytes(cp1251)
+	if err != nil {
+		t.Fatalf("CP1251 decode: %v", err)
+	}
+	if string(decoded) != "Привет" {
+		t.Errorf("decode mismatch: got %q, want %q", decoded, "Привет")
+	}
+}
+
+// TestInsertRow_BlobSourceIntoJSONBTarget pins down the SQLite→PostgreSQL
+// path for jsonb columns. The source DB had the JSON payload stored as
+// a BLOB, so the JSONL carries it as a JSON-escaped base64 string
+// (e.g. "IlJVQiI=" decodes to "RUB"). insertRow must base64-decode that
+// string before handing it to the ::jsonb cast, otherwise PostgreSQL
+// rejects the value with "invalid input syntax for type json".
+// This is a direct regression test for the deploy failure on
+// _constants.value.
+func TestInsertRow_BlobSourceIntoJSONBTarget(t *testing.T) {
+	ctx := context.Background()
+	db := newSQLite(t, "blob-to-jsonb")
+	if _, err := db.Exec(ctx, `CREATE TABLE _constants (
+		name TEXT PRIMARY KEY, value TEXT
+	)`); err != nil {
+		t.Fatal(err)
+	}
+
+	const want = `"RUB"`
+	// The JSONL line exactly as exported from a SQLite source whose
+	// `value` column was BLOB: a JSON string literal holding the base64
+	// of the raw JSON bytes.
+	b64 := base64.StdEncoding.EncodeToString([]byte(want))
+	raw := map[string]json.RawMessage{
+		"name":  json.RawMessage(`"CURRENCY"`),
+		"value": json.RawMessage(strconv.Quote(b64)),
+	}
+	btypes := map[string]bool{"value": true}
+	existingCols := map[string]bool{"name": true, "value": true}
+	// Pretend the target is PG and the column is jsonb — that's what
+	// makes insertRow take the btypes+jsonCols branch.
+	jsonCols := map[string]bool{"value": true}
+	boolCols := map[string]bool{}
+	byteaCols := map[string]bool{}
+
+	if err := insertRow(ctx, db, "_constants", raw, btypes, existingCols, jsonCols, boolCols, byteaCols); err != nil {
+		t.Fatalf("insertRow: %v", err)
+	}
+	var got string
+	if err := db.QueryRow(ctx, `SELECT value FROM _constants WHERE name='CURRENCY'`).Scan(&got); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if got != want {
+		t.Errorf("value round-trip mismatch:\n got  %s\n want %s", got, want)
+	}
+}
+
+// TestInsertRow_BlobSourceCP1251IntoJSONBTarget covers the _audit import
+// failure where the source .obz carries a base64 payload of Windows-1251
+// bytes (e.g. "О" = 0x9E). Without the in-branch transcoding, string(decoded)
+// leaks invalid UTF-8 into the ::jsonb cast and PostgreSQL raises
+// SQLSTATE 22021 "invalid byte sequence for encoding \"UTF8\": 0x9e".
+func TestInsertRow_BlobSourceCP1251IntoJSONBTarget(t *testing.T) {
+	ctx := context.Background()
+	db := newSQLite(t, "cp1251-to-jsonb")
+	if _, err := db.Exec(ctx, `CREATE TABLE _audit (
+		id TEXT PRIMARY KEY, old_value TEXT, new_value TEXT
+	)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Windows-1251 text from a legacy OneBase build, e.g. "Приход №5 ООО".
+	const cp1251 = "Приход №5 ООО"
+	decoded, err := charmap.Windows1251.NewEncoder().Bytes([]byte(cp1251))
+	if err != nil {
+		t.Fatalf("encode cp1251: %v", err)
+	}
+	if utf8.Valid(decoded) {
+		t.Fatalf("test fixture is not actually CP1251")
+	}
+	b64 := base64.StdEncoding.EncodeToString(decoded)
+	// Also include a control byte 0x9E to mirror the actual failure mode.
+	payload := append([]byte{0x9E}, decoded...)
+	b64With9E := base64.StdEncoding.EncodeToString(payload)
+
+	raw := map[string]json.RawMessage{
+		"id":        json.RawMessage(`"row-1"`),
+		"old_value": json.RawMessage(strconv.Quote(b64)),
+		"new_value": json.RawMessage(strconv.Quote(b64With9E)),
+	}
+	btypes := map[string]bool{"old_value": true, "new_value": true}
+	existingCols := map[string]bool{"id": true, "old_value": true, "new_value": true}
+	jsonCols := map[string]bool{"old_value": true, "new_value": true}
+	boolCols := map[string]bool{}
+	byteaCols := map[string]bool{}
+
+	if err := insertRow(ctx, db, "_audit", raw, btypes, existingCols, jsonCols, boolCols, byteaCols); err != nil {
+		t.Fatalf("insertRow: %v", err)
+	}
+
+	// Verify both columns decoded and transcoded to UTF-8 successfully.
+	var oldVal, newVal string
+	if err := db.QueryRow(ctx, `SELECT old_value, new_value FROM _audit WHERE id='row-1'`).Scan(&oldVal, &newVal); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if !utf8.ValidString(oldVal) {
+		t.Errorf("old_value still has invalid UTF-8: % x", []byte(oldVal))
+	}
+	if !utf8.ValidString(newVal) {
+		t.Errorf("new_value still has invalid UTF-8: % x", []byte(newVal))
+	}
+	// The decoded bytes are not valid JSON (plain text), so the
+	// importer must wrap them as a JSON string for the ::jsonb cast.
+	if !json.Valid([]byte(oldVal)) {
+		t.Errorf("old_value is not a valid JSON value: %q", oldVal)
+	}
+	if !json.Valid([]byte(newVal)) {
+		t.Errorf("new_value is not a valid JSON value: %q", newVal)
+	}
+}
+
+// TestInsertRow_BlobSourceValidJSONPassesThrough ensures that when the
+// base64-decoded bytes are already a valid JSON document (the common
+// case for a well-formed jsonb column), insertRow does NOT double-wrap
+// them as a JSON string — the value is forwarded as-is for the ::jsonb
+// cast to parse.
+func TestInsertRow_BlobSourceValidJSONPassesThrough(t *testing.T) {
+	ctx := context.Background()
+	db := newSQLite(t, "blob-valid-json")
+	if _, err := db.Exec(ctx, `CREATE TABLE _audit (
+		id TEXT PRIMARY KEY, new_value TEXT
+	)`); err != nil {
+		t.Fatal(err)
+	}
+
+	const want = `{"name":"RUB","value":100}`
+	b64 := base64.StdEncoding.EncodeToString([]byte(want))
+
+	raw := map[string]json.RawMessage{
+		"id":        json.RawMessage(`"row-1"`),
+		"new_value": json.RawMessage(strconv.Quote(b64)),
+	}
+	btypes := map[string]bool{"new_value": true}
+	existingCols := map[string]bool{"id": true, "new_value": true}
+	jsonCols := map[string]bool{"new_value": true}
+	boolCols := map[string]bool{}
+	byteaCols := map[string]bool{}
+
+	if err := insertRow(ctx, db, "_audit", raw, btypes, existingCols, jsonCols, boolCols, byteaCols); err != nil {
+		t.Fatalf("insertRow: %v", err)
+	}
+	var got string
+	if err := db.QueryRow(ctx, `SELECT new_value FROM _audit WHERE id='row-1'`).Scan(&got); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if got != want {
+		t.Errorf("new_value double-wrapped:\n got  %s\n want %s", got, want)
 	}
 }

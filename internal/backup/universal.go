@@ -15,8 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/text/encoding/charmap"
 
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/configdb"
@@ -38,6 +40,8 @@ type ImportReport struct {
 // backup. The order matters for import (users before sessions, etc.).
 var systemTables = []string{
 	"_users",
+	"_roles",
+	"_user_roles",
 	"_constants",
 	"_numerators",
 	"_attachments",
@@ -328,6 +332,23 @@ func detectBoolCols(ctx context.Context, db *storage.DB, tableName string) (map[
 func detectByteaCols(ctx context.Context, db *storage.DB, tableName string) (map[string]bool, error) {
 	result := make(map[string]bool)
 	if db.IsSQLite() {
+		rows, err := db.Query(ctx, "PRAGMA table_info("+sqliteQuote(tableName)+")")
+		if err != nil {
+			return result, nil
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var cid int
+			var name, ctype string
+			var notnull, pk int
+			var dflt any
+			if rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk) != nil {
+				continue
+			}
+			if strings.ToUpper(ctype) == "BLOB" {
+				result[name] = true
+			}
+		}
 		return result, nil
 	}
 	rows, err := db.Query(ctx,
@@ -347,6 +368,33 @@ func detectByteaCols(ctx context.Context, db *storage.DB, tableName string) (map
 	return result, nil
 }
 
+// jsonColValue converts a json.RawMessage column value to a Go value suitable
+// for a JSON/JSONB parameter in INSERT statements. The JSONL on disk may carry
+// the value in one of two shapes:
+//
+//  1. Old (pre-fix) format — a JSON-escaped string. marshalValue used to
+//     turn the []byte returned by a JSONB scan into a Go string, and
+//     json.Marshal then wrapped it in quotes. The raw bytes look like
+//     {\"x\":1} and have to be JSON-unmarshalled to recover the original
+//     JSON text. Importing such a value via string(rawVal) would let
+//     PostgreSQL store it as a JSON string-scalar, breaking consumers
+//     (e.g. unmarshalPermissions in auth/roles.go) that expect an object.
+//
+//  2. New format — a nested JSON object/array/number/bool. The raw bytes
+//     are already valid JSON and can be passed straight through as text.
+//
+// In both cases we end up with a Go value that pgx will send to PostgreSQL
+// as text, where the ::jsonb cast parses it into a real jsonb value.
+func jsonColValue(rawVal json.RawMessage) any {
+	// Case 1: JSON-escaped string — unwrap to recover the original JSON text.
+	var s string
+	if err := json.Unmarshal(rawVal, &s); err == nil {
+		return s
+	}
+	// Case 2: raw bytes are already a valid JSON value — pass through as text.
+	return string(rawVal)
+}
+
 // marshalValue converts a scanned DB value to a JSON-safe Go value.
 // For bytes columns, returns base64 string. For Numeric, returns exact decimal string.
 func marshalValue(v any, isBytesCol bool) any {
@@ -358,8 +406,12 @@ func marshalValue(v any, isBytesCol bool) any {
 		if isBytesCol {
 			return base64.StdEncoding.EncodeToString(t)
 		}
-		// Non-bytes []byte (e.g. JSON BLOB in SQLite) — return as string if valid UTF-8.
-		return string(t)
+		// Non-bytes []byte (JSONB from PostgreSQL, JSON BLOB in SQLite).
+		// Return as json.RawMessage so json.Marshal embeds the JSON
+		// directly instead of encoding it as a JSON string — that
+		// string-in-string wrapping is what used to break round-trip
+		// imports of jsonb columns like _roles.permissions.
+		return json.RawMessage(t)
 	case [16]byte:
 		// UUID from pgx
 		s := fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
@@ -874,6 +926,18 @@ func importTableJSONL(ctx context.Context, db *storage.DB, tableName, filePath s
 	colsChecked := false
 	for scanner.Scan() {
 		line := scanner.Bytes()
+		// json.Unmarshal replaces invalid UTF-8 inside JSON string
+		// literals with U+FFFD, which then survives all the way to
+		// PostgreSQL and triggers SQLSTATE 22021. We have to fix the
+		// encoding BEFORE the parser sees the line, so transcode
+		// from Windows-1251 (the legacy single-byte encoding used by
+		// older OneBase builds and most pre-Unicode Russian tools)
+		// up-front when the raw line isn't already valid UTF-8.
+		if !utf8.Valid(line) {
+			if decoded, err := charmap.Windows1251.NewDecoder().Bytes(line); err == nil {
+				line = decoded
+			}
+		}
 		if len(line) == 0 {
 			continue
 		}
@@ -941,20 +1005,54 @@ func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[st
 			}
 		} else if btypes[col] {
 			// Column is in btypes but target is NOT bytea (text/jsonb).
-			// Keep the original string — do NOT base64-decode it.
+			// The source side stored a binary value as base64, so the JSONL
+			// holds a JSON-escaped string containing the base64 text. Try
+			// to base64-decode; if the value isn't base64 at all (e.g. it
+			// is the literal string "null"/"true" written by export as a
+			// JSON string, or any other valid JSON snippet), pass it
+			// through — PostgreSQL's ::jsonb cast will then parse it.
+			var s string
+			if err := json.Unmarshal(rawVal, &s); err != nil {
+				return fmt.Errorf("col %s: string unmarshal: %w", col, err)
+			}
 			if jsonCols[col] {
-				// JSONB column: pass raw JSON string directly.
-				goVal = string(rawVal)
-			} else {
-				var s string
-				if err := json.Unmarshal(rawVal, &s); err != nil {
-					return fmt.Errorf("col %s: string unmarshal: %w", col, err)
+				if decoded, err := base64.StdEncoding.DecodeString(s); err == nil {
+					// The base64 payload may carry Windows-1251 text
+					// from legacy OneBase builds (PostgreSQL rejects
+					// non-UTF-8 bytes with SQLSTATE 22021, e.g. 0x9E
+					// for "О"). Transcode to UTF-8 when needed; if
+					// the bytes are already UTF-8, keep them as-is.
+					var utf8bytes []byte
+					if utf8.Valid(decoded) {
+						utf8bytes = decoded
+					} else if cp1251, err2 := charmap.Windows1251.NewDecoder().Bytes(decoded); err2 == nil {
+						utf8bytes = cp1251
+					} else {
+						utf8bytes = decoded
+					}
+					// PostgreSQL's ::jsonb cast requires a valid JSON
+					// value. The legacy BLOB may hold plain text (e.g.
+					// Python repr) rather than a JSON document, so
+					// validate the payload. If it's already valid JSON
+					// (object, array, number, bool, null, or quoted
+					// string), pass it through. Otherwise wrap it as a
+					// JSON string so the value is always well-formed.
+					if json.Valid(utf8bytes) {
+						goVal = string(utf8bytes)
+					} else if wrapped, err3 := json.Marshal(string(utf8bytes)); err3 == nil {
+						goVal = string(wrapped)
+					} else {
+						goVal = string(utf8bytes)
+					}
+				} else {
+					goVal = s
 				}
+			} else {
 				goVal = stripMonoClock(s)
 			}
 		} else if jsonCols[col] {
-			// JSON/JSONB column: pass raw JSON string directly.
-			goVal = string(rawVal)
+			// JSON/JSONB column: pass raw JSON object directly (unwrap if stringified).
+			goVal = jsonColValue(rawVal)
 		} else {
 			// Decode the JSON value as a generic Go type.
 			// Strings cover UUIDs, timestamps, numeric amounts.
@@ -983,6 +1081,9 @@ func insertRow(ctx context.Context, db *storage.DB, tableName string, raw map[st
 					}
 				}
 			case string:
+				// Raw bytes are already valid UTF-8 here — the line-level
+				// transcode in importTableJSONL has already converted
+				// any Windows-1251 source to UTF-8.
 				goVal = stripMonoClock(tv)
 			case bool:
 				goVal = tv
