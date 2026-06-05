@@ -31,10 +31,10 @@ func Connect(ctx context.Context, dsn string) (*DB, error) {
 	}
 	// Create implicit uuid→text cast so that SQL queries written for SQLite
 	// (where uuid is stored as text) work on PostgreSQL without explicit
-	// casts.  CREATE CAST ... AS IMPLICIT is idempotent.
-	_, _ = pool.Exec(ctx, `CREATE OR REPLACE FUNCTION pg_catalog.uuid_text_cast(uuid) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT $1::text $$`)
+	// casts.  WITH INOUT uses type I/O functions (uuidout→textin) directly,
+	// avoiding recursion that a custom function with ::text would cause.
 	_, _ = pool.Exec(ctx, `DROP CAST IF EXISTS (uuid AS text)`)
-	_, _ = pool.Exec(ctx, `CREATE CAST (uuid AS text) WITH FUNCTION pg_catalog.uuid_text_cast(uuid) AS IMPLICIT`)
+	_, _ = pool.Exec(ctx, `CREATE CAST (uuid AS text) WITH INOUT AS IMPLICIT`)
 
 	filesDir := defaultFilesDir(dsn)
 	return &DB{pool: pool, filesDir: filesDir, dialect: PgDialect{}}, nil
