@@ -125,6 +125,21 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return nil
 	},
+	// tpCommandButtons возвращает дочерние элементы-кнопки табличной части —
+	// команды ТЧ (план 46). Рендерятся как тулбар над таблицей; кнопка с
+	// обработчиком Нажатие вызывает obFire(name,'Нажатие',{_tp:...}).
+	"tpCommandButtons": func(el *metadata.FormElement) []*metadata.FormElement {
+		if el == nil {
+			return nil
+		}
+		var out []*metadata.FormElement
+		for _, ch := range el.Children {
+			if ch != nil && ch.Kind == metadata.FormElementButton {
+				out = append(out, ch)
+			}
+		}
+		return out
+	},
 	// dict собирает map[string]any из чередующихся ключей и значений —
 	// стандартный приём передать несколько аргументов в подшаблон
 	// (Go template принимает только один параметр).
@@ -1224,6 +1239,16 @@ function addTpRow(tpName, fields, numFields, idx) {
   var tr = document.createElement('tr');
   var refOpts = (window._tpRefOpts && window._tpRefOpts[tpName]) || {};
   var refMeta = (window._tpRefMeta && window._tpRefMeta[tpName]) || {};
+  // У ТЧ с командной панелью (план 46) первая колонка — чекбокс выделения;
+  // добавляем и при ручном создании строки, чтобы колонки совпали с thead.
+  if (tbody && tbody.getAttribute('data-tp-cmd') === '1') {
+    var tdSel = document.createElement('td');
+    tdSel.style.textAlign = 'center';
+    var cbSel = document.createElement('input');
+    cbSel.type = 'checkbox'; cbSel.className = '_tp-sel';
+    tdSel.appendChild(cbSel);
+    tr.appendChild(tdSel);
+  }
   fields.forEach(function(fn) {
     var td = document.createElement('td');
     if (refOpts[fn] !== undefined) {
@@ -1427,6 +1452,144 @@ function openRefCreate(targetSelect, refEntity) {
   }
   window.addEventListener('message', handler);
   modal.addEventListener('click', function(e) { if (e.target === modal) cleanup(); });
+}
+
+// openItemPicker — модальный диалог мультивыбора (подбор, план 46). Вызывается
+// клиентом, когда ответ form-event содержит pickerData. payload:
+//   { columns:[{name,title,type,editable}], rows:[{id,data:{col:val}}],
+//     config:{title,searchField,qtyField,checkAll} }
+// По «Перенести в документ» собирает отмеченные строки и возвращает их
+// серверу второй фазой: obFire(elementName,'Выбор',{_pick_result: JSON}).
+function openItemPicker(payload, elementName) {
+  if (!payload) return;
+  var cols = payload.columns || [];
+  var rows = payload.rows || [];
+  var cfg = payload.config || {};
+  var old = document.getElementById('_item-picker-modal');
+  if (old) old.remove();
+  var modal = document.createElement('div');
+  modal.id = '_item-picker-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:10px;padding:20px;width:720px;max-width:96vw;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18)';
+
+  var head = document.createElement('div');
+  head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;font-size:15px;color:#1e293b';
+  title.textContent = cfg.title || 'Подбор';
+  var counter = document.createElement('div');
+  counter.style.cssText = 'font-size:12px;color:#64748b';
+  head.appendChild(title); head.appendChild(counter);
+  box.appendChild(head);
+
+  var search = document.createElement('input');
+  search.type = 'text'; search.placeholder = 'Поиск...'; search.autocomplete = 'off';
+  search.style.cssText = 'padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;margin-bottom:10px;outline:none';
+  box.appendChild(search);
+
+  var scroll = document.createElement('div');
+  scroll.style.cssText = 'overflow:auto;flex:1;border:1px solid #e2e8f0;border-radius:7px';
+  var table = document.createElement('table');
+  table.className = 'tp-table'; table.style.cssText = 'width:100%;font-size:13px;margin:0';
+  // Шапка: чекбокс «выделить все» + колонки.
+  var thead = document.createElement('thead');
+  var htr = document.createElement('tr');
+  var thCb = document.createElement('th'); thCb.style.width = '34px';
+  var cbAll = document.createElement('input'); cbAll.type = 'checkbox';
+  thCb.appendChild(cbAll); htr.appendChild(thCb);
+  cols.forEach(function(c){ var th = document.createElement('th'); th.textContent = c.title || c.name; htr.appendChild(th); });
+  thead.appendChild(htr); table.appendChild(thead);
+
+  var tbody = document.createElement('tbody');
+  function rowText(r){
+    return cols.map(function(c){ var v = (r.data||{})[c.name]; return v == null ? '' : String(v); }).join(' ').toLowerCase();
+  }
+  rows.forEach(function(r){
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-id', r.id || '');
+    tr.setAttribute('data-search', rowText(r));
+    var tdCb = document.createElement('td'); tdCb.style.textAlign = 'center';
+    var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = '_ip-cb';
+    if (cfg.checkAll) cb.checked = true;
+    cb.onchange = updateCounter;
+    tdCb.appendChild(cb); tr.appendChild(tdCb);
+    cols.forEach(function(c){
+      var td = document.createElement('td');
+      var v = (r.data||{})[c.name];
+      if (c.editable) {
+        var inp = document.createElement('input');
+        inp.type = (c.type === 'number') ? 'number' : 'text';
+        if (c.type === 'number') inp.step = 'any';
+        inp.value = (v == null ? '' : v);
+        inp.className = '_ip-val'; inp.setAttribute('data-col', c.name);
+        inp.style.cssText = 'width:90px;padding:3px 6px';
+        td.appendChild(inp);
+      } else {
+        td.textContent = (v == null ? '' : String(v));
+        td.setAttribute('data-col', c.name);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  scroll.appendChild(table);
+  box.appendChild(scroll);
+
+  var foot = document.createElement('div');
+  foot.style.cssText = 'margin-top:12px;display:flex;justify-content:flex-end;gap:8px';
+  var btnCancel = document.createElement('button');
+  btnCancel.type = 'button'; btnCancel.textContent = 'Отмена';
+  btnCancel.style.cssText = 'padding:7px 18px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px';
+  var btnOk = document.createElement('button');
+  btnOk.type = 'button'; btnOk.textContent = 'Перенести в документ';
+  btnOk.style.cssText = 'padding:7px 18px;border:1px solid #2563eb;border-radius:7px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px;font-weight:600';
+  foot.appendChild(btnCancel); foot.appendChild(btnOk);
+  box.appendChild(foot);
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  function checkedRows(){ return Array.prototype.slice.call(tbody.querySelectorAll('._ip-cb')).filter(function(cb){ return cb.checked && cb.closest('tr').style.display !== 'none'; }); }
+  function updateCounter(){ counter.textContent = 'Выбрано: ' + checkedRows().length; }
+  updateCounter();
+  search.focus();
+  search.addEventListener('input', function(){
+    var q = this.value.toLowerCase();
+    Array.prototype.forEach.call(tbody.rows, function(tr){
+      tr.style.display = (tr.getAttribute('data-search') || '').indexOf(q) >= 0 ? '' : 'none';
+    });
+    updateCounter();
+  });
+  cbAll.addEventListener('change', function(){
+    Array.prototype.forEach.call(tbody.rows, function(tr){
+      if (tr.style.display === 'none') return;
+      var cb = tr.querySelector('._ip-cb'); if (cb) cb.checked = cbAll.checked;
+    });
+    updateCounter();
+  });
+  btnCancel.addEventListener('click', function(){ modal.remove(); });
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+  btnOk.addEventListener('click', function(){
+    var result = checkedRows().map(function(cb){
+      var tr = cb.closest('tr');
+      var obj = { id: tr.getAttribute('data-id') };
+      cols.forEach(function(c){
+        if (c.editable) {
+          var inp = tr.querySelector('._ip-val[data-col="' + c.name + '"]');
+          obj[c.name] = inp ? inp.value : '';
+        } else {
+          var td = tr.querySelector('td[data-col="' + c.name + '"]');
+          obj[c.name] = td ? td.textContent : '';
+        }
+      });
+      return obj;
+    });
+    modal.remove();
+    if (typeof obFire === 'function') {
+      obFire(elementName, 'Выбор', { _pick_result: JSON.stringify(result) });
+    }
+  });
 }
 </script>
 {{end}}

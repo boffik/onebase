@@ -131,18 +131,31 @@ const tplManagedForm = `
   {{$tpMeta := tablePartByName $ctx.Entity $tpName}}
   {{$tpRows := index $ctx.TablePartRows $tpName}}
   {{$tpRef := index $ctx.TPRefOptions $tpName}}
+  {{$tpCmds := tpCommandButtons $el}}
   <h3 style="margin:18px 0 8px;font-size:14px">{{fieldTitleRU $el.TitleMap $tpName}}</h3>
   {{if $tpMeta}}
+  {{if $tpCmds}}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+    {{range $tpCmds}}
+    <button type="button" class="btn btn-sm" style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe"
+      {{if $el.ReadOnly}}disabled{{end}}{{if hasHandler . "Нажатие"}} onclick="obFire('{{.Name}}','Нажатие',{_tp:'{{$tpName}}'})"{{end}}>
+      {{fieldTitleRU .TitleMap .Name}}
+    </button>
+    {{end}}
+  </div>
+  {{end}}
   <table class="tp-table" data-tp="{{$tpName}}">
     <thead>
       <tr>
+        {{if $tpCmds}}<th style="width:30px"></th>{{end}}
         {{range $tpMeta.Fields}}<th>{{.Name}}</th>{{end}}
         <th style="width:40px"></th>
       </tr>
     </thead>
-    <tbody id="tp-body-{{$tpName}}" data-tp-fields="{{range $i, $f := $tpMeta.Fields}}{{if $i}},{{end}}{{$f.Name}}|{{$f.Type}}{{if $f.RefEntity}}:{{$f.RefEntity}}{{end}}{{end}}">
+    <tbody id="tp-body-{{$tpName}}" {{if $tpCmds}}data-tp-cmd="1" {{end}}data-tp-fields="{{range $i, $f := $tpMeta.Fields}}{{if $i}},{{end}}{{$f.Name}}|{{$f.Type}}{{if $f.RefEntity}}:{{$f.RefEntity}}{{end}}{{end}}">
     {{range $i, $row := $tpRows}}
       <tr>
+        {{if $tpCmds}}<td style="text-align:center"><input type="checkbox" class="_tp-sel"></td>{{end}}
         {{range $f := $tpMeta.Fields}}
         <td>
           {{$v := index $row $f.Name}}
@@ -406,9 +419,18 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       });
       const rows = tps[tpName] || [];
       const refOpts = (window._tpRefOpts && window._tpRefOpts[tpName]) || {};
+      const hasCmd = tbody.getAttribute('data-tp-cmd') === '1';
       tbody.innerHTML = '';
       rows.forEach(function(row, idx){
         const tr = document.createElement('tr');
+        if (hasCmd) {
+          const tdSel = document.createElement('td');
+          tdSel.style.textAlign = 'center';
+          const cbSel = document.createElement('input');
+          cbSel.type = 'checkbox'; cbSel.className = '_tp-sel';
+          tdSel.appendChild(cbSel);
+          tr.appendChild(tdSel);
+        }
         fieldsMeta.forEach(function(f){
           const td = document.createElement('td');
           const v = row[f.name];
@@ -492,7 +514,10 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     reader.readAsArrayBuffer(file);
   };
 
-  window.obFire = async function(elementName, eventName){
+  // obFire(elementName, eventName[, extraParams]) — extraParams (объект)
+  // добавляются к телу запроса. Используется подбором (план 46): фаза 2
+  // шлёт {_pick_result}, команды ТЧ — {_tp, _tp_selected}.
+  window.obFire = async function(elementName, eventName, extraParams){
     const form = document.getElementById('main-form');
     if (!form) return;
     const fd = new FormData(form);
@@ -509,6 +534,22 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       if (fcEl && fcEl.value) { body.append(k, fcEl.value); }
       else { body.append(k, v); }
     });
+    // Команда над ТЧ: подмешать индексы выделенных строк (_tp_selected) по
+    // имени ТЧ из extraParams._tp.
+    if (extraParams && extraParams._tp) {
+      const tbody = document.getElementById('tp-body-' + extraParams._tp);
+      if (tbody) {
+        const sel = [];
+        Array.prototype.forEach.call(tbody.rows, (tr, i) => {
+          const cb = tr.querySelector('._tp-sel');
+          if (cb && cb.checked) sel.push(i);
+        });
+        body.append('_tp_selected', sel.join(','));
+      }
+    }
+    if (extraParams) {
+      Object.keys(extraParams).forEach(k => body.append(k, extraParams[k]));
+    }
     try {
       const res = await fetch(URL, {
         method: 'POST',
@@ -517,6 +558,14 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
         credentials: 'same-origin'
       });
       const data = await res.json();
+      // Подбор фазы 1: сервер вернул pickerData — открыть диалог, не трогая
+      // ТЧ (её обновит фаза 2 после «Перенести»).
+      if (data.pickerData) {
+        (data.messages || []).forEach(m => flash(m, 'ok'));
+        if (data.error) flash(data.error, 'err');
+        openItemPicker(data.pickerData, elementName);
+        return;
+      }
       applyTableParts(data.tableparts);
       applyValues(data.values);
       (data.messages || []).forEach(m => flash(m, 'ok'));

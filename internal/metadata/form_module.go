@@ -42,6 +42,11 @@ const (
 	FormEventStartListChoice   FormEventType = "НачалоВыбораИзСписка"   // StartListChoice
 	FormEventAutoComplete      FormEventType = "АвтоПодбор"             // AutoComplete
 	FormEventExecuteCommand    FormEventType = "ВыполнитьКоманду"       // Command
+	// Выбор — вторая фаза диалога подбора (план 46): обработчик кнопки
+	// показывает диалог через билтин ПоказатьПодбор (фаза 1, событие Нажатие),
+	// а результат пользователь возвращает событием Выбор с переменной
+	// ПодборРезультат. Generic: годится для любого диалога мультивыбора.
+	FormEventOnChoice          FormEventType = "Выбор"                  // OnChoice
 )
 
 // FormElementType represents types of form elements

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +44,9 @@ type formEventResponse struct {
 	TableParts map[string][]map[string]any `json:"tableparts,omitempty"`
 	Messages   []string                    `json:"messages,omitempty"`
 	Error      string                      `json:"error,omitempty"`
+	// PickerData != nil — обработчик фазы 1 вызвал ПоказатьПодбор: клиент
+	// открывает модальный диалог мультивыбора вместо применения ТЧ (план 46).
+	PickerData *pickerPayload `json:"pickerData,omitempty"`
 }
 
 // handleManagedFormEvent — единая точка обработки событий managed-форм.
@@ -153,6 +157,28 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 	}
 	vars["__form_procs__"] = formProcs
 
+	// Подбор (план 46). Фаза 1: билтин ПоказатьПодбор копит payload в sink —
+	// после Run он уйдёт в ответ как pickerData, и клиент откроет диалог.
+	var picker *pickerPayload
+	pickerFn := newPickerBuiltin(&picker)
+	vars["ПоказатьПодбор"] = pickerFn
+	vars["ShowPicker"] = pickerFn
+
+	// Фаза 2: результат диалога приходит как _pick_result (JSON) → переменная
+	// ПодборРезультат (Массив структур) для обработчика события Выбор.
+	if pr := parsePickResult(r.FormValue("_pick_result")); pr != nil {
+		vars["ПодборРезультат"] = pr
+		vars["PickResult"] = pr
+	}
+
+	// Команды ТЧ: выделенные строки (_tp_selected = CSV индексов строк ТЧ из
+	// _tp) → переменная ВыделенныеСтроки (Массив строк ТЧ) для обработчиков
+	// команд вида «изменить выделенные».
+	if sel := selectedTPRows(r, obj); sel != nil {
+		vars["ВыделенныеСтроки"] = sel
+		vars["SelectedRows"] = sel
+	}
+
 	// Выполнение процедуры. Ошибка DSL отдаётся в JSON, не как 500 —
 	// клиент покажет красный баннер и не закроет форму.
 	if runErr := s.interp.Run(decl, thisObj, vars); runErr != nil {
@@ -162,6 +188,7 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 			TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, entity),
 			Messages:   msgs,
 			Error:      runErr.Error(),
+			PickerData: picker,
 		})
 		return
 	}
@@ -171,7 +198,40 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 		Values:     serializeFieldsForEntity(obj.Fields, entity),
 		TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, entity),
 		Messages:   msgs,
+		PickerData: picker,
 	})
+}
+
+// selectedTPRows читает _tp (имя ТЧ) и _tp_selected (CSV индексов отмеченных
+// строк) из запроса и возвращает Массив соответствующих строк ТЧ (обёрнутых
+// в MapThis) для DSL-обработчиков команд ТЧ. nil, если выделения нет.
+//
+// Индексы соответствуют отрисованным (непустым) строкам ТЧ — тем же, что
+// собирает parseTablePartRows. Если пользователь оставил полностью пустую
+// строку посередине, она отфильтровывается и при сдвиге индексов выделение
+// может не совпасть; для команд «по выделенным» это приемлемое ограничение.
+func selectedTPRows(r *http.Request, obj *runtime.Object) *interpreter.Array {
+	tpName := strings.TrimSpace(r.FormValue("_tp"))
+	selRaw := strings.TrimSpace(r.FormValue("_tp_selected"))
+	if tpName == "" || selRaw == "" {
+		return nil
+	}
+	rows := obj.TablePartRows[tpName]
+	if len(rows) == 0 {
+		return nil
+	}
+	var items []any
+	for _, part := range strings.Split(selRaw, ",") {
+		idx, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || idx < 0 || idx >= len(rows) {
+			continue
+		}
+		items = append(items, &interpreter.MapThis{M: rows[idx]})
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return interpreter.NewArray(items)
 }
 
 // serializeFieldsForEntity нормализует имена полей к оригинальному регистру
