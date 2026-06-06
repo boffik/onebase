@@ -84,6 +84,9 @@ func (s *Server) ListenAndServe() error {
 	// ECharts (тот же вендоренный пакет, что и у базы) — предпросмотр виджета
 	// в конфигураторе рисуется тем же графическим движком, что и рабочий стол.
 	r.Handle("/vendor/echarts/*", http.StripPrefix("/vendor/echarts/", webassets.EChartsHandler()))
+	// SlickGrid (6pac fork, MIT) — грид для редактируемых табличных частей в
+	// managed-формах. Самохостинг вместо CDN: UI работает офлайн.
+	r.Handle("/vendor/slickgrid/*", http.StripPrefix("/vendor/slickgrid/", webassets.SlickGridHandler()))
 
 	// Launcher pages (no auth)
 	r.Get("/", s.h.index)

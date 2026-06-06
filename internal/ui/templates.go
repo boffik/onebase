@@ -1,4 +1,4 @@
-package ui
+﻿package ui
 
 import (
 	"encoding/json"
@@ -140,6 +140,23 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return out
 	},
+	// hasGridTP checks if any TablePart element in the form has use_grid flag (plan 48).
+	// Used to conditionally include SlickGrid CSS/JS.
+	"hasGridTP": func(form *metadata.FormModule) bool {
+		if form == nil {
+			return false
+		}
+		found := false
+		form.Walk(func(el *metadata.FormElement) bool {
+			if el != nil && el.Kind == metadata.FormElementTablePart && el.UseGrid {
+				found = true
+				return false
+			}
+			return true
+		})
+		return found
+	},
+
 	// dict собирает map[string]any из чередующихся ключей и значений —
 	// стандартный приём передать несколько аргументов в подшаблон
 	// (Go template принимает только один параметр).

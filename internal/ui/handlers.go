@@ -1790,6 +1790,59 @@ func (s *Server) saveTablePartsDirect(ctx context.Context, entity *metadata.Enti
 func parseTablePartRows(r *http.Request, entity *metadata.Entity) map[string][]map[string]any {
 	result := make(map[string][]map[string]any)
 	for _, tp := range entity.TableParts {
+		// Plan 48 (SlickGrid): check for tp_json.{TPName} first.
+		if jsonBlob := r.FormValue("tp_json." + tp.Name); jsonBlob != "" {
+			var rows []map[string]any
+			if err := json.Unmarshal([]byte(jsonBlob), &rows); err == nil {
+				// Normalize field names to original case + convert types.
+				cleaned := make([]map[string]any, 0, len(rows))
+				for _, row := range rows {
+					if len(row) == 0 {
+						continue
+					}
+					converted := make(map[string]any, len(row))
+					for _, f := range tp.Fields {
+						// Normalize case: try exact, then case-insensitive match.
+						var raw string
+						if v, ok := row[f.Name]; ok {
+							raw = fmt.Sprintf("%v", v)
+						} else {
+							for k, v := range row {
+								if strings.EqualFold(k, f.Name) {
+									raw = fmt.Sprintf("%v", v)
+									break
+								}
+							}
+						}
+						switch f.Type {
+						case metadata.FieldTypeNumber:
+							if n, err := strconv.ParseFloat(raw, 64); err == nil {
+								converted[f.Name] = n
+							} else {
+								converted[f.Name] = raw
+							}
+						case metadata.FieldTypeBool:
+							converted[f.Name] = raw == "true"
+						default:
+							converted[f.Name] = raw
+						}
+					}
+					// Skip rows where all fields are blank (like legacy path).
+					empty := true
+					for _, f := range tp.Fields {
+						if v, ok := converted[f.Name]; ok && fmt.Sprintf("%v", v) != "" {
+							empty = false
+							break
+						}
+					}
+					if !empty {
+						cleaned = append(cleaned, converted)
+					}
+				}
+				result[tp.Name] = cleaned
+				continue // skip legacy named-input parsing for this TP
+			}
+		}
 		// collect max index
 		maxIdx := -1
 		prefix := "tp." + tp.Name + "."

@@ -64,3 +64,48 @@ func TestEChartsHandlerServesBundle(t *testing.T) {
 		t.Error("echarts.min.js: empty body")
 	}
 }
+
+// TestSlickGridHandlerServesCriticalFiles guards that all required SlickGrid
+// assets are embedded and served. Managed forms load them for editable table
+// parts from /vendor/slickgrid/.
+func TestSlickGridHandlerServesCriticalFiles(t *testing.T) {
+	h := http.StripPrefix("/vendor/slickgrid/", SlickGridHandler())
+	files := []string{
+		"slick.core.js",
+		"slick.interactions.js",
+		"slick.grid.js",
+		"slick.dataview.js",
+		"slick.editors.js",
+		"slick.formatters.js",
+		"slick.grid.css",
+		"slick-default-theme.css",
+	}
+	for _, f := range files {
+		req := httptest.NewRequest(http.MethodGet, "/vendor/slickgrid/"+f, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", f, rec.Code)
+			continue
+		}
+		if rec.Body.Len() == 0 {
+			t.Errorf("%s: empty body", f)
+		}
+	}
+
+	// A path outside the embedded tree must 404.
+	req := httptest.NewRequest(http.MethodGet, "/vendor/slickgrid/nonexistent.js", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("absent file: status = %d, want 404", rec.Code)
+	}
+
+	// Cache header must be set for long-lived versioned assets.
+	req = httptest.NewRequest(http.MethodGet, "/vendor/slickgrid/slick.grid.js", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "max-age") {
+		t.Errorf("Cache-Control = %q, want max-age", cc)
+	}
+}

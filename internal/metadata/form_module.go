@@ -23,7 +23,7 @@ const (
 	FormEventOnCreate      FormEventType = "ПриСоздании"         // OnCreate
 	FormEventBeforeDelete  FormEventType = "ПередУдалением"      // BeforeDelete
 	FormEventOnDelete      FormEventType = "ПриУдалении"         // OnDelete
-	FormEventAfterDelete   FormEventType = "ПослеУдаления"       // AfterDelete
+	FormEventAfterDelete   FormEventType = "ПослеУдалении"       // AfterDelete
 	// События для табличных частей (замечание #15): даём YAML-конфигу
 	// возможность их объявлять. UI пока умеет дергать ExecuteElementEvent
 	// generic-маршрутом — кастомные триггеры (auto-fill цены при добавлении
@@ -113,6 +113,7 @@ type FormElement struct {
 	HorizontalAlign string            `yaml:"halign,omitempty"`            // left|center|right|stretch
 	VerticalAlign   string            `yaml:"valign,omitempty"`            // top|center|bottom
 	ReadOnly        bool              `yaml:"readonly,omitempty"`          // только чтение
+	UseGrid         bool              `yaml:"use_grid,omitempty"`          // SlickGrid для ТЧ (план 48)
 	Hint            string            `yaml:"hint,omitempty"`              // всплывающая подсказка
 	Mask            string            `yaml:"mask,omitempty"`              // маска ввода
 	Type            string            `yaml:"type,omitempty"`              // "file" для файлового поля, и т.п.

@@ -1,4 +1,4 @@
-package ui
+﻿package ui
 
 // tplManagedForm — шаблон рендеринга «управляемой формы» из FormModule
 // (план 37, этап 3). В отличие от tplForm, который автоматически выводит
@@ -144,7 +144,22 @@ const tplManagedForm = `
     {{end}}
   </div>
   {{end}}
-  <table class="tp-table" data-tp="{{$tpName}}">
+  {{if $el.UseGrid}}
+  <div id="sg-{{$tpName}}" class="ob-grid" style="height:{{if gt (len $tpRows) 8}}300{{else}}200{{end}}px;width:100%"
+       data-sg-tp="{{$tpName}}"
+       data-sg-cols='[{{range $i, $f := $tpMeta.Fields}}{{if $i}},{{end}}{"id":"{{$f.Name}}","name":"{{$f.Name}}","type":"{{$f.Type}}"{{if $f.RefEntity}},"ref":"{{$f.RefEntity}}"{{end}}}{{end}}]'
+       data-sg-ref='{{jsJSON $tpRef}}'
+       data-sg-rows='{{jsJSON $tpRows}}'
+       {{if $tpCmds}}data-sg-cmd="1"{{end}}></div>
+  <input type="hidden" name="tp_json.{{$tpName}}" id="tp-json-{{$tpName}}" value="">
+  <div style="display:flex;gap:6px;margin-top:4px">
+    <button type="button" class="btn btn-sm" style="background:#e2e8f0;color:#475569"
+      onclick="obGridAddRow('{{$tpName}}')">+ Добавить строку</button>
+    <button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b"
+      onclick="obGridDelRow('{{$tpName}}')">− Удалить строку</button>
+  </div>
+{{else}}
+<table class="tp-table" data-tp="{{$tpName}}">
     <thead>
       <tr>
         {{if $tpCmds}}<th style="width:30px"></th>{{end}}
@@ -185,6 +200,7 @@ const tplManagedForm = `
   <button type="button" class="btn btn-sm" style="background:#e2e8f0;color:#475569;margin:0 0 12px"
     onclick="addTpRow('{{$tpName}}', [{{range $tpMeta.Fields}}'{{.Name}}',{{end}}], [{{range $tpMeta.Fields}}{{if eq (str .Type) "number"}}'{{.Name}}',{{end}}{{end}}], document.getElementById('tp-body-{{$tpName}}').rows.length)">
     + Добавить строку
+{{end}}
   </button>
   {{else}}
   <div style="background:#fef9c3;padding:8px;border-radius:6px;font-size:12px;color:#92400e">
@@ -204,6 +220,23 @@ const tplManagedForm = `
 
 {{define "page-managed-form"}}
 {{template "head" .}}{{if not .IsPopup}}{{template "nav" .}}{{end}}
+{{if hasGridTP .Form}}
+<link rel="stylesheet" href="/vendor/slickgrid/slick.grid.css">
+<link rel="stylesheet" href="/vendor/slickgrid/slick-default-theme.css">
+<style>
+.ob-grid{font-size:13px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
+.ob-grid .slick-header-columns{background:#f8fafc;border-bottom:2px solid #e2e8f0}
+.ob-grid .slick-header-column{font-weight:600;color:#475569;font-size:12px;padding:6px 8px;border-right:1px solid #e2e8f0}
+.ob-grid .slick-row{border-bottom:1px solid #f1f5f9}
+.ob-grid .slick-row:hover .slick-cell{background:#f0f4ff}
+.ob-grid .slick-cell{padding:4px 8px;border-right:1px solid #f1f5f9}
+.ob-grid .slick-cell.selected{background:#dbeafe}
+.ob-grid .slick-cell.active{border:2px solid #3b82f6;padding:2px 6px}
+.ob-grid .ob-num{text-align:right;font-variant-numeric:tabular-nums}
+.ob-grid .ob-ref{color:#2563eb;cursor:pointer}
+.ob-grid .ob-ref:hover{text-decoration:underline}
+</style>
+{{end}}
 <main>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:1400px">
   <h2 style="margin-bottom:0">
@@ -316,7 +349,7 @@ const tplManagedForm = `
 {{end}}
 
 <div class="card">
-<form id="main-form" method="POST" {{if .IsProcessor}}action="/ui/processor/{{lower .Processor.Name}}" enctype="multipart/form-data"{{end}}>
+<form id="main-form" method="POST" onsubmit="if(window.obGridSync)obGridSync()" {{if .IsProcessor}}action="/ui/processor/{{lower .Processor.Name}}" enctype="multipart/form-data"{{end}}>
 {{if and (not .IsNew) (index .Values "_version")}}<input type="hidden" name="_version" value="{{index .Values "_version"}}">{{end}}
 {{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}
 
@@ -518,6 +551,7 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
   // добавляются к телу запроса. Используется подбором (план 46): фаза 2
   // шлёт {_pick_result}, команды ТЧ — {_tp, _tp_selected}.
   window.obFire = async function(elementName, eventName, extraParams){
+    if (window.obGridSync) obGridSync();
     const form = document.getElementById('main-form');
     if (!form) return;
     const fd = new FormData(form);
@@ -537,14 +571,22 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     // Команда над ТЧ: подмешать индексы выделенных строк (_tp_selected) по
     // имени ТЧ из extraParams._tp.
     if (extraParams && extraParams._tp) {
-      const tbody = document.getElementById('tp-body-' + extraParams._tp);
-      if (tbody) {
-        const sel = [];
-        Array.prototype.forEach.call(tbody.rows, (tr, i) => {
-          const cb = tr.querySelector('._tp-sel');
-          if (cb && cb.checked) sel.push(i);
-        });
+      // Plan 48: check if SlickGrid exists for this TP
+      var obg = (window._obGrids || {})[extraParams._tp];
+      if (obg) {
+        var sel = obg.grid.getSelectedRows();
         body.append('_tp_selected', sel.join(','));
+      } else {
+        // Legacy: read from DOM checkboxes
+        const tbody = document.getElementById('tp-body-' + extraParams._tp);
+        if (tbody) {
+          const sel = [];
+          Array.prototype.forEach.call(tbody.rows, (tr, i) => {
+            const cb = tr.querySelector('._tp-sel');
+            if (cb && cb.checked) sel.push(i);
+          });
+          body.append('_tp_selected', sel.join(','));
+        }
       }
     }
     if (extraParams) {
@@ -580,6 +622,407 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
 {{/* Общие JS-функции addTpRow / openRefCreate / openRefPicker — те же,
      что в обычной auto-форме, чтобы "+" рядом со ссылкой и "Добавить
      строку" в ТЧ работали и в managed-форме. */}}
+
+{{if hasGridTP .Form}}
+<script src="/vendor/slickgrid/slick.core.js"></script>
+<script src="/vendor/slickgrid/slick.interactions.js"></script>
+<script src="/vendor/slickgrid/slick.grid.js"></script>
+<script src="/vendor/slickgrid/slick.dataview.js"></script>
+<script src="/vendor/slickgrid/slick.editors.js"></script>
+<script src="/vendor/slickgrid/slick.formatters.js"></script>
+<script>
+// SlickGrid initializer for managed-form table parts (plan 48).
+// Grids are stored in window._obGrids = {tpName: {grid, dataView, columns}}.
+(function(){
+  window._obGrids = window._obGrids || {};
+
+  // Serialize ref value: extract id from {id,_label} object or return raw value
+  function refId(v) {
+    if (v && typeof v === "object" && v.id !== undefined) return v.id;
+    return (v == null) ? "" : String(v);
+  }
+
+  // Custom ref editor with dropdown search and picker button (plan 48, phase 4).
+  function ObRefEditor(refField, refOptsList, args) {
+    var wrapper, input, dropBtn, list, isOpen = false, selectedId = '', defaultValue = '';
+
+    function label(id) {
+      for (var k = 0; k < refOptsList.length; k++) {
+        if (String(refOptsList[k].id) === String(id)) return refOptsList[k]._label;
+      }
+      return '';
+    }
+
+    this.init = function() {
+      wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex;align-items:center;width:100%;height:100%;gap:2px';
+
+      input = document.createElement('input');
+      input.type = 'text';
+      input.style.cssText = 'flex:1;border:none;outline:none;padding:2px 4px;font-size:13px;min-width:0';
+      var cur = args.item[args.column.field];
+      defaultValue = cur;
+      selectedId = (cur && typeof cur === 'object') ? (cur.id || '') : (cur || '');
+      input.value = label(selectedId) || String(selectedId);
+
+      dropBtn = document.createElement('button');
+      dropBtn.type = 'button';
+      dropBtn.textContent = '…';
+      dropBtn.title = 'Выбрать из списка';
+      dropBtn.style.cssText = 'border:none;background:none;cursor:pointer;font-size:12px;padding:0 4px;color:#2563eb;flex-shrink:0';
+
+      wrapper.appendChild(input);
+      wrapper.appendChild(dropBtn);
+      args.container.appendChild(wrapper);
+
+      // Dropdown list
+      list = document.createElement('div');
+      list.style.cssText = 'position:absolute;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;min-width:160px;font-size:13px';
+
+      function buildList(filter) {
+        list.innerHTML = '';
+        var f = (filter || '').toLowerCase();
+        var found = false;
+        for (var k = 0; k < refOptsList.length; k++) {
+          var opt = refOptsList[k];
+          if (f && opt._label.toLowerCase().indexOf(f) < 0) continue;
+          found = true;
+          var item = document.createElement('div');
+          item.textContent = opt._label;
+          item.setAttribute('data-id', opt.id);
+          item.style.cssText = 'padding:6px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9';
+          item.addEventListener('mouseenter', function() { this.style.background = '#eef2ff'; });
+          item.addEventListener('mouseleave', function() { this.style.background = ''; });
+          (function(o) {
+            item.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              selectedId = o.id;
+              input.value = o._label;
+              closeList();
+              args.commitChanges();
+            });
+          })(opt);
+          list.appendChild(item);
+        }
+        if (!found) {
+          var empty = document.createElement('div');
+          empty.textContent = 'Ничего не найдено';
+          empty.style.cssText = 'padding:8px 10px;color:#94a3b8;font-style:italic';
+          list.appendChild(empty);
+        }
+      }
+
+      function openList() {
+        if (isOpen) return;
+        isOpen = true;
+        buildList(input.value);
+        var rect = input.getBoundingClientRect();
+        list.style.left = rect.left + 'px';
+        list.style.top = rect.bottom + 'px';
+        list.style.width = Math.max(rect.width, 160) + 'px';
+        document.body.appendChild(list);
+      }
+
+      function closeList() {
+        if (!isOpen) return;
+        isOpen = false;
+        if (list.parentElement) list.remove();
+      }
+
+      input.addEventListener('focus', openList);
+      input.addEventListener('input', function() {
+        if (isOpen) buildList(input.value);
+        else openList();
+      });
+      input.addEventListener('blur', function() { setTimeout(closeList, 150); });
+
+      dropBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Use existing openRefPicker mechanism
+        var selEl = document.createElement('select');
+        selEl.setAttribute('data-ref-entity', args.column.refEntity || '');
+        refOptsList.forEach(function(opt) {
+          var o = document.createElement('option');
+          o.value = opt.id; o.textContent = opt._label;
+          selEl.appendChild(o);
+        });
+        selEl.value = selectedId;
+        // Monkey-patch: picker callback sets our cell value
+        var origPicker = window.openRefPicker;
+        window.openRefPicker(selEl);
+        // Poll for picker result via the select value
+        var pickerInterval = setInterval(function() {
+          var modal = document.getElementById('_ref-picker-modal');
+          if (!modal) {
+            clearInterval(pickerInterval);
+            // Picker closed - check if value changed
+            var newVal = selEl.value;
+            if (newVal !== selectedId) {
+              selectedId = newVal;
+              input.value = label(newVal);
+              args.commitChanges();
+            }
+          }
+        }, 300);
+      });
+
+      input.focus();
+      input.select();
+    };
+
+    this.destroy = function() {
+      closeList();
+      if (wrapper && wrapper.parentElement) wrapper.remove();
+    };
+    this.focus = function() { input && input.focus(); };
+    this.getValue = function() { return selectedId; };
+    this.setValue = function(val) { selectedId = val; input.value = label(val); };
+    this.loadValue = function(item) {
+      var v = item[args.column.field];
+      defaultValue = v;
+      selectedId = (v && typeof v === 'object') ? (v.id || '') : (v || '');
+      input.value = label(selectedId);
+    };
+    this.serializeValue = function() { return selectedId; };
+    this.applyValue = function(item, state) { item[args.column.field] = state; };
+    this.isValueChanged = function() { return selectedId !== defaultValue; };
+    this.validate = function() { return {valid: true, msg: null}; };
+    this.init();
+  }
+
+  // Custom number editor with locale-aware parsing (plan 48, phase 3).
+  function ObNumberEditor(args) {
+    var input, defaultValue;
+    this.init = function() {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'editor-text';
+      input.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:2px 4px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px';
+      args.container.appendChild(input);
+      input.focus();
+      var val = args.item[args.column.field];
+      defaultValue = val;
+      if (val != null && val !== '') input.value = String(val).replace('.', ',');
+      input.select();
+    };
+    this.destroy = function() { input.remove(); };
+    this.focus = function() { input.focus(); };
+    this.getValue = function() { return input.value; };
+    this.setValue = function(val) { input.value = val; };
+    this.loadValue = function(item) {
+      var v = item[args.column.field];
+      defaultValue = v;
+      input.value = (v != null && v !== '') ? String(v).replace('.', ',') : '';
+    };
+    this.serializeValue = function() {
+      var v = input.value.replace(/\s/g, '').replace(',', '.');
+      return v === '' ? '' : v;
+    };
+    this.applyValue = function(item, state) { item[args.column.field] = state; };
+    this.isValueChanged = function() {
+      return input.value !== ((defaultValue != null) ? String(defaultValue).replace('.', ',') : '');
+    };
+    this.validate = function() {
+      var v = input.value.replace(/\s/g, '').replace(',', '.');
+      if (v !== '' && isNaN(Number(v))) return {valid: false, msg: 'Введите число'};
+      return {valid: true, msg: null};
+    };
+    this.init();
+  }
+
+  // Build SlickGrid columns from metadata with editors (plan 48, phase 3).
+  function buildColumns(colsMeta, refOpts) {
+    var columns = [];
+    for (var i = 0; i < colsMeta.length; i++) {
+      var c = colsMeta[i];
+      var col = {id: c.id, name: c.name, field: c.id, width: 120, resizable: true};
+      if (c.type === "number") {
+        col.cssClass = "ob-num";
+        col.editor = ObNumberEditor;
+        col.formatter = function(row, cell, value) {
+          if (value == null || value === "") return "";
+          var n = Number(String(value).replace(',', '.'));
+          if (isNaN(n)) return "<span>" + value + "</span>";
+          return "<span>" + n.toLocaleString("ru-RU", {minimumFractionDigits:0, maximumFractionDigits:2}) + "</span>";
+        };
+      } else if (c.ref) {
+        col.cssClass = "ob-ref";
+        col.editor = (function(refField, refOptsList) {
+          return ObRefEditor.bind(null, refField, refOptsList);
+        })(c.id, refOpts[c.id] || []);
+        col.formatter = (function(refField) {
+          return function(row, cell, value, colDef, dataCtx) {
+            if (!value) return "";
+            if (typeof value === "object" && value._label) return "<span>" + value._label + "</span>";
+            var opts = (refOpts && refOpts[refField]) || [];
+            for (var k = 0; k < opts.length; k++) {
+              if (String(opts[k].id) === String(value)) return "<span>" + opts[k]._label + "</span>";
+            }
+            return "<span>" + String(value) + "</span>";
+          };
+        })(c.id);
+      } else {
+        col.editor = Slick.Editors.Text;
+      }
+      columns.push(col);
+    }
+    return columns;
+  }
+
+  // Serialize ref value
+  function refId(v) {
+    if (v && typeof v === "object" && v.id !== undefined) return v.id;
+    return (v == null) ? "" : String(v);
+  }
+
+  // Serialize all grid data into hidden inputs (for form submit / obFire)
+  window.obGridSync = function() {
+    var grids = window._obGrids || {};
+    for (var tpName in grids) {
+      var g = grids[tpName];
+      var items = g.dataView.getItems();
+      var rows = items.map(function(item) {
+        var row = {};
+        var cols = g.columnsMeta || [];
+        for (var i = 0; i < cols.length; i++) {
+          row[cols[i].id] = refId(item[cols[i].id]);
+        }
+        return row;
+      });
+      var inp = document.getElementById("tp-json-" + tpName);
+      if (inp) inp.value = JSON.stringify(rows);
+    }
+  };
+
+  // Add empty row to grid
+  window.obGridAddRow = function(tpName) {
+    var g = (window._obGrids || {})[tpName];
+    if (!g) return;
+    var nextId = 0;
+    g.dataView.getItems().forEach(function(it) { if (it.id >= nextId) nextId = it.id + 1; });
+    var item = {id: nextId};
+    var cols = g.columnsMeta || [];
+    for (var i = 0; i < cols.length; i++) item[cols[i].id] = "";
+    g.dataView.addItem(item);
+    g.grid.invalidate();
+    g.grid.scrollRowIntoView(nextId);
+    var rowIdx = g.dataView.getRowById(nextId);
+    if (rowIdx !== undefined && g.columns.length > 0) {
+      g.grid.setActiveCell(rowIdx, 0);
+      g.grid.editActiveCell();
+    }
+  };
+
+  // Delete selected row from grid
+  window.obGridDelRow = function(tpName) {
+    var g = (window._obGrids || {})[tpName];
+    if (!g) return;
+    var sel = g.grid.getSelectedRows();
+    if (!sel || !sel.length) return;
+    var items = g.dataView.getItems();
+    var toRemove = sel.map(function(r) { return items[r]; });
+    for (var i = 0; i < toRemove.length; i++) g.dataView.deleteItem(toRemove[i].id);
+    g.grid.invalidate();
+    g.grid.setSelectedRows([]);
+  };
+
+  // SlickGrid-aware applyTableParts
+  var origApplyTP = window.applyTableParts;
+  window.applyTableParts = function(tps) {
+    if (!tps) return;
+    var grids = window._obGrids || {};
+    Object.keys(tps).forEach(function(tpName) {
+      if (grids[tpName]) {
+        var rows = tps[tpName] || [];
+        var items = rows.map(function(r, idx) {
+          var item = {id: idx};
+          var cols = grids[tpName].columnsMeta || [];
+          for (var i = 0; i < cols.length; i++) item[cols[i].id] = r[cols[i].id] || "";
+          return item;
+        });
+        grids[tpName].dataView.setItems(items);
+        grids[tpName].grid.invalidate();
+      }
+    });
+    if (origApplyTP) origApplyTP(tps);
+  };
+
+  // Initialize all grids
+  function initGrids() {
+    var divs = document.querySelectorAll(".ob-grid[data-sg-tp]");
+    for (var d = 0; d < divs.length; d++) {
+      var div = divs[d];
+      var tpName = div.getAttribute("data-sg-tp");
+      if (window._obGrids[tpName]) continue;
+
+      var colsRaw = JSON.parse(div.getAttribute("data-sg-cols") || "[]");
+      var refOpts = JSON.parse(div.getAttribute("data-sg-ref") || "null") || {};
+      var rowsRaw = JSON.parse(div.getAttribute("data-sg-rows") || "[]");
+
+      var columns = buildColumns(colsRaw, refOpts);
+      var items = rowsRaw.map(function(r, idx) {
+        var item = {id: idx};
+        for (var i = 0; i < colsRaw.length; i++) item[colsRaw[i].id] = r[colsRaw[i].id] || "";
+        return item;
+      });
+
+      var dataView = new Slick.Data.DataView();
+      dataView.setItems(items);
+
+      var options = {
+        enableCellNavigation: true,
+        enableColumnReorder: false,
+        editable: true,
+        autoEdit: true,
+        autoHeight: false,
+        rowHeight: 28,
+        headerRowHeight: 30,
+        syncColumnCellResize: true,
+        enableTextSelectionOnCells: true,
+        enableAddRow: false,
+        multiSelect: true
+      };
+
+      var grid = new Slick.Grid(div, dataView, columns, options);
+      dataView.onRowCountChanged.subscribe(function() { grid.updateRowCount(); grid.render(); });
+      dataView.onRowsChanged.subscribe(function(e, args) { grid.invalidateRows(args.rows); grid.render(); });
+
+      // Delete key removes selected rows
+      grid.onKeyDown.subscribe(function(e) {
+        if (e.key === 'Delete' && !grid.getEditorLock().isActive()) {
+          var sel = grid.getSelectedRows();
+          if (sel && sel.length) {
+            var items = dataView.getItems();
+            var toRemove = sel.map(function(r) { return items[r]; });
+            for (var i = 0; i < toRemove.length; i++) dataView.deleteItem(toRemove[i].id);
+            grid.invalidate();
+            grid.setSelectedRows([]);
+            e.stopImmediatePropagation();
+          }
+        }
+      });
+
+      window._obGrids[tpName] = {
+        grid: grid,
+        dataView: dataView,
+        columns: columns,
+        columnsMeta: colsRaw,
+        refOpts: refOpts
+      };
+
+      grid.autosizeColumns();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initGrids);
+  } else {
+    initGrids();
+  }
+})();</script>
+{{end}}
+
 {{template "form-shared-js" .}}
 
 {{/* Авто-вызов ПриОткрытииФормы при загрузке страницы. Без этого

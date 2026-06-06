@@ -32,6 +32,15 @@ var monacoFS embed.FS
 //go:embed echarts
 var echartsFS embed.FS
 
+// SlickGrid (6pac fork, MIT) vendored for editable table parts in managed forms.
+// Only the IIFE browser-global builds are embedded — core, grid, dataview, editors,
+// formatters, interactions. Самохостинг вместо CDN: грид работает офлайн,
+// десктопная база не зависит от интернета. SortableJS не включён (reorder отключён
+// в v1).
+//
+//go:embed slickgrid
+var slickgridFS embed.FS
+
 // MonacoHandler serves the embedded Monaco tree. Mount it under
 // /vendor/monaco/ in every server that renders a Monaco editor.
 func MonacoHandler() http.Handler {
@@ -51,6 +60,21 @@ func MonacoHandler() http.Handler {
 // /vendor/echarts/ in every server that renders charts (base UI, configurator).
 func EChartsHandler() http.Handler {
 	sub, err := fs.Sub(echartsFS, "echarts")
+	if err != nil {
+		return http.NotFoundHandler()
+	}
+	fileSrv := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		fileSrv.ServeHTTP(w, req)
+	})
+}
+
+// SlickGridHandler serves the embedded SlickGrid assets. Mount it under
+// /vendor/slickgrid/ in every server that renders editable table parts
+// (base UI managed forms).
+func SlickGridHandler() http.Handler {
+	sub, err := fs.Sub(slickgridFS, "slickgrid")
 	if err != nil {
 		return http.NotFoundHandler()
 	}
