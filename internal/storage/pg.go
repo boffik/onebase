@@ -78,10 +78,12 @@ func (db *DB) Close() {
 // to every subsequent statement, then executes PRAGMA foreign_keys=OFF.
 // The cleanup restores PRAGMA foreign_keys=ON and the pool size.
 //
-// PostgreSQL: attempts SET session_replication_role='replica' which suppresses
-// FK trigger evaluation. Requires the connected role to have the REPLICATION
-// attribute. On permission error the call succeeds silently (FK constraints
-// remain active but data is presumed to be internally consistent).
+// PostgreSQL: drops all FK constraints via ALTER TABLE (DDL), which reliably
+// affects every connection in the pool. Previously we used
+// SET session_replication_role='replica', but that is a session-level setting
+// that only applies to ONE connection — other pool connections still enforce
+// FK constraints (including ON DELETE CASCADE), causing silent data loss
+// when import reorders tables and intermittent FK violation errors.
 func (db *DB) DisableFKForImport(ctx context.Context) (cleanup func(), err error) {
 	if db.sqlDB != nil {
 		db.sqlDB.SetMaxOpenConns(1)
@@ -94,15 +96,7 @@ func (db *DB) DisableFKForImport(ctx context.Context) (cleanup func(), err error
 			db.sqlDB.SetMaxOpenConns(0)
 		}, nil
 	}
-	// PostgreSQL: try session_replication_role first (needs superuser).
-	_, pgErr := db.pool.Exec(ctx, "SET session_replication_role='replica'")
-	if pgErr == nil {
-		return func() {
-			_, _ = db.pool.Exec(context.Background(), "SET session_replication_role='origin'")
-		}, nil
-	}
-
-	// Fallback for non-superuser: drop all FK constraints, recreate after import.
+	// PostgreSQL: drop all FK constraints (DDL affects all pool connections).
 	type fkInfo struct {
 		table string
 		name  string
