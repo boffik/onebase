@@ -425,6 +425,8 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     b.appendChild(d);
     setTimeout(() => d.remove(), kind === 'err' ? 9000 : 5000);
   }
+  // Доступно другим скриптам (например, грид-IIFE показывает ошибки настройки).
+  window.obFlash = flash;
   function applyValues(values){
     if (!values) return;
     const form = document.getElementById('main-form');
@@ -721,25 +723,30 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
   // колонки считает сумму по всем строкам модели и выводит в footer-ячейку,
   // выровненную по колонке. В первой колонке — подпись «Итого».
   function updateTotals(g) {
-    if (!g || !g.grid.getOptions || !g.grid.getOptions().showFooterRow) return;
-    var items = g.dataView.getItems();
-    var cols = g.columnsMeta || [];
-    for (var i = 0; i < cols.length; i++) {
-      var c = cols[i];
-      var node = g.grid.getFooterRowColumn(c.id);
-      if (!node) continue;
-      if (c.type === "number") {
-        var sum = 0;
-        for (var r = 0; r < items.length; r++) {
-          var n = Number(String(items[r][c.id] == null ? "" : items[r][c.id]).replace(",", "."));
-          if (!isNaN(n)) sum += n;
+    // Полностью defensive: итоги — вторичны и НИКОГДА не должны ломать
+    // перерисовку грида (этот код вызывается из подписчиков onRowCountChanged).
+    try {
+      if (!g || !g.grid || typeof g.grid.getOptions !== "function" || !g.grid.getOptions().showFooterRow) return;
+      if (typeof g.grid.getFooterRowColumn !== "function") return;
+      var items = g.dataView.getItems();
+      var cols = g.columnsMeta || [];
+      for (var i = 0; i < cols.length; i++) {
+        var c = cols[i];
+        var node = g.grid.getFooterRowColumn(c.id);
+        if (!node) continue;
+        if (c.type === "number") {
+          var sum = 0;
+          for (var r = 0; r < items.length; r++) {
+            var n = Number(String(items[r][c.id] == null ? "" : items[r][c.id]).replace(",", "."));
+            if (!isNaN(n)) sum += n;
+          }
+          node.innerHTML = '<span style="display:block;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">' +
+            sum.toLocaleString("ru-RU", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + "</span>";
+        } else {
+          node.innerHTML = (i === 0) ? '<span style="color:#64748b">Итого</span>' : "";
         }
-        node.innerHTML = '<span style="display:block;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">' +
-          sum.toLocaleString("ru-RU", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + "</span>";
-      } else {
-        node.innerHTML = (i === 0) ? '<span style="color:#64748b">Итого</span>' : "";
       }
-    }
+    } catch (e) { if (window.console) console.warn("updateTotals:", e); }
   }
   // _obResizeGrids — пройтись по всем гридам и пересчитать видимые. Вызывается
   // при переключении вкладок managed-формы и при ресайзе окна.
@@ -1022,6 +1029,8 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
   window.obGridAddRow = function(tpName) {
     var g = (window._obGrids || {})[tpName];
     if (!g) return;
+    var _lk = g.grid.getEditorLock && g.grid.getEditorLock();
+    if (_lk && _lk.isActive()) _lk.commitCurrentEdit();
     var nextId = 0, nextOrd = 0;
     g.dataView.getItems().forEach(function(it) {
       if (it.id >= nextId) nextId = it.id + 1;
@@ -1045,6 +1054,8 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
   window.obGridDelRow = function(tpName) {
     var g = (window._obGrids || {})[tpName];
     if (!g) return;
+    var _lk = g.grid.getEditorLock && g.grid.getEditorLock();
+    if (_lk && _lk.isActive()) _lk.commitCurrentEdit();
     var sel = g.grid.getSelectedRows();
     if (!sel || !sel.length) return;
     var items = g.dataView.getItems();
@@ -1132,6 +1143,16 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     };
 
     var grid = new Slick.Grid(div, dataView, columns, options);
+
+    // Регистрируем грид СРАЗУ после создания — ДО подписок ниже. Если что-то в
+    // подписках бросит исключение, грид всё равно в window._obGrids, и кнопки
+    // (добавить/удалить строку, подбор, сериализация) продолжат работать.
+    window._obGrids[tpName] = {
+      grid: grid, dataView: dataView, columns: columns,
+      columnsMeta: colsRaw, refOpts: refOpts, div: div
+    };
+
+   try {
     dataView.onRowCountChanged.subscribe(function() { grid.updateRowCount(); grid.render(); updateTotals(window._obGrids[tpName]); });
     dataView.onRowsChanged.subscribe(function(e, args) { grid.invalidateRows(args.rows); grid.render(); });
 
@@ -1210,14 +1231,12 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       });
     }
 
-    window._obGrids[tpName] = {
-      grid: grid,
-      dataView: dataView,
-      columns: columns,
-      columnsMeta: colsRaw,
-      refOpts: refOpts,
-      div: div
-    };
+   } catch (err) {
+     // Подписки/настройка дали сбой. Грид уже зарегистрирован выше, поэтому
+     // базовые операции работают. Показываем причину, чтобы не гадать вслепую.
+     if (window.console) console.error("SlickGrid setup error [" + tpName + "]:", err);
+     if (window.obFlash) window.obFlash("Грид «" + tpName + "»: " + (err && err.message ? err.message : err), "err");
+   }
 
     // Растягиваем колонки на ширину контейнера, если грид уже виден. Для ТЧ на
     // скрытой вкладке ресайз отложится до её показа (см. хук на .managed-tab-btn).
