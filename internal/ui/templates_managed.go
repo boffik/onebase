@@ -230,14 +230,18 @@ const tplManagedForm = `
 <link rel="stylesheet" href="/vendor/slickgrid/slick.grid.css">
 <link rel="stylesheet" href="/vendor/slickgrid/slick-default-theme.css">
 <style>
-.ob-grid{font-size:13px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
-.ob-grid .slick-header-columns{background:#f8fafc;border-bottom:2px solid #e2e8f0}
-.ob-grid .slick-header-column{font-weight:600;color:#475569;font-size:12px;padding:6px 8px;border-right:1px solid #e2e8f0}
-.ob-grid .slick-row{border-bottom:1px solid #f1f5f9}
-.ob-grid .slick-row:hover .slick-cell{background:#f0f4ff}
-.ob-grid .slick-cell{padding:4px 8px;border-right:1px solid #f1f5f9}
+.ob-grid{font-size:13px;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}
+.ob-grid .slick-header-columns{background:#f1f5f9;border-bottom:2px solid #cbd5e1}
+.ob-grid .slick-header-column{font-weight:600;color:#475569;font-size:12px;padding:6px 8px;border-right:1px solid #cbd5e1}
+.ob-grid .slick-header-column:hover{background:#e2e8f0}
+/* Зебра — на строке; ячейки прозрачны, чтобы фон строки просвечивал. */
+.ob-grid .slick-cell{padding:4px 8px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;background:transparent}
+.ob-grid .slick-row.odd{background:#f6f8fb}
+.ob-grid .slick-row:hover .slick-cell{background:#eef4ff}
 .ob-grid .slick-cell.selected{background:#dbeafe}
-.ob-grid .slick-cell.active{border:2px solid #3b82f6;padding:2px 6px}
+.ob-grid .slick-cell.active{box-shadow:inset 0 0 0 2px #3b82f6}
+.ob-grid .slick-footerrow{background:#f1f5f9;border-top:2px solid #cbd5e1}
+.ob-grid .slick-footerrow-column{padding:4px 8px;border-right:1px solid #e2e8f0;color:#334155}
 .ob-grid .ob-num{text-align:right;font-variant-numeric:tabular-nums}
 .ob-grid .ob-ref{color:#2563eb;cursor:pointer}
 .ob-grid .ob-ref:hover{text-decoration:underline}
@@ -628,6 +632,28 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       flash('Сетевая ошибка: ' + (e && e.message ? e.message : e), 'err');
     }
   };
+
+  // Esc — отмена незаконченного ввода / закрытие формы (как в 1С). Порядок:
+  //   1) открыт модальный диалог (подбор/выбор ссылки) → закрыть его;
+  //   2) активен редактор ячейки грида → отменить правку ячейки;
+  //   3) фокус в поле ввода → снять фокус (отменить ввод), форму не закрываем;
+  //   4) иначе → закрыть форму (эквивалент кнопки «Отмена»).
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape' && e.keyCode !== 27) return;
+    var modal = document.getElementById('_item-picker-modal') || document.getElementById('_ref-picker-modal');
+    if (modal) { modal.remove(); e.preventDefault(); return; }
+    var grids = window._obGrids || {};
+    for (var tp in grids) {
+      var lock = grids[tp].grid && grids[tp].grid.getEditorLock();
+      if (lock && lock.isActive()) { lock.cancelCurrentEdit(); e.preventDefault(); return; }
+    }
+    var ae = document.activeElement;
+    if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName) && !ae.readOnly && ae.type !== 'submit' && ae.type !== 'button') {
+      ae.blur(); e.preventDefault(); return;
+    }
+    var cancel = document.querySelector('a.btn-cancel');
+    if (cancel) { e.preventDefault(); cancel.click(); }
+  });
 })();
 </script>
 
@@ -647,6 +673,49 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
 // Grids are stored in window._obGrids = {tpName: {grid, dataView, columns}}.
 (function(){
   window._obGrids = window._obGrids || {};
+
+  // resizeGrid — пересчитывает геометрию грида и растягивает колонки на всю
+  // ширину контейнера. Критично для ТЧ на вкладках/в свёрнутых группах: при
+  // инициализации в скрытом (display:none) контейнере SlickGrid меряет ширину
+  // 0 и autosizeColumns схлопывает колонки в узкую полоску. Поэтому ресайзим
+  // только видимый грид (offsetParent != null) — и повторяем при показе вкладки.
+  function resizeGrid(g) {
+    if (!g || !g.div || g.div.offsetParent === null) return;
+    g.grid.resizeCanvas();
+    g.grid.autosizeColumns();
+    updateTotals(g); // footer-ячейки пересоздаются при re-render — обновляем суммы
+  }
+
+  // updateTotals — строка итогов (footer row SlickGrid). Для каждой числовой
+  // колонки считает сумму по всем строкам модели и выводит в footer-ячейку,
+  // выровненную по колонке. В первой колонке — подпись «Итого».
+  function updateTotals(g) {
+    if (!g || !g.grid.getOptions || !g.grid.getOptions().showFooterRow) return;
+    var items = g.dataView.getItems();
+    var cols = g.columnsMeta || [];
+    for (var i = 0; i < cols.length; i++) {
+      var c = cols[i];
+      var node = g.grid.getFooterRowColumn(c.id);
+      if (!node) continue;
+      if (c.type === "number") {
+        var sum = 0;
+        for (var r = 0; r < items.length; r++) {
+          var n = Number(String(items[r][c.id] == null ? "" : items[r][c.id]).replace(",", "."));
+          if (!isNaN(n)) sum += n;
+        }
+        node.innerHTML = '<span style="display:block;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">' +
+          sum.toLocaleString("ru-RU", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + "</span>";
+      } else {
+        node.innerHTML = (i === 0) ? '<span style="color:#64748b">Итого</span>' : "";
+      }
+    }
+  }
+  // _obResizeGrids — пройтись по всем гридам и пересчитать видимые. Вызывается
+  // при переключении вкладок managed-формы и при ресайзе окна.
+  window._obResizeGrids = function() {
+    var grids = window._obGrids || {};
+    for (var tp in grids) resizeGrid(grids[tp]);
+  };
 
   // Serialize ref value: extract id from {id,_label} object or return raw value
   function refId(v) {
@@ -784,7 +853,13 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     };
 
     this.destroy = function() {
-      closeList();
+      // ВАЖНО: closeList объявлена внутри init() и здесь недоступна — обращение
+      // к ней бросало ReferenceError, из-за чего SlickGrid не мог разрушить
+      // редактор, commitCurrentEdit падал и активная ячейка «залипала» (нельзя
+      // было перейти на другую). Закрываем выпадающий список напрямую по
+      // editor-scoped переменным list/isOpen.
+      isOpen = false;
+      if (list && list.parentElement) list.remove();
       if (wrapper && wrapper.parentElement) wrapper.remove();
     };
     this.focus = function() { input && input.focus(); };
@@ -848,7 +923,7 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     var columns = [];
     for (var i = 0; i < colsMeta.length; i++) {
       var c = colsMeta[i];
-      var col = {id: c.id, name: c.name, field: c.id, width: 120, resizable: true};
+      var col = {id: c.id, name: c.name, field: c.id, width: 120, resizable: true, sortable: true};
       if (c.type === "number") {
         col.cssClass = "ob-num";
         col.editor = ObNumberEditor;
@@ -893,7 +968,12 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     var grids = window._obGrids || {};
     for (var tpName in grids) {
       var g = grids[tpName];
-      var items = g.dataView.getItems();
+      // Сериализуем в исходном порядке (_ord), а не в порядке текущей
+      // сортировки отображения — чтобы сортировка «для просмотра» не меняла
+      // порядок строк в сохраняемом документе.
+      var items = g.dataView.getItems().slice().sort(function(a, b) {
+        return (a._ord || 0) - (b._ord || 0);
+      });
       var rows = items.map(function(item) {
         var row = {};
         var cols = g.columnsMeta || [];
@@ -911,9 +991,12 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
   window.obGridAddRow = function(tpName) {
     var g = (window._obGrids || {})[tpName];
     if (!g) return;
-    var nextId = 0;
-    g.dataView.getItems().forEach(function(it) { if (it.id >= nextId) nextId = it.id + 1; });
-    var item = {id: nextId};
+    var nextId = 0, nextOrd = 0;
+    g.dataView.getItems().forEach(function(it) {
+      if (it.id >= nextId) nextId = it.id + 1;
+      if ((it._ord || 0) >= nextOrd) nextOrd = (it._ord || 0) + 1;
+    });
+    var item = {id: nextId, _ord: nextOrd};
     var cols = g.columnsMeta || [];
     for (var i = 0; i < cols.length; i++) item[cols[i].id] = "";
     g.dataView.addItem(item);
@@ -954,7 +1037,7 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       var rows = tps[tpName] || [];
       var cols = g.columnsMeta || [];
       var items = rows.map(function(r, idx) {
-        var item = {id: idx};
+        var item = {id: idx, _ord: idx};
         for (var i = 0; i < cols.length; i++) item[cols[i].id] = r[cols[i].id] || "";
         return item;
       });
@@ -963,6 +1046,7 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       if (active && active.row < items.length) {
         g.grid.setActiveCell(active.row, active.cell);
       }
+      updateTotals(g);
     });
     if (origApplyTP) origApplyTP(tps);
   };
@@ -980,8 +1064,12 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     var rowsRaw = JSON.parse(div.getAttribute("data-sg-rows") || "[]");
 
     var columns = buildColumns(colsRaw, refOpts);
+    // _ord — исходный порядок строки. Клиентская сортировка меняет ПОРЯДОК
+    // ОТОБРАЖЕНИЯ (dataView.sort), но при сохранении (obGridSync) строки
+    // сериализуются по _ord — чтобы сортировка «для просмотра» не переставляла
+    // строки документа (у табличной части порядок значим).
     var items = rowsRaw.map(function(r, idx) {
-      var item = {id: idx};
+      var item = {id: idx, _ord: idx};
       for (var i = 0; i < colsRaw.length; i++) item[colsRaw[i].id] = r[colsRaw[i].id] || "";
       return item;
     });
@@ -1000,12 +1088,42 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       syncColumnCellResize: true,
       enableTextSelectionOnCells: true,
       enableAddRow: false,
-      multiSelect: true
+      multiSelect: true,
+      showFooterRow: true,
+      footerRowHeight: 28
     };
 
     var grid = new Slick.Grid(div, dataView, columns, options);
-    dataView.onRowCountChanged.subscribe(function() { grid.updateRowCount(); grid.render(); });
+    dataView.onRowCountChanged.subscribe(function() { grid.updateRowCount(); grid.render(); updateTotals(window._obGrids[tpName]); });
     dataView.onRowsChanged.subscribe(function(e, args) { grid.invalidateRows(args.rows); grid.render(); });
+
+    // Сортировка по клику на заголовок (колонки sortable). Порядок ОТОБРАЖЕНИЯ;
+    // на сохранение не влияет (см. _ord и obGridSync). Числа сортируются как
+    // числа, ссылки — по наименованию (_label), остальное — по строке.
+    grid.onSort.subscribe(function(e, args) {
+      var field = args.sortCol.field;
+      var sign = args.sortAsc ? 1 : -1;
+      var meta = null;
+      for (var i = 0; i < colsRaw.length; i++) { if (colsRaw[i].id === field) { meta = colsRaw[i]; break; } }
+      var isNum = meta && meta.type === "number";
+      var isRef = meta && meta.ref;
+      function keyOf(it) {
+        var v = it[field];
+        if (isNum) { var n = Number(String(v == null ? "" : v).replace(",", ".")); return isNaN(n) ? -Infinity : n; }
+        if (isRef) {
+          var id = (v && typeof v === "object") ? (v.id || "") : (v == null ? "" : v);
+          var opts = refOpts[field] || [];
+          for (var k = 0; k < opts.length; k++) { if (String(opts[k].id) === String(id)) return String(opts[k]._label).toLowerCase(); }
+          return String(id).toLowerCase();
+        }
+        return String(v == null ? "" : v).toLowerCase();
+      }
+      dataView.sort(function(a, b) { var ka = keyOf(a), kb = keyOf(b); return ka > kb ? sign : (ka < kb ? -sign : 0); });
+      grid.invalidate(); grid.render();
+    });
+
+    // Итоги обновляем при любом изменении ячейки (независимо от data-sg-recalc).
+    grid.onCellChange.subscribe(function() { updateTotals(window._obGrids[tpName]); });
 
     // Delete key removes selected rows
     grid.onKeyDown.subscribe(function(e) {
@@ -1043,16 +1161,35 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       dataView: dataView,
       columns: columns,
       columnsMeta: colsRaw,
-      refOpts: refOpts
+      refOpts: refOpts,
+      div: div
     };
 
-    grid.autosizeColumns();
+    // Растягиваем колонки на ширину контейнера, если грид уже виден. Для ТЧ на
+    // скрытой вкладке ресайз отложится до её показа (см. хук на .managed-tab-btn).
+    resizeGrid(window._obGrids[tpName]);
   }
 
   // Initialize all grids
   function initGrids() {
     var divs = document.querySelectorAll(".ob-grid[data-sg-tp]");
     for (var d = 0; d < divs.length; d++) setupGrid(divs[d]);
+  }
+
+  // При переключении вкладки managed-формы её содержимое становится видимым —
+  // пересчитываем гриды (inline-onclick кнопки уже переключил display, наш
+  // делегированный слушатель на document отработает после него в фазе всплытия).
+  if (!window._obTabHook) {
+    window._obTabHook = true;
+    document.addEventListener("click", function(e) {
+      var btn = e.target && e.target.closest ? e.target.closest(".managed-tab-btn") : null;
+      if (btn) setTimeout(window._obResizeGrids, 0);
+    });
+    var _rt = null;
+    window.addEventListener("resize", function() {
+      if (_rt) clearTimeout(_rt);
+      _rt = setTimeout(window._obResizeGrids, 100);
+    });
   }
 
   if (document.readyState === "loading") {

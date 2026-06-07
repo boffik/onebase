@@ -412,11 +412,13 @@ details[open] summary::before{content:"▼ "}
 .filter-actions{padding:0 20px 16px;display:flex;gap:10px}
 .tp-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
 .tp-table th{background:#f8fafc;padding:8px 10px;text-align:left;font-size:12px;color:#475569;font-weight:600;border-bottom:2px solid #e2e8f0;white-space:nowrap}
-.tp-table td{padding:5px 6px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
-.tp-table tbody tr:nth-child(even) td{background:#f8fafc}
-.tp-table tbody tr:hover td{background:#f0f4ff}
-.tp-table input,.tp-table select{padding:5px 8px;font-size:13px;border:1px solid #e2e8f0;border-radius:5px;width:100%;transition:border-color .15s,box-shadow .15s}
-.tp-table input:focus,.tp-table select:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+.tp-table td{padding:5px 6px;border-bottom:1px solid #e2e8f0;border-right:1px solid #eef2f7;vertical-align:middle}
+.tp-table tbody tr:nth-child(even) td{background:#f1f5f9}
+.tp-table tbody tr:hover td{background:#eef4ff}
+/* Инпуты прозрачны, чтобы зебра/выделение строки просвечивали; на фокусе — белый фон. */
+.tp-table input,.tp-table select{padding:5px 8px;font-size:13px;border:1px solid transparent;border-radius:5px;width:100%;background:transparent;transition:border-color .15s,box-shadow .15s,background .15s}
+.tp-table input:hover,.tp-table select:hover{border-color:#e2e8f0}
+.tp-table input:focus,.tp-table select:focus{outline:none;background:#fff;border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
 .tp-table input[type=number]{text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
 .tp-table input[type=number]::-webkit-inner-spin-button,.tp-table input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .tp-table .del-btn{background:none;border:none;color:#94a3b8;cursor:pointer;font-size:15px;padding:0 4px;transition:color .15s}
