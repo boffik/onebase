@@ -15,14 +15,20 @@ import (
 // Историю запусков регл.заданий оставляем.
 // Пользователи, роли и связи импортируются из бэкапа — демо-сайт должен
 // показывать тех же пользователей, что и в исходной конфигурации.
+// Системные таблицы (_users, _roles, _user_roles) импортируются в явном
+// порядке зависимостей, а не в алфавитном — чтобы DELETE FROM _users не
+// уничтожил только что импортированные _user_roles через ON DELETE CASCADE.
 var authTables = map[string]bool{
 	"_sessions":       true,
 	"_scheduled_runs": true,
 }
 
-// DemoReset восстанавливает бизнес-данные из .obz бэкапа, сохраняя таблицы
-// авторизации нетронутыми (_users, _sessions, _roles, _user_roles).
-// Если backupPath пуст — только очищает бизнес-данные без восстановления.
+// DemoReset восстанавливает все данные из .obz бэкапа (бизнес-данные,
+// конфигурацию, пользователей и роли), пропуская сессии и историю
+// регламентных заданий.  Системные таблицы импортируются в порядке
+// зависимостей (_users → _roles → _user_roles), чтобы FK CASCADE
+// не уничтожил только что импортированные связи.
+// Если backupPath пуст — ничего не делает.
 func DemoReset(ctx context.Context, db *storage.DB, backupPath string) (*ImportReport, error) {
 	report := &ImportReport{Tables: make(map[string]int)}
 
@@ -88,7 +94,7 @@ func DemoReset(ctx context.Context, db *storage.DB, backupPath string) (*ImportR
 		}
 	}
 
-	// Импортируем data/ и system/, пропуская таблицы авторизации
+	// Импортируем data/, пропуская таблицы авторизации
 	dataDir := filepath.Join(tmpDir, "data")
 	if _, err := os.Stat(dataDir); err == nil {
 		if err := importDir(ctx, db, dataDir, report, authTables); err != nil {
@@ -96,10 +102,40 @@ func DemoReset(ctx context.Context, db *storage.DB, backupPath string) (*ImportR
 		}
 	}
 
+	// Импортируем system/ в порядке зависимостей: сначала _users, потом _roles,
+	// последним _user_roles.  filepath.WalkDir даёт алфавитный порядок, при
+	// котором _users идёт ПОСЛЕ _user_roles — и DELETE FROM _users через
+	// ON DELETE CASCADE уничтожает только что импортированные связи.
+	// Явный порядок гарантирует, что _user_roles всегда импортируется последним.
 	sysDir := filepath.Join(tmpDir, "system")
 	if _, err := os.Stat(sysDir); err == nil {
-		if err := importDir(ctx, db, sysDir, report, authTables); err != nil {
-			return report, fmt.Errorf("demo reset system: %w", err)
+		sysOrder := []string{
+			"_attachments",
+			"_audit",
+			"_constants",
+			"_numerators",
+			"_users",      // до _user_roles
+			"_roles",      // до _user_roles
+			"_user_roles", // последним — зависит от _users и _roles
+		}
+		for _, tbl := range sysOrder {
+			if authTables[tbl] {
+				continue
+			}
+			fp := filepath.Join(sysDir, tbl+".jsonl")
+			if _, err := os.Stat(fp); err != nil {
+				continue // файла нет — пропускаем
+			}
+			n, err := importTableJSONL(ctx, db, tbl, fp)
+			if err != nil {
+				return report, fmt.Errorf("demo reset system %s: %w", tbl, err)
+			}
+			report.Tables[tbl] = n
+		}
+		// Подбираем оставшиеся системные таблицы, не вошедшие в sysOrder
+		// (например, _scheduled_runs если он не в authTables, или новые таблицы).
+		if err := importDir(ctx, db, sysDir, report, authTables, sysOrder); err != nil {
+			return report, fmt.Errorf("demo reset system rest: %w", err)
 		}
 	}
 

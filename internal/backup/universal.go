@@ -848,7 +848,18 @@ func migrateSchema(ctx context.Context, db *storage.DB, configDest, cfgFileDir s
 }
 
 // importDir walks a directory of .jsonl files and imports each into the DB.
-func importDir(ctx context.Context, db *storage.DB, dir string, report *ImportReport, skip map[string]bool) error {
+func importDir(ctx context.Context, db *storage.DB, dir string, report *ImportReport, skip map[string]bool, extraSkip ...[]string) error {
+	// Build combined skip set from skip + optional extraSkip.
+	allSkip := make(map[string]bool, len(skip))
+	for k, v := range skip {
+		allSkip[k] = v
+	}
+	if len(extraSkip) > 0 {
+		for _, tbl := range extraSkip[0] {
+			allSkip[strings.ToLower(tbl)] = true
+		}
+	}
+
 	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
@@ -860,7 +871,7 @@ func importDir(ctx context.Context, db *storage.DB, dir string, report *ImportRe
 		base := filepath.Base(path)
 		tableName := strings.TrimSuffix(base, ".jsonl")
 
-		if skip[strings.ToLower(tableName)] {
+		if allSkip[strings.ToLower(tableName)] {
 			return nil
 		}
 
