@@ -1089,6 +1089,10 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
       enableTextSelectionOnCells: true,
       enableAddRow: false,
       multiSelect: true,
+      // ВАЖНО: footer-строке нужны ОБЕ опции — createFooterRow создаёт DOM,
+      // showFooterRow показывает его. Только showFooterRow без createFooterRow
+      // роняет рендер (обращение к несуществующему _footerRowScroller[0]).
+      createFooterRow: true,
       showFooterRow: true,
       footerRowHeight: 28
     };
