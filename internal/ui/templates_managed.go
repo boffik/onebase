@@ -1103,9 +1103,14 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
     var tpName = div.getAttribute("data-sg-tp");
     if (window._obGrids[tpName]) return;
 
-    var colsRaw = JSON.parse(div.getAttribute("data-sg-cols") || "[]");
+    // ВАЖНО: jsJSON от nil-слайса даёт литерал "null", а не "[]". Без защиты
+    // от null для пустой табличной части (новый документ) JSON.parse("null")
+    // вернёт null и rowsRaw.map бросит TypeError ДО создания грида — грид не
+    // создавался и не регистрировался, из-за чего add/удаление/подбор тихо не
+    // работали именно в новых документах.
+    var colsRaw = JSON.parse(div.getAttribute("data-sg-cols") || "[]") || [];
     var refOpts = JSON.parse(div.getAttribute("data-sg-ref") || "null") || {};
-    var rowsRaw = JSON.parse(div.getAttribute("data-sg-rows") || "[]");
+    var rowsRaw = JSON.parse(div.getAttribute("data-sg-rows") || "[]") || [];
 
     var columns = buildColumns(colsRaw, refOpts);
     // _ord — исходный порядок строки. Клиентская сортировка меняет ПОРЯДОК
