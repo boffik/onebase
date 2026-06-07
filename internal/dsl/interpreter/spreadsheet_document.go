@@ -618,7 +618,8 @@ body{font-family:'Times New Roman',Times,serif;font-size:10pt;color:#000;padding
 .doc-toolbar .btn-print:hover{background:#398}
 .doc-content{padding:20px}
 table{border-collapse:collapse;width:auto}
-td,th{border:1px solid #000;padding:2px 4px;empty-cells:show}
+td,th{border:1px solid #cbd5e1;padding:3px 6px;empty-cells:show;font-size:13px}
+tr:nth-child(even) td{background:#f8fafc}
 @media print{.doc-toolbar{display:none}.doc-content{padding:0}}
 </style>
 </head>

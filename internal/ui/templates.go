@@ -410,11 +410,18 @@ details[open] summary::before{content:"▼ "}
 .filter-body label{font-size:12px;color:#64748b;margin-bottom:3px}
 .filter-body input,.filter-body select{padding:7px 10px;font-size:13px}
 .filter-actions{padding:0 20px 16px;display:flex;gap:10px}
-.tp-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
-.tp-table th{background:#f1f5f9;padding:7px 10px;text-align:left;font-size:12px;color:#64748b}
-.tp-table td{padding:4px 6px;border-bottom:1px solid #f1f5f9}
-.tp-table input,.tp-table select{padding:5px 8px;font-size:13px;border:1px solid #e2e8f0;border-radius:5px;width:100%}
-.tp-table .del-btn{background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:0 4px}
+.tp-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+.tp-table th{background:#f8fafc;padding:8px 10px;text-align:left;font-size:12px;color:#475569;font-weight:600;border-bottom:2px solid #e2e8f0;white-space:nowrap}
+.tp-table td{padding:5px 6px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.tp-table tr:nth-child(even) td{background:#fafbfc}
+.tp-table tr:hover td{background:#f0f4ff}
+.tp-table input,.tp-table select{padding:5px 8px;font-size:13px;border:1px solid #e2e8f0;border-radius:5px;width:100%;transition:border-color .15s,box-shadow .15s}
+.tp-table input:focus,.tp-table select:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+.tp-table input[type=number]{text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+.tp-table input[type=number]::-webkit-inner-spin-button,.tp-table input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.tp-table .del-btn{background:none;border:none;color:#94a3b8;cursor:pointer;font-size:15px;padding:0 4px;transition:color .15s}
+.tp-table .del-btn:hover{color:#ef4444}
+.tp-table .tp-footer td{font-weight:600;border-top:2px solid #e2e8f0;background:#f8fafc;font-variant-numeric:tabular-nums}
 .subsys-bar{background:#0f172a;display:flex;padding:0 12px;gap:2px;flex-shrink:0}
 .subsys-bar a{display:inline-block;padding:7px 18px;color:#94a3b8;text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid transparent;transition:color .15s}
 .subsys-bar a:hover{color:#e2e8f0;background:rgba(255,255,255,.04)}
@@ -1171,6 +1178,9 @@ const tplForm = `
     </tr>
   {{end}}
   </tbody>
+  <tfoot id="tp-foot-{{$tpName}}" class="tp-footer" style="display:none"><tr>
+    {{range .Fields}}{{if eq (str .Type) "number"}}<td class="tp-total" data-tp-total="{{$tpName}}}.{{.Name}}" style="text-align:right;font-variant-numeric:tabular-nums">0</td>{{else}}<td></td>{{end}}{{end}}<td></td>
+  </tr></tfoot>
 </table>
 <button type="button" class="btn btn-sm" style="background:#e2e8f0;color:#475569;margin-bottom:8px"
   onclick="addTpRow('{{$tpName}}', [{{range .Fields}}'{{.Name}}',{{end}}], [{{range .Fields}}{{if eq (str .Type) "number"}}'{{.Name}}',{{end}}{{end}}], document.getElementById('tp-body-{{$tpName}}').rows.length)">
@@ -1330,6 +1340,7 @@ function addTpRow(tpName, fields, numFields, idx) {
 }
 
 // If a row has exactly 3 numeric fields (qty, price, sum), auto-calculate the last.
+// Then recalculate totals in tfoot (Phase 0 CSS-refresh).
 function recalcTpRow(inp) {
   var tr = inp.closest('tr');
   var nums = tr.querySelectorAll('[data-tp-num]');
@@ -1338,7 +1349,48 @@ function recalcTpRow(inp) {
     var b = parseFloat(nums[1].value) || 0;
     nums[2].value = (a * b).toFixed(2);
   }
+  // Update totals in tfoot
+  recalcTpTotals(inp);
 }
+function recalcTpTotals(inp) {
+  var tbody = inp.closest('tbody');
+  if (!tbody) return;
+  var table = tbody.closest('table');
+  if (!table) return;
+  var tfoot = table.querySelector('tfoot');
+  if (!tfoot) return;
+  var totals = {};
+  var numFields = [];
+  tbody.querySelectorAll('[data-tp-num]').forEach(function(el) {
+    var fn = el.getAttribute('data-tp-num');
+    if (totals[fn] === undefined) { totals[fn] = 0; numFields.push(fn); }
+    totals[fn] += parseFloat(el.value) || 0;
+  });
+  var hasData = false;
+  numFields.forEach(function(fn) {
+    var td = tfoot.querySelector('[data-tp-total]');
+    tfoot.querySelectorAll('[data-tp-total]').forEach(function(cell) {
+      var key = cell.getAttribute('data-tp-total');
+      if (key && key.split('.').pop() === fn) {
+        cell.textContent = totals[fn].toLocaleString('ru-RU', {minimumFractionDigits:0, maximumFractionDigits:2});
+      }
+    });
+    if (totals[fn] !== 0) hasData = true;
+  });
+  tfoot.style.display = hasData ? '' : 'none';
+}
+// Init totals on page load (Phase 0)
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.tp-table tfoot').forEach(function(tfoot) {
+    var table = tfoot.closest('table');
+    if (!table) return;
+    var tbody = table.querySelector('tbody');
+    if (!tbody || !tbody.rows.length) return;
+    // Trigger recalc by finding first numeric input
+    var firstNum = tbody.querySelector('[data-tp-num]');
+    if (firstNum) recalcTpTotals(firstNum);
+  });
+});
 // openRefPicker — единая точка для всех действий со ссылочным полем по
 // аналогии с 1С: модалка показывает список, кнопку «+ Создать» (если поле
 // помечено data-ref-allow-create) и иконку-лупу у каждой строки для

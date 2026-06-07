@@ -196,6 +196,10 @@ const tplManagedForm = `
       </tr>
     {{end}}
     </tbody>
+    <tfoot id="tp-foot-{{$tpName}}" class="tp-footer" style="display:none"><tr>
+      {{if $tpCmds}}<td></td>{{end}}
+      {{range $f := $tpMeta.Fields}}{{if eq (str $f.Type) "number"}}<td class="tp-total" data-tp-total="{{$tpName}}.{{$f.Name}}" style="text-align:right;font-variant-numeric:tabular-nums">0</td>{{else}}<td></td>{{end}}{{end}}<td></td>
+    </tr></tfoot>
   </table>
   <button type="button" class="btn btn-sm" style="background:#e2e8f0;color:#475569;margin:0 0 12px"
     onclick="addTpRow('{{$tpName}}', [{{range $tpMeta.Fields}}'{{.Name}}',{{end}}], [{{range $tpMeta.Fields}}{{if eq (str .Type) "number"}}'{{.Name}}',{{end}}{{end}}], document.getElementById('tp-body-{{$tpName}}').rows.length)">
