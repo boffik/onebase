@@ -102,9 +102,14 @@ func (db *DB) DisableFKForImport(ctx context.Context) (cleanup func(), err error
 		name  string
 		def   string
 	}
+	// Use pg_class.relname (always unquoted) instead of regclass::text
+	// which may return quoted identifiers like "возвратотпокупателя",
+	// causing double-quoting and silent ALTER TABLE failures.
 	rows, err := db.pool.Query(ctx,
-		`SELECT conname, conrelid::regclass::text, pg_get_constraintdef(oid)
-		 FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace`)
+		`SELECT c.conname, t.relname, pg_get_constraintdef(c.oid)
+		 FROM pg_constraint c
+		 JOIN pg_class t ON c.conrelid = t.oid
+		 WHERE c.contype='f' AND c.connamespace='public'::regnamespace`)
 	if err != nil {
 		return func() {}, nil
 	}
