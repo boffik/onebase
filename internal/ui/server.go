@@ -244,6 +244,10 @@ func (s *Server) Mount(r chi.Router) {
 	// Messages panel
 	r.Get("/ui/messages", s.messagesList)
 	r.Post("/ui/messages/clear", s.messagesClear)
+
+	// AI assistant chat (план 48, F3)
+	r.Get("/ui/ai/enabled", s.aiEnabled)
+	r.Post("/ui/ai/chat", s.aiChat)
 }
 
 // MountDebug registers debug API routes gated by an internal shared token
