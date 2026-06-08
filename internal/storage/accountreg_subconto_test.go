@@ -181,6 +181,30 @@ func TestAccountBalances_BySubconto(t *testing.T) {
 	}
 }
 
+// id движения должен заполняться: на нём держится HAVING в .Обороты()
+// (SUM(r.id IS NOT NULL) > 0). Без id колонка была NULL и обороты были пусты.
+func TestAccountReg_MovementHasID(t *testing.T) {
+	ar := subcontoReg()
+	db, ctx := newAccountTestDB(t, ar)
+	period := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+
+	rows := []map[string]any{
+		{"счётдт": "41", "счёткт": "60", "сумма": float64(1000), "субконто2": "Товар-X"},
+		{"счётдт": "41", "счёткт": "60", "сумма": float64(500), "субконто2": "Товар-Y"},
+	}
+	if err := db.WriteAccountMovements(ctx, ar.Name, "Doc", uuid.New(), rows, ar, &period); err != nil {
+		t.Fatalf("WriteAccountMovements: %v", err)
+	}
+
+	var nullIDs int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM акк_бухучёт WHERE id IS NULL").Scan(&nullIDs); err != nil {
+		t.Fatal(err)
+	}
+	if nullIDs != 0 {
+		t.Errorf("есть движения с NULL id: %d (ломает .Обороты())", nullIDs)
+	}
+}
+
 // Присваивание несуществующему субконто — ошибка проведения, не тихий no-op.
 func TestAccountReg_UnknownSubconto_Errors(t *testing.T) {
 	ar := subcontoReg() // объявлено два субконто

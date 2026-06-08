@@ -724,6 +724,34 @@ func (tr *translator) translateAccountFilter(ar *metadata.AccountRegister, token
 	return res
 }
 
+// accountMomentCondition — аналог momentTimeCondition для регистра бухгалтерии:
+// таблица движений присоединяется под алиасом r, а колонка регистратора —
+// «регистратор» (не recorder). Строит «строго до момента» с исключением самого
+// документа при перепроведении.
+func (tr *translator) accountMomentCondition(mt momentTimeValue) string {
+	d := dialectOrDefault(tr.opts.Dialect)
+	period, docID := mt.PointInTime()
+	tr.args = append(tr.args, period)
+	pph := d.Placeholder(len(tr.args))
+	if docID == "" {
+		return "r.period <= " + pph
+	}
+	id, err := uuid.Parse(docID)
+	if err != nil {
+		return "r.period <= " + pph
+	}
+	tr.args = append(tr.args, period)
+	pph2 := d.Placeholder(len(tr.args))
+	if d.Name() == "sqlite" {
+		tr.args = append(tr.args, id.String())
+	} else {
+		tr.args = append(tr.args, id)
+	}
+	docPH := d.Placeholder(len(tr.args))
+	return fmt.Sprintf("(r.period < %s OR (r.period = %s AND r.регистратор != %s))",
+		pph, pph2, docPH)
+}
+
 // accountSubcontoSelect returns SELECT and GROUP BY fragments that roll account
 // balances/turnovers out by every declared subconto (aliased субконтоN).
 func accountSubcontoSelect(ar *metadata.AccountRegister) (selCols []string, groupCols []string) {
@@ -783,7 +811,10 @@ func (tr *translator) genAccountBalances(ar *metadata.AccountRegister, args [][]
 
 	var conds []string
 	if len(args) > 0 && len(args[0]) > 0 {
-		if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
+		// Первый аргумент — момент времени (&МВ = МоментВремени документа) или дата.
+		if mt := tr.firstArgMoment(args[0]); mt != nil {
+			conds = append(conds, tr.accountMomentCondition(mt))
+		} else if s := tr.translateFilterTokens(args[0]); s != "" && s != "NULL" {
 			conds = append(conds, "r.period <= "+s)
 		}
 	}

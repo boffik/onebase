@@ -192,12 +192,14 @@ func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string
 			extraArgs = append(extraArgs, normalizeRegArg(d, val, metadata.IsReference(s.Type)))
 		}
 
-		colList := "period, регистратор, регистратор_тип, счётдт, счёткт"
-		phs := []string{d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5)}
-		args := []any{*p, idArg(d, docID), docType, dtCode, ktCode}
+		// id — собственный PK движения. Без него колонка оставалась NULL, из-за
+		// чего .Обороты() (HAVING по r.id IS NOT NULL) всегда возвращала пусто.
+		colList := "id, period, регистратор, регистратор_тип, счётдт, счёткт"
+		phs := []string{d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6)}
+		args := []any{idArg(d, uuid.New()), *p, idArg(d, docID), docType, dtCode, ktCode}
 		for i, ec := range extraCols {
 			colList += ", " + ec
-			phs = append(phs, d.Placeholder(6+i))
+			phs = append(phs, d.Placeholder(7+i))
 			args = append(args, extraArgs[i])
 		}
 

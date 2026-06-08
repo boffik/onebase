@@ -71,6 +71,18 @@ func runMigrate(cmd *cobra.Command, _ []string) error {
 	if err := db.MigrateConstants(ctx, proj.Constants); err != nil {
 		return err
 	}
+	// План счетов и регистры бухгалтерии: таблица _accounts + синк счетов из YAML
+	// и таблицы акк_<имя>. Без этого проводки и запросы остатков падают на
+	// «no such table» (как run.go).
+	if err := db.EnsureAccountsTable(ctx); err != nil {
+		return err
+	}
+	if err := db.SyncAccounts(ctx, proj.ChartsOfAccounts); err != nil {
+		return err
+	}
+	if err := db.MigrateAccountRegisters(ctx, proj.AccountRegisters); err != nil {
+		return err
+	}
 	if err := db.EnsureAttachmentTable(ctx); err != nil {
 		return err
 	}

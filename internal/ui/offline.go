@@ -31,6 +31,10 @@ func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage
 	})
 	reg.LoadModules(proj.Modules)
 	reg.LoadProcessors(proj.Processors)
+	// Регистры бухгалтерии нужны, чтобы запросы РегистрБухгалтерии.X.Остатки()/
+	// .Обороты() и проведение документов с проводками работали в offline-режиме
+	// (procrun), как и на полном сервере (run.go).
+	reg.LoadAccountRegisters(proj.AccountRegisters, proj.ChartsOfAccounts)
 
 	interp := interpreter.New()
 	interp.LookupProc = reg.GetModuleProc
