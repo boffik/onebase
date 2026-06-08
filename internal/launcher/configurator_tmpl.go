@@ -3435,6 +3435,48 @@ document.querySelectorAll('details.cfg-tree').forEach(function(d){
   d.addEventListener('toggle',u);u();
 });
 </script>
+<!-- ИИ-помощник разработчика (план 48, F5) -->
+<button id="cfgai-btn" title="ИИ-помощник" style="display:none;position:fixed;right:18px;bottom:18px;z-index:9000;width:48px;height:48px;border-radius:50%;background:#7c3aed;color:#fff;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 14px rgba(124,58,237,.4)">🤖</button>
+<div id="cfgai-panel" style="display:none;position:fixed;right:18px;bottom:18px;z-index:9001;width:420px;max-width:calc(100vw - 24px);height:560px;max-height:calc(100vh - 40px);background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);flex-direction:column;overflow:hidden;font-family:system-ui,sans-serif">
+  <div style="background:#7c3aed;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px">🤖 ИИ-помощник разработчика<span style="flex:1"></span><button type="button" id="cfgai-close" style="background:none;border:none;color:#fff;cursor:pointer;font-size:18px">×</button></div>
+  <textarea id="cfgai-prompt" placeholder="Опишите, что сгенерировать или объяснить. Напр.: обработчик ПриОткрытии, который ставит текущую дату в поле Дата" style="margin:10px;height:80px;resize:vertical;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;font-family:inherit"></textarea>
+  <label style="margin:0 10px;font-size:11px;color:#666"><input type="checkbox" id="cfgai-usecode"> добавить текущий код из активного редактора как контекст</label>
+  <div style="margin:8px 10px;display:flex;gap:8px;align-items:center"><button id="cfgai-send" type="button" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:6px 16px;cursor:pointer;font-size:13px">Сгенерировать</button><button id="cfgai-copy" type="button" style="background:#e2e8f0;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;display:none">Копировать</button><span id="cfgai-msg" style="font-size:11px"></span></div>
+  <pre id="cfgai-out" style="flex:1;overflow:auto;margin:0 10px 10px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word"></pre>
+</div>
+<script>
+(function(){
+  if(window.__cfgAiInit)return;window.__cfgAiInit=true;
+  var base='{{.Base.ID}}';
+  fetch('/bases/'+base+'/configurator/ai-enabled').then(function(r){return r.json();}).then(function(d){if(d&&d.enabled)init();}).catch(function(){});
+  function init(){
+    var btn=document.getElementById('cfgai-btn'),panel=document.getElementById('cfgai-panel');
+    var prompt=document.getElementById('cfgai-prompt'),send=document.getElementById('cfgai-send'),out=document.getElementById('cfgai-out');
+    var msg=document.getElementById('cfgai-msg'),copy=document.getElementById('cfgai-copy'),useCode=document.getElementById('cfgai-usecode');
+    btn.style.display='';
+    btn.addEventListener('click',function(){panel.style.display='flex';btn.style.display='none';prompt.focus();});
+    document.getElementById('cfgai-close').addEventListener('click',function(){panel.style.display='none';btn.style.display='';});
+    function activeCode(){
+      try{ if(window.monaco&&monaco.editor){var es=monaco.editor.getEditors?monaco.editor.getEditors():[];for(var i=0;i<es.length;i++){var v=es[i].getValue();if(v&&v.trim())return v;}} }catch(e){}
+      var ta=document.querySelector('textarea:focus');if(ta&&ta.value)return ta.value;return '';
+    }
+    send.addEventListener('click',function(){
+      var p=prompt.value.trim();if(!p){msg.textContent='Введите запрос';msg.style.color='#c00';return;}
+      msg.textContent='Генерация...';msg.style.color='#666';out.textContent='';copy.style.display='none';send.disabled=true;
+      var body={prompt:p};if(useCode.checked){var c=activeCode();if(c)body.code=c;}
+      fetch('/bases/'+base+'/configurator/ai-assist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d&&d.ok){out.textContent=d.text;copy.style.display='';msg.textContent='Модель: '+(d.model||'');msg.style.color='#16a34a';}
+          else{out.textContent=(d&&d.error)||'Ошибка';msg.textContent='Ошибка';msg.style.color='#c00';}
+        })
+        .catch(function(){msg.textContent='Ошибка сети';msg.style.color='#c00';})
+        .finally(function(){send.disabled=false;});
+    });
+    copy.addEventListener('click',function(){try{navigator.clipboard.writeText(out.textContent);msg.textContent='Скопировано';msg.style.color='#16a34a';}catch(e){}});
+  }
+})();
+</script>
 </body></html>
 {{end}}`
 
