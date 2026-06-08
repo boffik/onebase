@@ -584,7 +584,11 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			"EnumOptions":   s.loadEnumOptions(entity),
 			"TPRefOptions":  tpRefOpts,
 			"TPRefMeta":     tpRefMeta(entity),
-			"TablePartRows": tpRows,
+			// tpRows мог быть обогащён до *interpreter.Ref хуком проведения
+			// (EnrichTPRows мутирует слайсы on place). jsJSON сериализовал бы
+			// Ref как объект {UUID,Name,…} → грид показал бы «[object Object]».
+			// Нормализуем обратно к UUID-строкам, как в обработчике form-event.
+			"TablePartRows": serializeTablePartRowsForEntity(tpRows, entity),
 			"FolderOptions": fOpts,
 			"IsPopup":       r.FormValue("_popup") == "1",
 		})
@@ -863,7 +867,9 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 			"EnumOptions":   s.loadEnumOptions(entity),
 			"TPRefOptions":  tpRefOpts2,
 			"TPRefMeta":     tpRefMeta(entity),
-			"TablePartRows": tpRows,
+			// См. submit: проведение могло обогатить tpRows до *Ref —
+			// сериализуем к UUID-строкам, иначе грид покажет «[object Object]».
+			"TablePartRows": serializeTablePartRowsForEntity(tpRows, entity),
 		})
 		return
 	}

@@ -918,7 +918,10 @@ function addVtRow(vtName, fields) {
 
   // Serialize ref value: extract id from {id,_label} object or return raw value
   function refId(v) {
-    if (v && typeof v === "object" && v.id !== undefined) return v.id;
+    if (v && typeof v === "object") {
+      if (v.id !== undefined) return v.id;
+      if (v.UUID !== undefined) return v.UUID; // сериализованный *interpreter.Ref
+    }
     return (v == null) ? "" : String(v);
   }
 
@@ -1140,7 +1143,15 @@ function addVtRow(vtName, fields) {
         col.formatter = (function(refField) {
           return function(row, cell, value, colDef, dataCtx) {
             if (!value) return "";
-            if (typeof value === "object" && value._label) return "<span>" + value._label + "</span>";
+            // Ссылка может прийти объектом: {id,_label} (клиентский формат) или
+            // {UUID,Name} (сериализованный *interpreter.Ref, если просочился мимо
+            // serializeValue). Извлекаем подпись/идентификатор — иначе String(obj)
+            // дал бы «[object Object]».
+            if (typeof value === "object") {
+              if (value._label) return "<span>" + value._label + "</span>";
+              if (value.Name)   return "<span>" + value.Name + "</span>";
+              value = (value.id !== undefined) ? value.id : (value.UUID !== undefined ? value.UUID : "");
+            }
             var opts = (refOpts && refOpts[refField]) || [];
             for (var k = 0; k < opts.length; k++) {
               if (String(opts[k].id) === String(value)) return "<span>" + opts[k]._label + "</span>";
@@ -1158,7 +1169,10 @@ function addVtRow(vtName, fields) {
 
   // Serialize ref value
   function refId(v) {
-    if (v && typeof v === "object" && v.id !== undefined) return v.id;
+    if (v && typeof v === "object") {
+      if (v.id !== undefined) return v.id;
+      if (v.UUID !== undefined) return v.UUID; // сериализованный *interpreter.Ref
+    }
     return (v == null) ? "" : String(v);
   }
 
@@ -1478,6 +1492,41 @@ document.addEventListener('DOMContentLoaded', function(){
 .managed-tab-btn:hover{color:#1a4a80;background:#f5f8ff}
 .managed-tab-btn.active{color:#1a4a80;border-bottom-color:#1a4a80;font-weight:600}
 </style>
+
+{{/* Запоминание активной вкладки. После POST-сабмита (например, ошибка
+     проведения) форма перерисовывается с нуля и сбрасывается на первую
+     вкладку «Основное» — пользователь терял контекст и не понимал, что
+     ошибка относится к ТЧ на другой вкладке. Сохраняем индекс активной
+     вкладки в sessionStorage по pathname+имя группы вкладок и
+     восстанавливаем при загрузке. */}}
+<script>
+(function(){
+  function tabKey(tabs){ return "obtab:" + location.pathname + ":" + (tabs.getAttribute("data-tabs") || ""); }
+  // Сохраняем выбор при клике (наш слушатель — после inline-onclick кнопки).
+  document.addEventListener("click", function(e){
+    var btn = e.target && e.target.closest ? e.target.closest(".managed-tab-btn") : null;
+    if (!btn) return;
+    var tabs = btn.closest(".managed-tabs");
+    if (!tabs) return;
+    try { sessionStorage.setItem(tabKey(tabs), btn.getAttribute("data-tab-idx") || "0"); } catch(_){}
+  });
+  // Восстанавливаем при загрузке. Кликаем по кнопке — это переключит и display,
+  // и (через _obTabHook) пересчитает гриды на показанной вкладке.
+  function restore(){
+    var groups = document.querySelectorAll(".managed-tabs");
+    for (var i = 0; i < groups.length; i++) {
+      var tabs = groups[i];
+      var idx;
+      try { idx = sessionStorage.getItem(tabKey(tabs)); } catch(_){ idx = null; }
+      if (idx == null || idx === "0") continue;
+      var btn = tabs.querySelector('.managed-tab-btn[data-tab-idx="' + idx + '"]');
+      if (btn) btn.click();
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", restore);
+  else restore();
+})();
+</script>
 
 </main>
 </body></html>
