@@ -1022,13 +1022,11 @@ const tplForm = `
   {{end}}
   {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">{{t $.Lang "Записать"}}</button>{{end}}
   {{if .Entity.Posting}}
+    {{if $.CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">{{t $.Lang "Провести"}}</button>{{end}}
     {{if $.CanPost}}<button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">{{t $.Lang "Провести и закрыть"}}</button>{{end}}
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
-        {{if $.CanPost}}<button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">{{t $.Lang "Перепровести"}}</button>{{end}}
         {{if $.CanUnpost}}<button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">{{t $.Lang "Отменить проведение"}}</button>{{end}}
-      {{else}}
-        {{if $.CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">{{t $.Lang "Провести"}}</button>{{end}}
       {{end}}
     {{end}}
   {{end}}

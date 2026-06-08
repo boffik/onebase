@@ -329,12 +329,11 @@ const tplManagedForm = `
   {{end}}
   {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">Записать</button>{{end}}
   {{if .Entity.Posting}}
+    {{if .CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>{{end}}
     {{if .CanPost}}<button class="btn btn-post" type="submit" name="_action" value="post_and_close" form="main-form">Провести и закрыть</button>{{end}}
     {{if not .IsNew}}
       {{if eq (index .Values "posted") "true"}}
-        {{if .CanPost}}<button class="btn btn-primary btn-sm" type="submit" name="_action" value="post" form="main-form">Перепровести</button>{{end}}
-      {{else}}
-        {{if .CanPost}}<button class="btn btn-primary" type="submit" name="_action" value="post" form="main-form">Провести</button>{{end}}
+        {{if $.CanUnpost}}<button class="btn btn-sm" style="background:#e2e8f0;color:#374151" form="form-unpost" type="submit">Отменить проведение</button>{{end}}
       {{end}}
     {{end}}
   {{end}}
@@ -380,6 +379,11 @@ const tplManagedForm = `
   {{end}}{{/* end if not .IsProcessor */}}
 </div>
 {{end}}{{/* end if not .IsPopup */}}
+{{if and (not .IsNew) .Entity.Posting}}
+{{if eq (index .Values "posted") "true"}}
+<form id="form-unpost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/unpost"></form>
+{{end}}
+{{end}}
 
 {{/* Движения регистров: свёрнутые «таблеточки» по каждому регистру с
      количеством строк. Симметрично page-form, чтобы пользователь видел
