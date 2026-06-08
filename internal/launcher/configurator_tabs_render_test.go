@@ -48,3 +48,16 @@ func TestConfigurator_EntityTabs(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurator_ReportTabs(t *testing.T) {
+	html := renderTabTree(t)
+	for _, sub := range []string{
+		`id="ot-params-Продажи"`,
+		`id="ot-query-Продажи"`,
+		`id="ot-chart-Продажи"`,
+	} {
+		if !strings.Contains(html, sub) {
+			t.Errorf("в HTML нет ожидаемого фрагмента отчёта: %q", sub)
+		}
+	}
+}

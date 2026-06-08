@@ -3947,49 +3947,62 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Название отчёта"}}">
       </div>
-      <div class="section-hd" style="margin-top:12px">
-        Параметры
-        <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('params-{{$rn}}')">+</button>
-      </div>
-      <table class="fields-tbl" id="params-{{$rn}}">
-        <tr><th>{{t $.Lang "Имя"}} (&amp;{{t $.Lang "Параметр"}})</th><th>{{t $.Lang "Тип"}}</th><th>{{t $.Lang "Заголовок"}}</th><th></th></tr>
-        {{range $i, $p := .Params}}
-        <tr>
-          <td><input type="text" name="param.{{$i}}.name" value="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
-          <td>
-            <select name="param.{{$i}}.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
-              <option value="string" {{if eq $p.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
-              <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
-              <option value="number" {{if eq $p.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
-              <option value="select" {{if eq $p.Type "select"}}selected{{end}}>{{t $.Lang "список"}}</option>
-              {{range $.AllEntityNames}}<option value="reference:{{.}}" {{if eq $p.Type (print "reference:" .)}}selected{{end}}>ссылка: {{.}}</option>
-              {{end}}
-            </select>
-          </td>
-          <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
-          <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();repReindex('params-{{$rn}}')">✕</button></td>
-        </tr>
-        {{end}}
-      </table>
-      <div class="section-hd" style="margin-top:12px">{{t $.Lang "Запрос"}}</div>
-      <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
-        <pre class="os-code clickable-code" id="pre-rep-{{.Name}}"
-             onclick="startEdit('rep-{{.Name}}')">{{if .Query}}{{.Query}}{{else}}ВЫБРАТЬ&#10;  *&#10;ИЗ РегистрНакопления.ИмяРегистра{{end}}</pre>
-        <textarea class="os-edit" id="ta-rep-{{.Name}}" name="query"
-                  style="display:none"
-                  onblur="endEdit('rep-{{.Name}}')">{{.Query}}</textarea>
-      </div>
-      <div class="fg" style="margin-top:12px">
-        <label>{{t $.Lang "Процедура диаграммы"}} (chart_proc)</label>
-        <input type="text" name="chart_proc" value="{{.ChartProc}}" placeholder="СформироватьДиаграмму">
-      </div>
-      <div class="section-hd" style="margin-top:8px">{{t $.Lang "Код диаграммы"}} (.rep.os) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
-      <div class="code-wrap">
-        <pre class="os-code clickable-code" id="pre-repchart-{{.Name}}"
-             onclick="startEdit('repchart-{{.Name}}')">{{.ChartSource}}</pre>
-        <textarea class="os-edit" id="ta-repchart-{{.Name}}" name="chart_source"
-                  style="display:none"
-                  onblur="endEdit('repchart-{{.Name}}')">{{.ChartSource}}</textarea>
+      <div class="obj-editor">
+        <div class="obj-tabs">
+          <div class="obj-tab active" onclick="cfgObjTab(this,'ot-params-{{$rn}}')">{{t $.Lang "Параметры"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-query-{{$rn}}')">{{t $.Lang "Запрос"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
+        </div>
+        <div class="obj-pane active" id="ot-params-{{$rn}}">
+          <div class="section-hd" style="margin-top:12px">
+            Параметры
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('params-{{$rn}}')">+</button>
+          </div>
+          <table class="fields-tbl" id="params-{{$rn}}">
+            <tr><th>{{t $.Lang "Имя"}} (&amp;{{t $.Lang "Параметр"}})</th><th>{{t $.Lang "Тип"}}</th><th>{{t $.Lang "Заголовок"}}</th><th></th></tr>
+            {{range $i, $p := .Params}}
+            <tr>
+              <td><input type="text" name="param.{{$i}}.name" value="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td>
+                <select name="param.{{$i}}.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+                  <option value="string" {{if eq $p.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+                  <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+                  <option value="number" {{if eq $p.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+                  <option value="select" {{if eq $p.Type "select"}}selected{{end}}>{{t $.Lang "список"}}</option>
+                  {{range $.AllEntityNames}}<option value="reference:{{.}}" {{if eq $p.Type (print "reference:" .)}}selected{{end}}>ссылка: {{.}}</option>
+                  {{end}}
+                </select>
+              </td>
+              <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();repReindex('params-{{$rn}}')">✕</button></td>
+            </tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="obj-pane" id="ot-query-{{$rn}}">
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Запрос"}}</div>
+          <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
+            <pre class="os-code clickable-code" id="pre-rep-{{.Name}}"
+                 onclick="startEdit('rep-{{.Name}}')">{{if .Query}}{{.Query}}{{else}}ВЫБРАТЬ&#10;  *&#10;ИЗ РегистрНакопления.ИмяРегистра{{end}}</pre>
+            <textarea class="os-edit" id="ta-rep-{{.Name}}" name="query"
+                      style="display:none"
+                      onblur="endEdit('rep-{{.Name}}')">{{.Query}}</textarea>
+          </div>
+        </div>
+        <div class="obj-pane" id="ot-chart-{{$rn}}">
+          <div class="fg" style="margin-top:12px">
+            <label>{{t $.Lang "Процедура диаграммы"}} (chart_proc)</label>
+            <input type="text" name="chart_proc" value="{{.ChartProc}}" placeholder="СформироватьДиаграмму">
+          </div>
+          <div class="section-hd" style="margin-top:8px">{{t $.Lang "Код диаграммы"}} (.rep.os) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
+          <div class="code-wrap">
+            <pre class="os-code clickable-code" id="pre-repchart-{{.Name}}"
+                 onclick="startEdit('repchart-{{.Name}}')">{{.ChartSource}}</pre>
+            <textarea class="os-edit" id="ta-repchart-{{.Name}}" name="chart_source"
+                      style="display:none"
+                      onblur="endEdit('repchart-{{.Name}}')">{{.ChartSource}}</textarea>
+          </div>
+        </div>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
