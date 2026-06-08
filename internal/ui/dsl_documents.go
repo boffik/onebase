@@ -486,6 +486,13 @@ type tpProxy struct {
 func (t *tpProxy) Get(_ string) any    { return nil }
 func (t *tpProxy) Set(_ string, _ any) {}
 
+// IterateRows реализует контракт цикла «Для Каждого Стр Из Док.ТЧ» — отдаёт
+// загруженные строки ТЧ. Без этого ТЧ документа, полученного из БД
+// (Ссылка.ПолучитьОбъект / НайтиПоНомеру), нельзя было прочитать в DSL.
+func (t *tpProxy) IterateRows() []map[string]any {
+	return t.w.obj.TablePartRows[t.tpName]
+}
+
 func (t *tpProxy) CallMethod(method string, args []any) any {
 	switch strings.ToLower(method) {
 	case "добавить", "add":
@@ -494,6 +501,8 @@ func (t *tpProxy) CallMethod(method string, args []any) any {
 		return &interpreter.MapThis{M: row}
 	case "очистить", "clear":
 		t.w.obj.TablePartRows[t.tpName] = nil
+	case "количество", "count":
+		return float64(len(t.w.obj.TablePartRows[t.tpName]))
 	}
 	return nil
 }
