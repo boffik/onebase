@@ -1148,12 +1148,18 @@ function addVtRow(vtName, fields) {
       if (c.type === "number") {
         col.cssClass = "ob-num";
         col.editor = ObNumberEditor;
-        col.formatter = function(row, cell, value) {
+        // Подсветка значений: отрицательные — красным (недостачи, возвраты,
+        // отклонения); колонка «дефицит» при положительном значении — оранжевым.
+        var warnPos = /дефицит/i.test(c.id || "");
+        col.formatter = (function(warn){ return function(row, cell, value) {
           if (value == null || value === "") return "";
           var n = Number(String(value).replace(',', '.'));
           if (isNaN(n)) return "<span>" + value + "</span>";
-          return "<span>" + n.toLocaleString("ru-RU", {minimumFractionDigits:0, maximumFractionDigits:2}) + "</span>";
-        };
+          var s = n.toLocaleString("ru-RU", {minimumFractionDigits:0, maximumFractionDigits:2});
+          if (n < 0) return "<span style='color:#dc2626;font-weight:600'>" + s + "</span>";
+          if (warn && n > 0) return "<span style='color:#ea580c;font-weight:600'>" + s + "</span>";
+          return "<span>" + s + "</span>";
+        }; })(warnPos);
       } else if (c.ref) {
         col.cssClass = "ob-ref";
         col.editor = (function(refField, refOptsList) {
