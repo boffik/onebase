@@ -3954,11 +3954,11 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
       <div class="obj-editor">
         <div class="obj-tabs">
-          <div class="obj-tab active" onclick="cfgObjTab(this,'ot-params-{{$rn}}')">{{t $.Lang "Параметры"}}</div>
-          <div class="obj-tab" onclick="cfgObjTab(this,'ot-query-{{$rn}}')">{{t $.Lang "Запрос"}}</div>
-          <div class="obj-tab" onclick="cfgObjTab(this,'ot-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
+          <div class="obj-tab active" onclick="cfgObjTab(this,'ot-rep-params-{{$rn}}')">{{t $.Lang "Параметры"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-query-{{$rn}}')">{{t $.Lang "Запрос"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
         </div>
-        <div class="obj-pane active" id="ot-params-{{$rn}}">
+        <div class="obj-pane active" id="ot-rep-params-{{$rn}}">
           <div class="section-hd" style="margin-top:12px">
             Параметры
             <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('params-{{$rn}}')">+</button>
@@ -3984,7 +3984,7 @@ const cfgTabTree = `{{define "tab-tree"}}
             {{end}}
           </table>
         </div>
-        <div class="obj-pane" id="ot-query-{{$rn}}">
+        <div class="obj-pane" id="ot-rep-query-{{$rn}}">
           <div class="section-hd" style="margin-top:12px">{{t $.Lang "Запрос"}}</div>
           <div class="code-wrap" title="{{t $.Lang "Кликните для редактирования"}}">
             <pre class="os-code clickable-code" id="pre-rep-{{.Name}}"
@@ -3994,7 +3994,7 @@ const cfgTabTree = `{{define "tab-tree"}}
                       onblur="endEdit('rep-{{.Name}}')">{{.Query}}</textarea>
           </div>
         </div>
-        <div class="obj-pane" id="ot-chart-{{$rn}}">
+        <div class="obj-pane" id="ot-rep-chart-{{$rn}}">
           <div class="fg" style="margin-top:12px">
             <label>{{t $.Lang "Процедура диаграммы"}} (chart_proc)</label>
             <input type="text" name="chart_proc" value="{{.ChartProc}}" placeholder="СформироватьДиаграмму">
@@ -4060,11 +4060,11 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
       <div class="obj-editor">
         <div class="obj-tabs">
-          <div class="obj-tab active" onclick="cfgObjTab(this,'ot-params-{{$pn}}')">{{t $.Lang "Параметры"}}</div>
-          <div class="obj-tab" onclick="cfgObjTab(this,'ot-code-{{$pn}}')">{{t $.Lang "Код"}}</div>
-          <div class="obj-tab" onclick="cfgObjTab(this,'ot-form-{{$pn}}')">{{t $.Lang "Форма"}}</div>
+          <div class="obj-tab active" onclick="cfgObjTab(this,'ot-proc-params-{{$pn}}')">{{t $.Lang "Параметры"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-proc-code-{{$pn}}')">{{t $.Lang "Код"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-proc-form-{{$pn}}')">{{t $.Lang "Форма"}}</div>
         </div>
-        <div class="obj-pane active" id="ot-params-{{$pn}}">
+        <div class="obj-pane active" id="ot-proc-params-{{$pn}}">
           <div class="section-hd" style="margin-top:12px">
             Параметры
             <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('pparams-{{$pn}}')">+</button>
@@ -4087,7 +4087,7 @@ const cfgTabTree = `{{define "tab-tree"}}
             {{end}}
           </table>
         </div>
-        <div class="obj-pane" id="ot-code-{{$pn}}">
+        <div class="obj-pane" id="ot-proc-code-{{$pn}}">
           <details open><summary class="section-hd" style="cursor:pointer;margin-top:12px">{{t $.Lang "Исходный код"}} ({{t $.Lang "Процедура Выполнить()"}}) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></summary>
           <div class="code-wrap">
             <pre class="os-code" id="pre-proc-{{$pn}}" onclick="startEdit('proc-{{$pn}}')">{{if .Source}}{{.Source}}{{else}}Процедура Выполнить()&#10;    Сообщить("Привет!")&#10;КонецПроцедуры{{end}}</pre>
@@ -4097,7 +4097,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           </div>
           </details>
         </div>
-        <div class="obj-pane" id="ot-form-{{$pn}}">
+        <div class="obj-pane" id="ot-proc-form-{{$pn}}">
           {{$procForms := filterFormsByEntity $.ManagedForms .Name}}
           <div style="background:#f8fafc;border:1px dashed #c8d4f0;border-radius:6px;padding:12px 14px;font-size:12px;color:#475569;line-height:1.5">
             {{if $procForms}}
