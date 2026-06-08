@@ -427,6 +427,7 @@ func (w *docWriter) write() error {
 // та же логика, что в postDocument (UI-проведение).
 func (w *docWriter) post() error {
 	ctx := w.ctx()
+	w.ensureSelfRef()
 	mc := runtime.NewMovementsCollector(w.entity.Name, w.obj.ID)
 	setPeriodFromFields(mc, w.entity, w.obj.Fields)
 	if errMsg, _ := w.s.runOnPostCtx(ctx, w.obj, mc); errMsg != "" {
@@ -436,6 +437,18 @@ func (w *docWriter) post() error {
 		return err
 	}
 	return w.s.store.SetPosted(ctx, w.entity.Name, w.obj.ID, true)
+}
+
+// ensureSelfRef устанавливает псевдо-реквизит «Ссылка» самого документа, чтобы
+// this.Ссылка в OnPost/OnWrite указывал на сам документ (нужно для записи
+// DocumentRef на себя в регистр сведений: Дв.Спецификация = this.Ссылка).
+func (w *docWriter) ensureSelfRef() {
+	if w.obj.Fields == nil {
+		w.obj.Fields = map[string]any{}
+	}
+	selfRef := &interpreter.Ref{UUID: w.obj.ID.String(), Name: w.displayName(), Type: w.entity.Name}
+	w.obj.Fields["ссылка"] = selfRef
+	w.obj.Fields["reference"] = selfRef
 }
 
 // ref строит ссылку на записанный документ с привязкой к менеджеру,

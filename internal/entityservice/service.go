@@ -125,6 +125,16 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 		TablePartRows: req.TablePartRows,
 	}
 
+	// Псевдо-реквизит «Ссылка» самого объекта (аналог 1С). Без него this.Ссылка
+	// в OnWrite/OnPost не указывал на сам документ — из-за чего запись ссылки на
+	// себя в регистр сведений (Дв.Спецификация = this.Ссылка) давала NULL.
+	if obj.Fields == nil {
+		obj.Fields = map[string]any{}
+	}
+	selfRef := &interpreter.Ref{UUID: req.ID.String(), Type: req.Entity.Name}
+	obj.Fields["ссылка"] = selfRef
+	obj.Fields["reference"] = selfRef
+
 	// Pre-hook enrichment: даём caller'у заменить UUID-строки на *Ref и т.п.
 	if s.PrepareHook != nil {
 		s.PrepareHook(ctx, req.Entity, obj)
