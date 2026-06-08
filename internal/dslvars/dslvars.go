@@ -15,6 +15,7 @@ package dslvars
 import (
 	"context"
 
+	"github.com/ivantit66/onebase/internal/aiassist"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -64,6 +65,9 @@ func (c Common) Build() map[string]any {
 		vars[k] = v
 	}
 	for k, v := range interpreter.NewFileFunctions() {
+		vars[k] = v
+	}
+	for k, v := range interpreter.NewLLMFunctions(aiassist.New(c.Ctx, c.Store, nil)) {
 		vars[k] = v
 	}
 	return vars

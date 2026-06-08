@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/ivantit66/onebase/internal/llm"
 )
 
 // DefaultListPageSize — сколько строк показывать на странице списков по
@@ -166,6 +168,44 @@ func (db *DB) SaveNavCollapsible(ctx context.Context, on bool) error {
 		d.Placeholder(1), d.Placeholder(2))
 	if _, err := db.Exec(ctx, q, "ui.collapsible_nav", v); err != nil {
 		return fmt.Errorf("settings: save ui.collapsible_nav: %w", err)
+	}
+	return nil
+}
+
+// llmConfigKey — ключ _settings, под которым хранится весь LLM-конфиг (один JSON).
+const llmConfigKey = "llm.config"
+
+// GetLLMConfig читает конфиг ИИ-помощника из _settings. Отсутствие ключа/таблицы
+// трактуется как пустой (выключенный) конфиг — это не ошибка. Ошибкой считается
+// только повреждённый JSON.
+func (db *DB) GetLLMConfig(ctx context.Context) (llm.Config, error) {
+	d := db.dialect
+	var v string
+	err := db.QueryRow(ctx,
+		`SELECT value FROM _settings WHERE key = `+d.Placeholder(1),
+		llmConfigKey).Scan(&v)
+	if err != nil {
+		return llm.Config{}, nil
+	}
+	return llm.ParseConfig(v)
+}
+
+// SaveLLMConfig сохраняет конфиг ИИ-помощника в _settings одним JSON-значением.
+func (db *DB) SaveLLMConfig(ctx context.Context, cfg llm.Config) error {
+	if err := db.EnsureSettingsSchema(ctx); err != nil {
+		return err
+	}
+	raw, err := cfg.JSON()
+	if err != nil {
+		return err
+	}
+	d := db.dialect
+	q := fmt.Sprintf(
+		`INSERT INTO _settings (key, value) VALUES (%s, %s)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		d.Placeholder(1), d.Placeholder(2))
+	if _, err := db.Exec(ctx, q, llmConfigKey, raw); err != nil {
+		return fmt.Errorf("settings: save %s: %w", llmConfigKey, err)
 	}
 	return nil
 }

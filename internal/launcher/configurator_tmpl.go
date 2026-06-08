@@ -434,6 +434,7 @@ window.MonacoEnvironment = { getWorkerUrl: function () {
       <a href="#" onclick="cfgAdmin('sessions');return false">{{t $.Lang "Активные пользователи"}}</a>
       <a href="#" onclick="cfgAdmin('audit');return false">{{t $.Lang "Журнал регистрации"}}</a>
       <a href="#" onclick="cfgAdmin('settings');return false">{{t $.Lang "Параметры базы"}}</a>
+      <a href="#" onclick="cfgAdmin('ai');return false">{{t $.Lang "ИИ-помощник"}}</a>
       <a href="/bases/{{.Base.ID}}/configurator/logout" style="color:#c00;border-top:1px solid #e5e7eb;margin-top:2px">🚪 {{t $.Lang "Выйти"}}</a>
     </div>
   </div>
