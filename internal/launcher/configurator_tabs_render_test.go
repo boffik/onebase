@@ -61,3 +61,16 @@ func TestConfigurator_ReportTabs(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurator_ProcessorTabs(t *testing.T) {
+	html := renderTabTree(t)
+	for _, sub := range []string{
+		`id="ot-params-Загрузка"`,
+		`id="ot-code-Загрузка"`,
+		`id="ot-form-Загрузка"`,
+	} {
+		if !strings.Contains(html, sub) {
+			t.Errorf("в HTML нет ожидаемого фрагмента обработки: %q", sub)
+		}
+	}
+}

@@ -4053,84 +4053,95 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Название обработки"}}">
       </div>
-      <div class="section-hd" style="margin-top:12px">
-        Параметры
-        <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('pparams-{{$pn}}')">+</button>
+      <div class="obj-editor">
+        <div class="obj-tabs">
+          <div class="obj-tab active" onclick="cfgObjTab(this,'ot-params-{{$pn}}')">{{t $.Lang "Параметры"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-code-{{$pn}}')">{{t $.Lang "Код"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-form-{{$pn}}')">{{t $.Lang "Форма"}}</div>
+        </div>
+        <div class="obj-pane active" id="ot-params-{{$pn}}">
+          <div class="section-hd" style="margin-top:12px">
+            Параметры
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="repAddParam('pparams-{{$pn}}')">+</button>
+          </div>
+          <table class="fields-tbl" id="pparams-{{$pn}}">
+            <tr><th>{{t $.Lang "Имя"}} (&amp;{{t $.Lang "Параметры"}}.*)</th><th>{{t $.Lang "Тип"}}</th><th>{{t $.Lang "Заголовок"}}</th><th></th></tr>
+            {{range $i, $p := .Params}}
+            <tr>
+              <td><input type="text" name="param.{{$i}}.name" value="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td>
+                <select name="param.{{$i}}.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+                  <option value="string" {{if eq $p.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
+                  <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
+                  <option value="number" {{if eq $p.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
+                </select>
+              </td>
+              <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();repReindex('pparams-{{$pn}}')">✕</button></td>
+            </tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="obj-pane" id="ot-code-{{$pn}}">
+          <details open><summary class="section-hd" style="cursor:pointer;margin-top:12px">{{t $.Lang "Исходный код"}} ({{t $.Lang "Процедура Выполнить()"}}) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></summary>
+          <div class="code-wrap">
+            <pre class="os-code" id="pre-proc-{{$pn}}" onclick="startEdit('proc-{{$pn}}')">{{if .Source}}{{.Source}}{{else}}Процедура Выполнить()&#10;    Сообщить("Привет!")&#10;КонецПроцедуры{{end}}</pre>
+            <textarea class="os-edit" id="ta-proc-{{$pn}}" name="source"
+                      style="display:none"
+                      onblur="endEdit('proc-{{$pn}}')">{{.Source}}</textarea>
+          </div>
+          </details>
+        </div>
+        <div class="obj-pane" id="ot-form-{{$pn}}">
+          {{$procForms := filterFormsByEntity $.ManagedForms .Name}}
+          <div style="background:#f8fafc;border:1px dashed #c8d4f0;border-radius:6px;padding:12px 14px;font-size:12px;color:#475569;line-height:1.5">
+            {{if $procForms}}
+            <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px">
+              <thead><tr style="background:#fff;border-bottom:1px solid #e2e8f0">
+                <th style="text-align:left;padding:4px 8px">{{t $.Lang "Имя"}}</th>
+                <th style="text-align:left;padding:4px 8px">{{t $.Lang "Тип"}}</th>
+                <th style="text-align:left;padding:4px 8px">{{t $.Lang "Модуль"}}</th>
+                <th></th>
+              </tr></thead>
+              <tbody>
+              {{range $procForms}}
+              <tr style="border-bottom:1px solid #eef0f5">
+                <td style="padding:6px 8px">◇ {{formLabel .Name}}</td>
+                <td style="padding:6px 8px">{{if .Kind}}{{.Kind}}{{else}}—{{end}}</td>
+                <td style="padding:6px 8px">{{if .HasOS}}{{t $.Lang "есть"}}{{else}}—{{end}}</td>
+                <td style="text-align:right;padding:6px 8px">
+                  <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}"
+                     style="display:inline-block;padding:3px 10px;background:#1a4a80;color:#fff;text-decoration:none;border-radius:4px;font-size:11px">
+                    {{t $.Lang "Редактировать"}}
+                  </a>
+                </td>
+              </tr>
+              {{end}}
+              </tbody>
+            </table>
+            {{else}}
+            <p style="margin:0 0 10px">{{t $.Lang "У обработки"}} <b>{{.Name}}</b> {{t $.Lang "нет управляемых форм."}}</p>
+            {{end}}
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Name}}&name=ФормаОбъекта"
+                 style="display:inline-block;padding:5px 12px;background:#16a34a;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">
+                + {{t $.Lang "Форма объекта"}}
+              </a>
+              <a href="/bases/{{$.Base.ID}}/configurator/forms"
+                 style="display:inline-block;padding:5px 12px;background:#e2e8f0;color:#334155;text-decoration:none;border-radius:4px;font-size:12px">
+                {{t $.Lang "Все формы"}} / {{t $.Lang "Импорт из 1С"}}
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="module-save-row">
+          <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
+          <button type="button" class="btn-check" onclick="runCheck('dsl','proc-{{$pn}}','{{$pn}}')">{{t $.Lang "Проверить"}}</button>
+          <span class="check-result" id="check-proc-{{$pn}}"></span>
+          {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
+        </div>
       </div>
-      <table class="fields-tbl" id="pparams-{{$pn}}">
-        <tr><th>{{t $.Lang "Имя"}} (&amp;{{t $.Lang "Параметры"}}.*)</th><th>{{t $.Lang "Тип"}}</th><th>{{t $.Lang "Заголовок"}}</th><th></th></tr>
-        {{range $i, $p := .Params}}
-        <tr>
-          <td><input type="text" name="param.{{$i}}.name" value="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
-          <td>
-            <select name="param.{{$i}}.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
-              <option value="string" {{if eq $p.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
-              <option value="date"   {{if eq $p.Type "date"}}selected{{end}}>{{t $.Lang "дата"}}</option>
-              <option value="number" {{if eq $p.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
-            </select>
-          </td>
-          <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
-          <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();repReindex('pparams-{{$pn}}')">✕</button></td>
-        </tr>
-        {{end}}
-      </table>
-      <details open><summary class="section-hd" style="cursor:pointer;margin-top:12px">{{t $.Lang "Исходный код"}} ({{t $.Lang "Процедура Выполнить()"}}) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></summary>
-      <div class="code-wrap">
-        <pre class="os-code" id="pre-proc-{{$pn}}" onclick="startEdit('proc-{{$pn}}')">{{if .Source}}{{.Source}}{{else}}Процедура Выполнить()&#10;    Сообщить("Привет!")&#10;КонецПроцедуры{{end}}</pre>
-        <textarea class="os-edit" id="ta-proc-{{$pn}}" name="source"
-                  style="display:none"
-                  onblur="endEdit('proc-{{$pn}}')">{{.Source}}</textarea>
-      </div>
-      <div class="module-save-row">
-        <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
-        <button type="button" class="btn-check" onclick="runCheck('dsl','proc-{{$pn}}','{{$pn}}')">{{t $.Lang "Проверить"}}</button>
-        <span class="check-result" id="check-proc-{{$pn}}"></span>
-        {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
-      </div>
-      </details>
     </form>
-    {{/* Управляемые формы обработки */}}
-		{{$procForms := filterFormsByEntity $.ManagedForms .Name}}
-    <div class="section-hd" style="margin-top:18px">â {{t $.Lang "Управляемая форма"}}</div>
-    <div style="background:#f8fafc;border:1px dashed #c8d4f0;border-radius:6px;padding:12px 14px;font-size:12px;color:#475569;line-height:1.5">
-      {{if $procForms}}
-      <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px">
-        <thead><tr style="background:#fff;border-bottom:1px solid #e2e8f0">
-          <th style="text-align:left;padding:4px 8px">{{t $.Lang "Имя"}}</th>
-          <th style="text-align:left;padding:4px 8px">{{t $.Lang "Тип"}}</th>
-          <th style="text-align:left;padding:4px 8px">{{t $.Lang "Модуль"}}</th>
-          <th></th>
-        </tr></thead>
-        <tbody>
-		{{range $procForms}}
-        <tr style="border-bottom:1px solid #eef0f5">
-          <td style="padding:6px 8px">â {{formLabel .Name}}</td>
-          <td style="padding:6px 8px">{{if .Kind}}{{.Kind}}{{else}}â{{end}}</td>
-          <td style="padding:6px 8px">{{if .HasOS}}{{t $.Lang "есть"}}{{else}}â{{end}}</td>
-          <td style="text-align:right;padding:6px 8px">
-            <a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}"
-               style="display:inline-block;padding:3px 10px;background:#1a4a80;color:#fff;text-decoration:none;border-radius:4px;font-size:11px">
-              {{t $.Lang "Редактировать"}}
-            </a>
-          </td>
-        </tr>
-        {{end}}
-        </tbody>
-      </table>
-      {{else}}
-      <p style="margin:0 0 10px">{{t $.Lang "У обработки"}} <b>{{.Name}}</b> {{t $.Lang "нет управляемых форм."}}</p>
-      {{end}}
-      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-		<a href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Name}}&name=ФормаОбъекта"
-           style="display:inline-block;padding:5px 12px;background:#16a34a;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">
-          + {{t $.Lang "Форма объекта"}}
-        </a>
-        <a href="/bases/{{$.Base.ID}}/configurator/forms"
-           style="display:inline-block;padding:5px 12px;background:#e2e8f0;color:#334155;text-decoration:none;border-radius:4px;font-size:12px">
-          {{t $.Lang "Все формы"}} / {{t $.Lang "Импорт из 1С"}}
-        </a>
-      </div>
-    </div>
   </div>
   {{end}}
 
