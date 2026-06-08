@@ -12,9 +12,12 @@ import (
 // к данным базы (это F4, tool-use): он отвечает на общие вопросы и рассуждает по
 // тексту, который пользователь приводит сам.
 const aiChatSystemPrompt = "Ты — встроенный ИИ-помощник учётной системы OneBase. " +
-	"Отвечай по-русски, кратко и по делу. Если для точного ответа нужны данные из " +
-	"базы, которых нет в переписке, честно скажи об этом и подскажи, какой отчёт или " +
-	"обработку посмотреть."
+	"Отвечай по-русски, кратко и по делу. " +
+	"Если тебе доступны инструменты запроса данных — пользуйся ими, чтобы отвечать на " +
+	"вопросы по фактическим данным: сначала вызови «описание_данных», чтобы узнать " +
+	"объекты и поля, затем «выполнить_запрос». Числа бери только из результатов " +
+	"инструментов, не выдумывай. Если инструментов нет, а для ответа нужны данные из " +
+	"базы — честно скажи об этом и подскажи, какой отчёт или обработку посмотреть."
 
 // aiEnabled сообщает клиенту, показывать ли кнопку чата (помощник настроен).
 func (s *Server) aiEnabled(w http.ResponseWriter, r *http.Request) {
@@ -59,10 +62,11 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	runner := llm.New(cfg, nil)
-	resp, err := runner.Run(r.Context(), "чат", llm.ChatRequest{
-		System:   aiChatSystemPrompt,
-		Messages: msgs,
-	})
+	chatReq := llm.ChatRequest{System: aiChatSystemPrompt, Messages: msgs}
+	// Tool-use (F4): администратору доступны инструменты чтения данных, чтобы ИИ
+	// сам выполнял запросы. Остальным — обычный ответ без доступа к данным.
+	tools, exec := s.aiTools(r)
+	resp, err := runner.RunWithTools(r.Context(), "чат", chatReq, tools, exec)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error()})
 		return
