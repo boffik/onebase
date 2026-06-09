@@ -78,6 +78,8 @@
 | 30 | [30-i18n-localization.md](30-i18n-localization.md) | Локализация интерфейса (i18n) | 10–14 дней | 🟡 Фазы 1–3 и 4a/4b/4d реализованы; 4c (импорт из 1С) — нет |
 | 31 | [31-configurator-multilang-editor.md](31-configurator-multilang-editor.md) | Редактирование переводов синонимов в конфигураторе (4e) | 1–1.5 дня | ⬜ Не начато |
 | 39 | [39-subsystem-home-pages.md](39-subsystem-home-pages.md) | Виджеты главной страницы по подсистемам | ~0.5 дня | ⬜ Не начато |
+| 45 | [45-mobile-pwa.md](45-mobile-pwa.md) | Мобильный доступ: адаптивная вёрстка + PWA | 3–4 дня | 🟡 Реализовано + правки по ревью (PWA публичны, авто-версия кэша SW, a11y); визуальная проверка на устройстве — приёмка |
+| 46 | [46-pwa-store-wrapper.md](46-pwa-store-wrapper.md) | Публикация PWA в App Store / Google Play (TWA/Capacitor) | 1–4 дня | ⬜ Не начато (опционально, поверх 45) |
 
 ### Направление Е — Корректность учёта
 

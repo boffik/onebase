@@ -50,7 +50,10 @@ func MonacoHandler() http.Handler {
 	}
 	fileSrv := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Версионируется в URL (vendor/monaco) — кэшируем надолго.
+		// URL вендора НЕ версионируются, но содержимое привязано к версии
+		// onebase: между релизами байты те же, поэтому кэшируем надолго. Сброс
+		// при апгрейде обеспечивает service worker (имя кэша = ревизия сборки),
+		// а не ревалидация по URL.
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		fileSrv.ServeHTTP(w, req)
 	})

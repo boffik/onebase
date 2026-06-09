@@ -353,6 +353,12 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
 <html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1e293b">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="onebase">
 <title>{{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -463,6 +469,29 @@ body{padding-bottom:32px}
 #ob-msg-list .it:last-child{border-bottom:none}
 #ob-msg-list .it .t{color:#94a3b8;flex-shrink:0;font-size:11px;padding-top:1px}
 #ob-msg-list .empty{padding:10px 14px;color:#94a3b8;font-style:italic}
+/* ===== Мобильная адаптация (этап 45). Правила в @media применяются только на
+   узких экранах — десктопная вёрстка выше остаётся неизменной. ===== */
+.nav-toggle{display:none}
+@media (max-width:820px){
+  .nav-toggle{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:#cbd5e1;font-size:20px;cursor:pointer;padding:4px 12px 4px 0;line-height:1}
+  .nav-toggle:hover{color:#fff}
+  .app-body{display:block;overflow:visible}
+  aside{position:fixed;left:0;top:0;bottom:0;width:78vw;max-width:300px;z-index:401;transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 16px rgba(0,0,0,.3)}
+  body.nav-open aside{transform:translateX(0)}
+  body.nav-open::before{content:"";position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400}
+  main{padding:14px;overflow-y:visible}
+  h2{font-size:19px;margin-bottom:14px}
+  .card{padding:16px;max-width:none}
+  .row-top{flex-wrap:wrap;gap:8px;align-items:stretch;max-width:none}
+  aside a{padding:10px 14px}
+  .btn{padding:10px 18px}
+  .filter-body{grid-template-columns:1fr}
+  /* широкие таблицы-гриды скроллятся по горизонтали внутри своей области, а не «едет» вся страница */
+  main table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+  /* …но верстальные key/value-таблицы (О программе, карточка задания, вывод
+     обработки) остаются обычными: текст переносится, ширина не схлопывается. */
+  main table.tbl-plain{display:table;white-space:normal;overflow:visible}
+}
 </style>
 <script>
 (function(){
@@ -502,6 +531,7 @@ body{padding-bottom:32px}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
+<script>if('serviceWorker'in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 </head><body>
 {{end}}
 `
@@ -509,6 +539,7 @@ body{padding-bottom:32px}
 const tplNav = `
 {{define "nav"}}
 <header class="topbar">
+  <button class="nav-toggle" type="button" aria-label="{{t $.Lang "Меню"}}" aria-controls="ob-nav" aria-expanded="false" onclick="obNavToggle()">&#9776;</button>
   <a href="/ui/" class="topbar-title" style="text-decoration:none;color:inherit" title="{{t $.Lang "Главная"}}">{{if .Cfg.Logo}}<img src="/ui/logo" alt="" style="height:22px;max-width:90px;vertical-align:middle;margin-right:6px;border-radius:2px">{{end}}⚡ {{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</a>
   <div class="sys-menu">
     <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; {{t $.Lang "Система"}} &#9660;</button>
@@ -545,7 +576,7 @@ const tplNav = `
 </nav>
 {{end}}
 <div class="app-body">
-<aside>
+<aside id="ob-nav">
   {{if not .Subsystems}}<a href="/ui/" style="display:block;padding:12px 14px 8px;color:#7dd3fc;font-weight:700;font-size:15px;text-decoration:none">{{t $.Lang "Главная"}}</a>{{end}}
   {{if .CollapsibleNav}}
   {{range .Nav}}
@@ -562,6 +593,32 @@ const tplNav = `
   {{end}}{{end}}
   {{end}}
 </aside>
+<script>
+(function(){
+  if(window.__obNavInit)return;window.__obNavInit=true; // ob-nav drawer
+  // Управление мобильным drawer. Состояние — класс body.nav-open; синхронно
+  // обновляем aria-expanded кнопки ☰ (для скринридеров). На десктопе меню видно
+  // всегда, обработчики безвредны (nav-open там не выставляется).
+  function setNav(open){
+    document.body.classList.toggle('nav-open',open);
+    var btn=document.querySelector('.nav-toggle');
+    if(btn)btn.setAttribute('aria-expanded',open?'true':'false');
+  }
+  window.obNavToggle=function(){setNav(!document.body.classList.contains('nav-open'));};
+  // Тап по затемнению (вне меню и вне кнопки ☰) закрывает drawer.
+  document.addEventListener('click',function(e){
+    if(!document.body.classList.contains('nav-open'))return;
+    if(e.target.closest&&e.target.closest('.nav-toggle'))return;
+    var as=document.getElementById('ob-nav');
+    if(as&&as.contains(e.target))return;
+    setNav(false);
+  },true);
+  // Esc закрывает drawer (клавиатурная доступность).
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&document.body.classList.contains('nav-open'))setNav(false);
+  });
+})();
+</script>
 {{if .CollapsibleNav}}
 <script>
 (function(){
@@ -2040,7 +2097,7 @@ const tplProcessor = `
 {{if .RunError}}
   <div class="error">{{.RunError}}</div>
 {{else if .Messages}}
-  <table><tbody>
+  <table class="tbl-plain"><tbody>
   {{range .Messages}}<tr><td style="font-family:monospace;font-size:13px;padding:6px 12px;border-bottom:1px solid #f1f5f9">{{.}}</td></tr>{{end}}
   </tbody></table>
 {{else}}
@@ -2059,7 +2116,7 @@ const tplAbout = `
 <h2>{{t $.Lang "О программе"}}</h2>
 <div class="card" style="max-width:560px">
   {{if .Cfg.Logo}}<div style="text-align:center;margin-bottom:20px"><img src="/ui/logo" alt="Logo" style="max-height:160px;max-width:360px"></div>{{end}}
-  <table style="width:100%;border-collapse:collapse">
+  <table class="tbl-plain" style="width:100%;border-collapse:collapse">
     {{if .User}}
     <tr>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">{{t $.Lang "Пользователь"}}</td>
@@ -2418,7 +2475,7 @@ const tplScheduled = `
 </div>
 
 <div class="card" style="margin-bottom:20px">
-<table style="width:100%;border-collapse:collapse">
+<table class="tbl-plain" style="width:100%;border-collapse:collapse">
   <tr><td style="padding:6px 12px;color:#64748b;width:160px">{{t $.Lang "Расписание"}}</td><td><code>{{.Job.Schedule}}</code></td></tr>
   <tr><td style="padding:6px 12px;color:#64748b">{{t $.Lang "Обработка"}}</td><td>{{.Job.Processor}}</td></tr>
   <tr><td style="padding:6px 12px;color:#64748b">{{t $.Lang "При ошибке"}}</td><td>{{.Job.OnError}}</td></tr>
