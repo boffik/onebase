@@ -120,9 +120,15 @@ func (h *handler) cfgAdminAISave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
-	if prev, err := db.GetLLMConfig(r.Context()); err == nil {
-		cfg = cfg.UnmaskKeys(prev)
+	// Объединяем реальные ключи под масками с ранее сохранёнными. Если текущий
+	// конфиг прочитать нельзя (повреждённый JSON) — НЕ сохраняем, иначе под масками
+	// `****` затёрлись бы реальные ключи.
+	prev, err := db.GetLLMConfig(r.Context())
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": "не удалось прочитать текущий конфиг (ключи не объединены): " + err.Error()})
+		return
 	}
+	cfg = cfg.UnmaskKeys(prev)
 	if err := db.SaveLLMConfig(r.Context(), cfg); err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return

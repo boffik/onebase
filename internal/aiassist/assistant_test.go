@@ -117,11 +117,10 @@ func TestAsk_ImagePartPassedThrough(t *testing.T) {
 		ImageB64: "AAAA",
 		MimeType: "image/png",
 	})
-	// Ошибка должна быть от runner (сетевая), а не от src (src.err == nil).
+	// Конфиг валиден и источник без ошибки, поэтому единственный источник сбоя —
+	// runner (мёртвый endpoint). Ненулевая ошибка доказывает, что Ask дошёл до
+	// runner через ветку сборки image-части, не упав раньше на конфиге.
 	if err == nil {
 		t.Fatal("ожидалась сетевая ошибка runner, получен nil")
-	}
-	if errors.Is(err, src.err) {
-		t.Fatal("ошибка не должна исходить от источника конфига")
 	}
 }
