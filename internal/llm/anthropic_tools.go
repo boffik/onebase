@@ -57,12 +57,10 @@ func completeAnthropicTools(ctx context.Context, hc *http.Client, rm ResolvedMod
 			"messages":   messages,
 			"tools":      toolDefs,
 		}
-		if req.System != "" {
-			body["system"] = req.System
+		if sys := anthropicSystem(req); sys != "" {
+			body["system"] = sys
 		}
-		if req.Temperature > 0 {
-			body["temperature"] = req.Temperature
-		}
+		// temperature не отправляем по Anthropic-протоколу (Opus 4.7/4.8 → 400).
 
 		data, err := postJSON(ctx, hc, "anthropic", url, body, headers, rm.Endpoint.Headers)
 		if err != nil {

@@ -8,6 +8,20 @@ import (
 	"strings"
 )
 
+// anthropicSystem строит системный промпт для Anthropic Messages API. У Anthropic
+// нет параметра response_format, поэтому строгий JSON задаём директивой в system
+// (req.JSON). Покрывает и GLM через z.ai.
+func anthropicSystem(req ChatRequest) string {
+	sys := req.System
+	if req.JSON {
+		if sys != "" {
+			sys += "\n\n"
+		}
+		sys += "Верни ответ строго в виде валидного JSON, без пояснений и без markdown-ограждений."
+	}
+	return sys
+}
+
 // completeAnthropic вызывает Anthropic Messages API. Этот же путь покрывает GLM
 // через z.ai: достаточно задать endpoint base_url = https://api.z.ai/api/anthropic.
 func completeAnthropic(ctx context.Context, hc *http.Client, rm ResolvedModel, req ChatRequest) (ChatResponse, error) {
@@ -47,12 +61,11 @@ func completeAnthropic(ctx context.Context, hc *http.Client, rm ResolvedModel, r
 		"max_tokens": maxTokens(rm.Model, req),
 		"messages":   msgs,
 	}
-	if req.System != "" {
-		body["system"] = req.System
+	if sys := anthropicSystem(req); sys != "" {
+		body["system"] = sys
 	}
-	if req.Temperature > 0 {
-		body["temperature"] = req.Temperature
-	}
+	// temperature/top_p/top_k не отправляем по Anthropic-протоколу: Claude Opus
+	// 4.7/4.8 отклоняют их (HTTP 400). Поведение модели задаём промптом.
 
 	headers := map[string]string{
 		"x-api-key":         rm.Endpoint.APIKey,
