@@ -722,7 +722,16 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	// Include posted status + deletion mark for documents
 	if entity.Kind == metadata.KindDocument {
 		vals["posted"] = fmt.Sprintf("%v", row["posted"])
-		vals["deletion_mark"] = fmt.Sprintf("%v", row["deletion_mark"])
+		// deletion_mark нормализуем к каноничным "true"/"false": GetByID гонит его
+		// через normalizeValue, и на SQLite помеченный документ приходит как
+		// int64(1) (а не bool). Шаблон формы сравнивает с литералом "true"
+		// (скрыть «Провести», показать «Снять пометку»), поэтому сырое "1"
+		// ломало бы UI на SQLite. asBool понимает bool/int/int64 одинаково.
+		if asBool(row["deletion_mark"]) {
+			vals["deletion_mark"] = "true"
+		} else {
+			vals["deletion_mark"] = "false"
+		}
 	}
 	// _version нужен на форме как hidden — для оптимистической блокировки
 	// при последующем POST'е в submitEdit. См. storage.UpsertVersioned.

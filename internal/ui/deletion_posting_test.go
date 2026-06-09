@@ -3,7 +3,11 @@ package ui
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
@@ -192,5 +196,54 @@ func TestDocsRoot_UnpostAndMarkMethods(t *testing.T) {
 	db.QueryRow(ctx, "SELECT deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&marked)
 	if marked {
 		t.Error("пометка должна быть снята после СнятьПометку")
+	}
+}
+
+// Регрессия #36: карточка помеченного на удаление документа (рендер через
+// HTTP-handler formEdit) НЕ должна показывать кнопки «Провести» и ДОЛЖНА
+// показывать «Снять пометку». На SQLite GetByID отдаёт deletion_mark как
+// int64(1); handler обязан нормализовать его к "true", иначе шаблонные
+// сравнения с литералом "true" дают неверный UI (баг финального ревью #36).
+func TestFormEdit_MarkedDoc_HidesPostShowsUnmark(t *testing.T) {
+	ctx, db, s, dp, doc := newPostingDoc(t)
+	// Минимальный cfg, чтобы render() не падал на nil Bundle и т.п.
+	s.cfg = Config{AppName: "test"}
+
+	// Создать+провести документ, затем пометить на удаление (авто-снимает
+	// проведение). После этого в БД deletion_mark = 1 (SQLite int64).
+	w := postOne(t, dp)
+	if err := s.markForDeletion(ctx, doc, w.obj.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Санити: GetByID на SQLite отдаёт deletion_mark как НЕ-bool (int64(1)) —
+	// именно это значение handler обязан нормализовать.
+	row, err := db.GetByID(ctx, doc.Name, w.obj.ID, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, isBool := row["deletion_mark"].(bool); isBool {
+		t.Fatalf("ожидался не-bool deletion_mark из GetByID на SQLite, получили %T(%v)",
+			row["deletion_mark"], row["deletion_mark"])
+	}
+
+	// Рендер карточки через реальный HTTP-handler formEdit.
+	r := reqWithChi("GET", "/ui/document/поступлениетоваров/"+w.obj.ID.String(), url.Values{},
+		map[string]string{"kind": "document", "entity": "поступлениетоваров", "id": w.obj.ID.String()})
+	rec := httptest.NewRecorder()
+	s.formEdit(rec, r)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ожидался 200, получен %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	// Должна быть кнопка снятия пометки (action .../delete?mark=0).
+	if !strings.Contains(body, "mark=0") {
+		t.Errorf("карточка помеченного документа должна содержать кнопку снятия пометки (mark=0); тело:\n%s", body)
+	}
+	// НЕ должно быть кнопок проведения (name=\"_action\" value=\"post\" / \"post_and_close\").
+	if strings.Contains(body, `value="post"`) {
+		t.Errorf("карточка помеченного документа НЕ должна содержать кнопку «Провести» (value=\"post\"); тело:\n%s", body)
 	}
 }
