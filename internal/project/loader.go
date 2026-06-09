@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -14,6 +15,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
 	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/ivantit66/onebase/internal/llm"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/processor"
@@ -85,6 +87,11 @@ type AppConfig struct {
 	Email       *EmailConfig       `yaml:"email,omitempty"`
 	Attachments *AttachmentsConfig `yaml:"attachments,omitempty"`
 	Demo        *DemoConfig        `yaml:"demo,omitempty"`
+	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
+	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
+	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в
+	// app.yaml/git/.obz. Удобно для демо/прод-деплоя.
+	LLM *llm.Config `yaml:"llm,omitempty"`
 }
 
 // LoadConfig reads config/app.yaml from the project directory.
@@ -97,7 +104,34 @@ func LoadConfig(dir string) (*AppConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	if cfg.LLM != nil {
+		expandLLMEnv(cfg.LLM)
+	}
 	return &cfg, nil
+}
+
+// envRefPattern matches ${env:VAR} references that are substituted from the
+// process environment — used for secrets like API keys so they live in env,
+// not in app.yaml / git / .obz.
+var envRefPattern = regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
+func expandEnvRefs(s string) string {
+	return envRefPattern.ReplaceAllStringFunc(s, func(m string) string {
+		name := envRefPattern.FindStringSubmatch(m)[1]
+		return os.Getenv(strings.TrimSpace(name))
+	})
+}
+
+// expandLLMEnv substitutes ${env:VAR} in secret-bearing fields of the LLM
+// config (endpoint keys, base URLs, custom headers).
+func expandLLMEnv(c *llm.Config) {
+	for i := range c.Endpoints {
+		c.Endpoints[i].APIKey = expandEnvRefs(c.Endpoints[i].APIKey)
+		c.Endpoints[i].BaseURL = expandEnvRefs(c.Endpoints[i].BaseURL)
+		for k, v := range c.Endpoints[i].Headers {
+			c.Endpoints[i].Headers[k] = expandEnvRefs(v)
+		}
+	}
 }
 
 // LoadFromDB loads project metadata from the _onebase_config table, writing

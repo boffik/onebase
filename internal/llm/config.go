@@ -22,38 +22,38 @@ const (
 
 // Endpoint — именованное подключение к провайдеру: куда ходить и каким ключом.
 type Endpoint struct {
-	Name       string            `json:"name"`
-	Kind       Kind              `json:"kind"`
-	BaseURL    string            `json:"base_url,omitempty"` // для z.ai/локальных; пусто → дефолт провайдера
-	APIKey     string            `json:"api_key,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`     // дополнительные заголовки
-	TimeoutSec int               `json:"timeout_sec,omitempty"` // 0 → DefaultTimeoutSec
+	Name       string            `json:"name" yaml:"name"`
+	Kind       Kind              `json:"kind" yaml:"kind"`
+	BaseURL    string            `json:"base_url,omitempty" yaml:"base_url,omitempty"` // для z.ai/локальных; пусто → дефолт провайдера
+	APIKey     string            `json:"api_key,omitempty" yaml:"api_key,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`         // дополнительные заголовки
+	TimeoutSec int               `json:"timeout_sec,omitempty" yaml:"timeout_sec,omitempty"` // 0 → DefaultTimeoutSec
 }
 
 // Model — конкретная модель у провайдера. Vision помечает мультимодальные модели,
 // пригодные для распознавания документов (см. профиль "документы").
 type Model struct {
-	Name      string `json:"name"`     // имя модели у провайдера, напр. gemini-2.5-flash
-	Endpoint  string `json:"endpoint"` // ссылка на Endpoint.Name
-	Vision    bool   `json:"vision,omitempty"`
-	MaxTokens int    `json:"max_tokens,omitempty"` // 0 → DefaultMaxTokens
+	Name      string `json:"name" yaml:"name"`         // имя модели у провайдера, напр. gemini-2.5-flash
+	Endpoint  string `json:"endpoint" yaml:"endpoint"` // ссылка на Endpoint.Name
+	Vision    bool   `json:"vision,omitempty" yaml:"vision,omitempty"`
+	MaxTokens int    `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"` // 0 → DefaultMaxTokens
 }
 
 // Profile — маршрут одной задачи: упорядоченная цепочка моделей. Движок идёт по
 // списку сверху вниз, переключаясь на следующую при лимитах/временных ошибках.
 type Profile struct {
-	Task   string   `json:"task"`   // документы | анализ | чат | конфигуратор | ...
-	Models []string `json:"models"` // имена Model в порядке предпочтения
+	Task   string   `json:"task" yaml:"task"`     // документы | анализ | чат | конфигуратор | ...
+	Models []string `json:"models" yaml:"models"` // имена Model в порядке предпочтения
 }
 
 // Config — весь LLM-конфиг базы. Хранится одним JSON-значением в _settings
 // (ключ llm.config), чтобы не плодить десятки ключей.
 type Config struct {
-	Enabled        bool       `json:"enabled"`
-	Endpoints      []Endpoint `json:"endpoints"`
-	Models         []Model    `json:"models"`
-	Profiles       []Profile  `json:"profiles"`
-	DefaultProfile string     `json:"default_profile,omitempty"` // для неуказанных задач
+	Enabled        bool       `json:"enabled" yaml:"enabled"`
+	Endpoints      []Endpoint `json:"endpoints" yaml:"endpoints"`
+	Models         []Model    `json:"models" yaml:"models"`
+	Profiles       []Profile  `json:"profiles" yaml:"profiles"`
+	DefaultProfile string     `json:"default_profile,omitempty" yaml:"default_profile,omitempty"` // для неуказанных задач
 }
 
 // Дефолты, применяемые когда в конфиге не задано иное.
