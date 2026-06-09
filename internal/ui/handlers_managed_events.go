@@ -604,6 +604,18 @@ func (s *Server) handleProcessorFormEvent(w http.ResponseWriter, r *http.Request
 				}
 				vars["__form_procs__"] = formProcs
 
+				// Подбор (план 46), как в handleManagedFormEvent: фаза 1 копит
+				// payload через ПоказатьПодбор → pickerData в ответе; фаза 2
+				// отдаёт _pick_result в ПодборРезультат для обработчика Выбор.
+				var picker *pickerPayload
+				pickerFn := newPickerBuiltin(&picker)
+				vars["ПоказатьПодбор"] = pickerFn
+				vars["ShowPicker"] = pickerFn
+				if pr := parsePickResult(r.FormValue("_pick_result")); pr != nil {
+					vars["ПодборРезультат"] = pr
+					vars["PickResult"] = pr
+				}
+
 				if runErr := s.interp.Run(decl, thisObj, vars); runErr != nil {
 					enc.Encode(formEventResponse{
 						OK:         false,
@@ -611,6 +623,7 @@ func (s *Server) handleProcessorFormEvent(w http.ResponseWriter, r *http.Request
 						TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, virtEntity),
 						Messages:   msgs,
 						Error:      runErr.Error(),
+						PickerData: picker,
 					})
 					return
 				}
@@ -620,6 +633,7 @@ func (s *Server) handleProcessorFormEvent(w http.ResponseWriter, r *http.Request
 					Values:     serializeFieldsForEntity(obj.Fields, virtEntity),
 					TableParts: serializeTablePartRowsForEntity(obj.TablePartRows, virtEntity),
 					Messages:   msgs,
+					PickerData: picker,
 				})
 				return
 			}
