@@ -353,6 +353,12 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
 <html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1e293b">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="onebase">
 <title>{{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -463,6 +469,26 @@ body{padding-bottom:32px}
 #ob-msg-list .it:last-child{border-bottom:none}
 #ob-msg-list .it .t{color:#94a3b8;flex-shrink:0;font-size:11px;padding-top:1px}
 #ob-msg-list .empty{padding:10px 14px;color:#94a3b8;font-style:italic}
+/* ===== Мобильная адаптация (этап 45). Правила в @media применяются только на
+   узких экранах — десктопная вёрстка выше остаётся неизменной. ===== */
+.nav-toggle{display:none}
+@media (max-width:820px){
+  .nav-toggle{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:#cbd5e1;font-size:20px;cursor:pointer;padding:4px 12px 4px 0;line-height:1}
+  .nav-toggle:hover{color:#fff}
+  .app-body{display:block;overflow:visible}
+  aside{position:fixed;left:0;top:0;bottom:0;width:78vw;max-width:300px;z-index:401;transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 16px rgba(0,0,0,.3)}
+  body.nav-open aside{transform:translateX(0)}
+  body.nav-open::before{content:"";position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400}
+  main{padding:14px;overflow-y:visible}
+  h2{font-size:19px;margin-bottom:14px}
+  .card{padding:16px;max-width:none}
+  .row-top{flex-wrap:wrap;gap:8px;align-items:stretch;max-width:none}
+  aside a{padding:10px 14px}
+  .btn{padding:10px 18px}
+  .filter-body{grid-template-columns:1fr}
+  /* широкие таблицы скроллятся по горизонтали внутри своей области, а не «едет» вся страница */
+  main table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+}
 </style>
 <script>
 (function(){
@@ -502,6 +528,7 @@ body{padding-bottom:32px}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
+<script>if('serviceWorker'in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 </head><body>
 {{end}}
 `
@@ -509,6 +536,7 @@ body{padding-bottom:32px}
 const tplNav = `
 {{define "nav"}}
 <header class="topbar">
+  <button class="nav-toggle" type="button" aria-label="{{t $.Lang "Меню"}}" onclick="document.body.classList.toggle('nav-open')">&#9776;</button>
   <a href="/ui/" class="topbar-title" style="text-decoration:none;color:inherit" title="{{t $.Lang "Главная"}}">{{if .Cfg.Logo}}<img src="/ui/logo" alt="" style="height:22px;max-width:90px;vertical-align:middle;margin-right:6px;border-radius:2px">{{end}}⚡ {{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</a>
   <div class="sys-menu">
     <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; {{t $.Lang "Система"}} &#9660;</button>
@@ -562,6 +590,20 @@ const tplNav = `
   {{end}}{{end}}
   {{end}}
 </aside>
+<script>
+(function(){
+  // Закрытие мобильного drawer: тап по затемнению (вне меню и вне кнопки ☰)
+  // снимает класс nav-open. На десктопе меню всегда видно, обработчик безвреден.
+  if(window.__obNavInit)return;window.__obNavInit=true;
+  document.addEventListener('click',function(e){
+    if(!document.body.classList.contains('nav-open'))return;
+    if(e.target.closest&&e.target.closest('.nav-toggle'))return;
+    var as=document.querySelector('.app-body>aside');
+    if(as&&as.contains(e.target))return;
+    document.body.classList.remove('nav-open');
+  },true);
+})();
+</script>
 {{if .CollapsibleNav}}
 <script>
 (function(){

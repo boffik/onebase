@@ -1537,6 +1537,14 @@ document.addEventListener('DOMContentLoaded', function(){
 .managed-tab-btn{padding:8px 14px;border:none;background:none;cursor:pointer;font-size:13px;color:#64748b;border-bottom:2px solid transparent;margin-bottom:-2px;font-family:inherit}
 .managed-tab-btn:hover{color:#1a4a80;background:#f5f8ff}
 .managed-tab-btn.active{color:#1a4a80;border-bottom-color:#1a4a80;font-weight:600}
+/* Мобильная адаптация управляемых форм (этап 45): заголовки вкладок скроллятся
+   по горизонтали, поля в одну колонку. ТЧ-таблицы (.tp-table) уже скроллятся
+   общим правилом main table из tplHead. */
+@media (max-width:820px){
+  .managed-tab-headers{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  .managed-tab-btn{white-space:nowrap}
+  .form-group-box{padding:10px 12px}
+}
 </style>
 
 {{/* Запоминание активной вкладки. После POST-сабмита (например, ошибка
