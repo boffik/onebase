@@ -306,6 +306,100 @@ func TestCompile_Balances_RefDim_Aliased(t *testing.T) {
 	}
 }
 
+// assertDocRefDisplay проверяет, что представление измерения-ссылки на документ
+// разворачивается в .номер (а не .наименование), а ссылка на справочник — в
+// .наименование. Это и есть инвариант фикса #21: displayCol() ветвится по типу
+// сущности, а не валит все ссылки в одну колонку.
+func assertDocRefDisplay(t *testing.T, sql, docAlias, catAlias string) {
+	t.Helper()
+	if !strings.Contains(sql, docAlias+".номер") {
+		t.Errorf("document ref must resolve to %s.номер, got:\n%s", docAlias, sql)
+	}
+	if strings.Contains(sql, docAlias+".наименование") {
+		t.Errorf("document ref must NOT use %s.наименование, got:\n%s", docAlias, sql)
+	}
+	if !strings.Contains(sql, catAlias+".наименование") {
+		t.Errorf("catalog ref must still resolve to %s.наименование, got:\n%s", catAlias, sql)
+	}
+}
+
+// TestCompile_VT_RefDim_Document_AccumGenerators расширяет регрессию
+// TestCompile_VT_RefDim_Document (которая покрывает только .Остатки()) на
+// остальные генераторы накопительного регистра: .Обороты() и .ОстаткиИОбороты()
+// идут через тот же buildVTRefDimInfos/displayCol, поэтому документ-ссылка
+// обязана давать .номер во всех трёх. Справочник-ссылка (Номенклатура) — контроль.
+func TestCompile_VT_RefDim_Document_AccumGenerators(t *testing.T) {
+	cases := []struct {
+		name, vt, resource string
+	}{
+		{"Обороты", "Обороты()", "КоличествоОборот"},
+		{"ОстаткиИОбороты", "ОстаткиИОбороты()", "КоличествоПриход"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := "ВЫБРАТЬ ЗаказПоставщику, Номенклатура, " + c.resource +
+				" ИЗ РегистрНакопления.ТоварыВПути." + c.vt
+
+			reg := &metadata.Register{
+				Name: "ТоварыВПути",
+				Dimensions: []metadata.Field{
+					{Name: "ЗаказПоставщику", RefEntity: "ЗаказПоставщику"}, // документ
+					{Name: "Номенклатура", RefEntity: "Номенклатура"},       // справочник
+				},
+				Resources: []metadata.Field{{Name: "Количество"}},
+			}
+			r, err := query.Compile(src, query.CompileOpts{
+				Registers: []*metadata.Register{reg},
+				Entities: []*metadata.Entity{
+					{Name: "ЗаказПоставщику", Kind: metadata.KindDocument},
+					{Name: "Номенклатура", Kind: metadata.KindCatalog},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertDocRefDisplay(t, r.SQL, "ref_заказпоставщику", "ref_номенклатура")
+		})
+	}
+}
+
+// TestCompile_VT_RefDim_Document_InfoSlices — то же для info-регистровых срезов:
+// .СрезПоследних() и .СрезПервых() оба проходят через genInfoSlice, чей VT-предскан
+// тоже зовёт buildVTRefDimInfos(ir.Dimensions, opts.Entities) (query.go:1246).
+// Измерение-ссылка на документ → .номер, на справочник → .наименование.
+func TestCompile_VT_RefDim_Document_InfoSlices(t *testing.T) {
+	d := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, vt := range []string{"СрезПоследних", "СрезПервых"} {
+		t.Run(vt, func(t *testing.T) {
+			src := "ВЫБРАТЬ Заказ, Менеджер, Статус " +
+				"ИЗ РегистрСведений.СостоянияЗаказов." + vt + "(&НаДату)"
+
+			ir := &metadata.InfoRegister{
+				Name:     "СостоянияЗаказов",
+				Periodic: true,
+				Dimensions: []metadata.Field{
+					{Name: "Заказ", RefEntity: "ЗаказПокупателя"}, // документ
+					{Name: "Менеджер", RefEntity: "Сотрудники"},   // справочник
+				},
+				Resources: []metadata.Field{{Name: "Статус"}},
+			}
+			r, err := query.Compile(src, query.CompileOpts{
+				Params:   map[string]any{"НаДату": d},
+				InfoRegs: []*metadata.InfoRegister{ir},
+				Dialect:  storage.SQLiteDialect{},
+				Entities: []*metadata.Entity{
+					{Name: "ЗаказПокупателя", Kind: metadata.KindDocument},
+					{Name: "Сотрудники", Kind: metadata.KindCatalog},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertDocRefDisplay(t, r.SQL, "ref_заказ", "ref_менеджер")
+		})
+	}
+}
+
 func TestCompile_MissingRegister_Error(t *testing.T) {
 	src := `ВЫБРАТЬ Ном ИЗ РегистрНакопления.Неизвестный.Остатки()`
 	_, err := query.Compile(src, query.CompileOpts{})
