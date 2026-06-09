@@ -19,6 +19,4 @@ func mountStatic(r chi.Router) {
 	r.Handle("/vendor/monaco/*", http.StripPrefix("/vendor/monaco/", webassets.MonacoHandler()))
 	// SlickGrid — грид для редактируемых табличных частей managed-форм.
 	r.Handle("/vendor/slickgrid/*", http.StripPrefix("/vendor/slickgrid/", webassets.SlickGridHandler()))
-	// PWA: манифест, service worker, офлайн-страница, иконки (этап 45).
-	mountPWA(r)
 }

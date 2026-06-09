@@ -44,6 +44,12 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	r.Get("/auth/bootstrap", authH.Bootstrap)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
+	// PWA-ассеты (manifest, service worker, offline-страница, иконки) — публичны.
+	// Браузер фечит manifest/иконки без credentials, а install-промпт работает
+	// вне сессии: под auth-мидлварой они отдавали бы 401 и PWA не устанавливался
+	// бы на инстансе с пользователями. Ассеты не содержат данных (план 45).
+	uiSrv.MountPWA(r)
+
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authRepo.Middleware)
