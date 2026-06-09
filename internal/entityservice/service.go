@@ -149,6 +149,17 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 
 	// Выбор хука: OnPost при проведении документа, иначе OnWrite.
 	isPosting := req.Entity.Posting && (req.Action == "post" || req.Action == "post_and_close")
+	// Инвариант: помеченный на удаление документ нельзя провести (как в 1С).
+	// Проверяем ДО запуска хука и записи, чтобы не терять правки полей.
+	if isPosting && !req.IsNew {
+		marked, err := s.Store.IsMarkedForDeletion(ctx, req.Entity.Name, req.ID)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		if marked {
+			return SaveResult{ID: req.ID, DSLError: storage.ErrPostingDeletionMarked.Error()}, nil
+		}
+	}
 	hookName := "OnWrite"
 	if isPosting {
 		hookName = "OnPost"
