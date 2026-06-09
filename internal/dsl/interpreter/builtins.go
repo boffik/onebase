@@ -405,6 +405,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		NewTxFunctions(nil, nil),
 		NewChartFunctions(),
 		NewSpreadsheetFunctions(),
+		NewLLMFunctions(nil),
 	}
 	for _, m := range factoryMaps {
 		for k := range m {

@@ -40,9 +40,10 @@ Thumbs.db
 *.swp
 
 # Рабочие материалы / документация (не в публичном репо)
-docs/
+docs/*
 !docs/forms.md
 !docs/forms-1c-converter.md
+!docs/ai-assistant.md
 
 # Локальные базы SQLite
 *.db

@@ -207,6 +207,7 @@ func builtinGroups() []builtinGroup {
 		{"Диаграммы", collect(interpreter.NewChartFunctions())},
 		{"ТабличныйДокумент", collect(interpreter.NewSpreadsheetFunctions())},
 		{"Файлы", collect(interpreter.NewFileFunctions())},
+		{"ИИ-помощник", collect(interpreter.NewLLMFunctions(nil))},
 	}
 	grouped := map[string]bool{}
 	for _, g := range groups {

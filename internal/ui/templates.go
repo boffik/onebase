@@ -452,6 +452,24 @@ details[open] summary::before{content:"▼ "}
 .breadcrumb span{color:#94a3b8;padding:0 2px}
 /* Чтобы контент не накрывало панелью сообщений */
 body{padding-bottom:32px}
+/* ИИ-помощник: плавающая кнопка и панель чата (план 48, F3) */
+#ob-ai-btn{position:fixed;right:18px;bottom:44px;z-index:320;width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 14px rgba(37,99,235,.4);display:none}
+#ob-ai-btn:hover{background:#1d4ed8}
+#ob-ai-panel{position:fixed;right:18px;bottom:44px;z-index:321;width:370px;max-width:calc(100vw - 24px);height:520px;max-height:calc(100vh - 80px);background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;font-family:system-ui,sans-serif}
+#ob-ai-panel.open{display:flex}
+#ob-ai-head{background:#2563eb;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+#ob-ai-head .sp{flex:1}
+#ob-ai-head button{background:none;border:none;color:#fff;cursor:pointer;font-size:18px;line-height:1}
+#ob-ai-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:#f8fafc}
+#ob-ai-log .m{max-width:85%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+#ob-ai-log .m.u{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:3px}
+#ob-ai-log .m.a{align-self:flex-start;background:#fff;border:1px solid #e2e8f0;color:#1e293b;border-bottom-left-radius:3px}
+#ob-ai-log .m.err{align-self:stretch;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c}
+#ob-ai-log .hint{color:#94a3b8;font-size:12px;text-align:center;margin:auto 0}
+#ob-ai-foot{border-top:1px solid #e2e8f0;padding:8px;display:flex;gap:6px;background:#fff}
+#ob-ai-input{flex:1;resize:none;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;max-height:90px}
+#ob-ai-send{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:0 14px;cursor:pointer;font-size:14px}
+#ob-ai-send:disabled{opacity:.5;cursor:default}
 /* Панель сообщений (как «Окно сообщений» в 1С) */
 #ob-msg-bar{position:fixed;left:0;right:0;bottom:0;z-index:300;background:#fff;border-top:1px solid #cbd5e1;box-shadow:0 -2px 8px rgba(0,0,0,.08);font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;transform:translateY(calc(100% - 30px));transition:transform .18s ease}
 #ob-msg-bar.open{transform:translateY(0)}
@@ -493,6 +511,52 @@ body{padding-bottom:32px}
   main table.tbl-plain{display:table;white-space:normal;overflow:visible}
 }
 </style>
+<script>
+(function(){
+  if(window.__obAiInit)return;window.__obAiInit=true;
+  function init(){
+    if(document.getElementById('ob-ai-btn'))return;
+    fetch('/ui/ai/enabled').then(function(r){return r.json();}).then(function(d){
+      if(d&&d.enabled)buildUI();
+    }).catch(function(){});
+  }
+  function buildUI(){
+    var btn=document.createElement('button');btn.id='ob-ai-btn';btn.title='ИИ-помощник';btn.textContent='🤖';
+    var panel=document.createElement('div');panel.id='ob-ai-panel';
+    panel.innerHTML='<div id="ob-ai-head"><span>🤖 ИИ-помощник</span><span class="sp"></span><button type="button" id="ob-ai-close" title="Закрыть">×</button></div>'+
+      '<div id="ob-ai-log"><div class="hint">Спросите про данные, отчёт или как что-то сделать.</div></div>'+
+      '<div id="ob-ai-foot"><textarea id="ob-ai-input" rows="1" placeholder="Ваш вопрос…"></textarea><button id="ob-ai-send" type="button" title="Отправить">▶</button></div>';
+    document.body.appendChild(btn);document.body.appendChild(panel);
+    var log=document.getElementById('ob-ai-log'),input=document.getElementById('ob-ai-input'),send=document.getElementById('ob-ai-send');
+    var history=[];var busy=false;
+    function open(){panel.classList.add('open');btn.style.display='none';input.focus();}
+    function close(){panel.classList.remove('open');btn.style.display='';}
+    btn.addEventListener('click',open);
+    document.getElementById('ob-ai-close').addEventListener('click',close);
+    function addMsg(role,text){
+      var h=log.querySelector('.hint');if(h)h.remove();
+      var d=document.createElement('div');d.className='m '+(role==='user'?'u':role==='error'?'err':'a');d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;
+    }
+    function doSend(){
+      var t=input.value.trim();if(!t||busy)return;
+      input.value='';addMsg('user',t);history.push({role:'user',content:t});
+      busy=true;send.disabled=true;var pend=addMsg('assistant','…');
+      fetch('/ui/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:history})})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d&&d.ok){pend.textContent=d.text;history.push({role:'assistant',content:d.text});}
+          else{pend.className='m err';pend.textContent=(d&&d.error)||'Ошибка';}
+        })
+        .catch(function(){pend.className='m err';pend.textContent='Ошибка сети';})
+        .finally(function(){busy=false;send.disabled=false;log.scrollTop=log.scrollHeight;input.focus();});
+    }
+    send.addEventListener('click',doSend);
+    input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSend();}});
+    btn.style.display='';
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 <script>
 (function(){
   if(window.__obMsgInit)return;window.__obMsgInit=true;
