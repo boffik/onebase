@@ -120,3 +120,47 @@ func TestAITools_AdminGetsTools(t *testing.T) {
 		t.Fatal("администратор должен получать исполнитель инструментов, получено nil")
 	}
 }
+
+// TestAITools_FlaggedUserGetsTools проверяет, что не-администратор с флагом
+// AIDataAccess получает инструменты ИИ-чата. Прогоняет весь путь флага: схема
+// (ALTER) → Update (сохранение) → GetByID (чтение) → ContextWithUser (гейт).
+func TestAITools_FlaggedUserGetsTools(t *testing.T) {
+	ctx := context.Background()
+
+	authDB, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "auth.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { authDB.Close() })
+
+	repo := auth.NewRepo(authDB)
+	if err := repo.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	u, err := repo.Create(ctx, "flagged", "password1", "Flagged User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Выдаём доступ ИИ-чата к данным, оставаясь не-администратором.
+	if err := repo.Update(ctx, u.ID, "Flagged User", false, false, false, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsAdmin || !got.AIDataAccess {
+		t.Fatalf("ожидался не-админ с AIDataAccess=true, получено IsAdmin=%v AIDataAccess=%v", got.IsAdmin, got.AIDataAccess)
+	}
+
+	s, _ := newSubmitTestServer(t, nil)
+	s.authRepo = repo
+
+	// Запрос несёт пользователя с флагом → aiDataAllowed==true.
+	r := httptest.NewRequest(http.MethodPost, "/ui/ai/chat", nil)
+	r = r.WithContext(auth.ContextWithUser(r.Context(), got))
+	tools, exec := s.aiTools(r)
+	if tools == nil || exec == nil {
+		t.Fatalf("пользователь с AIDataAccess должен получать инструменты ИИ: tools=%v exec!=nil=%v", tools, exec != nil)
+	}
+}

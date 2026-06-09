@@ -84,3 +84,10 @@ func UserFromContext(ctx context.Context) *User {
 	}
 	return nil
 }
+
+// ContextWithUser возвращает контекст с привязанным пользователем. Симметрично
+// UserFromContext (userKey не экспортируется) — используется тестами и кодом,
+// которому нужно подменить пользователя запроса.
+func ContextWithUser(ctx context.Context, u *User) context.Context {
+	return context.WithValue(ctx, userKey, u)
+}

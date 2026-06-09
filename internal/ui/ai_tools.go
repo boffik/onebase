@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/llm"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
@@ -17,12 +18,24 @@ import (
 // размера контекста и стоимости).
 const aiQueryRowLimit = 100
 
+// aiDataAllowed решает, доступны ли запросу read-only инструменты данных ИИ-чата.
+// Доступ имеют администраторы (как у консоли запросов) и пользователи с флагом
+// AIDataAccess. Флаг даёт доступ к произвольным запросам на чтение в обход
+// объектного RBAC — выдавать его осознанно (см. карточку пользователя).
+func (s *Server) aiDataAllowed(r *http.Request) bool {
+	if s.isAdmin(r) {
+		return true
+	}
+	u := auth.UserFromContext(r.Context())
+	return u != nil && u.AIDataAccess
+}
+
 // aiTools формирует набор read-only инструментов для tool-use чата и исполнитель.
-// Инструменты, дающие доступ к произвольным данным, выдаются только администратору
-// (как и консоль запросов). Для остальных возвращается (nil, nil) — чат отвечает
-// без доступа к данным.
+// Инструменты, дающие доступ к произвольным данным, выдаются администратору и
+// пользователям с флагом AIDataAccess (см. aiDataAllowed). Для остальных
+// возвращается (nil, nil) — чат отвечает без доступа к данным.
 func (s *Server) aiTools(r *http.Request) ([]llm.Tool, llm.ToolExecutor) {
-	if !s.isAdmin(r) {
+	if !s.aiDataAllowed(r) {
 		return nil, nil
 	}
 	tools := []llm.Tool{

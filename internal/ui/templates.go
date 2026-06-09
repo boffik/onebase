@@ -453,7 +453,7 @@ details[open] summary::before{content:"▼ "}
 /* Чтобы контент не накрывало панелью сообщений */
 body{padding-bottom:32px}
 /* ИИ-помощник: плавающая кнопка и панель чата (план 51, F3) */
-#ob-ai-btn{position:fixed;right:18px;bottom:44px;z-index:320;width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 14px rgba(37,99,235,.4);display:none}
+#ob-ai-btn{position:fixed;right:18px;bottom:44px;z-index:320;width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 14px rgba(37,99,235,.4)}
 #ob-ai-btn:hover{background:#1d4ed8}
 #ob-ai-panel{position:fixed;right:18px;bottom:44px;z-index:321;width:370px;max-width:calc(100vw - 24px);height:520px;max-height:calc(100vh - 80px);background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;font-family:system-ui,sans-serif}
 #ob-ai-panel.open{display:flex}

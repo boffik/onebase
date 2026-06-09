@@ -20,6 +20,7 @@ type User struct {
 	IsAdmin          bool
 	DenyPasswdChange bool
 	ShowInList       bool   // appears in reference pickers when true
+	AIDataAccess     bool   // can use AI chat data tools without being admin
 	Lang             string // preferred UI language ("" = use base default)
 	CreatedAt        time.Time
 	Roles            []*Role // loaded by middleware after session lookup
@@ -65,6 +66,7 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN deny_passwd_change %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
 	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN show_in_list %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
 	r.db.Exec(ctx, `ALTER TABLE _users ADD COLUMN lang TEXT NOT NULL DEFAULT ''`)
+	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN ai_data_access %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
 	return nil
 }
 
@@ -92,7 +94,7 @@ func (r *Repo) ListForSelection(ctx context.Context) ([]*User, error) {
 }
 
 func (r *Repo) listWhere(ctx context.Context, where string) ([]*User, error) {
-	q := `SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, lang, created_at FROM _users ` + where + ` ORDER BY login`
+	q := `SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, ai_data_access, lang, created_at FROM _users ` + where + ` ORDER BY login`
 	rows, err := r.db.Query(ctx, q)
 	if err != nil {
 		return nil, err
@@ -101,13 +103,14 @@ func (r *Repo) listWhere(ctx context.Context, where string) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		u := &User{}
-		var isAdmin, denyPasswd, showInList, createdAt any
-		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &u.Lang, &createdAt); err != nil {
+		var isAdmin, denyPasswd, showInList, aiData, createdAt any
+		if err := rows.Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &aiData, &u.Lang, &createdAt); err != nil {
 			return nil, err
 		}
 		u.IsAdmin = scanBool(isAdmin)
 		u.DenyPasswdChange = scanBool(denyPasswd)
 		u.ShowInList = scanBool(showInList)
+		u.AIDataAccess = scanBool(aiData)
 		u.CreatedAt = scanTime(createdAt)
 		users = append(users, u)
 	}
@@ -118,24 +121,25 @@ func (r *Repo) listWhere(ctx context.Context, where string) ([]*User, error) {
 func (r *Repo) GetByID(ctx context.Context, userID string) (*User, error) {
 	d := r.db.Dialect()
 	u := &User{}
-	var isAdmin, denyPasswd, showInList, createdAt any
-	q := fmt.Sprintf(`SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, lang, created_at FROM _users WHERE id = %s`, d.Placeholder(1))
-	if err := r.db.QueryRow(ctx, q, userID).Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &u.Lang, &createdAt); err != nil {
+	var isAdmin, denyPasswd, showInList, aiData, createdAt any
+	q := fmt.Sprintf(`SELECT id, login, full_name, is_admin, deny_passwd_change, show_in_list, ai_data_access, lang, created_at FROM _users WHERE id = %s`, d.Placeholder(1))
+	if err := r.db.QueryRow(ctx, q, userID).Scan(&u.ID, &u.Login, &u.FullName, &isAdmin, &denyPasswd, &showInList, &aiData, &u.Lang, &createdAt); err != nil {
 		return nil, err
 	}
 	u.IsAdmin = scanBool(isAdmin)
 	u.DenyPasswdChange = scanBool(denyPasswd)
 	u.ShowInList = scanBool(showInList)
+	u.AIDataAccess = scanBool(aiData)
 	u.CreatedAt = scanTime(createdAt)
 	return u, nil
 }
 
 // Update saves editable fields on a user.
-func (r *Repo) Update(ctx context.Context, userID, fullName string, isAdmin, denyPasswdChange, showInList bool) error {
+func (r *Repo) Update(ctx context.Context, userID, fullName string, isAdmin, denyPasswdChange, showInList, aiDataAccess bool) error {
 	d := r.db.Dialect()
-	q := fmt.Sprintf(`UPDATE _users SET full_name=%s, is_admin=%s, deny_passwd_change=%s, show_in_list=%s WHERE id=%s`,
-		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5))
-	_, err := r.db.Exec(ctx, q, fullName, isAdmin, denyPasswdChange, showInList, userID)
+	q := fmt.Sprintf(`UPDATE _users SET full_name=%s, is_admin=%s, deny_passwd_change=%s, show_in_list=%s, ai_data_access=%s WHERE id=%s`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6))
+	_, err := r.db.Exec(ctx, q, fullName, isAdmin, denyPasswdChange, showInList, aiDataAccess, userID)
 	return err
 }
 
@@ -240,15 +244,17 @@ func (r *Repo) CreateSession(ctx context.Context, userID string) (string, error)
 func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
 	d := r.db.Dialect()
 	u := &User{}
+	var aiData any
 	q := fmt.Sprintf(`
-		SELECT u.id, u.login, u.full_name, u.is_admin, u.deny_passwd_change, u.lang
+		SELECT u.id, u.login, u.full_name, u.is_admin, u.deny_passwd_change, u.ai_data_access, u.lang
 		FROM _sessions s JOIN _users u ON u.id = s.user_id
 		WHERE s.token = %s AND s.expires_at > %s
 	`, d.Placeholder(1), d.Now())
-	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &u.Lang)
+	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &aiData, &u.Lang)
 	if err != nil {
 		return nil, err
 	}
+	u.AIDataAccess = scanBool(aiData)
 	return u, nil
 }
 

@@ -91,6 +91,12 @@ const tplAdminUserCard = `{{define "admin-user-card"}}` + adminHead + `
     </label>
     <div style="font-size:12px;color:#94a3b8;margin-top:4px;margin-left:24px">Пользователь будет доступен для выбора в полях типа «Ответственный» и т.п.</div>
   </div>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+      <input type="checkbox" name="ai_data_access" value="1" {{if .User.AIDataAccess}}checked{{end}}> Доступ ИИ-чата к данным (без прав администратора)
+    </label>
+    <div style="font-size:12px;color:#dc2626;margin-top:4px;margin-left:24px">⚠ ИИ-чат сможет выполнять произвольные запросы на чтение и не ограничен правами на отдельные объекты — пользователь получит доступ к любым данным базы через ассистента.</div>
+  </div>
   <button class="btn btn-primary" type="submit">Сохранить</button>
 </form>
 </div>
@@ -145,6 +151,12 @@ const tplAdminUserForm = `{{define "admin-user-form"}}` + adminHead + `
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
       <input type="checkbox" name="show_in_list" value="1"> Показывать в списках выбора
     </label>
+  </div>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" name="ai_data_access" value="1"> Доступ ИИ-чата к данным (без прав администратора)
+    </label>
+    <div style="font-size:12px;color:#dc2626;margin-top:4px;margin-left:24px">⚠ ИИ-чат выполняет произвольные запросы на чтение, не ограничен правами на объекты.</div>
   </div>
   <div style="display:flex;gap:12px;margin-top:8px">
     <button class="btn btn-primary" type="submit">Создать</button>
@@ -222,13 +234,15 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 			isAdmin := r.FormValue("is_admin") == "1"
 			denyPasswd := r.FormValue("deny_passwd_change") == "1"
 			showInList := r.FormValue("show_in_list") == "1"
-			if err := s.authRepo.Update(r.Context(), userID, fullName, isAdmin, denyPasswd, showInList); err != nil {
+			aiData := r.FormValue("ai_data_access") == "1"
+			if err := s.authRepo.Update(r.Context(), userID, fullName, isAdmin, denyPasswd, showInList, aiData); err != nil {
 				data["Error"] = err.Error()
 			} else {
 				u.FullName = fullName
 				u.IsAdmin = isAdmin
 				u.DenyPasswdChange = denyPasswd
 				u.ShowInList = showInList
+				u.AIDataAccess = aiData
 				data["Success"] = s.tr(lang, "Данные сохранены")
 			}
 		case "passwd":
@@ -272,6 +286,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 	isAdmin := r.FormValue("is_admin") == "1"
 	denyPasswd := r.FormValue("deny_passwd_change") == "1"
 	showInList := r.FormValue("show_in_list") == "1"
+	aiData := r.FormValue("ai_data_access") == "1"
 
 	if login == "" || password == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -285,8 +300,8 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": err.Error()})
 		return
 	}
-	if denyPasswd || showInList {
-		s.authRepo.Update(r.Context(), u.ID, fullName, isAdmin, denyPasswd, showInList)
+	if denyPasswd || showInList || aiData {
+		s.authRepo.Update(r.Context(), u.ID, fullName, isAdmin, denyPasswd, showInList, aiData)
 	}
 	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
 }
