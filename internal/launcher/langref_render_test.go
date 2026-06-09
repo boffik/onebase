@@ -29,3 +29,22 @@ func TestConfigurator_LangrefWired(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurator_SyntaxPanelWired(t *testing.T) {
+	data := &configuratorData{Base: &Base{ID: "test-base", Name: "Тест", ConfigSource: "file"}, Lang: "ru", Tab: "tree"}
+	var buf bytes.Buffer
+	if err := cfgTmpl.ExecuteTemplate(&buf, "cfg-main", data); err != nil {
+		t.Fatalf("ExecuteTemplate cfg-main: %v", err)
+	}
+	html := buf.String()
+	for _, sub := range []string{
+		`id="syntax-ref-panel"`,
+		`id="syntax-ref-toggle"`,
+		"function toggleSyntaxRef",
+		"function insertLangrefSignature",
+	} {
+		if !strings.Contains(html, sub) {
+			t.Errorf("в cfg-main нет фрагмента окна-справочника: %q", sub)
+		}
+	}
+}
