@@ -903,6 +903,15 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if asBool(row["deletion_mark"]) {
+		// Помеченный на удаление документ проводить нельзя.
+		http.Redirect(w, r,
+			"/ui/"+strings.ToLower(string(entity.Kind))+"/"+entity.Name+"/"+id.String()+
+				"?posting_error="+url.QueryEscape("Документ помечен на удаление: проведение невозможно"),
+			http.StatusSeeOther)
+		return
+	}
+
 	obj := &runtime.Object{ID: id, Type: entity.Name, Kind: entity.Kind, Fields: make(map[string]any)}
 	for _, f := range entity.Fields {
 		obj.Fields[f.Name] = row[f.Name]

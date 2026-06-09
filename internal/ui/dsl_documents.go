@@ -10,6 +10,7 @@ import (
 	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // docsCtxSource предоставляет «живой» контекст (с открытой DSL-транзакцией,
@@ -427,6 +428,12 @@ func (w *docWriter) write() error {
 // та же логика, что в postDocument (UI-проведение).
 func (w *docWriter) post() error {
 	ctx := w.ctx()
+	// Инвариант: помеченный на удаление документ нельзя провести (как в 1С).
+	if marked, err := w.s.store.IsMarkedForDeletion(ctx, w.entity.Name, w.obj.ID); err != nil {
+		return err
+	} else if marked {
+		return storage.ErrPostingDeletionMarked
+	}
 	w.ensureSelfRef()
 	mc := runtime.NewMovementsCollector(w.entity.Name, w.obj.ID)
 	setPeriodFromFields(mc, w.entity, w.obj.Fields)
