@@ -2,12 +2,38 @@ package storage
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/jackc/pgx/v5"
 )
+
+// ErrPostingDeletionMarked возвращается при попытке провести документ, помеченный
+// на удаление. Проведённость и пометка на удаление взаимоисключающи (как в 1С).
+var ErrPostingDeletionMarked = errors.New("документ помечен на удаление: проведение невозможно")
+
+// IsMarkedForDeletion сообщает, выставлен ли deletion_mark у записи.
+// Возвращает (false, nil), если записи нет.
+func (db *DB) IsMarkedForDeletion(ctx context.Context, entityName string, id uuid.UUID) (bool, error) {
+	d := db.dialect
+	var mark bool
+	err := db.QueryRow(ctx,
+		fmt.Sprintf("SELECT deletion_mark FROM %s WHERE id = %s",
+			metadata.TableName(entityName), d.Placeholder(1)),
+		idArg(d, id),
+	).Scan(&mark)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return mark, nil
+}
 
 // EnsureDeletionMark adds deletion_mark column to all entity tables if missing.
 func (db *DB) EnsureDeletionMark(ctx context.Context, entities []*metadata.Entity) error {

@@ -630,6 +630,15 @@ func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error
 // SetPosted sets the posted flag on a document.
 func (db *DB) SetPosted(ctx context.Context, entityName string, id uuid.UUID, posted bool) error {
 	d := db.dialect
+	if posted {
+		// Инвариант: помеченный на удаление документ нельзя провести. Backstop —
+		// точки входа проведения сторожат раньше, это страховка от будущих путей.
+		if marked, mErr := db.IsMarkedForDeletion(ctx, entityName, id); mErr != nil {
+			return mErr
+		} else if marked {
+			return ErrPostingDeletionMarked
+		}
+	}
 	err := db.exec(ctx,
 		fmt.Sprintf("UPDATE %s SET posted = %s WHERE id = %s",
 			metadata.TableName(entityName), d.Placeholder(1), d.Placeholder(2)),
