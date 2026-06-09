@@ -52,6 +52,9 @@ func (r *Runner) Run(ctx context.Context, task string, req ChatRequest) (ChatRes
 			return resp, nil
 		}
 		lastErr = err
+		if ctx.Err() != nil { // вызывающий отменил/истёк дедлайн — не перебираем цепочку
+			return ChatResponse{}, ctx.Err()
+		}
 		if !shouldFallback(err) {
 			return ChatResponse{}, err
 		}
@@ -96,6 +99,9 @@ func (r *Runner) RunWithTools(ctx context.Context, task string, req ChatRequest,
 			return resp, nil
 		}
 		lastErr = err
+		if ctx.Err() != nil { // вызывающий отменил/истёк дедлайн — не перебираем цепочку
+			return ChatResponse{}, ctx.Err()
+		}
 		if !shouldFallback(err) {
 			return ChatResponse{}, err
 		}

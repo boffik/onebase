@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
+
+const maxRespBytes = 8 << 20 // 8 MiB — потолок тела ответа провайдера (защита от OOM)
 
 // postJSON отправляет body как JSON на url и возвращает тело ответа. Не-2xx
 // статусы возвращаются как *APIError (его классифицирует фолбэк-движок).
@@ -32,7 +35,10 @@ func postJSON(ctx context.Context, hc *http.Client, provider, url string, body a
 		return nil, err
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxRespBytes))
+	if err != nil {
+		return nil, fmt.Errorf("%s: чтение ответа: %w", provider, err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &APIError{StatusCode: resp.StatusCode, Provider: provider, Body: string(data)}
 	}
