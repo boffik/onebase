@@ -11,6 +11,8 @@ import (
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/llm"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
@@ -36,6 +38,32 @@ func TestAISchemaText(t *testing.T) {
 	}
 	if !strings.Contains(txt, "Наименование") || !strings.Contains(txt, "Цена") {
 		t.Fatalf("в описании нет полей: %s", txt)
+	}
+}
+
+// TestAISchemaText_NonDataObjects проверяет, что в карту конфигурации попадают не
+// только источники данных (справочники/документы/регистры), но и отчёты,
+// перечисления и прочие метаданные — иначе ИИ-чат «не видит» готовые отчёты и
+// отвечает, что их нет (был такой баг с отчётом ВаловаяПрибыль).
+func TestAISchemaText_NonDataObjects(t *testing.T) {
+	reg := runtime.NewRegistry()
+	reg.Load(runtime.LoadOptions{
+		Reports: []*report.Report{
+			{Name: "ВаловаяПрибыль", Title: "Отчёт по валовой прибыли (ФИФО)"},
+		},
+		Enums: []*metadata.Enum{
+			{Name: "СтатусЗаказа", Values: []string{"Новый", "Выполнен"}},
+		},
+	})
+	s := &Server{reg: reg}
+	txt := s.aiSchemaText()
+	if !strings.Contains(txt, "Отчёты") || !strings.Contains(txt, "ВаловаяПрибыль") ||
+		!strings.Contains(txt, "Отчёт по валовой прибыли (ФИФО)") {
+		t.Fatalf("в карте конфигурации нет отчёта: %s", txt)
+	}
+	if !strings.Contains(txt, "Перечисления") || !strings.Contains(txt, "СтатусЗаказа") ||
+		!strings.Contains(txt, "Выполнен") {
+		t.Fatalf("в карте конфигурации нет перечисления: %s", txt)
 	}
 }
 

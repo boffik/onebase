@@ -41,7 +41,7 @@ func (s *Server) aiTools(r *http.Request) ([]llm.Tool, llm.ToolExecutor) {
 	tools := []llm.Tool{
 		{
 			Name:        "описание_данных",
-			Description:  "Вернуть список доступных справочников, документов и регистров с их полями. Вызови первым, чтобы понять, что можно запросить.",
+			Description:  "Вернуть карту конфигурации: справочники, документы, регистры (накопления, сведений, бухгалтерии), планы счетов, перечисления и константы с их полями, а также готовые отчёты, обработки, журналы и подсистемы. Вызови первым, чтобы понять, что есть в системе и что можно запросить.",
 			Schema:      map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
@@ -91,6 +91,13 @@ func (s *Server) aiSchemaText() string {
 		}
 		return strings.Join(names, ", ")
 	}
+	// nameTitle — «Имя — Заголовок», если заголовок задан и отличается от имени.
+	nameTitle := func(name, title string) string {
+		if title != "" && title != name {
+			return name + " — " + title
+		}
+		return name
+	}
 	if len(catalogs) > 0 {
 		b.WriteString("Справочники:\n")
 		for _, e := range catalogs {
@@ -115,6 +122,60 @@ func (s *Server) aiSchemaText() string {
 		for _, ir := range irs {
 			fmt.Fprintf(&b, "  %s: измерения [%s]; ресурсы [%s]\n",
 				ir.Name, writeFields(ir.Dimensions), writeFields(ir.Resources))
+		}
+	}
+	if charts := s.reg.ChartsOfAccounts(); len(charts) > 0 {
+		b.WriteString("Планы счетов:\n")
+		for _, ch := range charts {
+			codes := make([]string, 0, len(ch.Accounts))
+			for _, a := range ch.Accounts {
+				codes = append(codes, a.Code)
+			}
+			fmt.Fprintf(&b, "  %s: счета %s\n", nameTitle(ch.Name, ch.Title), strings.Join(codes, ", "))
+		}
+	}
+	if ars := s.reg.AccountRegisters(); len(ars) > 0 {
+		b.WriteString("Регистры бухгалтерии (доступны .Остатки/.Обороты по счетам и субконто):\n")
+		for _, ar := range ars {
+			fmt.Fprintf(&b, "  %s: ресурсы [%s]; субконто [%s]; план счетов %s\n",
+				nameTitle(ar.Name, ar.Title), writeFields(ar.Resources), writeFields(ar.Subconto), ar.Accounts)
+		}
+	}
+	if enums := s.reg.Enums(); len(enums) > 0 {
+		b.WriteString("Перечисления:\n")
+		for _, en := range enums {
+			fmt.Fprintf(&b, "  %s: %s\n", en.Name, strings.Join(en.Values, ", "))
+		}
+	}
+	if consts := s.reg.Constants(); len(consts) > 0 {
+		names := make([]string, 0, len(consts))
+		for _, c := range consts {
+			names = append(names, c.Name)
+		}
+		fmt.Fprintf(&b, "Константы: %s\n", strings.Join(names, ", "))
+	}
+	if reports := s.reg.Reports(); len(reports) > 0 {
+		b.WriteString("Отчёты (готовые, открываются в интерфейсе; не используются как таблицы в запросах):\n")
+		for _, rp := range reports {
+			fmt.Fprintf(&b, "  %s\n", nameTitle(rp.Name, rp.Title))
+		}
+	}
+	if procs := s.reg.Processors(); len(procs) > 0 {
+		b.WriteString("Обработки (запускаются в интерфейсе):\n")
+		for _, p := range procs {
+			fmt.Fprintf(&b, "  %s\n", nameTitle(p.Name, p.Title))
+		}
+	}
+	if journals := s.reg.Journals(); len(journals) > 0 {
+		b.WriteString("Журналы документов:\n")
+		for _, j := range journals {
+			fmt.Fprintf(&b, "  %s: документы [%s]\n", nameTitle(j.Name, j.Title), strings.Join(j.Documents, ", "))
+		}
+	}
+	if subs := s.reg.Subsystems(); len(subs) > 0 {
+		b.WriteString("Подсистемы (разделы интерфейса):\n")
+		for _, sub := range subs {
+			fmt.Fprintf(&b, "  %s\n", nameTitle(sub.Name, sub.Title))
 		}
 	}
 	if b.Len() == 0 {
