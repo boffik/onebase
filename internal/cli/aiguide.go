@@ -292,8 +292,8 @@ func builtinGroups() []builtinGroup {
 		return out
 	}
 	groups := []builtinGroup{
-		{"HTTP", collect(interpreter.NewHTTPFunctions())},
-		{"Email", collect(interpreter.NewEmailFunctions(nil))},
+		{"HTTP", collect(interpreter.NewHTTPFunctions(nil))},
+		{"Email", collect(interpreter.NewEmailFunctions(nil, nil))},
 		{"Транзакции", collect(interpreter.NewTxFunctions(nil, nil))},
 		{"Диаграммы", collect(interpreter.NewChartFunctions())},
 		{"ТабличныйДокумент", collect(interpreter.NewSpreadsheetFunctions())},

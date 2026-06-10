@@ -28,6 +28,10 @@ type Common struct {
 	Store     *storage.DB
 	Mailer    interpreter.EmailSender     // nil допустим — email-функции запаникуют при вызове, не при сборке
 	Movements *runtime.MovementsCollector // nil допустим — попадёт в карту как Движения=nil (совместимо с прежним поведением)
+	// NetGuard вызывается перед каждой сетевой операцией DSL (HTTP-клиент,
+	// email). Возвращает ошибку, если сеть заблокирована предохранителем
+	// (план 62). nil → сеть не ограничивается (для тестов/совместимости).
+	NetGuard func() error
 }
 
 // Build возвращает map с пересечением DSL-переменных, общих для UI и scheduler.
@@ -58,10 +62,10 @@ func (c Common) Build() map[string]any {
 		"ПредопределённыеЗначения": predefined,
 		"PredefinedValues":         predefined,
 	}
-	for k, v := range interpreter.NewHTTPFunctions() {
+	for k, v := range interpreter.NewHTTPFunctions(c.NetGuard) {
 		vars[k] = v
 	}
-	for k, v := range interpreter.NewEmailFunctions(c.Mailer) {
+	for k, v := range interpreter.NewEmailFunctions(c.Mailer, c.NetGuard) {
 		vars[k] = v
 	}
 	for k, v := range interpreter.NewFileFunctions() {

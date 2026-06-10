@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -17,6 +18,9 @@ import (
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
+
+// ErrNetworkLocked — отказ предохранителя сети (план 62) для DSL заданий.
+var ErrNetworkLocked = errors.New("сетевые возможности отключены предохранителем — включите «Разрешить сетевые операции» в конфигураторе")
 
 type Scheduler struct {
 	cron    *cronlib.Cron
@@ -231,6 +235,14 @@ func (s *Scheduler) buildDSLVars(ctx context.Context, mc *runtime.MovementsColle
 		Store:     s.db,
 		Mailer:    s.mailer,
 		Movements: mc,
+		// Предохранитель сети (план 62): регламентные задания тоже инициируют
+		// HTTP/email из конфигурации — гейтим тем же флагом.
+		NetGuard: func() error {
+			if s.db.GetNetworkEnabled(ctx) {
+				return nil
+			}
+			return ErrNetworkLocked
+		},
 	}.Build()
 }
 

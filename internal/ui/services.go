@@ -117,6 +117,14 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 		s.serviceOpenAPI(w, r)
 		return
 	}
+	// Предохранитель сети (план 62): входящие сервисы — тоже сетевая
+	// поверхность конфигурации. Дискавери (индекс/openapi) выше остаётся
+	// доступным, а вызовы обработчиков — 503, пока сеть не разрешена.
+	if !s.netEnabled(r.Context()) {
+		writeServiceError(w, http.StatusServiceUnavailable, ErrNetworkLocked.Error())
+		return
+	}
+
 	root, remainder, _ := strings.Cut(rest, "/")
 	svc := s.reg.GetHTTPServiceByRoot(root)
 	if svc == nil {

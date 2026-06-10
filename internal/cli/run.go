@@ -314,14 +314,21 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	// журнал — в _webhook_log.
 	if appCfg != nil && len(appCfg.Webhooks) > 0 {
 		dbRef := db
-		uiCfg.Webhooks = webhook.New(appCfg.Webhooks, func(e webhook.LogEntry) {
+		d := webhook.New(appCfg.Webhooks, func(e webhook.LogEntry) {
 			dbRef.LogWebhook(context.Background(), storage.WebhookLogEntry{
 				Webhook: e.Webhook, Event: e.Event, Entity: e.Entity, RecordID: e.RecordID,
 				URL: e.URL, StatusCode: e.StatusCode, Error: e.Error,
 				Duration: e.Duration, Attempts: e.Attempts,
 			})
 		})
+		// Предохранитель сети (план 62): хуки уходят только при разрешённой сети.
+		d.SetGuard(func() bool { return dbRef.GetNetworkEnabled(context.Background()) })
+		uiCfg.Webhooks = d
 		fmt.Fprintf(os.Stdout, "веб-хуки: настроено %d\n", len(appCfg.Webhooks))
+		if !db.GetNetworkEnabled(ctx) {
+			fmt.Fprintln(os.Stdout, "  ⚠ сеть заблокирована предохранителем — хуки не будут отправляться,\n"+
+				"    пока не включить «Разрешить сетевые операции» в конфигураторе")
+		}
 	}
 
 	host, _ := cmd.Flags().GetString("host")

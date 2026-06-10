@@ -108,10 +108,12 @@
 
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
-| 52 | [52-interpreter-concurrency.md](52-interpreter-concurrency.md) | 🔴 Потокобезопасность DSL-интерпретатора: `curFile/curLine` и `DebugHook` per-call, конкурентный race-тест | 2 дня | ⬜ Не начато |
-| 53 | [53-web-security-hardening.md](53-web-security-hardening.md) | Web-безопасность: токен сессии вне URL/логов, rate-limit логина, CSRF + security-заголовки, bind на 127.0.0.1 | 4–4.5 дня | ⬜ Не начато |
-| 55 | [55-monolith-split-embed-frontend.md](55-monolith-split-embed-frontend.md) | Раскол монолитов (`handlers.go`, `configurator_tmpl.go`) + фронт в `go:embed` | 4–5 дней | ⬜ Не начато |
-| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | ⬜ Не начато |
+| 52 | [52-interpreter-concurrency.md](52-interpreter-concurrency.md) | 🔴 Потокобезопасность DSL-интерпретатора: `curFile/curLine` и `DebugHook` per-call, конкурентный race-тест | 2 дня | ✅ Реализовано |
+| 53 | [53-web-security-hardening.md](53-web-security-hardening.md) | Web-безопасность: токен сессии вне URL/логов, rate-limit логина, CSRF + security-заголовки, bind на 127.0.0.1 | 4–4.5 дня | ✅ Реализовано |
+| 54 | [54-ai-assistant-security-audit.md](54-ai-assistant-security-audit.md) | Безопасность/аудит ИИ: журнал обращений, rate-limit чата, суточный потолок токенов | 3.5 дня | 🟡 Этапы 2–3 (объектный RBAC — нет) |
+| 55 | [55-monolith-split-embed-frontend.md](55-monolith-split-embed-frontend.md) | Раскол монолитов (`handlers.go`, `configurator_tmpl.go`) + фронт в `go:embed` | 4–5 дней | 🟡 Этап 1 (handlers.go); фронт в go:embed — нет |
+| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | 🟡 Этапы 1, 2, 4; RBAC вложений/slog//metrics/lint — нет |
+| 62 | [62-network-safety-switch.md](62-network-safety-switch.md) | Предохранитель сети: галочка `net.enabled` лочит хуки/HTTP/сервисы/email; сброс при restore | 0.5 дня | ✅ Реализовано |
 
 ### Направление Г — Интеграции и экосистема (продолжение)
 
@@ -120,6 +122,7 @@
 | 58 | [58-inbound-integrations.md](58-inbound-integrations.md) | Входящие интеграции: REST-эндпоинты → DSL-обработчики (пара к 29) | 1.5 недели | ♻ Поглощён планом 61 (HTTP-сервисы) |
 | 59 | [59-report-composition.md](59-report-composition.md) | Лёгкая компоновка отчётов: группировки, итоги, drill-down, графики, условное оформление | 1.5–2 недели | ⬜ Не начато |
 | 60 | [60-config-versioning-marketplace.md](60-config-versioning-marketplace.md) | Версионирование конфигурации в БД (история/diff/откат) + marketplace конфигураций | 2–3 недели | ⬜ Не начато |
+| 61 | [61-http-services.md](61-http-services.md) | HTTP-сервисы: публикация REST-эндпоинтов на DSL (/hs/*, OpenAPI/RapiDoc); поглотил план 58 | 1 день | ✅ Реализовано |
 
 ## Граф зависимостей
 
