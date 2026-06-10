@@ -1,6 +1,15 @@
 # План 55 — Раскол монолитов и фронт в go:embed
 
-**Статус:** ⬜ Не начато
+**Статус:** 🟡 Этап 1 реализован (2026-06-10, ветка `refactor/split-ui-handlers`); этапы 2 (фронт конфигуратора в go:embed) и 3 (inline-JS ui) — не начаты
+
+> **Как реализовано (этап 1).** `ui/handlers.go` разнесён механически (as-is,
+> вместе с doc-комментариями) с 3908 до 660 строк: `handlers_entity.go` (CRUD
+> сущностей), `handlers_registers.go`, `handlers_reports.go`,
+> `handlers_processors.go`, `handlers_journals.go`, `handlers_print.go`,
+> `handlers_export.go`, `handlers_attachments.go`, `handlers_dsl.go`
+> (DSL-хуки), `handlers_home.go`, `handlers_audit_enrich.go`. В handlers.go
+> остались общие хелперы (can/requirePerm/render, resolve*/enrich*-помощники).
+> Все тесты прошли без изменений — поведение не менялось.
 **Источник:** `АнализПроекта-2026-06-10.md` §2.8; продолжение плана 43 («раскол монолитов»).
 **Приоритет:** 🟠 Средний — не баг, но тормозит поддержку, review и онбординг.
 
