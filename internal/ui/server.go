@@ -59,6 +59,7 @@ type Server struct {
 	lockMgr          *runtime.LockManager   // #2 managed locks
 	entitySvc        *entityservice.Service // упсёрт + ТЧ + движения + проведение, разделяется с api
 	aiChatLimit      *aiWindowLimiter       // лимит частоты ИИ-чата на пользователя (план 54)
+	endpointLimit    endpointLimiter        // rate-limit входящих эндпоинтов (план 58)
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {

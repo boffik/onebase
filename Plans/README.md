@@ -116,7 +116,7 @@
 
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
-| 58 | [58-inbound-integrations.md](58-inbound-integrations.md) | Входящие интеграции: REST-эндпоинты `/api/hooks/*` → DSL-обработчики (пара к 29) | 1.5 недели | ⬜ Не начато |
+| 58 | [58-inbound-integrations.md](58-inbound-integrations.md) | Входящие интеграции: REST-эндпоинты `/api/hooks/*` → DSL-обработчики (пара к 29) | 1.5 недели | ✅ Реализовано |
 | 59 | [59-report-composition.md](59-report-composition.md) | Лёгкая компоновка отчётов: группировки, итоги, drill-down, графики, условное оформление | 1.5–2 недели | ⬜ Не начато |
 | 60 | [60-config-versioning-marketplace.md](60-config-versioning-marketplace.md) | Версионирование конфигурации в БД (история/diff/откат) + marketplace конфигураций | 2–3 недели | ⬜ Не начато |
 

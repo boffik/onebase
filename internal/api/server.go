@@ -63,6 +63,10 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// бы на инстансе с пользователями. Ассеты не содержат данных (план 45).
 	uiSrv.MountPWA(r)
 
+	// Входящие интеграционные эндпоинты /api/hooks/* (план 58) — вне auth-группы:
+	// аутентификация у каждого эндпоинта своя (token/hmac из endpoints/*.yaml).
+	uiSrv.MountEndpoints(r)
+
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authRepo.Middleware)

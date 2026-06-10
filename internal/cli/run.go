@@ -181,6 +181,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	reg.LoadAccountRegisters(proj.AccountRegisters, proj.ChartsOfAccounts)
 	reg.LoadWidgets(proj.Widgets)
 	reg.LoadHomePage(proj.HomePage)
+	reg.LoadEndpoints(proj.Endpoints, proj.EndpointPrograms)
 
 	appCfg, _ := project.LoadConfig(proj.Dir)
 	// app.yaml может задавать конфиг ИИ-помощника (секция llm, ключи через
@@ -367,6 +368,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 			reg.LoadAccountRegisters(newProj.AccountRegisters, newProj.ChartsOfAccounts)
 			reg.LoadWidgets(newProj.Widgets)
 			reg.LoadHomePage(newProj.HomePage)
+			reg.LoadEndpoints(newProj.Endpoints, newProj.EndpointPrograms)
 			fmt.Fprintln(os.Stdout, "[watch] метаданные перезагружены")
 		}
 		if err := devserver.Watch(dir, reload); err != nil {
