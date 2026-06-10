@@ -1,0 +1,123 @@
+package ui
+
+// HTTP-обработчики вложений к объектам.
+// Выделено из handlers.go (план 55, этап 1) — перенос as-is.
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/ivantit66/onebase/internal/storage"
+)
+
+// attachmentsList returns JSON list of attachments for a record.
+func (s *Server) attachmentsList(w http.ResponseWriter, r *http.Request) {
+	entity := s.getEntity(w, r)
+	if entity == nil {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+
+	atts, err := s.store.ListAttachments(r.Context(), string(entity.Kind), entity.Name, id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if atts == nil {
+		atts = []storage.Attachment{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(atts)
+}
+
+// attachmentUpload handles file upload for a record.
+func (s *Server) attachmentUpload(w http.ResponseWriter, r *http.Request) {
+	entity := s.getEntity(w, r)
+	if entity == nil {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+
+	maxSize := s.maxFileSizeBytes
+	if maxSize == 0 {
+		maxSize = 50 * 1024 * 1024
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSize+1024)
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, "Ошибка разбора формы: "+err.Error(), 400)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Нет файла в форме", 400)
+		return
+	}
+	defer file.Close()
+
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+
+	uploadedBy := ""
+	if u := auth.UserFromContext(r.Context()); u != nil {
+		uploadedBy = u.Login
+	}
+
+	_, err = s.store.UploadAttachment(r.Context(), string(entity.Kind), entity.Name, id,
+		header.Filename, mimeType, uploadedBy, file, maxSize)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
+}
+
+// attachmentDownload serves a file attachment for download.
+func (s *Server) attachmentDownload(w http.ResponseWriter, r *http.Request) {
+	aid, err := uuid.Parse(chi.URLParam(r, "aid"))
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+
+	f, att, err := s.store.OpenAttachment(r.Context(), aid)
+	if err != nil {
+		http.Error(w, "Файл не найден", 404)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", att.MimeType)
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+sanitizeFilename(att.Filename)+"\"")
+	http.ServeContent(w, r, att.Filename, att.UploadedAt, f)
+}
+
+// attachmentDelete removes a file attachment.
+func (s *Server) attachmentDelete(w http.ResponseWriter, r *http.Request) {
+	aid, err := uuid.Parse(chi.URLParam(r, "aid"))
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+
+	if err := s.store.DeleteAttachment(r.Context(), aid); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
+}
