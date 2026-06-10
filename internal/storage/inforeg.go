@@ -48,7 +48,6 @@ func (db *DB) InfoRegSet(ctx context.Context, ir *metadata.InfoRegister, dimKey 
 	cols = append(cols, "updated_at")
 	phs = append(phs, d.Placeholder(idx))
 	args = append(args, time.Now())
-	idx++
 
 	// Build ON CONFLICT update clause for all non-PK columns
 	var updates []string

@@ -198,7 +198,6 @@ func runFormsConvertFrom(cmd *cobra.Command, _ []string) error {
 		alt := filepath.Join(srcBase, "Form.xml")
 		if _, e2 := os.Stat(alt); e2 == nil {
 			xmlPath = alt
-			srcBase = filepath.Dir(srcBase) // подняться на уровень выше для Form/
 		} else {
 			return fmt.Errorf("Form.xml не найден ни в %s, ни в %s", xmlPath, alt)
 		}

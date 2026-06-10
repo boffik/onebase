@@ -80,13 +80,15 @@ func TestLockManager_ParallelDifferentKeys(t *testing.T) {
 func TestLockManager_NoDeadlockOnDifferentOrder(t *testing.T) {
 	mgr := NewLockManager()
 	var wg sync.WaitGroup
+	// Add до запуска Wait-горутины: конкурентные Add/Wait — гонка по контракту
+	// WaitGroup (ловится -race; см. план 56, CI).
+	wg.Add(2)
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
 	for i := 0; i < 2; i++ {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			var keys []string

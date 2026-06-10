@@ -145,8 +145,10 @@ func TestAIRunQuery_WritesAudit(t *testing.T) {
 
 func TestAIWindowLimiter(t *testing.T) {
 	l := newAIWindowLimiter(2, 30*time.Millisecond)
-	if !l.Allow("u") || !l.Allow("u") {
-		t.Fatal("первые 2 запроса должны проходить")
+	for i := 0; i < 2; i++ {
+		if !l.Allow("u") {
+			t.Fatalf("запрос %d должен проходить", i+1)
+		}
 	}
 	if l.Allow("u") {
 		t.Fatal("3-й запрос в окне должен блокироваться")

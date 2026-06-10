@@ -335,7 +335,6 @@ func (r *Runner) runRecent(ctx context.Context, w *metadata.Widget, res *Result)
 	if strings.EqualFold(w.Scope, "current_user") && r.CurrentUser != "" {
 		where = append(where, "user_login = "+d.Placeholder(idx))
 		args = append(args, r.CurrentUser)
-		idx++
 	}
 
 	sql := `SELECT entity_kind, entity_name, record_id, MAX(at) AS _ts
