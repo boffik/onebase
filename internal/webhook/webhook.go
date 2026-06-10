@@ -58,6 +58,7 @@ type Dispatcher struct {
 	hooks     []Config
 	client    *http.Client
 	logFn     func(LogEntry) // best-effort журнал; может быть nil
+	guard     func() bool    // предохранитель сети (план 62): true = сеть разрешена; nil = без ограничений
 	wg        sync.WaitGroup
 	retryBase time.Duration // база экспоненциальной задержки (тесты ускоряют)
 }
@@ -72,6 +73,11 @@ func New(hooks []Config, logFn func(LogEntry)) *Dispatcher {
 		retryBase: time.Second,
 	}
 }
+
+// SetGuard задаёт предохранитель сети (план 62): когда guard() == false,
+// исходящие веб-хуки не отправляются, а в журнал пишется запись со статусом
+// «заблокировано» — отказ виден, а не молчалив.
+func (d *Dispatcher) SetGuard(guard func() bool) { d.guard = guard }
 
 // Enabled сообщает, настроен ли хотя бы один веб-хук.
 func (d *Dispatcher) Enabled() bool { return d != nil && len(d.hooks) > 0 }
@@ -105,6 +111,14 @@ func (d *Dispatcher) Wait() { d.wg.Wait() }
 func (d *Dispatcher) fire(h *Config, e Event) {
 	start := time.Now()
 	entry := LogEntry{Webhook: h.Name, Event: e.Name, Entity: e.Entity, RecordID: e.ID, URL: h.URL}
+
+	// Предохранитель сети (план 62): не отправляем, но фиксируем отказ в журнале.
+	if d.guard != nil && !d.guard() {
+		entry.Error = "заблокировано предохранителем сети (net.enabled выкл.)"
+		entry.Attempts = 0
+		d.log(entry, start)
+		return
+	}
 
 	body, err := renderBody(h.Body, e)
 	if err != nil {

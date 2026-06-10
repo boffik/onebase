@@ -197,3 +197,44 @@ func TestDispatcher_EscapesJSONInStrings(t *testing.T) {
 		t.Fatalf("значение исказилось: %q", parsed["name"])
 	}
 }
+
+// Предохранитель сети (план 62): при guard()==false хук не отправляется,
+// но в журнал попадает запись со статусом «заблокировано».
+func TestDispatcher_BlockedByNetGuard(t *testing.T) {
+	rec := &recorder{}
+	srv := httptest.NewServer(rec.handler())
+	defer srv.Close()
+
+	logged := make(chan LogEntry, 1)
+	d := New([]Config{{Name: "g", On: "document.post", URL: srv.URL, Body: "x"}},
+		func(e LogEntry) { logged <- e })
+	d.SetGuard(func() bool { return false }) // сеть заблокирована
+
+	d.Dispatch(Event{Name: "document.post", Entity: "Реализация", ID: "id1"})
+	d.Wait()
+
+	if rec.count() != 0 {
+		t.Fatalf("при заблокированной сети хук не должен уходить, запросов: %d", rec.count())
+	}
+	e := <-logged
+	if e.Error == "" || !strings.Contains(e.Error, "предохранител") {
+		t.Fatalf("ожидалась запись о блокировке, получено: %+v", e)
+	}
+}
+
+// При guard()==true хук уходит как обычно.
+func TestDispatcher_AllowedByNetGuard(t *testing.T) {
+	rec := &recorder{}
+	srv := httptest.NewServer(rec.handler())
+	defer srv.Close()
+
+	d := New([]Config{{Name: "g", On: "document.post", URL: srv.URL, Body: "x"}}, nil)
+	d.SetGuard(func() bool { return true })
+
+	d.Dispatch(Event{Name: "document.post", Entity: "Реализация", ID: "id1"})
+	d.Wait()
+
+	if rec.count() != 1 {
+		t.Fatalf("при разрешённой сети ожидался 1 запрос, получено %d", rec.count())
+	}
+}

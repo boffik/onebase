@@ -33,7 +33,7 @@ func TestEmailShorthand(t *testing.T) {
 	src := `Процедура Тест()
   ОтправитьПисьмо("client@example.com", "Заказ принят", "Привет!");
 КонецПроцедуры`
-	runHTTPSrc(t, src, interpreter.NewEmailFunctions(stub))
+	runHTTPSrc(t, src, interpreter.NewEmailFunctions(stub, nil))
 	assert.Equal(t, 1, stub.calls)
 	assert.Equal(t, "client@example.com", stub.to)
 	assert.Equal(t, "Заказ принят", stub.subject)
@@ -50,7 +50,7 @@ func TestEmailObject(t *testing.T) {
   Письмо.HTMLТело = "<b>Итоги</b>";
   Письмо.Отправить();
 КонецПроцедуры`
-	runHTTPSrc(t, src, interpreter.NewEmailFunctions(stub))
+	runHTTPSrc(t, src, interpreter.NewEmailFunctions(stub, nil))
 	assert.Equal(t, 1, stub.calls)
 	assert.Equal(t, "boss@company.ru", stub.to)
 	assert.Equal(t, "Отчёт", stub.subject)
@@ -68,7 +68,7 @@ func TestEmailNotConfigured(t *testing.T) {
   КонецПопытки;
 КонецПроцедуры`
 	// nil sender → should panic with user error
-	extra := interpreter.NewEmailFunctions(nil)
+	extra := interpreter.NewEmailFunctions(nil, nil)
 	result := runHTTPSrc(t, src, extra)
 	msg, ok := result.(string)
 	require.True(t, ok, fmt.Sprintf("expected string, got %T", result))

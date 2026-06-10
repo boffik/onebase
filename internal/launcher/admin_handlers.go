@@ -653,6 +653,10 @@ func (h *handler) cfgAdminSettings(w http.ResponseWriter, r *http.Request) {
 	if db.GetNavCollapsible(r.Context()) {
 		navChecked = "checked"
 	}
+	netChecked := ""
+	if db.GetNetworkEnabled(r.Context()) {
+		netChecked = "checked"
+	}
 	html := fmt.Sprintf(`<div style="padding:16px">
 	<h3 style="margin:0 0 14px;font-size:15px">Параметры базы</h3>
 	<div style="padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;max-width:520px">
@@ -668,6 +672,12 @@ func (h *handler) cfgAdminSettings(w http.ResponseWriter, r *http.Request) {
 	    Сворачиваемые группы в левом меню
 	  </label>
 	  <div style="font-size:11px;color:#666;margin-top:6px">Когда включено, группы меню (Отчёты, Регистры, Обработки…) можно сворачивать; тяжёлые группы свёрнуты по умолчанию, чтобы меню не растягивало страницу.</div>
+	  <div style="font-size:13px;font-weight:600;margin:16px 0 8px">Безопасность</div>
+	  <label style="font-size:12px;display:flex;align-items:center;gap:8px">
+	    <input type="checkbox" id="st-net" %s>
+	    Разрешить сетевые операции конфигурации
+	  </label>
+	  <div style="font-size:11px;color:#666;margin-top:6px">Предохранитель. Пока выключен — блокируются исходящие веб-хуки, HTTP-клиент и отправка писем из DSL, входящие HTTP-сервисы. Защищает от того, чтобы восстановленная копия базы случайно слала уведомления в боевые системы. После восстановления из бэкапа сбрасывается в выключено — включайте осознанно.</div>
 	  <button onclick="cfgSettingsSave()" style="margin-top:12px;background:#16a34a;color:#fff;border:none;padding:5px 14px;border-radius:3px;cursor:pointer;font-size:12px">Сохранить</button>
 	  <span id="st-msg" style="font-size:11px;margin-left:8px"></span>
 	</div>
@@ -676,7 +686,8 @@ func (h *handler) cfgAdminSettings(w http.ResponseWriter, r *http.Request) {
 function cfgSettingsSave(){
   var n=parseInt(document.getElementById('st-pagesize').value,10);
   var c=document.getElementById('st-collapsenav').checked;
-  fetch('/bases/%s/configurator/admin/settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({list_page_size:n,collapsible_nav:c})})
+  var net=document.getElementById('st-net').checked;
+  fetch('/bases/%s/configurator/admin/settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({list_page_size:n,collapsible_nav:c,network_enabled:net})})
     .then(function(r){return r.json()})
     .then(function(d){
       var m=document.getElementById('st-msg');
@@ -685,7 +696,7 @@ function cfgSettingsSave(){
     })
     .catch(function(){var m=document.getElementById('st-msg');m.textContent='Ошибка сети';m.style.color='#c00';});
 }
-</script>`, storage.MaxListPageSize, pageSize, storage.MaxListPageSize, navChecked, b.ID)
+</script>`, storage.MaxListPageSize, pageSize, storage.MaxListPageSize, navChecked, netChecked, b.ID)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
 }
@@ -702,6 +713,7 @@ func (h *handler) cfgAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ListPageSize   int   `json:"list_page_size"`
 		CollapsibleNav *bool `json:"collapsible_nav"`
+		NetworkEnabled *bool `json:"network_enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
@@ -718,6 +730,12 @@ func (h *handler) cfgAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CollapsibleNav != nil {
 		if err := db.SaveNavCollapsible(r.Context(), *req.CollapsibleNav); err != nil {
+			writeJSON(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+	}
+	if req.NetworkEnabled != nil {
+		if err := db.SaveNetworkEnabled(r.Context(), *req.NetworkEnabled); err != nil {
 			writeJSON(w, 500, map[string]any{"error": err.Error()})
 			return
 		}

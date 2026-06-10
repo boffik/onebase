@@ -41,7 +41,7 @@ func TestHTTPGet_Shorthand(t *testing.T) {
   Возврат Ответ.КодСостояния;
 КонецФункции`, srv.URL)
 
-	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions())
+	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions(nil))
 	assert.Equal(t, float64(200), result)
 }
 
@@ -61,7 +61,7 @@ func TestHTTPConnection_Get(t *testing.T) {
   Возврат Ответ.ПолучитьТелоКакСтроку();
 КонецФункции`, host)
 
-	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions())
+	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions(nil))
 	assert.Equal(t, "hello", result)
 }
 
@@ -89,7 +89,7 @@ func TestHTTPConnection_Post(t *testing.T) {
   Возврат Ответ.КодСостояния;
 КонецФункции`, host)
 
-	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions())
+	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions(nil))
 	assert.Equal(t, float64(201), result)
 	assert.Equal(t, `{"status":"new"}`, gotBody)
 	assert.Equal(t, "application/json", gotHeader)
@@ -107,7 +107,7 @@ func TestHTTPResponse_GetHeader(t *testing.T) {
   Возврат Ответ.ПолучитьЗаголовок("X-Request-Id");
 КонецФункции`, srv.URL)
 
-	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions())
+	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions(nil))
 	assert.Equal(t, "abc123", result)
 }
 
@@ -126,6 +126,6 @@ func TestHTTPGet_WithJSON(t *testing.T) {
   Возврат 0;
 КонецФункции`, srv.URL)
 
-	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions())
+	result := runHTTPSrc(t, src, interpreter.NewHTTPFunctions(nil))
 	assert.Equal(t, int64(75), result)
 }

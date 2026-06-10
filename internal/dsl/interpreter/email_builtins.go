@@ -12,6 +12,7 @@ type EmailSender interface {
 
 type dslEmail struct {
 	sender  EmailSender
+	guard   NetGuard
 	to      string
 	cc      string
 	subject string
@@ -54,6 +55,7 @@ func (e *dslEmail) Set(field string, val any) {
 func (e *dslEmail) CallMethod(name string, args []any) any {
 	switch name {
 	case "отправить", "send":
+		checkNet(e.guard)
 		if e.to == "" {
 			panic(userError{Msg: "ПисьмоEmail.Отправить: поле Кому не задано"})
 		}
@@ -72,8 +74,9 @@ func (e *dslEmail) CallMethod(name string, args []any) any {
 
 // NewEmailFunctions returns DSL functions/factories to inject into extraVars.
 // If sender is nil or not configured, functions panic with a user-friendly message.
-func NewEmailFunctions(sender EmailSender) map[string]any {
+func NewEmailFunctions(sender EmailSender, guard NetGuard) map[string]any {
 	send := func(to, subject, textBody string) {
+		checkNet(guard)
 		if sender == nil || !sender.Configured() {
 			panic(userError{Msg: "email не настроен — добавьте секцию email: в config/app.yaml"})
 		}
@@ -91,10 +94,11 @@ func NewEmailFunctions(sender EmailSender) map[string]any {
 	})
 
 	emailFactory := func(args []any) any {
+		checkNet(guard)
 		if sender == nil || !sender.Configured() {
 			panic(userError{Msg: "email не настроен — добавьте секцию email: в config/app.yaml"})
 		}
-		return &dslEmail{sender: sender}
+		return &dslEmail{sender: sender, guard: guard}
 	}
 
 	return map[string]any{

@@ -43,6 +43,12 @@ func newSecuredServiceServer(t *testing.T, svc *httpservice.Service) *Server {
 	svc.Normalize()
 	registry.LoadHTTPServices([]*httpservice.Service{svc})
 
+	// Сеть включаем — иначе предохранитель (план 62) даст 503 до auth/rate-limit,
+	// которые проверяют эти тесты. Тест блокировки выключает её отдельно.
+	if err := db.SaveNetworkEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+
 	interp := interpreter.New()
 	interp.LookupProc = registry.GetModuleProc
 
@@ -113,6 +119,32 @@ func TestService_HMACAuth(t *testing.T) {
 	s.serviceDispatch(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("с верной подписью ожидался 200, получен %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestService_BlockedWhenNetworkLocked(t *testing.T) {
+	s := newSecuredServiceServer(t, &httpservice.Service{
+		Name: "N", RootURL: "n", Auth: "none",
+		Templates: []httpservice.URLTemplate{{Template: "/", Methods: map[string]string{"GET": "Корень"}}},
+	})
+	// Выключаем предохранитель (фикстура включает его по умолчанию).
+	if err := s.store.SaveNetworkEnabled(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.serviceDispatch(w, httptest.NewRequest("GET", "/hs/n/", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("при заблокированной сети ожидался 503, получен %d", w.Code)
+	}
+
+	// После включения предохранителя сервис отвечает.
+	if err := s.store.SaveNetworkEnabled(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	s.serviceDispatch(w, httptest.NewRequest("GET", "/hs/n/", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("после включения сети ожидался 200, получен %d (%s)", w.Code, w.Body.String())
 	}
 }
 

@@ -400,8 +400,8 @@ func KnownBuiltinNames() map[string]struct{} {
 	// nil-state упадут при реальном вызове, но для перечисления имён это
 	// безопасно).
 	factoryMaps := []map[string]any{
-		NewHTTPFunctions(),
-		NewEmailFunctions(nil),
+		NewHTTPFunctions(nil),
+		NewEmailFunctions(nil, nil),
 		NewTxFunctions(nil, nil),
 		NewChartFunctions(),
 		NewSpreadsheetFunctions(),

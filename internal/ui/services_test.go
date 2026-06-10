@@ -89,6 +89,12 @@ func newServiceTestServer(t *testing.T) (*Server, context.Context) {
 		t.Fatal(err)
 	}
 
+	// Предохранитель сети (план 62) включаем — эти тесты проверяют
+	// маршрутизацию/auth/CORS, а не блокировку сети.
+	if err := db.SaveNetworkEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+
 	s := &Server{
 		store:            db,
 		reg:              registry,
