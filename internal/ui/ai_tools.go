@@ -12,6 +12,7 @@ import (
 	"github.com/ivantit66/onebase/internal/llm"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // aiQueryRowLimit — потолок строк, отдаваемых модели одним инструментом (контроль
@@ -223,6 +224,14 @@ func (s *Server) aiRunQuery(ctx context.Context, call llm.ToolCall) llm.ToolResu
 			}
 		}
 	}
+	// Журнал ИИ (план 54): какой пользователь какой запрос выполнил через
+	// ассистента и сколько строк ушло во внешний LLM.
+	entry := storage.AIAuditEntry{Task: "чат-запрос", Query: qtext, Rows: len(rows)}
+	if user := auth.UserFromContext(ctx); user != nil {
+		entry.UserID, entry.UserLogin = user.ID, user.Login
+	}
+	s.store.LogAIQuery(ctx, entry)
+
 	payload := map[string]any{"строк": len(rows), "данные": rows}
 	if truncated {
 		payload["усечено"] = true

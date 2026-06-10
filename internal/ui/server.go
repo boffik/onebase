@@ -53,6 +53,7 @@ type Server struct {
 	widgetCache      *widget.Cache
 	lockMgr          *runtime.LockManager   // #2 managed locks
 	entitySvc        *entityservice.Service // упсёрт + ТЧ + движения + проведение, разделяется с api
+	aiChatLimit      *aiWindowLimiter       // лимит частоты ИИ-чата на пользователя (план 54)
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -60,7 +61,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if maxBytes <= 0 {
 		maxBytes = 50 * 1024 * 1024
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager()}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute)}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,

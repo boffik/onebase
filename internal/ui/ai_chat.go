@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // aiChatSystemPrompt — роль ассистента. На фазе F3 у чата ещё нет прямого доступа
@@ -43,6 +46,31 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Лимит частоты (план 54): один запрос чата — до 12 раундов tool-use ×
+	// вызовы LLM; без лимита это вектор cost-DoS.
+	user := auth.UserFromContext(r.Context())
+	limitKey := "anon"
+	if user != nil {
+		limitKey = user.ID
+	}
+	if !s.aiChatLimit.Allow(limitKey) {
+		writeJSON(w, http.StatusTooManyRequests,
+			map[string]any{"error": "Слишком много запросов к ИИ — подождите минуту."})
+		return
+	}
+
+	// Суточный потолок токенов (план 54): ai.daily_token_cap в _settings,
+	// 0 = без лимита. Расход считается по журналу _ai_audit.
+	if cap := s.store.GetAIDailyTokenCap(r.Context()); cap > 0 {
+		now := time.Now()
+		midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		if used, err := s.store.AITokensUsedSince(r.Context(), midnight); err == nil && used >= cap {
+			writeJSON(w, http.StatusOK,
+				map[string]any{"error": "Суточный лимит токенов ИИ исчерпан — попробуйте завтра или увеличьте ai.daily_token_cap."})
+			return
+		}
+	}
+
 	cfg, err := s.store.GetLLMConfig(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"error": "Конфиг ИИ повреждён: " + err.Error()})
@@ -71,5 +99,16 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"error": llm.SafeErr(err)})
 		return
 	}
+
+	// Журнал ИИ (план 54): кто, какая модель, сколько токенов. Текст диалога
+	// намеренно не пишем (приватность) — запросы инструментов журналирует
+	// aiRunQuery отдельными записями.
+	entry := storage.AIAuditEntry{Task: "чат", Model: resp.Model,
+		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens}
+	if user != nil {
+		entry.UserID, entry.UserLogin = user.ID, user.Login
+	}
+	s.store.LogAIQuery(r.Context(), entry)
+
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "text": resp.Text, "model": resp.Model})
 }

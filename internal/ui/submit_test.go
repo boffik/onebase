@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -47,11 +48,12 @@ func newSubmitTestServer(t *testing.T, entities []*metadata.Entity) (*Server, co
 	interp.LookupProc = registry.GetModuleProc
 
 	s := &Server{
-		store:    db,
-		reg:      registry,
-		interp:   interp,
-		lockMgr:  runtime.NewLockManager(),
-		messages: NewMessageStore(),
+		store:       db,
+		reg:         registry,
+		interp:      interp,
+		lockMgr:     runtime.NewLockManager(),
+		messages:    NewMessageStore(),
+		aiChatLimit: newAIWindowLimiter(1000, time.Minute), // в тестах лимит не мешает
 	}
 	s.entitySvc = &entityservice.Service{
 		Store:        db,
