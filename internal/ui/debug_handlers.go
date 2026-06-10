@@ -49,10 +49,12 @@ func debugTokenMiddleware(token string) func(http.Handler) http.Handler {
 
 // ── Global Debug Handlers ────────────────────────────────────────
 
-// debugGlobalEnable handles POST /debug/global/enable
+// debugGlobalEnable handles POST /debug/global/enable.
+// Hook не присваивается интерпретатору: каждый запуск DSL сам захватывает
+// текущую сессию через interp.DebugSource (см. wiring в New) — включение
+// отладки на живом сервере не гонит с конкурентными запусками (план 52).
 func (s *Server) debugGlobalEnable(w http.ResponseWriter, r *http.Request) {
 	sess := s.globalDebug.Enable()
-	s.interp.DebugHook = sess
 	writeJSON(w, 200, map[string]any{
 		"status":     "enabled",
 		"session":    "global",
@@ -65,7 +67,6 @@ func (s *Server) debugGlobalEnable(w http.ResponseWriter, r *http.Request) {
 // debugGlobalDisable handles POST /debug/global/disable
 func (s *Server) debugGlobalDisable(w http.ResponseWriter, r *http.Request) {
 	s.globalDebug.Disable()
-	s.interp.DebugHook = nil
 	writeJSON(w, 200, map[string]string{"status": "disabled"})
 }
 
@@ -173,7 +174,6 @@ func (s *Server) debugGlobalStep(w http.ResponseWriter, r *http.Request) {
 // debugGlobalStop handles POST /debug/global/stop — force stop current execution
 func (s *Server) debugGlobalStop(w http.ResponseWriter, r *http.Request) {
 	s.globalDebug.Disable() // Disable stops the session internally
-	s.interp.DebugHook = nil
 	writeJSON(w, 200, map[string]string{"status": "stopped"})
 }
 

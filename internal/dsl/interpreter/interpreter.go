@@ -64,13 +64,27 @@ type Interpreter struct {
 	// `Утилиты.ФИФО(...)`. Используется когда object-часть MemberExpr —
 	// идентификатор, не разрешённый в env как переменная. См.
 	LookupModuleProc func(module, name string) *ast.ProcedureDecl
-	DebugHook        DebugHook // nil = no debugging
+	// DebugSource выдаёт debug hook для очередного запуска (nil = без отладки).
+	// Захватывается один раз на Run/Call/RunWithResult в execCtx запуска.
+	// Устанавливается однократно при конфигурировании сервера (как LookupProc);
+	// текущее включён/выключен живёт внутри источника (GlobalDebugController),
+	// поэтому Interpreter после старта неизменяем и безопасен для конкурентных
+	// запусков (план 52: раньше поле DebugHook мутировалось хендлерами на лету).
+	DebugSource func() DebugHook
 	// MaxRecursionDepth ограничивает глубину вложенных вызовов процедур/функций.
 	// 0 = defaultMaxRecursionDepth. Поле (а не глобальная константа), чтобы порог
 	// можно было задать per-Interpreter и понизить в тестах стража рекурсии.
 	MaxRecursionDepth int
-	curFile           string // last executed statement location (for error reporting)
-	curLine           int
+}
+
+// startEnv создаёт корневое окружение запуска и захватывает debug hook
+// из DebugSource в его execCtx.
+func (i *Interpreter) startEnv(this This) *env {
+	e := newEnv(this)
+	if i.DebugSource != nil {
+		e.ec.debug = i.DebugSource()
+	}
+	return e
 }
 
 func New() *Interpreter { return &Interpreter{} }
@@ -78,7 +92,7 @@ func New() *Interpreter { return &Interpreter{} }
 // EvalExpr evaluates a parsed AST expression and returns the result.
 // Public for the debugger console and debug handlers.
 func (i *Interpreter) EvalExpr(expr ast.Expr, this This) any {
-	e := newEnv(this)
+	e := i.startEnv(this)
 	return i.evalExpr(expr, e)
 }
 
@@ -87,19 +101,19 @@ func (i *Interpreter) EvalExpr(expr ast.Expr, this This) any {
 // Документы/Справочники.X.Method(args…) — args биндятся на proc.Params
 // через callUserProc (включая обработку дефолтов).
 func (i *Interpreter) Call(proc *ast.ProcedureDecl, this This, args []any, extraVars ...map[string]any) (result any, err error) {
+	e := i.startEnv(this)
 	defer func() {
 		if r := recover(); r != nil {
 			switch s := r.(type) {
 			case dslStop:
 				err = s.err
 			case userError:
-				err = &DSLError{File: i.curFile, Line: i.curLine, Msg: s.Msg}
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg}
 			default:
 				panic(r)
 			}
 		}
 	}()
-	e := newEnv(this)
 	for _, m := range extraVars {
 		for k, v := range m {
 			e.set(k, v)
@@ -111,13 +125,14 @@ func (i *Interpreter) Call(proc *ast.ProcedureDecl, this This, args []any, extra
 
 // RunWithResult executes a function procedure and captures its return value.
 func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *any, extraVars ...map[string]any) (err error) {
+	e := i.startEnv(this)
 	defer func() {
 		if r := recover(); r != nil {
 			switch s := r.(type) {
 			case dslStop:
 				err = s.err
 			case userError:
-				err = &DSLError{File: i.curFile, Line: i.curLine, Msg: s.Msg}
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg}
 			case dslReturn:
 				if result != nil {
 					*result = s.val
@@ -127,7 +142,6 @@ func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *
 			}
 		}
 	}()
-	e := newEnv(this)
 	for _, m := range extraVars {
 		for k, v := range m {
 			e.set(k, v)
@@ -140,13 +154,14 @@ func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *
 // Run executes a procedure. Optional extra vars (e.g. {"Движения": collector}) are
 // injected into the top-level environment.
 func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[string]any) (err error) {
+	e := i.startEnv(this)
 	defer func() {
 		if r := recover(); r != nil {
 			switch s := r.(type) {
 			case dslStop:
 				err = s.err
 			case userError:
-				err = &DSLError{File: i.curFile, Line: i.curLine, Msg: s.Msg}
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg}
 			case dslReturn:
 				// early return from procedure — not an error
 			default:
@@ -154,7 +169,6 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 			}
 		}
 	}()
-	e := newEnv(this)
 	for _, m := range extraVars {
 		for k, v := range m {
 			e.set(k, v)
@@ -167,10 +181,10 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 func (i *Interpreter) execBlock(stmts []ast.Stmt, e *env) {
 	for _, s := range stmts {
 		if loc := getLocation(s); loc != nil {
-			i.curFile = loc.File
-			i.curLine = loc.Line
+			e.ec.curFile = loc.File
+			e.ec.curLine = loc.Line
 		}
-		if i.DebugHook != nil {
+		if e.ec.debug != nil {
 			i.beforeStmt(s, e)
 		}
 		i.execStmt(s, e)
@@ -203,8 +217,9 @@ func (i *Interpreter) beforeStmt(s ast.Stmt, e *env) {
 		return
 	}
 
-	hitBP := i.DebugHook.HookCheckBreakpoint(loc.File, loc.Line)
-	shouldStep := i.DebugHook.HookShouldStep(loc.File, stackDepth(e))
+	hook := e.ec.debug
+	hitBP := hook.HookCheckBreakpoint(loc.File, loc.Line)
+	shouldStep := hook.HookShouldStep(loc.File, stackDepth(e))
 	if !hitBP && !shouldStep {
 		return
 	}
@@ -217,7 +232,7 @@ func (i *Interpreter) beforeStmt(s ast.Stmt, e *env) {
 	evalFn := func(expr string) (any, error) {
 		return i.evaluateExprString(expr, e)
 	}
-	i.DebugHook.HookOnPause(loc.File, loc.Line, vars, evalFn, reason)
+	hook.HookOnPause(loc.File, loc.Line, vars, evalFn, reason)
 }
 
 func stackDepth(e *env) int {
@@ -609,8 +624,8 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 		}
 		// Помощник из того же файла (.proc.os / .posting.os / .rep.os),
 		// см.
-		if i.LookupSiblingProc != nil && i.curFile != "" {
-			if proc := i.LookupSiblingProc(i.curFile, fnName); proc != nil {
+		if i.LookupSiblingProc != nil && e.ec.curFile != "" {
+			if proc := i.LookupSiblingProc(e.ec.curFile, fnName); proc != nil {
 				return i.callUserProc(proc, e, args)
 			}
 		}
@@ -692,9 +707,9 @@ func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args [
 	if callEnv.depth+1 > limit {
 		RaiseUserError(fmt.Sprintf("Превышена максимальная глубина рекурсии (%d) — вероятно, бесконечный вызов процедуры/функции", limit))
 	}
-	if i.DebugHook != nil {
-		i.DebugHook.HookPushFrame(proc.Name.Literal, 0)
-		defer i.DebugHook.HookPopFrame()
+	if hook := callEnv.ec.debug; hook != nil {
+		hook.HookPushFrame(proc.Name.Literal, 0)
+		defer hook.HookPopFrame()
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -706,7 +721,7 @@ func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args [
 			}
 		}
 	}()
-	child := &env{vars: make(map[string]any), parent: callEnv, this: callEnv.this, depth: callEnv.depth + 1}
+	child := callEnv.child()
 	for idx, param := range proc.Params {
 		if idx < len(args) {
 			child.set(param.Literal, args[idx])
