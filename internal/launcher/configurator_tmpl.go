@@ -2616,7 +2616,7 @@ function mqbGen(){
 // ── Debug panel ──────────────────────────────────────────────────
 var _dbgBase = '{{.Base.ID}}'; // base ID for debug proxy
 var _basePort = {{.Base.Port}};
-var _sessionToken = '{{.SessionToken}}';
+var _hasSession = {{if .SessionToken}}true{{else}}false{{end}}; // сырой токен в страницу не вшиваем (план 53)
 var _treeGroupOrder = [{{range $i, $g := .GroupOrder}}{{if $i}},{{end}}'{{$g}}'{{end}}]; // пользовательский порядок групп дерева
 var _dbgEnabled = false;
 var _dbgPollTimer = null;
@@ -2685,10 +2685,19 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// Возвращает Promise с URL пользовательского режима. Сессия передаётся через
+// одноразовый bootstrap-код (план 53): токен не попадает в URL/логи/историю.
 function _enterpriseURL() {
-  return _sessionToken
-    ? 'http://localhost:' + _basePort + '/ui?_tk=' + encodeURIComponent(_sessionToken)
-    : 'http://localhost:' + _basePort + '/ui';
+  var plain = 'http://localhost:' + _basePort + '/ui';
+  if (!_hasSession) return Promise.resolve(plain);
+  return fetch('/bases/' + _dbgBase + '/one-time-code', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      return (d && d.code)
+        ? 'http://localhost:' + _basePort + '/auth/bootstrap?code=' + encodeURIComponent(d.code) + '&return=%2Fui'
+        : plain;
+    })
+    .catch(function(){ return plain; });
 }
 
 // Запускает (restart=false) или перезапускает (restart=true) базу и открывает
@@ -2696,7 +2705,8 @@ function _enterpriseURL() {
 function _doLaunch(restart) {
   var btn = document.querySelector('.run-enterprise-btn');
   if (btn) btn.style.background = '#a3a3a3';
-  var url = _enterpriseURL();
+  // одноразовый код запрашиваем ПОСЛЕ старта базы — его выдаёт сам процесс базы
+  var openUI = function(){ _enterpriseURL().then(function(url){ window.open(url, '_blank'); }); };
   var endpoint = restart
     ? '/bases/' + _dbgBase + '/configurator/restart'
     : '/bases/' + _dbgBase + '/start';
@@ -2705,11 +2715,11 @@ function _doLaunch(restart) {
     .then(function(d){
       if (btn) btn.style.background = '';
       if (d && d.error) { alert('Не удалось запустить базу: ' + d.error); return; }
-      window.open(url, '_blank');
+      openUI();
     })
     .catch(function(){
       if (btn) btn.style.background = '';
-      window.open(url, '_blank');
+      openUI();
     });
 }
 

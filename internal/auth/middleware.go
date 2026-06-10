@@ -22,17 +22,13 @@ func (r *Repo) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 1) Try cookie
+		// Сессия принимается только из cookie. Токен в query (?_tk=) больше
+		// не поддерживается: он утекал в stdout-лог (middleware.Logger пишет
+		// полный RequestURI), Referer и историю браузера — план 53, этап 1.
+		// Конфигуратор передаёт сессию через /auth/bootstrap?code=<одноразовый>.
 		var token string
 		if cookie, err := req.Cookie("onebase_session"); err == nil {
 			token = cookie.Value
-		}
-
-		// 2) Try URL query parameter (used by configurator iframe on different port)
-		if token == "" {
-			if tk := req.URL.Query().Get("_tk"); tk != "" {
-				token = tk
-			}
 		}
 
 		if token == "" {
@@ -44,17 +40,6 @@ func (r *Repo) Middleware(next http.Handler) http.Handler {
 		if err != nil {
 			redirectToLogin(w, req)
 			return
-		}
-
-		// If token came from URL, set the cookie so subsequent requests work without _tk
-		if req.URL.Query().Get("_tk") != "" {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "onebase_session",
-				Value:    token,
-				Path:     "/",
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			})
 		}
 
 		// Load roles for this user (best-effort — don't fail if table missing yet)

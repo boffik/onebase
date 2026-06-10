@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/ivantit66/onebase/internal/websec"
 )
 
 type Server struct {
@@ -23,7 +23,9 @@ type Server struct {
 	handler http.Handler
 }
 
-func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, port int, uiCfg ui.Config, sched *scheduler.Scheduler) *Server {
+// New строит HTTP-сервер базы. host «» = 127.0.0.1 (см. addr.go): наружу
+// сервер выставляется только явным --host 0.0.0.0.
+func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, host string, port int, uiCfg ui.Config, sched *scheduler.Scheduler) *Server {
 	// Debug API защищён внутренним токеном. Без него (плоский `onebase run`,
 	// опубликованная база) debug-маршруты не монтируются вовсе.
 	debugToken := os.Getenv("ONEBASE_DEBUG_TOKEN")
@@ -31,17 +33,28 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
 	h := &handler{reg: reg, store: store, interp: interp, entitySvc: uiSrv.EntitySvc()}
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	r.Use(requestLogger()) // как middleware.Logger, но режет токены/коды из URI (план 53)
 	r.Use(middleware.Recoverer)
+	r.Use(websec.SecurityHeaders) // nosniff, Referrer-Policy, CSP frame-ancestors (план 53)
+	r.Use(websec.CSRFProtect)     // мутирующие запросы с чужим Origin → 403 (план 53)
 
 	// Public auth routes (no authentication required)
-	authH := &auth.Handlers{Repo: authRepo, Auditor: store}
+	authH := &auth.Handlers{
+		Repo:    authRepo,
+		Auditor: store,
+		Codes:   auth.NewOneTimeCodes(30 * time.Second),
+		// 5 неудач с одного IP по одному логину → блок на минуту (план 53).
+		LoginLimit: auth.NewLoginLimiter(5, time.Minute),
+	}
 	r.Get("/login", authH.LoginPage)
 	r.Post("/login", authH.LoginSubmit)
 	r.Post("/logout", authH.Logout)
 	r.Get("/auth/status", authH.Status)
 	r.Post("/auth/login", authH.LoginJSON)
 	r.Get("/auth/bootstrap", authH.Bootstrap)
+	// Одноразовый код для bootstrap (план 53): хендлер сам проверяет session
+	// cookie (401 JSON, без HTML-редиректа auth-мидлвары).
+	r.Post("/auth/one-time-code", authH.IssueOneTimeCode)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	// PWA-ассеты (manifest, service worker, offline-страница, иконки) — публичны.
@@ -83,9 +96,8 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		uiSrv.MountDebug(r)
 	}
 
-	addr := fmt.Sprintf(":%d", port)
 	return &Server{handler: r, srv: &http.Server{
-		Addr:    addr,
+		Addr:    listenAddr(host, port),
 		Handler: r,
 		// Slowloris-защита: обрываем клиента, который медленно шлёт заголовки,
 		// и закрываем простаивающие keep-alive соединения. ReadTimeout/

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/webassets"
+	"github.com/ivantit66/onebase/internal/websec"
 )
 
 //go:embed static
@@ -74,6 +75,12 @@ func (s *Server) Close() {
 func (s *Server) ListenAndServe() error {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
+	// Конфигуратор — чувствительная поверхность (консоль кода, миграции):
+	// те же базовые защитные заголовки и Origin-проверка CSRF, что у базы
+	// (план 53, этап 3). Модальные iframe конфигуратора — same-origin,
+	// frame-ancestors 'self' + localhost их не ломает.
+	r.Use(websec.SecurityHeaders)
+	r.Use(websec.CSRFProtect)
 
 	// Static assets (embedded)
 	r.Handle("/static/*", http.StripPrefix("/static/", staticHTTP))
@@ -193,6 +200,10 @@ func (s *Server) ListenAndServe() error {
 	// сессию админа и отвечает 401 JSON (а не 302→HTML, который ломал JS-fetch).
 	// На app-стороне debug-запрос дополнительно требует X-OneBase-Debug-Token.
 	r.HandleFunc("/bases/{id}/debug/{action}", s.h.debugProxy) // GET + POST
+
+	// Одноразовый bootstrap-код (план 53) — тоже вне cfgAuth-группы: хендлер
+	// сам проверяет сессию админа и отвечает JSON для JS-fetch.
+	r.Post("/bases/{id}/one-time-code", s.h.oneTimeCodeProxy)
 
 	r.Post("/killall", s.h.killAll)
 	r.Post("/quit", func(w http.ResponseWriter, r *http.Request) {

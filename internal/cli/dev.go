@@ -188,7 +188,8 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "warning: i18n load: %v\n", err2)
 	}
 	uiCfg.Bundle = bundle
-	srv := api.New(reg, db, interp, authRepo, port, uiCfg, sched)
+	// dev-сервер — всегда loopback (план 53: secure-by-default bind)
+	srv := api.New(reg, db, interp, authRepo, "127.0.0.1", port, uiCfg, sched)
 
 	schedCtx, schedCancel := context.WithCancel(ctx)
 	defer schedCancel()

@@ -40,6 +40,8 @@ func init() {
 	runCmd.Flags().String("db", "", "PostgreSQL DSN (overrides DATABASE_URL env)")
 	runCmd.Flags().String("sqlite", "", "path to SQLite database file (alternative to --db)")
 	runCmd.Flags().Int("port", 8080, "HTTP server port")
+	// Secure-by-default (план 53): наружу сервер выставляется только явно.
+	runCmd.Flags().String("host", "127.0.0.1", "интерфейс прослушивания (0.0.0.0 — все интерфейсы)")
 	runCmd.Flags().String("config-source", "file", "configuration source: file or database")
 	// hot reload .os/.yaml без перезапуска. По умолчанию off,
 	// для прода обычно не нужен. Включается флагом --watch.
@@ -306,7 +308,19 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		sched.SetMailer(m)
 	}
 
-	srv := api.New(reg, db, interp, authRepo, port, uiCfg, sched)
+	host, _ := cmd.Flags().GetString("host")
+	// Footgun-страж (план 53, анализ §2.7): без пользователей auth выключен
+	// целиком (включая консоль кода); слушать в таком виде не-loopback адрес —
+	// почти наверняка ошибка оператора.
+	if !api.IsLoopbackHost(host) {
+		if hasUsers, _ := authRepo.HasUsers(ctx); !hasUsers {
+			fmt.Fprintf(os.Stderr, "ПРЕДУПРЕЖДЕНИЕ: сервер слушает %s без настроенных пользователей —\n"+
+				"база и консоль кода доступны без аутентификации. Создайте пользователя\n"+
+				"или уберите --host (по умолчанию 127.0.0.1).\n", host)
+		}
+	}
+
+	srv := api.New(reg, db, interp, authRepo, host, port, uiCfg, sched)
 
 	// опциональный hot reload (см. --watch).
 	// Перечитываем только метаданные (reg.Load*), миграции не повторяем —
@@ -351,7 +365,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	defer schedCancel()
 	go sched.Start(schedCtx)
 
-	fmt.Fprintf(os.Stdout, "onebase running on :%d\n", port)
+	fmt.Fprintf(os.Stdout, "onebase running on %s:%d\n", host, port)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {

@@ -3582,6 +3582,48 @@ func (h *handler) savePredefinedToDB(ctx context.Context, b *Base, entityName st
 	return err
 }
 
+// ── one-time code proxy ──────────────────────────────────────────────────────
+
+// oneTimeCodeProxy запрашивает у процесса базы одноразовый bootstrap-код для
+// текущей сессии (план 53): конфигуратор больше не вшивает сессионный токен в
+// URL пользовательского режима (?_tk=) — JS дёргает этот эндпоинт (same-origin,
+// без CORS) и открывает /auth/bootstrap?code=<одноразовый>.
+func (h *handler) oneTimeCodeProxy(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "base not found"})
+		return
+	}
+	if !h.cfgAdminAuthorized(r, b) {
+		writeJSON(w, 401, map[string]string{"error": "Требуется вход администратора"})
+		return
+	}
+	cookie, err := r.Cookie("onebase_session")
+	if err != nil || cookie.Value == "" {
+		// Нет сессии пользовательского режима — клиент откроет /ui без bootstrap.
+		writeJSON(w, 200, map[string]string{"code": ""})
+		return
+	}
+
+	url := fmt.Sprintf("http://localhost:%d/auth/one-time-code", b.Port)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, nil)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	req.AddCookie(&http.Cookie{Name: "onebase_session", Value: cookie.Value})
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": "UI server unreachable: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
 // ── debug proxy ──────────────────────────────────────────────────────────────
 
 // debugProxy forwards debug API requests from the configurator (launcher server)
