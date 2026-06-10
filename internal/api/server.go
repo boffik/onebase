@@ -35,7 +35,13 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	r.Use(middleware.Recoverer)
 
 	// Public auth routes (no authentication required)
-	authH := &auth.Handlers{Repo: authRepo, Auditor: store, Codes: auth.NewOneTimeCodes(30 * time.Second)}
+	authH := &auth.Handlers{
+		Repo:    authRepo,
+		Auditor: store,
+		Codes:   auth.NewOneTimeCodes(30 * time.Second),
+		// 5 неудач с одного IP по одному логину → блок на минуту (план 53).
+		LoginLimit: auth.NewLoginLimiter(5, time.Minute),
+	}
 	r.Get("/login", authH.LoginPage)
 	r.Post("/login", authH.LoginSubmit)
 	r.Post("/logout", authH.Logout)

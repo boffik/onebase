@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"strconv"
 )
 
 var loginTmpl = template.Must(template.New("login").Parse(`<!DOCTYPE html>
@@ -43,9 +44,24 @@ type AuditLogger interface {
 }
 
 type Handlers struct {
-	Repo    *Repo
-	Auditor AuditLogger   // optional, set by api.New
-	Codes   *OneTimeCodes // одноразовые bootstrap-коды (план 53); optional
+	Repo       *Repo
+	Auditor    AuditLogger   // optional, set by api.New
+	Codes      *OneTimeCodes // одноразовые bootstrap-коды (план 53); optional
+	LoginLimit *LoginLimiter // rate-limit попыток входа (план 53); optional
+}
+
+// limitExceeded отвечает 429 + Retry-After, если ключ заблокирован лимитером.
+func (h *Handlers) limitExceeded(w http.ResponseWriter, r *http.Request, login string) bool {
+	if h.LoginLimit == nil {
+		return false
+	}
+	ok, retry := h.LoginLimit.Allow(loginKey(r, login))
+	if ok {
+		return false
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+	http.Error(w, "Слишком много попыток входа — повторите позже", http.StatusTooManyRequests)
+	return true
 }
 
 // IssueOneTimeCode handles POST /auth/one-time-code: выдаёт короткоживущий
@@ -106,10 +122,20 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	login := r.FormValue("login")
 	password := r.FormValue("password")
 
+	if h.limitExceeded(w, r, login) {
+		return
+	}
+
 	user, err := h.Repo.Authenticate(r.Context(), login, password)
 	if err != nil {
+		if h.LoginLimit != nil {
+			h.LoginLimit.Fail(loginKey(r, login))
+		}
 		renderErr(w, r, http.StatusUnauthorized, "Неверное имя пользователя или пароль")
 		return
+	}
+	if h.LoginLimit != nil {
+		h.LoginLimit.Reset(loginKey(r, login))
 	}
 
 	token, err := h.Repo.CreateSession(r.Context(), user.ID)
@@ -148,10 +174,20 @@ func (h *Handlers) LoginJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.limitExceeded(w, r, req.Login) {
+		return
+	}
+
 	user, err := h.Repo.Authenticate(r.Context(), req.Login, req.Password)
 	if err != nil {
+		if h.LoginLimit != nil {
+			h.LoginLimit.Fail(loginKey(r, req.Login))
+		}
 		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
 		return
+	}
+	if h.LoginLimit != nil {
+		h.LoginLimit.Reset(loginKey(r, req.Login))
 	}
 
 	token, err := h.Repo.CreateSession(r.Context(), user.ID)
