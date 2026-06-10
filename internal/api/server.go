@@ -50,6 +50,12 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// бы на инстансе с пользователями. Ассеты не содержат данных (план 45).
 	uiSrv.MountPWA(r)
 
+	// HTTP-сервисы конфигурации (план 52) — /hs/<корень>/…. Монтируются ВНЕ
+	// session-middleware: каждый сервис сам объявляет аутентификацию
+	// (none/basic/session), поэтому публичные приёмники вебхуков работают без
+	// cookie, а защищённые проверяют Basic/сессию внутри обработчика.
+	uiSrv.MountServices(r)
+
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authRepo.Middleware)

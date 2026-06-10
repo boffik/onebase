@@ -15,6 +15,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
 	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/ivantit66/onebase/internal/httpservice"
 	"github.com/ivantit66/onebase/internal/llm"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
@@ -36,6 +37,7 @@ type Project struct {
 	Programs         map[string]*ast.Program  // entity name → parsed DSL (модуль объекта)
 	ManagerPrograms  map[string]*ast.Program  // entity name → parsed DSL (модуль менеджера)
 	Processors       []*processor.Processor
+	HTTPServices     []*httpservice.Service   // план 52: опубликованные HTTP-сервисы
 	Modules          map[string]*ast.Program  // module name → parsed procs
 	Subsystems       []*metadata.Subsystem
 	Journals         []*metadata.Journal
@@ -185,6 +187,9 @@ func Load(dir string) (*Project, error) {
 	if err := p.loadProcessorForms(); err != nil {
 		return nil, err
 	}
+	if err := p.loadHTTPServices(); err != nil {
+		return nil, err
+	}
 	if err := p.loadSubsystems(); err != nil {
 		return nil, err
 	}
@@ -233,6 +238,15 @@ func (p *Project) loadProcessors() error {
 		return fmt.Errorf("project: load processors: %w", err)
 	}
 	p.Processors = procs
+	return nil
+}
+
+func (p *Project) loadHTTPServices() error {
+	services, err := httpservice.LoadDir(filepath.Join(p.Dir, "services"))
+	if err != nil {
+		return fmt.Errorf("project: load http services: %w", err)
+	}
+	p.HTTPServices = services
 	return nil
 }
 
@@ -428,6 +442,7 @@ func (p *Project) loadDSL() error {
 		isPosting := strings.HasSuffix(name, ".posting.os")
 		isReport := strings.HasSuffix(name, ".rep.os")
 		isManager := strings.HasSuffix(name, ".manager.os")
+		isService := strings.HasSuffix(name, ".service.os")
 
 		fullPath := filepath.Join(srcDir, name)
 		data, err := os.ReadFile(fullPath)
@@ -460,6 +475,17 @@ func (p *Project) loadDSL() error {
 
 		if isProc {
 			base := strings.TrimSuffix(name, ".proc.os")
+			entityName := fileNameToEntityBase(base)
+			p.Programs[entityName] = prog
+			continue
+		}
+		if isService {
+			// Обработчики HTTP-сервиса (план 52). Кладём в Programs под
+			// капитализированным именем файла; роутер достаёт процедуру через
+			// GetProcedure(serviceName, handlerName) с регистронезависимым
+			// фолбэком, поэтому имя файла должно совпадать с именем сервиса
+			// (без учёта регистра).
+			base := strings.TrimSuffix(name, ".service.os")
 			entityName := fileNameToEntityBase(base)
 			p.Programs[entityName] = prog
 			continue

@@ -80,6 +80,23 @@ func (u *User) Has(kind, entity, op string) bool {
 	return false
 }
 
+// HasAnyRole reports whether the user holds at least one of the named roles
+// (case-insensitive). Admins always pass. Used to gate HTTP-services declaring
+// a `roles:` list (план 52).
+func (u *User) HasAnyRole(names []string) bool {
+	if u.IsAdmin {
+		return true
+	}
+	for _, want := range names {
+		for _, r := range u.Roles {
+			if strings.EqualFold(r.Name, want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // EnsureRolesSchema creates the _roles and _user_roles tables if they don't exist.
 func (r *Repo) EnsureRolesSchema(ctx context.Context) error {
 	d := r.db.Dialect()

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/ivantit66/onebase/internal/httpservice"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/processor"
@@ -29,6 +30,7 @@ type Registry struct {
 	moduleProcs     map[string]*ast.ProcedureDecl // flat: proc name → decl
 	moduleByName    map[string]map[string]*ast.ProcedureDecl // lowercase module → procs in it
 	processors      map[string]*processor.Processor
+	httpServices    map[string]*httpservice.Service // lowercase name → HTTP-сервис
 	subsystems      []*metadata.Subsystem // sorted by Order
 	journals        map[string]*metadata.Journal
 	accountRegs     map[string]*metadata.AccountRegister
@@ -59,6 +61,7 @@ func NewRegistry() *Registry {
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),
 		moduleByName:    make(map[string]map[string]*ast.ProcedureDecl),
 		processors:      make(map[string]*processor.Processor),
+		httpServices:    make(map[string]*httpservice.Service),
 		journals:        make(map[string]*metadata.Journal),
 		accountRegs:     make(map[string]*metadata.AccountRegister),
 		chartsOfAccount: make(map[string]*metadata.ChartOfAccounts),
@@ -543,6 +546,50 @@ func (r *Registry) GetProcessor(name string) *processor.Processor {
 	for k, v := range r.processors {
 		if strings.ToLower(k) == nl {
 			return v
+		}
+	}
+	return nil
+}
+
+// LoadHTTPServices регистрирует опубликованные HTTP-сервисы (план 52).
+// Ключ — lowercase имя сервиса; роутер ищет сервис по корневому URL через
+// HTTPServices(), а обработчик — через GetProcedure(serviceName, handlerName).
+func (r *Registry) LoadHTTPServices(services []*httpservice.Service) {
+	m := make(map[string]*httpservice.Service, len(services))
+	for _, s := range services {
+		m[strings.ToLower(s.Name)] = s
+	}
+	r.mu.Lock()
+	r.httpServices = m
+	r.mu.Unlock()
+}
+
+// HTTPServices возвращает все зарегистрированные HTTP-сервисы.
+func (r *Registry) HTTPServices() []*httpservice.Service {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*httpservice.Service, 0, len(r.httpServices))
+	for _, s := range r.httpServices {
+		out = append(out, s)
+	}
+	return out
+}
+
+// GetHTTPService ищет сервис по имени (регистронезависимо). nil, если нет.
+func (r *Registry) GetHTTPService(name string) *httpservice.Service {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.httpServices[strings.ToLower(name)]
+}
+
+// GetHTTPServiceByRoot ищет сервис по корневому URL (регистронезависимо).
+func (r *Registry) GetHTTPServiceByRoot(root string) *httpservice.Service {
+	root = strings.Trim(root, "/")
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.httpServices {
+		if strings.EqualFold(s.RootURL, root) {
+			return s
 		}
 	}
 	return nil

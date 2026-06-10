@@ -70,5 +70,11 @@ func (c Common) Build() map[string]any {
 	for k, v := range interpreter.NewLLMFunctions(aiassist.New(c.Ctx, c.Store, nil)) {
 		vars[k] = v
 	}
+	// Объекты HTTP-сервисов (HTTPСервисОтвет, ОтветJSON/ОтветТекст) — нужны
+	// прежде всего обработчикам сервисов, но безвредны и в обработках/заданиях,
+	// поэтому держим их в общем наборе (как HTTP-клиент).
+	for k, v := range interpreter.NewServiceFunctions() {
+		vars[k] = v
+	}
 	return vars
 }

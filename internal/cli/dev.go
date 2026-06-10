@@ -143,6 +143,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		reg.LoadDSLPrintForms(proj.DSLPrintForms)
 		reg.LoadModules(proj.Modules)
 		reg.LoadProcessors(proj.Processors)
+		reg.LoadHTTPServices(proj.HTTPServices)
 		reg.LoadSubsystems(proj.Subsystems)
 		reg.LoadJournals(proj.Journals)
 		reg.LoadAccountRegisters(proj.AccountRegisters, proj.ChartsOfAccounts)

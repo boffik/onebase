@@ -406,6 +406,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		NewChartFunctions(),
 		NewSpreadsheetFunctions(),
 		NewLLMFunctions(nil),
+		NewServiceFunctions(),
 	}
 	for _, m := range factoryMaps {
 		for k := range m {

@@ -1,0 +1,25 @@
+name: API
+title: Публичное API магазина (план 52)
+# Опубликовано по адресу /hs/api/…  (префикс /hs/ — как у http-сервисов 1С).
+# auth: none — без аутентификации (удобно для чтения и приёма вебхуков).
+# Для защиты замените на basic (HTTP Basic против пользователей базы) или session.
+root_url: api
+auth: none
+# CORS — чтобы публичным API можно было пользоваться из браузера (SPA).
+cors:
+  origins: ["*"]
+  headers: ["Content-Type"]
+  max_age: 600
+templates:
+  - template: /health
+    methods:
+      GET: Здоровье
+  - template: /номенклатура
+    methods:
+      GET: СписокНоменклатуры
+  - template: /номенклатура/{артикул}
+    methods:
+      GET: НоменклатураПоАртикулу
+  - template: /эхо
+    methods:
+      POST: Эхо
