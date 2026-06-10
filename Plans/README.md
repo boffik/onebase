@@ -98,6 +98,27 @@
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
 | 51 | [51-llm-business-assistant.md](51-llm-business-assistant.md) | ИИ-помощник (LLM): мультипровайдер с маршрутизацией по задачам, builtin `ЗапросИИ`, чат в UI, помощник в конфигураторе, умная загрузка документов (vision) | 3–4 недели (мин. срез F1+F2 ≈ 5–8 дней) | ✅ F1–F6 реализованы (ядро+настройки, builtin, чат, tool-use, помощник в конфигураторе, vision-распознавание); follow-up'ы: tool-use для OpenAI/Gemini, объектный RBAC, демо-обработка |
+| 54 | [54-ai-assistant-security-audit.md](54-ai-assistant-security-audit.md) | Безопасность и аудит ИИ-помощника: объектный RBAC для ИИ-запросов, журнал ИИ-обращений, лимиты частоты/токенов | 3.5 дня | ⬜ Не начато |
+| 57 | [57-ai-configurator-codegen.md](57-ai-configurator-codegen.md) | ИИ-конфигуратор: генерация каркаса конфигурации по ТЗ, объяснение ошибок `check`, песочница DSL | 1.5–2.5 недели | ⬜ Не начато |
+
+### Направление К — Качество и безопасность (аудит 2026-06-10)
+
+Источник: [`АнализПроекта-2026-06-10.md`](../АнализПроекта-2026-06-10.md). Спринт «качество перед ростом».
+
+| № | Файл | Фича | Эстимейт | Статус |
+|---|---|---|---|---|
+| 52 | [52-interpreter-concurrency.md](52-interpreter-concurrency.md) | 🔴 Потокобезопасность DSL-интерпретатора: `curFile/curLine` и `DebugHook` per-call, конкурентный race-тест | 2 дня | ⬜ Не начато |
+| 53 | [53-web-security-hardening.md](53-web-security-hardening.md) | Web-безопасность: токен сессии вне URL/логов, rate-limit логина, CSRF + security-заголовки, bind на 127.0.0.1 | 4–4.5 дня | ⬜ Не начато |
+| 55 | [55-monolith-split-embed-frontend.md](55-monolith-split-embed-frontend.md) | Раскол монолитов (`handlers.go`, `configurator_tmpl.go`) + фронт в `go:embed` | 4–5 дней | ⬜ Не начато |
+| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | ⬜ Не начато |
+
+### Направление Г — Интеграции и экосистема (продолжение)
+
+| № | Файл | Фича | Эстимейт | Статус |
+|---|---|---|---|---|
+| 58 | [58-inbound-integrations.md](58-inbound-integrations.md) | Входящие интеграции: REST-эндпоинты `/api/hooks/*` → DSL-обработчики (пара к 29) | 1.5 недели | ⬜ Не начато |
+| 59 | [59-report-composition.md](59-report-composition.md) | Лёгкая компоновка отчётов: группировки, итоги, drill-down, графики, условное оформление | 1.5–2 недели | ⬜ Не начато |
+| 60 | [60-config-versioning-marketplace.md](60-config-versioning-marketplace.md) | Версионирование конфигурации в БД (история/diff/откат) + marketplace конфигураций | 2–3 недели | ⬜ Не начато |
 
 ## Граф зависимостей
 

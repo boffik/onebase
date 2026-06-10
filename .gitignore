@@ -33,6 +33,7 @@ Thumbs.db
 # Claude Code skills
 .claude/commands/
 .claude/scheduled_tasks.lock
+.superpowers/
 
 # IDE
 .idea/
@@ -44,6 +45,9 @@ docs/*
 !docs/forms.md
 !docs/forms-1c-converter.md
 !docs/ai-assistant.md
+
+# Локальные демо-артефакты (выгрузки, скриншоты печати)
+demo/
 
 # Локальные базы SQLite
 *.db
