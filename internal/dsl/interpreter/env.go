@@ -37,10 +37,21 @@ func (m *MapThis) Set(name string, v any) {
 	m.M[low] = v
 }
 
+// execCtx — изменяемое состояние одного запуска DSL (Run/Call/RunWithResult/
+// EvalExpr). Живёт в цепочке env конкретного вызова и разделяется всеми его
+// кадрами, поэтому конкурентные запуски на одном *Interpreter не гонят по
+// curFile/curLine и видят только свой debug hook (план 52).
+type execCtx struct {
+	curFile string // last executed statement location (for error reporting)
+	curLine int
+	debug   DebugHook // hook этого запуска; nil = без отладки, нулевые накладные
+}
+
 type env struct {
 	vars   map[string]any
 	parent *env
 	this   This
+	ec     *execCtx
 	// depth — глубина вызова процедур/функций (корень = 1). Растёт на каждый
 	// callUserProc; используется стражем рекурсии (см. limits.go). O(1) и
 	// потокобезопасно: счётчик живёт в цепочке env конкретного запуска.
@@ -48,11 +59,11 @@ type env struct {
 }
 
 func newEnv(this This) *env {
-	return &env{vars: make(map[string]any), this: this, depth: 1}
+	return &env{vars: make(map[string]any), this: this, ec: &execCtx{}, depth: 1}
 }
 
 func (e *env) child() *env {
-	return &env{vars: make(map[string]any), parent: e, this: e.this, depth: e.depth + 1}
+	return &env{vars: make(map[string]any), parent: e, this: e.this, ec: e.ec, depth: e.depth + 1}
 }
 
 func (e *env) get(name string) (any, bool) {

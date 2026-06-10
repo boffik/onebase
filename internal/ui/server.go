@@ -80,6 +80,17 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 			return &formObjectThis{obj: obj, entity: e}
 		},
 	}
+	// Отладчик подключается к исполнению через DebugSource: каждый запуск DSL
+	// захватывает текущую сессию глобального контроллера в свой execCtx.
+	// Устанавливается однократно здесь, до начала обслуживания HTTP, — сам
+	// Interpreter после этого неизменяем (план 52: раньше debug_handlers
+	// мутировали interp.DebugHook на лету, что гонило с конкурентными запусками).
+	interp.DebugSource = func() interpreter.DebugHook {
+		if sess := s.globalDebug.Session(); sess != nil {
+			return sess
+		}
+		return nil
+	}
 	globalBundle = cfg.Bundle
 	if sched != nil {
 		sched.SetMessageSink(func(userID, text string) { s.messages.Push(userID, text) })
