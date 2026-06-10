@@ -38,6 +38,8 @@ type Project struct {
 	ManagerPrograms  map[string]*ast.Program  // entity name → parsed DSL (модуль менеджера)
 	Processors       []*processor.Processor
 	Modules          map[string]*ast.Program  // module name → parsed procs
+	Endpoints        []*metadata.Endpoint     // входящие REST-эндпоинты (план 58)
+	EndpointPrograms map[string]*ast.Program  // handler (lower) → parsed DSL (src/*.endpoint.os)
 	Subsystems       []*metadata.Subsystem
 	Journals         []*metadata.Journal
 	ScheduledJobs    []*metadata.ScheduledJob
@@ -177,10 +179,11 @@ func LoadFromDB(ctx context.Context, repo *configdb.Repo) (*Project, error) {
 
 func Load(dir string) (*Project, error) {
 	p := &Project{
-		Dir:             dir,
-		Programs:        make(map[string]*ast.Program),
-		ManagerPrograms: make(map[string]*ast.Program),
-		Modules:         make(map[string]*ast.Program),
+		Dir:              dir,
+		Programs:         make(map[string]*ast.Program),
+		ManagerPrograms:  make(map[string]*ast.Program),
+		Modules:          make(map[string]*ast.Program),
+		EndpointPrograms: make(map[string]*ast.Program),
 	}
 	if err := p.loadMetadata(); err != nil {
 		return nil, err
@@ -198,6 +201,9 @@ func Load(dir string) (*Project, error) {
 		return nil, err
 	}
 	if err := p.loadProcessors(); err != nil {
+		return nil, err
+	}
+	if err := p.loadEndpoints(); err != nil {
 		return nil, err
 	}
 	if err := p.loadProcessorForms(); err != nil {
@@ -251,6 +257,31 @@ func (p *Project) loadProcessors() error {
 		return fmt.Errorf("project: load processors: %w", err)
 	}
 	p.Processors = procs
+	return nil
+}
+
+// loadEndpoints читает endpoints/*.yaml (план 58). Секреты поддерживают
+// ${env:VAR} — значение живёт в окружении, не в YAML/git/.obz.
+func (p *Project) loadEndpoints() error {
+	dir := filepath.Join(p.Dir, "endpoints")
+	items, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("project: readdir %s: %w", dir, err)
+	}
+	for _, item := range items {
+		if item.IsDir() || (!strings.HasSuffix(item.Name(), ".yaml") && !strings.HasSuffix(item.Name(), ".yml")) {
+			continue
+		}
+		ep, err := metadata.LoadEndpointFile(filepath.Join(dir, item.Name()))
+		if err != nil {
+			return fmt.Errorf("project: load endpoint: %w", err)
+		}
+		ep.Secret = expandEnvRefs(ep.Secret)
+		p.Endpoints = append(p.Endpoints, ep)
+	}
 	return nil
 }
 
@@ -446,6 +477,7 @@ func (p *Project) loadDSL() error {
 		isPosting := strings.HasSuffix(name, ".posting.os")
 		isReport := strings.HasSuffix(name, ".rep.os")
 		isManager := strings.HasSuffix(name, ".manager.os")
+		isEndpoint := strings.HasSuffix(name, ".endpoint.os")
 
 		fullPath := filepath.Join(srcDir, name)
 		data, err := os.ReadFile(fullPath)
@@ -473,6 +505,14 @@ func (p *Project) loadDSL() error {
 				entityName = actual
 			}
 			p.ManagerPrograms[entityName] = prog
+			continue
+		}
+
+		if isEndpoint {
+			// Обработчик входящего эндпоинта (план 58): ключ — имя файла без
+			// суффикса в нижнем регистре, на него ссылается handler в yaml.
+			base := strings.ToLower(strings.TrimSuffix(name, ".endpoint.os"))
+			p.EndpointPrograms[base] = prog
 			continue
 		}
 

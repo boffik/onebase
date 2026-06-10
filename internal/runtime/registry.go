@@ -41,6 +41,15 @@ type Registry struct {
 	// значение — список *Entity-приёмников, у которых в YAML указан этот
 	// источник в `based_on`. Заполняется в Load(opts).
 	basedOnIndex map[string][]*metadata.Entity
+	// endpoints — входящие REST-эндпоинты (план 58): lowercase path → эндпоинт
+	// с разрешённой процедурой-обработчиком.
+	endpoints map[string]*ResolvedEndpoint
+}
+
+// ResolvedEndpoint — эндпоинт вместе с процедурой Обработать его модуля.
+type ResolvedEndpoint struct {
+	Meta *metadata.Endpoint
+	Proc *ast.ProcedureDecl
 }
 
 func NewRegistry() *Registry {
@@ -63,7 +72,49 @@ func NewRegistry() *Registry {
 		accountRegs:     make(map[string]*metadata.AccountRegister),
 		chartsOfAccount: make(map[string]*metadata.ChartOfAccounts),
 		widgets:         make(map[string]*metadata.Widget),
+		endpoints:       make(map[string]*ResolvedEndpoint),
 	}
+}
+
+// LoadEndpoints регистрирует входящие эндпоинты (план 58). programs —
+// handler (lower) → программа модуля src/<handler>.endpoint.os; процедура
+// «Обработать» (или Handle) разрешается здесь, при загрузке.
+func (r *Registry) LoadEndpoints(eps []*metadata.Endpoint, programs map[string]*ast.Program) {
+	m := make(map[string]*ResolvedEndpoint, len(eps))
+	for _, ep := range eps {
+		re := &ResolvedEndpoint{Meta: ep}
+		if prog, ok := programs[strings.ToLower(ep.Handler)]; ok {
+			for _, p := range prog.Procedures {
+				low := strings.ToLower(p.Name.Literal)
+				if low == "обработать" || low == "handle" {
+					re.Proc = p
+					break
+				}
+			}
+		}
+		m[strings.ToLower(ep.Path)] = re
+	}
+	r.mu.Lock()
+	r.endpoints = m
+	r.mu.Unlock()
+}
+
+// GetEndpointByPath возвращает эндпоинт по пути (lowercase, точный матч).
+func (r *Registry) GetEndpointByPath(path string) *ResolvedEndpoint {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.endpoints[strings.ToLower(path)]
+}
+
+// Endpoints возвращает все входящие эндпоинты.
+func (r *Registry) Endpoints() []*ResolvedEndpoint {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*ResolvedEndpoint, 0, len(r.endpoints))
+	for _, e := range r.endpoints {
+		out = append(out, e)
+	}
+	return out
 }
 
 // LoadWidgets registers dashboard widgets by name (case-insensitive).
