@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/processor"
@@ -92,6 +93,10 @@ type AppConfig struct {
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в
 	// app.yaml/git/.obz. Удобно для демо/прод-деплоя.
 	LLM *llm.Config `yaml:"llm,omitempty"`
+	// Webhooks — исходящие веб-хуки на события платформы (план 29):
+	// document.save/post/unpost/delete, catalog.save/delete. Токены в URL и
+	// заголовках задавайте через ${env:VAR} — секрет живёт в окружении.
+	Webhooks []webhook.Config `yaml:"webhooks,omitempty"`
 }
 
 // LoadConfig reads config/app.yaml from the project directory.
@@ -107,7 +112,20 @@ func LoadConfig(dir string) (*AppConfig, error) {
 	if cfg.LLM != nil {
 		expandLLMEnv(cfg.LLM)
 	}
+	expandWebhookEnv(cfg.Webhooks)
 	return &cfg, nil
+}
+
+// expandWebhookEnv подставляет ${env:VAR} в секрет-носители веб-хуков
+// (URL с токеном бота, заголовки авторизации, тело).
+func expandWebhookEnv(hooks []webhook.Config) {
+	for i := range hooks {
+		hooks[i].URL = expandEnvRefs(hooks[i].URL)
+		hooks[i].Body = expandEnvRefs(hooks[i].Body)
+		for k, v := range hooks[i].Headers {
+			hooks[i].Headers[k] = expandEnvRefs(v)
+		}
+	}
 }
 
 // envRefPattern matches ${env:VAR} references that are substituted from the

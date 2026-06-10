@@ -23,6 +23,7 @@ import (
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/ui"
 	"github.com/ivantit66/onebase/internal/version"
 	"github.com/spf13/cobra"
@@ -306,6 +307,20 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		})
 		uiCfg.Mailer = m
 		sched.SetMailer(m)
+	}
+
+	// Исходящие веб-хуки из app.yaml (план 29): асинхронная отправка с retry,
+	// журнал — в _webhook_log.
+	if appCfg != nil && len(appCfg.Webhooks) > 0 {
+		dbRef := db
+		uiCfg.Webhooks = webhook.New(appCfg.Webhooks, func(e webhook.LogEntry) {
+			dbRef.LogWebhook(context.Background(), storage.WebhookLogEntry{
+				Webhook: e.Webhook, Event: e.Event, Entity: e.Entity, RecordID: e.RecordID,
+				URL: e.URL, StatusCode: e.StatusCode, Error: e.Error,
+				Duration: e.Duration, Attempts: e.Attempts,
+			})
+		})
+		fmt.Fprintf(os.Stdout, "веб-хуки: настроено %d\n", len(appCfg.Webhooks))
 	}
 
 	host, _ := cmd.Flags().GetString("host")

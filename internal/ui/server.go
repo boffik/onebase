@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/widget"
 	"time"
 )
@@ -37,6 +38,10 @@ type Config struct {
 	// монтируются (см. api.New). Непустой → каждый запрос к /debug/global/*
 	// должен нести его в заголовке X-OneBase-Debug-Token.
 	DebugToken string
+	// Webhooks — диспетчер исходящих веб-хуков из app.yaml (план 29).
+	// nil = не настроены. Прокидывается в entityservice (save/post) и
+	// используется обработчиками unpost/delete.
+	Webhooks *webhook.Dispatcher
 }
 
 type Server struct {
@@ -80,6 +85,8 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		MakeThis: func(obj *runtime.Object, e *metadata.Entity) interpreter.This {
 			return &formObjectThis{obj: obj, entity: e}
 		},
+		// Исходящие веб-хуки (план 29): save/post диспетчеризуются из Save.
+		Hooks: cfg.Webhooks,
 	}
 	// Отладчик подключается к исполнению через DebugSource: каждый запуск DSL
 	// захватывает текущую сессию глобального контроллера в свой execCtx.
@@ -196,6 +203,7 @@ func (s *Server) Mount(r chi.Router) {
 
 	// Admin: audit log
 	r.Get("/ui/admin/audit", s.adminAudit)
+	r.Get("/ui/admin/webhooks", s.adminWebhooks)
 	r.Get("/ui/{kind}/{entity}/{id}/history", s.recordHistory)
 
 	// Admin: orphan movements cleanup

@@ -22,6 +22,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/webhook"
 )
 
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +831,13 @@ func (s *Server) unpostDocument(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// Веб-хук document.unpost (план 29) — после успешной транзакции.
+	if s.cfg.Webhooks.Enabled() {
+		s.cfg.Webhooks.Dispatch(webhook.Event{
+			Name: "document.unpost", Entity: entity.Name, ID: id.String(),
+			User: storage.AuditUserLogin(r.Context()),
+		})
+	}
 	http.Redirect(w, r, listURL(entity), http.StatusSeeOther)
 }
 
@@ -898,6 +906,14 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
+	}
+	// Веб-хук <kind>.delete (план 29) — только физическое удаление
+	// (пометка на удаление обратима и событием не считается).
+	if s.cfg.Webhooks.Enabled() {
+		s.cfg.Webhooks.Dispatch(webhook.Event{
+			Name: string(entity.Kind) + ".delete", Entity: entity.Name, ID: id.String(),
+			User: storage.AuditUserLogin(r.Context()),
+		})
 	}
 	http.Redirect(w, r, listURL(entity), http.StatusSeeOther)
 }

@@ -613,6 +613,7 @@ const tplNav = `
       <a href="/ui/admin/roles">{{t $.Lang "Роли и права"}}</a>
       <a href="/ui/admin/sessions">{{t $.Lang "Активные пользователи"}}</a>
       <a href="/ui/admin/audit">{{t $.Lang "Журнал изменений"}}</a>
+      {{if .IsAdmin}}<a href="/ui/admin/webhooks">{{t $.Lang "Журнал веб-хуков"}}</a>{{end}}
       <a href="/ui/admin/scheduled">{{t $.Lang "Регламентные задания"}}</a>
       <a href="/ui/delete-marked">{{t $.Lang "Удалить помеченные"}}</a>
       <a href="/ui/admin/cleanup">{{t $.Lang "Очистка регистров"}}</a>

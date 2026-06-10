@@ -30,6 +30,14 @@ func auditUserFromCtx(ctx context.Context) (AuditUserInfo, bool) {
 	return v, ok
 }
 
+// AuditUserLogin возвращает логин пользователя запроса из контекста аудита
+// («» если аутентификация не настроена). Используется веб-хуками (план 29)
+// для подстановки {{user}} в тело уведомления.
+func AuditUserLogin(ctx context.Context) string {
+	u, _ := auditUserFromCtx(ctx)
+	return u.UserLogin
+}
+
 // AuditEntry is one audit log record.
 type AuditEntry struct {
 	ID         string

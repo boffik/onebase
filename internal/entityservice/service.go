@@ -20,6 +20,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/webhook"
 )
 
 // SetPeriodFromFields выставляет в mc период по первому date-полю сущности.
@@ -75,6 +76,47 @@ type Service struct {
 	// живёт в ui-слое (formObjectThis), здесь только хук. Если nil — Run
 	// получает obj напрямую, что для документов без ТЧ тоже работает.
 	MakeThis func(obj *runtime.Object, entity *metadata.Entity) interpreter.This
+
+	// Hooks — диспетчер исходящих веб-хуков (план 29). nil = веб-хуки не
+	// настроены. Событие отправляется ПОСЛЕ успешной транзакции (асинхронно):
+	// document.save/document.post или catalog.save в зависимости от вида и Action.
+	Hooks *webhook.Dispatcher
+}
+
+// dispatchSaved отправляет веб-хук о записи/проведении объекта.
+func (s *Service) dispatchSaved(ctx context.Context, req SaveRequest, isPosting bool) {
+	if !s.Hooks.Enabled() {
+		return
+	}
+	event := "catalog.save"
+	if req.Entity.Kind == metadata.KindDocument {
+		event = "document.save"
+		if isPosting {
+			event = "document.post"
+		}
+	}
+	s.Hooks.Dispatch(webhook.Event{
+		Name:   event,
+		Entity: req.Entity.Name,
+		ID:     req.ID.String(),
+		User:   storage.AuditUserLogin(ctx),
+		Record: webhookRecord(req.Fields),
+	})
+}
+
+// webhookRecord копирует поля записи для шаблона тела хука, отбрасывая
+// служебные псевдо-реквизиты (ссылка/reference — это *interpreter.Ref,
+// в шаблоне он бесполезен).
+func webhookRecord(fields map[string]any) map[string]any {
+	rec := make(map[string]any, len(fields))
+	for k, v := range fields {
+		low := strings.ToLower(k)
+		if low == "ссылка" || low == "reference" {
+			continue
+		}
+		rec[k] = v
+	}
+	return rec
 }
 
 // SaveRequest — входной DTO для Service.Save.
@@ -246,6 +288,8 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 	if err != nil {
 		return SaveResult{}, err
 	}
+
+	s.dispatchSaved(ctx, req, isPosting)
 
 	return SaveResult{ID: req.ID, DSLMessages: msgs, Movements: mc}, nil
 }
