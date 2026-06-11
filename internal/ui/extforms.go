@@ -41,37 +41,38 @@ func (s *Server) adminExtFormUpload(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, r)
 		return
 	}
+	lang := s.resolveLang(r)
 	if err := r.ParseMultipartForm(s.maxFileSizeBytes); err != nil {
-		s.extFormRedirect(w, r, "", "не удалось прочитать файл: "+err.Error())
+		s.extFormRedirect(w, r, "", s.tr(lang, "не удалось прочитать файл")+": "+s.errText(r, err))
 		return
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		s.extFormRedirect(w, r, "", "файл не выбран")
+		s.extFormRedirect(w, r, "", s.tr(lang, "файл не выбран"))
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, s.maxFileSizeBytes))
 	if err != nil {
-		s.extFormRedirect(w, r, "", "ошибка чтения файла: "+err.Error())
+		s.extFormRedirect(w, r, "", s.tr(lang, "ошибка чтения файла")+": "+s.errText(r, err))
 		return
 	}
 
 	parsed, err := extform.ParseUpload(data)
 	if err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	// Документ обязан существовать в конфигурации — иначе форму некуда
 	// привязать и она никогда не отрисуется.
 	if s.reg.GetEntity(parsed.Document) == nil {
-		s.extFormRedirect(w, r, "", fmt.Sprintf("документ %q не найден в конфигурации", parsed.Document))
+		s.extFormRedirect(w, r, "", fmt.Sprintf(s.tr(lang, "документ %q не найден в конфигурации"), parsed.Document))
 		return
 	}
 	// min_platform из бандла: не даём загрузить форму, требующую более новой
 	// платформы (best-effort, см. CheckMinPlatform).
 	if err := extform.CheckMinPlatform(parsed.MinPlatform, s.cfg.PlatVersion); err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 
@@ -84,7 +85,7 @@ func (s *Server) adminExtFormUpload(w http.ResponseWriter, r *http.Request) {
 		UploadedBy: currentLogin(r),
 	}
 	if err := s.extforms.Save(r.Context(), rec); err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	s.auditExtForm(r, "extform.upload", rec)
@@ -101,11 +102,11 @@ func (s *Server) adminExtFormToggle(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rec, err := s.extforms.Get(r.Context(), id)
 	if err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extforms.SetEnabled(r.Context(), id, !rec.Enabled); err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	action := "extform.enable"
@@ -126,11 +127,11 @@ func (s *Server) adminExtFormDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rec, err := s.extforms.Get(r.Context(), id)
 	if err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extforms.Delete(r.Context(), id); err != nil {
-		s.extFormRedirect(w, r, "", err.Error())
+		s.extFormRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	s.auditExtForm(r, "extform.delete", rec)

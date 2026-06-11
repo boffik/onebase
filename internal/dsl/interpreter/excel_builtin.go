@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ivantit66/onebase/internal/excel"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 )
 
 func init() {
@@ -17,12 +18,12 @@ func init() {
 // Возвращает base64-строку содержимого xlsx-файла.
 func builtinExportExcel(args []any, file string, line int) (any, error) {
 	if len(args) < 1 {
-		return nil, fmt.Errorf("ВыгрузитьВExcel: ожидается аргумент Данные (Массив)")
+		return nil, i18nerr.New("ВыгрузитьВExcel: ожидается аргумент Данные (Массив)")
 	}
 
 	outerArr, ok := args[0].(*Array)
 	if !ok {
-		return nil, fmt.Errorf("ВыгрузитьВExcel: аргумент Данные должен быть Массивом")
+		return nil, i18nerr.New("ВыгрузитьВExcel: аргумент Данные должен быть Массивом")
 	}
 	if len(outerArr.items) < 1 {
 		return "", nil
@@ -31,7 +32,7 @@ func builtinExportExcel(args []any, file string, line int) (any, error) {
 	// First row → column headers
 	firstRow, ok := outerArr.items[0].(*Array)
 	if !ok {
-		return nil, fmt.Errorf("ВыгрузитьВExcel: первая строка (заголовки) должна быть Массивом")
+		return nil, i18nerr.New("ВыгрузитьВExcel: первая строка (заголовки) должна быть Массивом")
 	}
 	cols := make([]string, len(firstRow.items))
 	for i, v := range firstRow.items {
@@ -52,7 +53,7 @@ func builtinExportExcel(args []any, file string, line int) (any, error) {
 
 	data, err := excel.ExportList(cols, rows)
 	if err != nil {
-		return nil, fmt.Errorf("ВыгрузитьВExcel: %w", err)
+		return nil, i18nerr.Wrapf(err, "ВыгрузитьВExcel")
 	}
 	return base64.StdEncoding.EncodeToString(data), nil
 }

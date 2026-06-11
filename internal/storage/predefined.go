@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
@@ -225,7 +226,7 @@ func topoSortPredefined(items []*metadata.PredefinedItem, selfRefFields map[stri
 		case black:
 			return nil
 		case gray:
-			return fmt.Errorf("цикл в self-reference predefined: %s → %s",
+			return i18nerr.Errorf("цикл в self-reference predefined: %s → %s",
 				strings.Join(path, " → "), name)
 		}
 		color[name] = gray

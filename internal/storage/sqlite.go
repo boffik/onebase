@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	sqlite "modernc.org/sqlite"
 )
 
@@ -44,26 +45,26 @@ func init() {
 // filesDir defaults to <home>/.onebase/files/<basename-without-ext>.
 func ConnectSQLite(ctx context.Context, dbPath string) (*DB, error) {
 	if dbPath == "" {
-		return nil, fmt.Errorf("storage: sqlite: пустой путь к файлу базы данных")
+		return nil, i18nerr.New("storage: sqlite: пустой путь к файлу базы данных")
 	}
 
 	// Ensure absolute path — relative paths fail on Windows when the working
 	// directory is restricted (e.g. Program Files).
 	absPath, err := filepath.Abs(dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("storage: sqlite: не удалось получить абсолютный путь %q: %w", dbPath, err)
+		return nil, i18nerr.Wrapf(err, "storage: sqlite: не удалось получить абсолютный путь %q", dbPath)
 	}
 	dbPath = absPath
 
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("storage: sqlite: не удалось создать папку %q: %w", dir, err)
+		return nil, i18nerr.Wrapf(err, "storage: sqlite: не удалось создать папку %q", dir)
 	}
 
 	// Quick write-permission check before handing path to SQLite.
 	probe := filepath.Join(dir, ".onebase_probe")
 	if f, ferr := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY, 0o600); ferr != nil {
-		return nil, fmt.Errorf("storage: sqlite: нет прав на запись в папку %q: %w", dir, ferr)
+		return nil, i18nerr.Wrapf(ferr, "storage: sqlite: нет прав на запись в папку %q", dir)
 	} else {
 		f.Close()
 		os.Remove(probe)

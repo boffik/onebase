@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
@@ -125,7 +126,7 @@ func (db *DB) migrateAccountReg(ctx context.Context, ar *metadata.AccountRegiste
 	for i, s := range ar.Subconto {
 		col := metadata.SubcontoColumn(i + 1)
 		if err := db.AddColumnIfMissing(ctx, table, col, fieldType(d, s)); err != nil {
-			return fmt.Errorf("migrate account register %s субконто %s: %w", ar.Name, s.Name, err)
+			return i18nerr.Wrapf(err, "migrate account register %s субконто %s", ar.Name, s.Name)
 		}
 	}
 	// Индекс по первому субконто ускоряет разворот остатков/оборотов по аналитике.
@@ -135,7 +136,7 @@ func (db *DB) migrateAccountReg(ctx context.Context, ar *metadata.AccountRegiste
 		idxKt := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_kt_сб1 ON %s (счёткт, %s, period)", strings.ToLower(ar.Name), table, sb1)
 		for _, s := range []string{idxDt, idxKt} {
 			if _, err := db.Exec(ctx, s); err != nil {
-				return fmt.Errorf("migrate account register %s субконто index: %w", ar.Name, err)
+				return i18nerr.Wrapf(err, "migrate account register %s субконто index", ar.Name)
 			}
 		}
 	}
@@ -443,7 +444,7 @@ func validateSubconto(row map[string]any, ar *metadata.AccountRegister) error {
 		case strings.HasPrefix(lk, "субконто_"):
 			nm := strings.TrimPrefix(lk, "субконто_")
 			if !declared[nm] {
-				return fmt.Errorf("неизвестное субконто %q (объявлены: %s)", nm, declaredSubcontoNames(ar))
+				return i18nerr.Errorf("неизвестное субконто %q (объявлены: %s)", nm, declaredSubcontoNames(ar))
 			}
 		case strings.HasPrefix(lk, "субконто"):
 			numPart := strings.TrimPrefix(lk, "субконто")
@@ -452,7 +453,7 @@ func validateSubconto(row map[string]any, ar *metadata.AccountRegister) error {
 				continue // не нумерованное субконто (напр. опечатка) — пропускаем
 			}
 			if idx < 1 || idx > n {
-				return fmt.Errorf("субконто%d не существует (объявлено субконто: %d)", idx, n)
+				return i18nerr.Errorf("субконто%d не существует (объявлено субконто: %d)", idx, n)
 			}
 		}
 	}
