@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/devserver"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/extform"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/launcher"
 	"github.com/ivantit66/onebase/internal/mailer"
@@ -182,6 +183,35 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	reg.LoadAccountRegisters(proj.AccountRegisters, proj.ChartsOfAccounts)
 	reg.LoadWidgets(proj.Widgets)
 	reg.LoadHomePage(proj.HomePage)
+
+	// Внешний контур: печатные формы и отчёты из БД (вне конфигурации проекта).
+	extRepo := extform.New(db)
+	if err := extRepo.EnsureSchema(ctx); err != nil {
+		return fmt.Errorf("extform schema: %w", err)
+	}
+	if extForms, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "external print forms:", err)
+	} else {
+		reg.SetExternalPrintForms(extForms)
+	}
+	extRepRepo := extform.NewReports(db)
+	if err := extRepRepo.EnsureSchema(ctx); err != nil {
+		return fmt.Errorf("extform reports schema: %w", err)
+	}
+	if extReps, err := extRepRepo.LoadEnabledReports(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "external reports:", err)
+	} else {
+		reg.SetExternalReports(extReps)
+	}
+	extProcRepo := extform.NewProcessors(db)
+	if err := extProcRepo.EnsureSchema(ctx); err != nil {
+		return fmt.Errorf("extform processors schema: %w", err)
+	}
+	if extProcs, extPrograms, err := extProcRepo.LoadEnabled(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "external processors:", err)
+	} else {
+		reg.SetExternalProcessors(extProcs, extPrograms)
+	}
 
 	appCfg, _ := project.LoadConfig(proj.Dir)
 	// app.yaml может задавать конфиг ИИ-помощника (секция llm, ключи через

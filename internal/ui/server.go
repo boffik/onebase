@@ -10,6 +10,7 @@ import (
 	"github.com/ivantit66/onebase/internal/debugger"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/entityservice"
+	"github.com/ivantit66/onebase/internal/extform"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
@@ -60,6 +61,9 @@ type Server struct {
 	entitySvc        *entityservice.Service // упсёрт + ТЧ + движения + проведение, разделяется с api
 	aiChatLimit      *aiWindowLimiter       // лимит частоты ИИ-чата на пользователя (план 54)
 	endpointLimit    endpointLimiter        // rate-limit HTTP-сервисов (план 61)
+	extforms         *extform.Repo          // внешний контур: печатные формы из БД
+	extreports       *extform.ReportRepo    // внешний контур: отчёты из БД
+	extprocessors    *extform.ProcessorRepo // внешний контур: обработки из БД
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -67,7 +71,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if maxBytes <= 0 {
 		maxBytes = 50 * 1024 * 1024
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute)}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store)}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,
@@ -210,6 +214,28 @@ func (s *Server) Mount(r chi.Router) {
 	// Admin: orphan movements cleanup
 	r.Get("/ui/admin/cleanup", s.adminCleanup)
 	r.Post("/ui/admin/cleanup", s.adminCleanup)
+
+	// Admin: external print forms (внешний контур расширяемости)
+	r.Get("/ui/admin/extforms", s.adminExtForms)
+	r.Post("/ui/admin/extforms", s.adminExtFormUpload)
+	r.Post("/ui/admin/extforms/{id}/toggle", s.adminExtFormToggle)
+	r.Post("/ui/admin/extforms/{id}/delete", s.adminExtFormDelete)
+	r.Get("/ui/admin/extforms/{id}/export", s.adminExtFormExport)
+
+	// Admin: external reports (внешний контур расширяемости)
+	r.Get("/ui/admin/extreports", s.adminExtReports)
+	r.Post("/ui/admin/extreports", s.adminExtReportUpload)
+	r.Post("/ui/admin/extreports/{id}/toggle", s.adminExtReportToggle)
+	r.Post("/ui/admin/extreports/{id}/delete", s.adminExtReportDelete)
+	r.Get("/ui/admin/extreports/{id}/export", s.adminExtReportExport)
+
+	// Admin: external processors (исполняют DSL — загрузка только админ)
+	r.Get("/ui/admin/extprocessors", s.adminExtProcessors)
+	r.Post("/ui/admin/extprocessors", s.adminExtProcessorUpload)
+	r.Post("/ui/admin/extprocessors/{id}/toggle", s.adminExtProcessorToggle)
+	r.Post("/ui/admin/extprocessors/{id}/trust", s.adminExtProcessorTrust)
+	r.Post("/ui/admin/extprocessors/{id}/delete", s.adminExtProcessorDelete)
+	r.Get("/ui/admin/extprocessors/{id}/export", s.adminExtProcessorExport)
 
 	// Admin: scheduled jobs
 	r.Get("/ui/admin/scheduled", s.scheduledList)
@@ -558,6 +584,9 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 			continue
 		}
 		label := rep.DisplayName(lang)
+		if rep.External {
+			label += " (" + s.tr(lang, "внешний") + ")"
+		}
 		repItems = append(repItems, navItem{
 			Label: label,
 			URL:   "/ui/report/" + strings.ToLower(rep.Name),
@@ -569,12 +598,20 @@ func (s *Server) buildFlatNav(r *http.Request) []navGroup {
 
 	procs := s.reg.Processors()
 	sort.Slice(procs, func(i, j int) bool { return procs[i].Name < procs[j].Name })
+	isAdmin := s.isAdmin(r)
 	var procItems []navItem
 	for _, proc := range procs {
 		if !s.can(r, "processor", proc.Name, "run") {
 			continue
 		}
+		// Внешняя недоверенная обработка видна только администратору.
+		if proc.External && !proc.Trusted && !isAdmin {
+			continue
+		}
 		label := proc.DisplayName(lang)
+		if proc.External {
+			label += " (" + s.tr(lang, "внешняя") + ")"
+		}
 		procItems = append(procItems, navItem{
 			Label: label,
 			URL:   "/ui/processor/" + strings.ToLower(proc.Name),

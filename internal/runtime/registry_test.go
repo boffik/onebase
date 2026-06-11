@@ -3,8 +3,13 @@ package runtime
 import (
 	"testing"
 
+	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/ivantit66/onebase/internal/processor"
+	"github.com/ivantit66/onebase/internal/report"
 )
 
 // при коллизии YAML/.os одноимённой печатной формы
@@ -58,6 +63,144 @@ func TestLoadDSLPrintForms_NoCollision(t *testing.T) {
 	}
 	if len(r.GetDSLPrintForms("РеализацияТоваров")) != 1 {
 		t.Error(".os должна остаться")
+	}
+}
+
+// Внешние формы дополняют формы конфигурации и помечаются External=true;
+// reload конфигурации (printForms) их не затирает.
+func TestSetExternalPrintForms_MergeAndFlag(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.printForms["реализациятоваров"] = []*printform.PrintForm{
+		{Name: "Накладная", Document: "РеализацияТоваров"},
+	}
+	r.mu.Unlock()
+
+	r.SetExternalPrintForms([]*printform.PrintForm{
+		{Name: "Накладная-А4", Document: "РеализацияТоваров"},
+	})
+
+	forms := r.GetPrintForms("РеализацияТоваров")
+	if len(forms) != 2 {
+		t.Fatalf("ожидались 2 формы (конфиг + внешняя), получили %d", len(forms))
+	}
+	// Конфиг-форма идёт первой и не помечена External.
+	if forms[0].Name != "Накладная" || forms[0].External {
+		t.Errorf("первой должна быть форма конфигурации без External, получили %+v", forms[0])
+	}
+	if forms[1].Name != "Накладная-А4" || !forms[1].External {
+		t.Errorf("второй должна быть внешняя форма с External=true, получили %+v", forms[1])
+	}
+}
+
+// При совпадении имени внешней формы с конфиг-формой обе остаются в списке,
+// но конфигурация идёт первой (приоритет), а внешняя помечена External.
+func TestSetExternalPrintForms_NameCollisionKeepsConfigFirst(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.printForms["реализациятоваров"] = []*printform.PrintForm{
+		{Name: "Накладная", Document: "РеализацияТоваров"},
+	}
+	r.mu.Unlock()
+
+	r.SetExternalPrintForms([]*printform.PrintForm{
+		{Name: "Накладная", Document: "РеализацияТоваров"},
+	})
+
+	forms := r.GetPrintForms("РеализацияТоваров")
+	if len(forms) != 2 {
+		t.Fatalf("ожидались 2 формы при коллизии имени, получили %d", len(forms))
+	}
+	if forms[0].External {
+		t.Error("первой (основной) должна оставаться форма конфигурации")
+	}
+	if !forms[1].External {
+		t.Error("второй должна быть внешняя форма")
+	}
+}
+
+// Повторный вызов SetExternalPrintForms полностью заменяет набор внешних форм.
+func TestSetExternalPrintForms_Replaces(t *testing.T) {
+	r := NewRegistry()
+	r.SetExternalPrintForms([]*printform.PrintForm{
+		{Name: "A", Document: "Док"},
+	})
+	r.SetExternalPrintForms([]*printform.PrintForm{
+		{Name: "B", Document: "Док"},
+	})
+	forms := r.GetPrintForms("Док")
+	if len(forms) != 1 || forms[0].Name != "B" {
+		t.Fatalf("ожидалась только форма B после замены, получили %+v", forms)
+	}
+}
+
+// Внешние отчёты дополняют список конфигурации и помечаются External;
+// при коллизии имени приоритет у конфигурации.
+func TestSetExternalReports_MergeAndPriority(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.reports["ОстаткиТоваров"] = &report.Report{Name: "ОстаткиТоваров", Query: "ВЫБРАТЬ 1"}
+	r.mu.Unlock()
+
+	r.SetExternalReports([]*report.Report{
+		{Name: "ВнешнийОтчёт", Query: "ВЫБРАТЬ 2"},
+		{Name: "ОстаткиТоваров", Query: "ВЫБРАТЬ 999"}, // коллизия
+	})
+
+	// GetReport: коллизия → отдаётся конфиг-отчёт.
+	if rep := r.GetReport("ОстаткиТоваров"); rep == nil || rep.Query != "ВЫБРАТЬ 1" || rep.External {
+		t.Errorf("при коллизии должен отдаваться отчёт конфигурации, got %+v", rep)
+	}
+	// Внешний уникальный отчёт доступен и помечен External.
+	if rep := r.GetReport("ВнешнийОтчёт"); rep == nil || !rep.External {
+		t.Errorf("ожидался внешний отчёт с External=true, got %+v", rep)
+	}
+	// Reports(): конфиг + только не конфликтующие внешние = 2.
+	if got := len(r.Reports()); got != 2 {
+		t.Errorf("ожидалось 2 отчёта (конфиг + 1 внешний без коллизии), got %d", got)
+	}
+}
+
+// Внешняя обработка регистрируется вместе с кодом; GetProcessor/GetProcedure
+// её находят, External выставляется, при коллизии имени приоритет у конфигурации.
+func TestSetExternalProcessors(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.processors["КонфигОбр"] = &processor.Processor{Name: "КонфигОбр"}
+	r.mu.Unlock()
+
+	parse := func(src string) *ast.Program {
+		prog, err := parser.New(lexer.New(src, "x.proc.os")).ParseProgram()
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		return prog
+	}
+	r.SetExternalProcessors(
+		[]*processor.Processor{{Name: "ВнешняяОбр", Trusted: true}},
+		map[string]*ast.Program{
+			"ВнешняяОбр": parse("Процедура Выполнить()\nКонецПроцедуры\n"),
+		},
+	)
+
+	p := r.GetProcessor("ВнешняяОбр")
+	if p == nil || !p.External || !p.Trusted {
+		t.Errorf("ожидалась внешняя доверенная обработка, got %+v", p)
+	}
+	if d := r.GetProcedure("ВнешняяОбр", "Выполнить"); d == nil {
+		t.Error("код внешней обработки не зарегистрирован (GetProcedure nil)")
+	}
+	if got := len(r.Processors()); got != 2 {
+		t.Errorf("ожидалось 2 обработки (конфиг + внешняя), got %d", got)
+	}
+
+	// Коллизия имени: внешняя «КонфигОбр» не перехватывает конфигурацию.
+	r.SetExternalProcessors(
+		[]*processor.Processor{{Name: "КонфигОбр"}},
+		map[string]*ast.Program{"КонфигОбр": parse("Процедура Выполнить()\nКонецПроцедуры\n")},
+	)
+	if p := r.GetProcessor("КонфигОбр"); p == nil || p.External {
+		t.Errorf("при коллизии должна отдаваться обработка конфигурации, got %+v", p)
 	}
 }
 

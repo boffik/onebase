@@ -25,6 +25,14 @@ type Processor struct {
 	Params     []Param                   `yaml:"params"`
 	TableParts []metadata.TablePart      `yaml:"table_parts"`
 	Forms      []*metadata.FormModule    `yaml:"-"`
+
+	// External помечает обработку из внешнего контура (таблица
+	// _ext_processors), а не из конфигурации проекта. Trusted — признак того,
+	// что администратор пометил внешнюю обработку доверенной: тогда её видят и
+	// запускают обычные пользователи, иначе — только администратор. Оба поля
+	// заполняются программно при загрузке; в YAML не сериализуются.
+	External bool `yaml:"-"`
+	Trusted  bool `yaml:"-"`
 }
 
 // DisplayLabel возвращает подпись параметра с учётом языка.
@@ -68,6 +76,14 @@ func LoadFile(path string) (*Processor, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ParseBytes(data)
+}
+
+// ParseBytes разбирает YAML метаданных обработки из памяти (без файла). Нужна
+// для внешних обработок, хранящихся в БД (см. internal/extform). Поле code в
+// YAML (исходник .proc.os для внешних обработок) при этом игнорируется —
+// извлекается отдельно вызывающим.
+func ParseBytes(data []byte) (*Processor, error) {
 	var proc Processor
 	if err := yaml.Unmarshal(data, &proc); err != nil {
 		return nil, err

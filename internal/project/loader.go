@@ -229,6 +229,14 @@ func Load(dir string) (*Project, error) {
 	if err := p.loadHomePage(); err != nil {
 		return nil, err
 	}
+	// Проверяем, что имена всех объектов и реквизитов пригодны как
+	// неэкранированные SQL-идентификаторы (они подставляются в SQL без кавычек).
+	// Здесь, в конце, потому что account-регистры грузятся выше после Validate.
+	if err := metadata.ValidateIdentifiers(
+		p.Entities, p.Registers, p.InfoRegisters, p.AccountRegisters, p.Enums, p.Constants,
+	); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 

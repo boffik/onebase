@@ -29,6 +29,10 @@ func (s *Server) processorForm(w http.ResponseWriter, r *http.Request) {
 	if proc == nil {
 		return
 	}
+	if !s.canRunExternalProc(r, proc) {
+		s.renderForbidden(w, r)
+		return
+	}
 
 	// Managed form path
 	if mf := proc.ManagedForm(); mf != nil {
@@ -127,6 +131,14 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 	proc := s.getProcessor(w, r)
 	if proc == nil {
 		return
+	}
+	if !s.canRunExternalProc(r, proc) {
+		s.renderForbidden(w, r)
+		return
+	}
+	if proc.External {
+		// Запуск внешней обработки (исполнение DSL-кода) всегда логируем.
+		s.auditExtProcRun(r, proc.Name)
 	}
 	r.ParseMultipartForm(32 << 20) // 32 MB max
 	paramValues := map[string]any{}
