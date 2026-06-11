@@ -101,7 +101,7 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 				return name
 			}
 		},
-}).Parse(cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgFoot))
+}).Parse(cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgSyntaxRef + cfgFoot))
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -929,6 +929,8 @@ function startEdit(name) {
     });
     editor._fileId = name;
     monacoEditors[name] = editor;
+    window._lastFocusedEditorId = window._lastFocusedEditorId || name;
+    editor.onDidFocusEditorText(function(){ window._lastFocusedEditorId = name; });
     // Запоминаем последнее непустое выделение: правый клик в Monaco
     // сбрасывает selection раньше, чем открывается конструктор запроса,
     // поэтому в openQBModalMonaco текущее выделение уже пустое.
@@ -1982,65 +1984,148 @@ document.querySelectorAll('pre.os-code').forEach(function(el){
 if (typeof require === 'undefined') { window._monacoReady = false; document.getElementById('monaco-status').textContent='Monaco:FAIL(no require)'; return; }
 require.config({ paths: { 'vs': '/vendor/monaco/vs' }});
 require(['vs/editor/editor.main'], function() {
+  // Единый загрузчик справочника языка (кешируется; используется провайдерами и окном-справочником)
+  window._langref = window._langref || null;
+  window._langrefPromise = window._langrefPromise || null;
+  function loadLangref() {
+    if (window._langref) return Promise.resolve(window._langref);
+    if (window._langrefPromise) return window._langrefPromise;
+    window._langrefPromise = fetch('/bases/' + _dbgBase + '/configurator/langref')
+      .then(function(r){ return r.json(); })
+      .then(function(d){ window._langref = d || []; return window._langref; })
+      .catch(function(){ window._langref = []; return window._langref; });
+    return window._langrefPromise;
+  }
+  window.loadLangref = loadLangref; // доступ из окна-справочника (отдельный <script>-скоуп)
   // Register OneBase DSL language
   monaco.languages.register({ id: 'onebase-dsl' });
-  monaco.languages.setMonarchTokensProvider('onebase-dsl', {
-    keywords: [
-      'Процедура','КонецПроцедуры','Функция','КонецФункции',
-      'Если','Тогда','ИначеЕсли','Иначе','КонецЕсли',
-      'Для','Каждого','Из','Цикл','КонецЦикла','Пока','КонецПока',
-      'Возврат','Прервать','Продолжить','Истина','Ложь','Неопределено','Новый',
-      'И','ИЛИ','НЕ','Не','Перем',
-      'Procedure','EndProcedure','Function','EndFunction',
-      'If','Then','ElseIf','Else','EndIf',
-      'For','Each','In','Do','EndDo','While','EndWhile',
-      'Return','Break','Continue','True','False','Undefined','New',
-      'And','Or','Not','Var'
-    ],
-    builtins: [
-      'Error','Ошибка','Сообщить','Формат','ФорматСтроки','СтрЗаменить',
+  function _onebaseMonarch(extraBuiltins){
+    var builtins = ['Error','Ошибка','Сообщить','Формат','ФорматСтроки','СтрЗаменить',
       'Запрос','Результат','Выполнить','УстановитьПараметр','Текст',
       'ВЫБРАТЬ','ИЗ','ГДЕ','УПОРЯДОЧИТЬ','ПО','СГРУППИРОВАТЬ',
       'ЛЕВОЕ','ПРАВОЕ','ВНУТРЕННЕЕ','ПОЛНОЕ','СОЕДИНЕНИЕ',
-      'КАК','ВОЗР','УБЫВ','СУММА','КОЛИЧЕСТВО','МИНИМУМ','МАКСИМУМ','СРЕДНЕЕ'
-    ],
-    special: ['this','ЭтотОбъект','Движения','Параметры'],
-    tokenizer: {
-      root: [
-        [/#.*$/, 'comment'],
-        ["\/\/.*$", 'comment'],
-        [/"/, 'string', '@string'],
-        [/\d+(\.\d+)?/, 'number'],
-        [/[a-zA-Z_А-яЁё][a-zA-Z0-9_А-яЁё]*/, {
-          cases: {
-            '@keywords': 'keyword',
-            '@builtins': 'type',
-            '@special': 'variable.predefined',
-            '@default': 'identifier'
-          }
-        }]
-      ],
-      string: [
-        [/[^"]+/, 'string'],
-        [/"/, 'string', '@pop']
-      ]
-    }
-  });
-  // Auto-completion
-  monaco.languages.registerCompletionItemProvider('onebase-dsl', {
-    provideCompletionItems: function(model, position) {
-      var word = model.getWordUntilPosition(position);
-      var range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
-      var kwSuggestions = [
+      'КАК','ВОЗР','УБЫВ','СУММА','КОЛИЧЕСТВО','МИНИМУМ','МАКСИМУМ','СРЕДНЕЕ'].concat(extraBuiltins||[]);
+    return {
+      keywords: [
         'Процедура','КонецПроцедуры','Функция','КонецФункции',
         'Если','Тогда','ИначеЕсли','Иначе','КонецЕсли',
         'Для','Каждого','Из','Цикл','КонецЦикла','Пока','КонецПока',
-        'Возврат','Новый','Истина','Ложь','Неопределено',
-        'Procedure','EndProcedure','Function','EndFunction'
-      ].map(function(k) {
-        return { label: k, kind: monaco.languages.CompletionItemKind.Keyword, insertText: k, range: range };
+        'Возврат','Прервать','Продолжить','Истина','Ложь','Неопределено','Новый',
+        'И','ИЛИ','НЕ','Не','Перем',
+        'Procedure','EndProcedure','Function','EndFunction',
+        'If','Then','ElseIf','Else','EndIf',
+        'For','Each','In','Do','EndDo','While','EndWhile',
+        'Return','Break','Continue','True','False','Undefined','New',
+        'And','Or','Not','Var'
+      ],
+      builtins: builtins,
+      special: ['this','ЭтотОбъект','Движения','Параметры'],
+      tokenizer: {
+        root: [
+          [/#.*$/, 'comment'],
+          ["\/\/.*$", 'comment'],
+          [/"/, 'string', '@string'],
+          [/\d+(\.\d+)?/, 'number'],
+          [/[a-zA-Z_А-яЁё][a-zA-Z0-9_А-яЁё]*/, {
+            cases: { '@keywords': 'keyword', '@builtins': 'type', '@special': 'variable.predefined', '@default': 'identifier' }
+          }]
+        ],
+        string: [ [/[^"]+/, 'string'], [/"/, 'string', '@pop'] ]
+      }
+    };
+  }
+  monaco.languages.setMonarchTokensProvider('onebase-dsl', _onebaseMonarch());
+  // Иконка по виду дескриптора
+  function _lrKind(kind){
+    var K = monaco.languages.CompletionItemKind;
+    if (kind === 'method') return K.Method;
+    if (kind === 'keyword') return K.Keyword;
+    if (kind === 'query') return K.Struct;
+    return K.Function;
+  }
+  // Огороженный markdown-блок bsl (символ ограждения собираем из кода 96,
+  // чтобы не вставлять его литерал в Go raw-string шаблона).
+  var _bt = String.fromCharCode(96);
+  function _lrFence(code){
+    return '\n\n' + _bt + _bt + _bt + 'bsl\n' + code + '\n' + _bt + _bt + _bt;
+  }
+  // Сниппет вставки: Имя(${1:П1}, ${2:П2})
+  function _lrSnippet(d){
+    if (!d.params || !d.params.length) return d.display;
+    var parts = d.params.map(function(p,i){ return '${'+(i+1)+':'+p.name+'}'; });
+    return d.display + '(' + parts.join(', ') + ')';
+  }
+  // Auto-completion (данные из langref, лениво)
+  monaco.languages.registerCompletionItemProvider('onebase-dsl', {
+    triggerCharacters: ['.'],
+    provideCompletionItems: function(model, position) {
+      loadLangref();
+      var data = window._langref || [];
+      var word = model.getWordUntilPosition(position);
+      var range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
+      var line = model.getLineContent(position.lineNumber).substring(0, word.startColumn - 1);
+      var dot = /([A-Za-zА-Яа-яЁё0-9_]+)\.\s*$/.exec(line);
+      var obj = dot ? dot[1].toLowerCase() : null;
+      var objExists = obj && data.some(function(d){ return d.kind==='method' && d.object && d.object.toLowerCase()===obj; });
+      var suggestions = [];
+      data.forEach(function(d){
+        if (objExists && !(d.kind==='method' && d.object && d.object.toLowerCase()===obj)) return;
+        suggestions.push({
+          label: d.display,
+          kind: _lrKind(d.kind),
+          detail: d.signature || '',
+          documentation: { value: (d.doc||'') + (d.example ? _lrFence(d.example) : '') },
+          insertText: _lrSnippet(d),
+          insertTextRules: (d.params && d.params.length) ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
+          range: range
+        });
       });
-      return { suggestions: kwSuggestions };
+      return { suggestions: suggestions };
+    }
+  });
+  // Hover — описание под курсором
+  monaco.languages.registerHoverProvider('onebase-dsl', {
+    provideHover: function(model, position) {
+      loadLangref();
+      var word = model.getWordAtPosition(position);
+      if (!word) return null;
+      var w = word.word.toLowerCase();
+      var data = window._langref || [];
+      var d = null;
+      for (var i=0;i<data.length;i++){
+        var x=data[i];
+        if (x.name && x.name.toLowerCase()===w){ d=x; break; }
+        if (x.aliases && x.aliases.some(function(a){return a.toLowerCase()===w;})){ d=x; break; }
+      }
+      if (!d) return null;
+      var md = '**' + (d.signature||d.display) + '**\n\n' + (d.doc||'');
+      if (d.returns) md += '\n\n_Возвращает:_ ' + d.returns;
+      if (d.example) md += _lrFence(d.example);
+      return { contents: [{ value: md }] };
+    }
+  });
+  // Подсказка параметров
+  monaco.languages.registerSignatureHelpProvider('onebase-dsl', {
+    signatureHelpTriggerCharacters: ['(', ','],
+    provideSignatureHelp: function(model, position) {
+      loadLangref();
+      var textBefore = model.getValueInRange({startLineNumber:1,startColumn:1,endLineNumber:position.lineNumber,endColumn:position.column});
+      var m = /([A-Za-zА-Яа-яЁё0-9_]+)\s*\(([^()]*)$/.exec(textBefore);
+      if (!m) return null;
+      var name = m[1].toLowerCase();
+      var data = window._langref || [];
+      var d = null;
+      for (var i=0;i<data.length;i++){
+        var x=data[i];
+        if ((x.name && x.name.toLowerCase()===name) || (x.aliases && x.aliases.some(function(a){return a.toLowerCase()===name;}))){ d=x; break; }
+      }
+      if (!d || !d.params || !d.params.length) return null;
+      var active = (m[2].match(/,/g) || []).length;
+      return { value: { signatures: [{
+        label: d.signature || d.display,
+        documentation: d.doc || '',
+        parameters: d.params.map(function(p){ return { label: p.name, documentation: (p.type||'') + (p.doc ? ' — '+p.doc : '') }; })
+      }], activeSignature: 0, activeParameter: Math.min(active, d.params.length-1) }, dispose: function(){} };
     }
   });
   // Dark theme matching existing #1e1e2e style
@@ -2066,6 +2151,13 @@ require(['vs/editor/editor.main'], function() {
     }
   });
   window._monacoReady = true;
+
+  // Динамическая подсветка: дополнить список встроенных именами из langref
+  loadLangref().then(function(data){
+    var names = data.filter(function(d){ return d.kind==='func' || d.kind==='method' || d.kind==='query'; })
+                    .map(function(d){ return d.display; });
+    monaco.languages.setMonarchTokensProvider('onebase-dsl', _onebaseMonarch(names));
+  });
 
   // Auto-open Monaco for visible code blocks
   document.querySelectorAll('pre.os-code').forEach(function(pre) {
@@ -3524,6 +3616,95 @@ const cfgMain = `{{define "cfg-main"}}
 {{if eq .Tab "backup"}}{{template "tab-backup" .}}{{end}}
 {{template "cfg-foot" .}}
 <div id="admin-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'"></div>
+{{template "syntax-ref" .}}
+{{end}}`
+
+// ── Syntax reference window (Синтакс-помощник) ─────────────────────────────────
+
+const cfgSyntaxRef = `{{define "syntax-ref"}}
+<button id="syntax-ref-toggle" type="button" onclick="toggleSyntaxRef()" title="{{t .Lang "Синтакс-помощник"}} (F1)"
+  style="position:fixed;right:0;top:120px;z-index:40;background:#1a4a80;color:#fff;border:none;border-radius:4px 0 0 4px;padding:8px 6px;cursor:pointer;writing-mode:vertical-rl">{{t .Lang "Синтакс-помощник"}}</button>
+<div id="syntax-ref-panel" style="display:none;position:fixed;right:0;top:0;bottom:0;width:520px;z-index:41;background:#fff;border-left:1px solid #cbd5e1;box-shadow:-4px 0 16px rgba(0,0,0,.12);font-size:13px;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #e2e8f0;background:#f8fafc">
+    <strong style="flex:0 0 auto">{{t .Lang "Синтакс-помощник"}}</strong>
+    <input id="syntax-ref-search" oninput="renderSyntaxRefTree()" placeholder="{{t .Lang "поиск"}}…" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px">
+    <button type="button" onclick="toggleSyntaxRef(false)" style="border:none;background:none;font-size:16px;cursor:pointer">✕</button>
+  </div>
+  <div style="flex:1;display:flex;min-height:0">
+    <div id="syntax-ref-tree" style="width:230px;overflow:auto;border-right:1px solid #e2e8f0;padding:6px"></div>
+    <div id="syntax-ref-detail" style="flex:1;overflow:auto;padding:10px"></div>
+  </div>
+</div>
+<script>
+function toggleSyntaxRef(show){
+  var p=document.getElementById('syntax-ref-panel');
+  var open=(typeof show==='boolean')?show:(p.style.display==='none');
+  p.style.display=open?'flex':'none';
+  if(open){ if(typeof loadLangref==='function'){ loadLangref().then(renderSyntaxRefTree); } else { renderSyntaxRefTree(); } }
+}
+function _lrFiltered(){
+  var q=(document.getElementById('syntax-ref-search').value||'').toLowerCase();
+  var data=window._langref||[];
+  if(!q) return data;
+  return data.filter(function(d){
+    return (d.display&&d.display.toLowerCase().indexOf(q)>=0)
+      || (d.name&&d.name.toLowerCase().indexOf(q)>=0)
+      || (d.aliases&&d.aliases.some(function(a){return a.toLowerCase().indexOf(q)>=0;}))
+      || (d.doc&&d.doc.toLowerCase().indexOf(q)>=0);
+  });
+}
+function renderSyntaxRefTree(){
+  var data=_lrFiltered(), tree=document.getElementById('syntax-ref-tree');
+  var groups={'{{t .Lang "Глобальные функции"}}':{}, '{{t .Lang "Методы объектов"}}':{}, '{{t .Lang "Конструкции языка"}}':{'_':[]}, '{{t .Lang "Язык запросов"}}':{'_':[]}};
+  var GF='{{t .Lang "Глобальные функции"}}', MO='{{t .Lang "Методы объектов"}}', KL='{{t .Lang "Конструкции языка"}}', QL='{{t .Lang "Язык запросов"}}';
+  data.forEach(function(d){
+    if(d.kind==='func'){ var g=d.group||'—'; (groups[GF][g]=groups[GF][g]||[]).push(d); }
+    else if(d.kind==='method'){ var o=d.object||'—'; (groups[MO][o]=groups[MO][o]||[]).push(d); }
+    else if(d.kind==='keyword'){ groups[KL]['_'].push(d); }
+    else if(d.kind==='query'){ groups[QL]['_'].push(d); }
+  });
+  var html='';
+  [GF,MO,KL,QL].forEach(function(top){
+    var sub=groups[top], subKeys=Object.keys(sub).filter(function(k){return sub[k].length;});
+    if(!subKeys.length) return;
+    html+='<div style="font-weight:600;margin:6px 0 2px">'+top+'</div>';
+    subKeys.sort().forEach(function(sk){
+      if(sk!=='_'){ html+='<div style="color:#64748b;margin:3px 0 1px;padding-left:6px">'+sk+'</div>'; }
+      sub[sk].slice().sort(function(a,b){return a.display.localeCompare(b.display);}).forEach(function(d){
+        var idx=(window._langref||[]).indexOf(d);
+        html+='<div style="padding:2px 6px 2px 16px;cursor:pointer;border-radius:3px" onmouseover="this.style.background=\'#eef2ff\'" onmouseout="this.style.background=\'\'" onclick="showSyntaxRefDetail('+idx+')">'+d.display+'</div>';
+      });
+    });
+  });
+  tree.innerHTML=html||('<div style="color:#94a3b8">'+'{{t .Lang "ничего не найдено"}}'+'</div>');
+}
+function showSyntaxRefDetail(idx){
+  var d=(window._langref||[])[idx]; if(!d) return;
+  var esc=function(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var h='<div style="font-family:monospace;font-size:14px;font-weight:600;margin-bottom:6px">'+esc(d.signature||d.display)+'</div>';
+  if(d.returns) h+='<div style="color:#475569;margin-bottom:6px">'+'{{t .Lang "Возвращает"}}'+': '+esc(d.returns)+'</div>';
+  h+='<div style="margin-bottom:10px">'+esc(d.doc)+'</div>';
+  if(d.params&&d.params.length){
+    h+='<div style="font-weight:600;margin-bottom:3px">'+'{{t .Lang "Параметры"}}'+':</div><ul style="margin:0 0 10px 16px;padding:0">';
+    d.params.forEach(function(p){ h+='<li><code>'+esc(p.name)+'</code> : '+esc(p.type)+(p.doc?' — '+esc(p.doc):'')+(p.optional?' <em>('+'{{t .Lang "необяз."}}'+')</em>':'')+'</li>'; });
+    h+='</ul>';
+  }
+  if(d.example) h+='<pre style="background:#f1f5f9;padding:8px;border-radius:4px;white-space:pre-wrap">'+esc(d.example)+'</pre>';
+  h+='<button type="button" onclick="insertLangrefSignature('+idx+')" style="margin-top:8px;background:#1a4a80;color:#fff;border:none;border-radius:4px;padding:6px 12px;cursor:pointer">'+'{{t .Lang "Вставить в редактор"}}'+'</button>';
+  document.getElementById('syntax-ref-detail').innerHTML=h;
+}
+function insertLangrefSignature(idx){
+  var d=(window._langref||[])[idx]; if(!d) return;
+  var id=window._lastFocusedEditorId, ed=id&&window.monacoEditors&&monacoEditors[id];
+  if(!ed){ alert('{{t .Lang "Откройте редактор модуля и поставьте курсор"}}'); return; }
+  ed.executeEdits('syntax-ref',[{range: ed.getSelection(), text: (d.signature||d.display)}]);
+  ed.focus();
+}
+document.addEventListener('keydown',function(e){
+  if(e.key==='F1'){ e.preventDefault(); toggleSyntaxRef(); }
+  else if(e.key==='Escape'){ var p=document.getElementById('syntax-ref-panel'); if(p&&p.style.display!=='none') toggleSyntaxRef(false); }
+});
+</script>
 {{end}}`
 
 // ── Tree tab ──────────────────────────────────────────────────────────────────

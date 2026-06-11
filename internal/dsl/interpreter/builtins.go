@@ -405,6 +405,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		NewTxFunctions(nil, nil),
 		NewChartFunctions(),
 		NewSpreadsheetFunctions(),
+		NewFileFunctions(),
 		NewLLMFunctions(nil),
 		NewServiceFunctions(),
 	}

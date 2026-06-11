@@ -179,6 +179,7 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/admin/ai/save", s.h.cfgAdminAISave)
 		r.Post("/bases/{id}/configurator/admin/ai/test", s.h.cfgAdminAITest)
 		r.Get("/bases/{id}/configurator/ai-enabled", s.h.cfgAIEnabled)
+		r.Get("/bases/{id}/configurator/langref", s.h.configuratorLangref)
 		r.Post("/bases/{id}/configurator/ai-assist", s.h.cfgAIAssist)
 		r.Get("/bases/{id}/configurator/admin/about", s.h.cfgAdminAbout)
 		r.Get("/bases/{id}/configurator/admin/roles", s.h.cfgAdminRoles)
