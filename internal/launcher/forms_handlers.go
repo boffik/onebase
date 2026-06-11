@@ -229,7 +229,7 @@ func (h *handler) configuratorFormsList(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Не удалось прочитать список форм: "+err.Error(), 500)
 		return
 	}
-	data := &configuratorData{Base: b, ManagedForms: forms}
+	data := &configuratorData{Base: b, ManagedForms: forms, Lang: resolveLang(r)}
 	// Подсветить флаги после save/delete-редиректа.
 	if q := r.URL.Query().Get("saved"); q != "" {
 		data.FieldsSaved = true
@@ -275,7 +275,7 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	data := &configuratorData{Base: b, EditingForm: form}
+	data := &configuratorData{Base: b, EditingForm: form, Lang: resolveLang(r)}
 	if q := r.URL.Query().Get("saved"); q != "" {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = q

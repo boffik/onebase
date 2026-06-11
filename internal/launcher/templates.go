@@ -14,7 +14,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 
 const tplLauncherHead = `
 {{define "lhead"}}<!DOCTYPE html>
-<html lang="ru">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <title>{{.Title}}</title>

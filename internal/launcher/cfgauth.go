@@ -55,7 +55,7 @@ func CloseAuthPools() {
 }
 
 var cfgLoginTmpl = template.Must(template.New("cfg-login").Parse(`<!DOCTYPE html>
-<html lang="ru">
+<html lang="{{.Lang}}">
 <head><meta charset="utf-8"><title>Конфигуратор — Вход</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -91,7 +91,7 @@ input:focus,select:focus{border-color:#3070D8;box-shadow:0 0 0 2px rgba(48,112,2
 
 // cfgLoginData builds the template data map for the configurator login page.
 func (h *handler) cfgLoginData(r *http.Request, b *Base) map[string]any {
-	data := map[string]any{"Error": "", "LogoURL": ""}
+	data := map[string]any{"Error": "", "LogoURL": "", "Lang": resolveLang(r)}
 	type appCfg struct {
 		Logo string `yaml:"logo"`
 	}
