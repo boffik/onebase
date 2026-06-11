@@ -32,7 +32,10 @@ import (
 var keyPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\{\{t\s+\$[.\w]*\s+"((?:[^"\\]|\\.)*)"\s*\}\}`),
 	regexp.MustCompile(`i18nerr\.(?:New|Errorf)\(\s*"((?:[^"\\]|\\.)*)"`),
-	regexp.MustCompile(`i18nerr\.Wrapf\([^,]+,\s*"((?:[^"\\]|\\.)*)"`),
+	// (?s).*? вместо [^,]+: err-аргумент часто содержит запятые
+	// (Wrapf(load(a, b), "ключ")) — жадность до первой запятой молча
+	// теряла ключ из проверки.
+	regexp.MustCompile(`(?s)i18nerr\.Wrapf\(.*?,\s*"((?:[^"\\]|\\.)*)"`),
 	regexp.MustCompile(`\btr\(\s*\w+,\s*"((?:[^"\\]|\\.)*)"\s*\)`),
 }
 
