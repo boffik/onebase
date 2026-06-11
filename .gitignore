@@ -18,6 +18,8 @@ desc_*.json
 # Temp files
 __*.py
 __*.go
+tmp*
+tmptest/
 exit
 GIT_WORKFLOW.md
 
