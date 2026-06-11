@@ -1,0 +1,6 @@
+name: Категории
+fields:
+  - name: Наименование
+    type: string
+  - name: Тип
+    type: string

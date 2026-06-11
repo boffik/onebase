@@ -1,0 +1,10 @@
+name: ПереводТекста
+fields:
+  - name: Основание
+    type: reference:Текст
+  - name: ТекстПеревода
+    type: string
+  - name: ЯзыкПеревода
+    type: string
+  - name: КоличествоСимволов
+    type: number

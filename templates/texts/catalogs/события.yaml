@@ -1,0 +1,6 @@
+name: События
+fields:
+  - name: Наименование
+    type: string
+  - name: Описание
+    type: string

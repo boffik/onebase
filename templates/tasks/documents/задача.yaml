@@ -1,0 +1,14 @@
+name: Задача
+fields:
+  - name: Наименование
+    type: string
+  - name: Проект
+    type: reference:Проекты
+  - name: Исполнитель
+    type: string
+  - name: Приоритет
+    type: string
+  - name: Статус
+    type: string
+  - name: Дедлайн
+    type: date

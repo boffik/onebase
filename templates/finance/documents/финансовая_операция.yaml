@@ -1,0 +1,12 @@
+name: ФинансоваяОперация
+fields:
+  - name: Категория
+    type: reference:Категории
+  - name: Сумма
+    type: number
+  - name: Дата
+    type: date
+  - name: Описание
+    type: string
+  - name: Тип
+    type: string

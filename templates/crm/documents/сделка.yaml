@@ -1,0 +1,12 @@
+name: Сделка
+fields:
+  - name: Клиент
+    type: reference:Клиенты
+  - name: Менеджер
+    type: string
+  - name: Статус
+    type: string
+  - name: Сумма
+    type: number
+  - name: ДатаСоздания
+    type: date

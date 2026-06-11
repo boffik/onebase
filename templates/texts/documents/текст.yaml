@@ -1,0 +1,10 @@
+name: Текст
+fields:
+  - name: Событие
+    type: reference:События
+  - name: ДатаСобытия
+    type: date
+  - name: Наименование
+    type: string
+  - name: ЯзыкОригинала
+    type: string

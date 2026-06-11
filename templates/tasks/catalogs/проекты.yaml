@@ -1,0 +1,10 @@
+name: Проекты
+fields:
+  - name: Наименование
+    type: string
+  - name: Описание
+    type: string
+  - name: ДатаНачала
+    type: date
+  - name: ДатаОкончания
+    type: date

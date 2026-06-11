@@ -1,0 +1,8 @@
+name: Клиенты
+fields:
+  - name: Наименование
+    type: string
+  - name: Телефон
+    type: string
+  - name: Email
+    type: string

@@ -139,6 +139,13 @@ func (s *Server) Mount(r chi.Router) {
 	mountStatic(r)
 	r.Get("/ui", s.index)
 	r.Get("/ui/", s.index)
+
+	// Gengen — ДО catch-all роутов! (иначе /ui/dev/gengen матчится как {kind}/{entity})
+	r.Get("/ui/dev/gengen", s.gengenPage)
+	r.Post("/ui/dev/gengen/analyze", s.gengenAnalyze)
+	r.Post("/ui/dev/gengen/generate", s.gengenGenerate)
+	r.Post("/ui/dev/gengen/merge", s.gengenMerge)
+
 	r.Get("/ui/{kind}/{entity}", s.list)
 	r.Get("/ui/{kind}/{entity}/new", s.form)
 	r.Post("/ui/{kind}/{entity}/new", s.submit)

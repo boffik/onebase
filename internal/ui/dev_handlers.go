@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
 	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/ivantit66/onebase/internal/gengen"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -495,4 +499,299 @@ func coerceParams(params map[string]any) {
 // поэтому здесь строгий strconv.ParseFloat.
 func parseFloat(s string) (float64, error) {
 	return strconv.ParseFloat(strings.TrimSpace(s), 64)
+}
+
+// ─── Gengen — генерация конфигурации ────────────────────────────────────────
+
+func (s *Server) gengenPage(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	domains := make([]map[string]any, 0)
+	for name, keywords := range gengen.AvailableDomains() {
+		domains = append(domains, map[string]any{
+			"Name":     name,
+			"Keywords": strings.Join(keywords[:min(len(keywords), 3)], ", "),
+		})
+	}
+	s.render(w, r, "page-gengen", map[string]any{
+		"Domains": domains,
+	})
+}
+
+func (s *Server) gengenAnalyze(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]any{"error": "Некорректный запрос"})
+		return
+	}
+	result := gengen.Analyze(req.Prompt)
+	jsonResp(w, 200, map[string]any{
+		"domain":    result.Domain,
+		"template":  result.Template,
+		"confident": result.Confident,
+		"ambiguous": result.Ambiguous,
+	})
+}
+
+func (s *Server) gengenGenerate(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	var req struct {
+		Prompt  string   `json:"prompt"`
+		Domain  string   `json:"domain"`
+		Addons  []string `json:"addons"`
+		YAML    map[string]string `json:"yaml"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]any{"error": "Некорректный запрос"})
+		return
+	}
+
+	// 1. Analyze if domain not specified
+	var result *gengen.AnalyzeResult
+	if req.Domain != "" {
+		result = &gengen.AnalyzeResult{Domain: req.Domain, Confident: true}
+	} else {
+		result = gengen.Analyze(req.Prompt)
+	}
+
+	if result.Domain == "unknown" {
+		jsonResp(w, 400, map[string]any{"error": "Домен не определён. Укажите --domain или уточните промпт."})
+		return
+	}
+
+	// 2. Resolve template
+	if result.Template == "" {
+		candidates := []string{"examples/" + result.Domain, "templates/" + result.Domain}
+		for _, t := range candidates {
+			if dirExists(t) {
+				result.Template = t
+				break
+			}
+		}
+	}
+
+	if result.Template == "" {
+		jsonResp(w, 400, map[string]any{"error": "Нет шаблона для домена: " + result.Domain})
+		return
+	}
+
+	// 3. Generate to temp dir
+	outDir := filepath.Join(os.TempDir(), "gengen-"+uuid.New().String()[:8])
+	gen := &gengen.Generator{OutputDir: outDir}
+	if err := gen.Generate(result.Template, req.Addons); err != nil {
+		jsonResp(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// 4. Override YAML files if provided (user edited them)
+	for relPath, content := range req.YAML {
+		if content == "" {
+			continue
+		}
+		fullPath := filepath.Join(outDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			jsonResp(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			jsonResp(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+	}
+
+	// 5. Collect generated files for preview
+	files := make(map[string]string)
+	filepath.WalkDir(outDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(outDir, path)
+		data, _ := os.ReadFile(path)
+		files[rel] = string(data)
+		return nil
+	})
+
+	jsonResp(w, 200, map[string]any{
+		"domain":   result.Domain,
+		"template": result.Template,
+		"output":   outDir,
+		"files":    files,
+	})
+}
+
+func (s *Server) gengenMerge(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	var req struct {
+		Prompt    string   `json:"prompt"`
+		Domain    string   `json:"domain"`
+		Addons    []string `json:"addons"`
+		OutputDir string   `json:"output_dir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]any{"error": "Некорректный запрос"})
+		return
+	}
+
+	if req.OutputDir == "" {
+		jsonResp(w, 400, map[string]any{"error": "Укажите output_dir — путь к существующему проекту"})
+		return
+	}
+
+	// 1. Analyze
+	var result *gengen.AnalyzeResult
+	if req.Domain != "" {
+		result = &gengen.AnalyzeResult{Domain: req.Domain, Confident: true}
+	} else {
+		result = gengen.Analyze(req.Prompt)
+	}
+
+	if result.Domain == "unknown" {
+		jsonResp(w, 400, map[string]any{"error": "Домен не определён"})
+		return
+	}
+
+	// 2. Resolve template
+	if result.Template == "" {
+		candidates := []string{"examples/" + result.Domain, "templates/" + result.Domain}
+		for _, t := range candidates {
+			if dirExists(t) {
+				result.Template = t
+				break
+			}
+		}
+	}
+
+	if result.Template == "" {
+		jsonResp(w, 400, map[string]any{"error": "Нет шаблона для домена: " + result.Domain})
+		return
+	}
+
+	// 3. Scan existing
+	before, err := gengen.ScanProjectFromFiles(req.OutputDir)
+	if err != nil {
+		jsonResp(w, 500, map[string]any{"error": "Сканирование проекта: " + err.Error()})
+		return
+	}
+
+	// 4. Generate (copyDir skips existing files)
+	gen := &gengen.Generator{OutputDir: req.OutputDir}
+	if err := gen.Generate(result.Template, req.Addons); err != nil {
+		jsonResp(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// 5. Scan after
+	after, err := gengen.ScanProjectFromFiles(req.OutputDir)
+	if err != nil {
+		jsonResp(w, 500, map[string]any{"error": "Сканирование после генерации: " + err.Error()})
+		return
+	}
+
+	// 6. Compute diff
+	diff := map[string]any{
+		"new_catalogs":  diffKeys(before.Catalogs, after.Catalogs),
+		"new_documents": diffKeys(before.Documents, after.Documents),
+		"new_enums":     diffKeysEnum(before.Enums, after.Enums),
+		"new_dsl":       diffKeysStr(before.DSLFiles, after.DSLFiles),
+		"new_fields":    diffFields(before, after),
+	}
+
+	jsonResp(w, 200, map[string]any{
+		"domain":   result.Domain,
+		"template": result.Template,
+		"diff":     diff,
+	})
+}
+
+// diffKeys returns keys in after that are not in before (for map[string]T).
+func diffKeys[T any](before, after map[string]T) []string {
+	var result []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+func diffKeysEnum(before, after map[string]gengen.EnumInfo) []string {
+	var result []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+func diffKeysStr(before, after map[string]string) []string {
+	var result []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+func diffFields(before, after *gengen.ExistingManifest) map[string][]string {
+	result := make(map[string][]string)
+
+	// Catalogs
+	for name, afterCat := range after.Catalogs {
+		beforeCat, ok := before.Catalogs[name]
+		if !ok {
+			continue
+		}
+		beforeFields := make(map[string]bool)
+		for _, f := range beforeCat.Fields {
+			beforeFields[f.Name] = true
+		}
+		for _, f := range afterCat.Fields {
+			if !beforeFields[f.Name] {
+				result[name] = append(result[name], f.Name)
+			}
+		}
+	}
+
+	// Documents
+	for name, afterDoc := range after.Documents {
+		beforeDoc, ok := before.Documents[name]
+		if !ok {
+			continue
+		}
+		beforeFields := make(map[string]bool)
+		for _, f := range beforeDoc.Fields {
+			beforeFields[f.Name] = true
+		}
+		for _, f := range afterDoc.Fields {
+			if !beforeFields[f.Name] {
+				result[name] = append(result[name], f.Name)
+			}
+		}
+	}
+
+	return result
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
