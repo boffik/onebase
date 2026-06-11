@@ -3,6 +3,7 @@ package i18nerr
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -78,5 +79,42 @@ func TestLocalizeWrappedChain(t *testing.T) {
 	// errors.Is работает сквозь цепочку.
 	if !errors.Is(outer, inner) {
 		t.Fatalf("errors.Is не видит wrapped")
+	}
+}
+
+// Перевод внешнего звена, содержащий русский рендер внутреннего как
+// подстроку, не должен портить сборку (структурная локализация vs Replace).
+func TestLocalizeChainNoFalseSubstitution(t *testing.T) {
+	fsys := fstest.MapFS{
+		"en.json": &fstest.MapFile{Data: []byte(`{
+			"обработка %s": "обж-process %s",
+			"обж": "ozh-inner"
+		}`)},
+	}
+	b, err := i18n.Load(fsys, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	chain := Wrapf(New("обж"), "обработка %s", "y")
+	if got := Localize(b, "en", chain); got != "обж-process y: ozh-inner" {
+		t.Fatalf("Localize = %q", got)
+	}
+}
+
+// Кривой перевод (несовпадение fmt-verbs) деградирует изящно — артефакты
+// fmt (%!s(MISSING), EXTRA), но не паника. Пиннинг текущего поведения.
+func TestLocalizeVerbMismatchDegradesGracefully(t *testing.T) {
+	fsys := fstest.MapFS{
+		"en.json": &fstest.MapFile{Data: []byte(`{
+			"таблица %s": "table %s of %s"
+		}`)},
+	}
+	b, err := i18n.Load(fsys, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	got := Localize(b, "en", Errorf("таблица %s", "x"))
+	if !strings.Contains(got, "table x") || !strings.Contains(got, "MISSING") {
+		t.Fatalf("ожидалась изящная деградация fmt, получено %q", got)
 	}
 }

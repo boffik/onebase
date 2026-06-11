@@ -22,10 +22,12 @@ type Error struct {
 	wrapped error
 }
 
-// New создаёт ошибку со статическим ключом.
+// New создаёт ошибку со статическим ключом. Ключ не прогоняется через fmt,
+// поэтому для сообщений с литеральным «%» используй New — не Errorf.
 func New(key string) error { return &Error{Key: key} }
 
-// Errorf создаёт ошибку с fmt-шаблоном и аргументами.
+// Errorf создаёт ошибку с fmt-шаблоном и аргументами. Ключ — fmt-шаблон;
+// литеральный % в ключе экранируй как %%.
 func Errorf(key string, args ...any) error { return &Error{Key: key, Args: args} }
 
 // Wrapf оборачивает err локализуемым префиксом: «<key с args>: <err>».
@@ -73,14 +75,33 @@ func Localize(b *i18n.Bundle, lang string, err error) string {
 	if t := b.T(lang, msg); t != msg {
 		return t
 	}
-	// Перевести i18nerr-звенья в цепочке, сохранив остальной текст.
-	for c := err; c != nil; c = errors.Unwrap(c) {
-		if e, ok := c.(*Error); ok {
-			ru := e.render()
-			if loc := e.localize(b, lang); loc != ru {
-				msg = strings.Replace(msg, ru, loc, 1)
-			}
+	// Структурная сборка по цепочке ошибок.
+	return localizeChain(b, lang, err)
+}
+
+// localizeChain собирает перевод по структуре цепочки ошибок: i18nerr-звенья
+// переводятся по своему шаблону, обёртки fmt.Errorf("…: %w") сохраняют свой
+// префикс с переводом хвоста, прочие ошибки переводятся exact-match-ом или
+// остаются как есть. Структурная сборка (а не strings.Replace по полному
+// тексту) исключает ложные подстановки, когда перевод внешнего звена содержит
+// русский рендер внутреннего как подстроку.
+func localizeChain(b *i18n.Bundle, lang string, err error) string {
+	if e, ok := err.(*Error); ok {
+		head := e.localize(b, lang)
+		if e.wrapped == nil {
+			return head
 		}
+		return head + ": " + localizeChain(b, lang, e.wrapped)
 	}
-	return msg
+	inner := errors.Unwrap(err)
+	if inner == nil {
+		return b.T(lang, err.Error())
+	}
+	// Не-i18nerr обёртка (fmt.Errorf "%w"): хвост переводим, префикс остаётся.
+	msg := err.Error()
+	innerMsg := inner.Error()
+	if strings.HasSuffix(msg, innerMsg) {
+		return msg[:len(msg)-len(innerMsg)] + localizeChain(b, lang, inner)
+	}
+	return msg // нестандартная обёртка — без перевода
 }
