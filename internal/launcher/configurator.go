@@ -328,6 +328,9 @@ type configuratorData struct {
 	AllEnumNames []string
 	// query builder schema (JSON for inline query builder)
 	QBSchema template.JS
+	// LayoutMeta — JSON для панели «Данные» редактора макетов (план 64, этап 5b):
+	// метаданные сущностей (реквизиты/ТЧ) + константы + карта «макет → документ».
+	LayoutMeta template.JS
 	// converter
 	ConvertSrcDir  string
 	ConvertResult  string
@@ -844,6 +847,9 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 
 	// Generate query builder schema
 	data.QBSchema = buildQBSchema(data)
+
+	// Generate layout designer data-binding metadata
+	data.LayoutMeta = buildLayoutMeta(data)
 
 	// Backup dir & files
 	data.BackupDir = h.backupDir(b)

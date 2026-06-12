@@ -1635,6 +1635,22 @@ function cfgObjTab(el, paneId){
 // порядка ключей. Незнакомые ключи (page/binding/будущие) НЕ теряются: правим
 // распарсенный объект, не пересобираем его с нуля.
 var _led={};
+// _ldMeta — метаданные для панели «Данные» (план 64, этап 5b, 6.5):
+// {entities:{Имя:{fields,tableParts}}, constants:[], formDoc:{макет→документ}}.
+var _ldMeta={{if .LayoutMeta}}{{.LayoutMeta}}{{else}}{}{{end}};
+if(!_ldMeta||typeof _ldMeta!=='object')_ldMeta={entities:{},constants:[],formDoc:{}};
+// _ldEntityForForm возвращает метаданные сущности, к которой привязан макет n,
+// или null. Имя документа берётся из formDoc[n] (регистронезависимо).
+function _ldEntityForForm(n){
+  if(!_ldMeta||!_ldMeta.formDoc)return null;
+  var doc=_ldMeta.formDoc[(n||'').toLowerCase()];
+  if(!doc)return null;
+  var ents=_ldMeta.entities||{};
+  if(ents[doc])return ents[doc];
+  var dl=doc.toLowerCase();
+  for(var k in ents){if(Object.prototype.hasOwnProperty.call(ents,k)&&k.toLowerCase()===dl)return ents[k];}
+  return null;
+}
 // _ldNormAreas приводит areas к массиву {name, rows}. Принимает:
 //   - массив (v2) — нормализует name/rows у каждого элемента;
 //   - объект (legacy map) — порядок ключей сохраняется (JS Object iteration order).
@@ -1785,6 +1801,7 @@ function renderLayoutEditor(n,noYamlSync){
     h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer" onclick="addLayoutRow(\''+n+"','"+esc(an)+"')\">+ {{t $.Lang "Строка"}}</button>";
     h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #fcc;border-radius:3px;cursor:pointer;color:#c33" onclick="delLayoutArea(\''+n+"','"+esc(an)+"')\">✕</button>";
     h+='</div>';
+    h+=_ldAreaBindingRow(n,an);
     h+='<table style="border-collapse:collapse">'+cg;
     var rows=ar.rows||[];
     for(var ri=0;ri<rows.length;ri++){
@@ -1818,6 +1835,7 @@ function renderLayoutEditor(n,noYamlSync){
   if(ved)ved.innerHTML=h;
   renderPreviewOnly(n);
   syncProps(n);
+  renderDataPanel(n);
 }
 // _ldSyncTextarea сериализует s.data → textarea. areas пишутся как sequence;
 // jsyaml уже хранит areas массивом, поэтому dump даёт v2-формат.
@@ -1901,6 +1919,7 @@ function syncProps(n){
   _setVal('vp-bc-'+n,c.borderColor||'#cccccc');
   _setVal('vp-colspan-'+n,c.colspan||1);
   _setVal('vp-rowspan-'+n,c.rowspan||1);
+  _setVal('vp-fmt-'+n,_ldParamFormat(n,c.parameter||''));
   _ldSyncBorderUI(n,c);
 }
 function updateCellProp(n,prop,val){
@@ -1912,6 +1931,219 @@ function updateCellProp(n,prop,val){
   }else{
     c[prop]=val;
   }
+  renderLayoutEditor(n);
+}
+// ── Привязка данных (план 64, этап 5b, 6.5) ───────────────────────
+// _ldBinding возвращает (создавая при ensure) объект binding макета.
+function _ldBinding(n,ensure){
+  var s=_led[n];if(!s||!s.data)return null;
+  if(!s.data.binding&&ensure)s.data.binding={};
+  return s.data.binding||null;
+}
+// _ldRepeatForArea возвращает запись binding.repeat для области areaName или null.
+function _ldRepeatForArea(n,areaName){
+  var b=_ldBinding(n,false);
+  if(!b||!Array.isArray(b.repeat))return null;
+  var al=(areaName||'').toLowerCase();
+  for(var i=0;i<b.repeat.length;i++){if((b.repeat[i].area||'').toLowerCase()===al)return b.repeat[i];}
+  return null;
+}
+// _ldParamMapFor возвращает (создавая при ensure) карту parameters для области:
+// для repeat-области это repeat[i].parameters, иначе binding.parameters.
+function _ldParamMapFor(n,areaName,ensure){
+  var rb=_ldRepeatForArea(n,areaName);
+  if(rb){
+    if(!rb.parameters&&ensure)rb.parameters={};
+    return rb.parameters||null;
+  }
+  var b=_ldBinding(n,ensure);
+  if(!b)return null;
+  if(!b.parameters&&ensure)b.parameters={};
+  return b.parameters||null;
+}
+// _ldParamFormat читает формат («| fmt») параметра выделенной ячейки из карты
+// параметров соответствующей области; пусто — нет формата или нет записи.
+function _ldParamFormat(n,param){
+  if(!param)return '';
+  var s=_led[n];if(!s||!s.sel)return '';
+  var pm=_ldParamMapFor(n,s.sel.area,false);
+  if(!pm)return '';
+  var expr=null;
+  for(var k in pm){if(Object.prototype.hasOwnProperty.call(pm,k)&&k.toLowerCase()===param.toLowerCase()){expr=pm[k];break;}}
+  if(typeof expr!=='string')return '';
+  var bar=expr.indexOf('|');
+  if(bar<0)return '';
+  return expr.slice(bar+1).trim();
+}
+// ldSetFormat дописывает «| формат» к выражению параметра выделенной ячейки.
+// Если выражение совпадает с именем (автопривязка) и формат пуст — запись из
+// parameters удаляется (не засоряем binding).
+function ldSetFormat(n,fmt){
+  var sc=_ldSelCell(n);if(!sc)return;
+  var param=sc.c.parameter||'';
+  if(!param){alert('{{t $.Lang "У ячейки нет параметра"}}');return;}
+  var s=_led[n];if(!s||!s.sel)return;
+  var pm=_ldParamMapFor(n,s.sel.area,true);
+  if(!pm)return;
+  // найдём существующий ключ (регистронезависимо) или используем имя параметра.
+  var key=param,curExpr=param;
+  for(var k in pm){if(Object.prototype.hasOwnProperty.call(pm,k)&&k.toLowerCase()===param.toLowerCase()){key=k;curExpr=pm[k];break;}}
+  var bar=curExpr.indexOf('|');
+  var baseExpr=(bar<0?curExpr:curExpr.slice(0,bar)).trim();
+  if(!baseExpr)baseExpr=param;
+  if(fmt){
+    pm[key]=baseExpr+' | '+fmt;
+  }else{
+    // нет формата: если выражение == имени параметра (автопривязка) — убираем запись.
+    if(baseExpr.toLowerCase()===param.toLowerCase())delete pm[key];
+    else pm[key]=baseExpr;
+  }
+  _ldCleanupParams(n,s.sel.area);
+  renderLayoutEditor(n);
+}
+// _ldBindParameter привязывает поле к параметру ячейки. Ставит cell.parameter и
+// добавляет запись в parameters ТОЛЬКО если выражение ≠ имени параметра.
+function _ldBindParameter(n,areaName,paramName,expr){
+  var sc=_ldSelCell(n);if(!sc)return;
+  sc.c.parameter=paramName;
+  delete sc.c.text; // параметр вытесняет статический текст
+  if(expr&&expr.toLowerCase()!==paramName.toLowerCase()){
+    var pm=_ldParamMapFor(n,areaName,true);
+    if(pm)pm[paramName]=expr;
+  }else{
+    // автопривязка по имени — убираем лишнюю запись, если была.
+    var pm2=_ldParamMapFor(n,areaName,false);
+    if(pm2){for(var k in pm2){if(Object.prototype.hasOwnProperty.call(pm2,k)&&k.toLowerCase()===paramName.toLowerCase())delete pm2[k];}}
+  }
+  _ldCleanupParams(n,areaName);
+}
+// _ldCleanupParams убирает пустые карты parameters/binding из YAML.
+function _ldCleanupParams(n,areaName){
+  var b=_ldBinding(n,false);if(!b)return;
+  var rb=_ldRepeatForArea(n,areaName);
+  if(rb&&rb.parameters&&Object.keys(rb.parameters).length===0)delete rb.parameters;
+  if(b.parameters&&Object.keys(b.parameters).length===0)delete b.parameters;
+}
+// ── Повтор по ТЧ / RepeatHeader у области (6.5) ────────────────────
+// ldSetAreaRepeat включает/выключает повтор области по табличной части source.
+// source='' — выключить повтор (удалить запись binding.repeat).
+function ldSetAreaRepeat(n,areaName,source){
+  var b=_ldBinding(n,true);if(!b)return;
+  if(!Array.isArray(b.repeat))b.repeat=[];
+  var al=(areaName||'').toLowerCase();
+  var idx=-1;
+  for(var i=0;i<b.repeat.length;i++){if((b.repeat[i].area||'').toLowerCase()===al){idx=i;break;}}
+  if(source){
+    if(idx>=0)b.repeat[idx].source=source;
+    else b.repeat.push({area:areaName,source:source});
+  }else if(idx>=0){
+    b.repeat.splice(idx,1);
+  }
+  if(b.repeat.length===0)delete b.repeat;
+  renderLayoutEditor(n);
+}
+// ldSetRepeatHeader ставит/снимает binding.repeat_header = areaName.
+function ldSetRepeatHeader(n,areaName,on){
+  var b=_ldBinding(n,true);if(!b)return;
+  if(on)b.repeat_header=areaName;
+  else if((b.repeat_header||'').toLowerCase()===(areaName||'').toLowerCase())delete b.repeat_header;
+  renderLayoutEditor(n);
+}
+// _ldAreaBindingRow строит строку привязки области: select «Повтор по ТЧ» +
+// чекбокс «Повторять на каждой странице». Список ТЧ берётся из метаданных
+// сущности макета.
+function _ldAreaBindingRow(n,areaName){
+  var ent=_ldEntityForForm(n);
+  var rb=_ldRepeatForArea(n,areaName);
+  var b=_ldBinding(n,false);
+  var rh=(b&&(b.repeat_header||'').toLowerCase()===(areaName||'').toLowerCase());
+  var jn=areaName.replace(/'/g,"\\'");
+  var h='<div style="display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:11px;color:#64748b">';
+  h+='<label style="display:flex;align-items:center;gap:3px">'+esc('{{t $.Lang "Повтор по ТЧ"}}')+':';
+  h+='<select style="font-size:11px;padding:1px 2px" onchange="ldSetAreaRepeat(\''+n+'\',\''+jn+'\',this.value)">';
+  h+='<option value="">'+esc('{{t $.Lang "нет"}}')+'</option>';
+  var tps=(ent&&ent.tableParts)?ent.tableParts:[];
+  var cur=rb?(rb.source||''):'';
+  for(var t=0;t<tps.length;t++){
+    var sel=(tps[t].name.toLowerCase()===cur.toLowerCase())?' selected':'';
+    h+='<option value="'+esc(tps[t].name)+'"'+sel+'>'+esc(tps[t].name)+'</option>';
+  }
+  // если в binding указана ТЧ, которой нет в метаданных (или метаданных нет) — покажем её.
+  if(cur){
+    var found=false;
+    for(var t2=0;t2<tps.length;t2++){if(tps[t2].name.toLowerCase()===cur.toLowerCase())found=true;}
+    if(!found)h+='<option value="'+esc(cur)+'" selected>'+esc(cur)+'</option>';
+  }
+  h+='</select></label>';
+  h+='<label style="display:flex;align-items:center;gap:3px"><input type="checkbox"'+(rh?' checked':'')+' onchange="ldSetRepeatHeader(\''+n+'\',\''+jn+'\',this.checked)"> '+esc('{{t $.Lang "Повторять на каждой странице"}}')+'</label>';
+  h+='</div>';
+  return h;
+}
+// ── Дерево данных (6.5) ───────────────────────────────────────────
+// renderDataPanel рисует дерево «Реквизиты / Табличные части / Константы».
+// Клик по полю при выделенной ячейке вызывает onDataFieldClick.
+function renderDataPanel(n){
+  var box=document.getElementById('vdata-'+n);
+  if(!box)return;
+  var ent=_ldEntityForForm(n);
+  var h='';
+  if(!ent){
+    h='<p style="color:#999;font-size:11px;margin:4px 0">{{t $.Lang "Сущность не определена. Укажите document: в YAML."}}</p>';
+  }else{
+    var s=_led[n];
+    var selArea=(s&&s.sel)?s.sel.area:null;
+    var rb=selArea?_ldRepeatForArea(n,selArea):null;
+    if(selArea){
+      h+='<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">'+esc(selArea)+(rb?' ↻ '+esc(rb.source||''):'')+'</div>';
+    }
+    // Реквизиты документа.
+    h+='<div style="font-weight:600;color:#475569;margin:2px 0">'+esc('{{t $.Lang "Реквизиты"}}')+'</div>';
+    h+=_ldFieldList(n,ent.fields,'doc');
+    // Табличные части.
+    var tps=ent.tableParts||[];
+    for(var t=0;t<tps.length;t++){
+      h+='<div style="font-weight:600;color:#475569;margin:6px 0 2px">↻ '+esc(tps[t].name)+'</div>';
+      h+=_ldFieldList(n,tps[t].fields,'tp:'+tps[t].name);
+    }
+    // Константы.
+    var cs=(_ldMeta&&Array.isArray(_ldMeta.constants))?_ldMeta.constants:[];
+    if(cs.length){
+      h+='<div style="font-weight:600;color:#475569;margin:6px 0 2px">'+esc('{{t $.Lang "Константы"}}')+'</div>';
+      for(var ci=0;ci<cs.length;ci++){
+        h+='<div class="ld-data-fld" style="padding:2px 4px;cursor:pointer;border-radius:3px" onclick="onDataFieldClick(\''+n+'\',\'const\',\''+esc(cs[ci])+'\')" title="{{t $.Lang "Кликните по ячейке, затем по полю"}}">'+esc(cs[ci])+'</div>';
+      }
+    }
+  }
+  box.innerHTML=h;
+}
+// _ldFieldList рисует список полей одного раздела (реквизиты или колонки ТЧ).
+function _ldFieldList(n,fields,scope){
+  fields=fields||[];
+  var h='';
+  for(var i=0;i<fields.length;i++){
+    var f=fields[i];
+    var sub=(f.ref?' →':'');
+    h+='<div class="ld-data-fld" style="padding:2px 4px;cursor:pointer;border-radius:3px" onclick="onDataFieldClick(\''+n+'\',\''+scope+'\',\''+esc(f.name)+'\')" title="{{t $.Lang "Кликните по ячейке, затем по полю"}}">'+esc(f.name)+sub+'</div>';
+  }
+  if(!fields.length)h='<div style="color:#cbd5e1;font-size:11px;padding:2px 4px">—</div>';
+  return h;
+}
+// onDataFieldClick привязывает выбранное поле к параметру выделенной ячейки.
+//   scope='doc'    — реквизит документа;
+//   scope='tp:Имя' — колонка ТЧ (выражение — имя колонки, действует в repeat-области);
+//   scope='const'  — Константы.Имя.
+function onDataFieldClick(n,scope,field){
+  var s=_led[n];
+  if(!s||!s.sel){alert('{{t $.Lang "Сначала выделите ячейку"}}');return;}
+  var areaName=s.sel.area;
+  var paramName=field;
+  var expr=field;
+  if(scope==='const'){expr='Константы.'+field;paramName=field;}
+  else if(scope.indexOf('tp:')===0){
+    // колонка ТЧ: выражение — имя колонки; имеет смысл, если область привязана к этой ТЧ.
+    expr=field;
+  }
+  _ldBindParameter(n,areaName,paramName,expr);
   renderLayoutEditor(n);
 }
 function applyYaml(n){
@@ -4862,6 +5094,11 @@ const cfgTabTree = `{{define "tab-tree"}}
           <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:3px 10px;font-size:11px;font-weight:600;color:#64748b;flex-shrink:0;letter-spacing:.03em">{{t $.Lang "Конструктор"}}</div>
           <div id="veditor-{{.Name}}" style="flex:1;padding:8px;overflow:auto;background:#fff">{{if .LayoutPreview}}{{.LayoutPreview}}{{else}}<p style="color:#999;font-size:12px">{{t $.Lang "Нет данных. Нажмите «+ Область» для начала."}}</p>{{end}}</div>
         </div>
+        {{/* Data binding panel (6.5): дерево реквизитов/ТЧ/констант */}}
+        <div style="flex:0 0 220px;display:flex;flex-direction:column;min-width:0;border-left:1px solid #d1d5db;background:#fcfdff">
+          <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:3px 10px;font-size:11px;font-weight:600;color:#64748b;flex-shrink:0;letter-spacing:.03em">{{t $.Lang "Данные"}}</div>
+          <div id="vdata-{{.Name}}" style="flex:1;padding:6px 8px;overflow:auto;font-size:12px"></div>
+        </div>
       </div>
 
       {{/* Cell properties panel */}}
@@ -4873,6 +5110,18 @@ const cfgTabTree = `{{define "tab-tree"}}
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px">
           <div><label>{{t $.Lang "Текст"}}</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
           <div><label>{{t $.Lang "Параметр"}}</label><br><input id="vp-param-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','parameter',this.value)"></div>
+          <div><label>{{t $.Lang "Формат"}}</label><br>
+            <select id="vp-fmt-{{.Name}}" style="width:100%;padding:3px" onchange="ldSetFormat('{{.Name}}',this.value)">
+              <option value="">{{t $.Lang "Без формата"}}</option>
+              <option value="date">{{t $.Lang "Дата"}}</option>
+              <option value="datetime">{{t $.Lang "Дата и время"}}</option>
+              <option value="number:2">{{t $.Lang "Число (2 знака)"}}</option>
+              <option value="number:3">{{t $.Lang "Число (3 знака)"}}</option>
+              <option value="currency">{{t $.Lang "Валюта"}}</option>
+              <option value="upper">{{t $.Lang "ВЕРХНИЙ регистр"}}</option>
+              <option value="lower">{{t $.Lang "нижний регистр"}}</option>
+            </select>
+          </div>
           <div><label>{{t $.Lang "Шрифт"}}</label><br>
             <select id="vp-ff-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','fontFamily',this.value)">
               <option value="">{{t $.Lang "По умолчанию"}}</option>
