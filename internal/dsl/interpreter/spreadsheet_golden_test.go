@@ -101,8 +101,9 @@ func buildSpansTailDoc() *SpreadsheetDocument {
 func buildLayoutDoc() *SpreadsheetDocument {
 	lt := &printform.LayoutTemplate{
 		Name: "Накладная",
-		Areas: map[string]*printform.LayoutArea{
-			"шапка": {
+		Areas: []*printform.LayoutArea{
+			{
+				Name: "шапка",
 				Rows: []printform.LayoutRow{
 					{Cells: []printform.LayoutCell{
 						{Text: "ТОВАРНАЯ НАКЛАДНАЯ", Bold: true, Align: "Center", FontSize: 12, ColSpan: 2},
@@ -113,7 +114,8 @@ func buildLayoutDoc() *SpreadsheetDocument {
 					}},
 				},
 			},
-			"строка": {
+			{
+				Name: "строка",
 				Rows: []printform.LayoutRow{
 					{Cells: []printform.LayoutCell{
 						{Parameter: "Наименование", Border: "all"},
