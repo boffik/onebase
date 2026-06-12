@@ -869,6 +869,7 @@ const tplList = `
     {{else}}
       {{if .CanWrite}}<a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "+ Создать"}}</a>{{end}}
     {{end}}
+    <button type="button" id="list-actions-btn" class="btn btn-secondary" onclick="listActionsBtnClick(event)" title="{{t $.Lang "Команды для выбранной строки"}}">⚙ {{t $.Lang "Действия"}} ▾</button>
     <a class="btn btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/excel{{filterQuery .Params}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
   </div>
 </div>
@@ -1077,15 +1078,10 @@ function treeSetVisible(parentId,visible){
     if(childId){treeSetVisible(childId,visible&&row.dataset.isFolder!=='1'||row.querySelector('.tree-toggle[data-expanded="1"]')!==null);}
   });
 }
-function listCtxMenu(e,tr){
-  if(e.target.closest('a,button'))return;
-  e.preventDefault();
-  listRowClick(e,tr);
-  var old=document.getElementById('_lctx');if(old)old.remove();
-  var m=document.createElement('div');
-  m.id='_lctx';
-  m.style.cssText='position:fixed;z-index:999;background:#fff;border:1px solid #c8d0de;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:190px;font-size:13px';
-  m.style.left=e.clientX+'px';m.style.top=e.clientY+'px';
+// listMenuItems — единый источник пунктов меню строки списка. Возвращает массив
+// {label, fn, danger, disabled}. Используется и контекстным меню (ПКМ), и кнопкой
+// «Действия» на панели — чтобы команды были доступны на мобильных без правой кнопки.
+function listMenuItems(tr){
   var isPredefined=tr.dataset.predefined==='1';
   var isFolder=tr.dataset.isFolder==='1';
   var items=[];
@@ -1102,6 +1098,15 @@ function listCtxMenu(e,tr){
   if(_canUnpost&&tr.dataset.posted==='1')items.push({label:'{{t $.Lang "Отменить проведение"}}',fn:function(){listSubmit(tr.dataset.unpostUrl,'{{t $.Lang "Отменить проведение?"}}');}});
   if(_canDelete&&tr.dataset.marked==='1'&&!isPredefined)items.push({label:'{{t $.Lang "Снять пометку на удаление"}}',fn:function(){listSubmit(tr.dataset.unmarkUrl,'{{t $.Lang "Снять пометку на удаление?"}}');}});
   if(_isAdmin&&!isPredefined)items.push({label:'{{t $.Lang "Удалить навсегда"}}',danger:true,fn:function(){listSubmit(tr.dataset.delUrl,'Удалить запись навсегда?');}});
+  return items;
+}
+// showListMenu — рендерит выпадающее меню #_lctx по координатам (x,y) во viewport.
+function showListMenu(items,x,y){
+  var old=document.getElementById('_lctx');if(old)old.remove();
+  var m=document.createElement('div');
+  m.id='_lctx';
+  m.style.cssText='position:fixed;z-index:999;background:#fff;border:1px solid #c8d0de;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:190px;font-size:13px';
+  m.style.left=x+'px';m.style.top=y+'px';
   items.forEach(function(item){
     var mi=document.createElement('div');
     mi.textContent=item.label;
@@ -1119,6 +1124,20 @@ function listCtxMenu(e,tr){
   setTimeout(function(){
     document.addEventListener('click',function h(){m.remove();document.removeEventListener('click',h);},{once:true});
   },0);
+}
+function listCtxMenu(e,tr){
+  if(e.target.closest('a,button'))return;
+  e.preventDefault();
+  listRowClick(e,tr);
+  showListMenu(listMenuItems(tr),e.clientX,e.clientY);
+}
+// Кнопка «Действия» на панели: открывает то же меню под кнопкой по выбранной строке.
+// На мобильных нет ПКМ — это единственный способ вызвать команды строки.
+function listActionsBtnClick(e){
+  e.preventDefault();
+  if(!_listSel){alert('{{t $.Lang "Сначала выберите строку списка"}}');return;}
+  var r=e.currentTarget.getBoundingClientRect();
+  showListMenu(listMenuItems(_listSel),r.left,r.bottom);
 }
 function listSubmit(url,msg){
   if(!url)return;
