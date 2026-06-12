@@ -69,7 +69,7 @@ func (s *Server) resolveRegisterRows(ctx context.Context, rows []map[string]any,
 	for i, f := range refFields {
 		cols[i] = refCol{Key: f.Name, RefEntity: f.RefEntity}
 	}
-	s.resolveRefColumns(ctx, rows, cols)
+	s.resolveRefColumns(ctx, rows, cols, "")
 
 	// recorder label
 	for _, row := range rows {
@@ -104,7 +104,7 @@ func (s *Server) resolveInfoRegRows(ctx context.Context, rows []map[string]any, 
 	if len(cols) == 0 {
 		return
 	}
-	s.resolveRefColumns(ctx, rows, cols)
+	s.resolveRefColumns(ctx, rows, cols, "_label")
 }
 
 // resolveAccountRows резолвит reference-субконто (хранятся под ключами субконто<N>)
@@ -120,7 +120,7 @@ func (s *Server) resolveAccountRows(ctx context.Context, rows []map[string]any, 
 	if len(cols) == 0 {
 		return
 	}
-	s.resolveRefColumns(ctx, rows, cols)
+	s.resolveRefColumns(ctx, rows, cols, "")
 }
 
 func (s *Server) getInfoReg(w http.ResponseWriter, r *http.Request) *metadata.InfoRegister {

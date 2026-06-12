@@ -141,7 +141,11 @@ type refCol struct {
 // resolveRefColumns заменяет UUID-значения в указанных колонках строк на
 // наименования соответствующих объектов. Общее ядро для регистров накопления и
 // регистра бухгалтерии (субконто).
-func (s *Server) resolveRefColumns(ctx context.Context, rows []map[string]any, cols []refCol) {
+//
+// Если labelSuffix == "" — замена происходит in-place (прежнее поведение).
+// Если labelSuffix != "" — наименование записывается в row[key+labelSuffix],
+// а оригинальное значение (UUID) остаётся нетронутым.
+func (s *Server) resolveRefColumns(ctx context.Context, rows []map[string]any, cols []refCol, labelSuffix string) {
 	// Build lookup: RefEntity → set of UUIDs to resolve
 	entityUUIDs := make(map[string]map[string]string) // entityName → {uuid: label}
 	for _, row := range rows {
@@ -194,7 +198,11 @@ func (s *Server) resolveRefColumns(ctx context.Context, rows []map[string]any, c
 				continue
 			}
 			if label, found := uuidToLabel[v]; found && label != "" {
-				row[c.Key] = label
+				if labelSuffix == "" {
+					row[c.Key] = label
+				} else {
+					row[c.Key+labelSuffix] = label
+				}
 			}
 		}
 	}

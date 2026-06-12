@@ -4,8 +4,8 @@ package ui
 // Выделено из handlers.go (план 55, этап 1) — перенос as-is.
 
 import (
+	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/excel"
@@ -65,7 +65,25 @@ func contentDisposition(filename string) string {
 			fallback = append(fallback, '_')
 		}
 	}
-	return "attachment; filename=\"" + string(fallback) + "\"; filename*=UTF-8''" + url.PathEscape(filename)
+	return "attachment; filename=\"" + string(fallback) + "\"; filename*=UTF-8''" + encodeRFC5987(filename)
+}
+
+// encodeRFC5987 кодирует строку для filename*=UTF-8'' — percent-кодируется
+// всё, кроме attr-char по RFC 5987 (url.PathEscape оставляет «=», «@», «:»,
+// которые ломают разбор заголовка).
+func encodeRFC5987(s string) string {
+	const attr = "!#$&+-.^_`|~"
+	var b strings.Builder
+	for _, c := range []byte(s) { // побайтово: октеты UTF-8 кодируются
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			strings.IndexByte(attr, c) >= 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
 }
 
 // sanitizeFilename replaces characters unsafe for Content-Disposition filename.
