@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // accumRegsRoot — DSL-глобал РегистрыНакопления / AccumulationRegisters.
@@ -55,13 +56,13 @@ func (p *accumRegProxy) ctx() context.Context {
 func (p *accumRegProxy) CallMethod(method string, args []any) any {
 	switch strings.ToLower(method) {
 	case "остатки", "balances":
-		rows, err := p.s.store.GetBalances(p.ctx(), p.reg.Name, p.reg)
+		rows, err := p.s.store.GetBalances(p.ctx(), p.reg.Name, p.reg, storage.RegFilter{})
 		if err != nil {
 			interpreter.RaiseUserError("Остатки(" + p.reg.Name + "): " + err.Error())
 		}
 		return rowsToArray(rows)
 	case "движения", "выбрать", "select":
-		rows, err := p.s.store.GetMovements(p.ctx(), p.reg.Name, p.reg)
+		rows, err := p.s.store.GetMovements(p.ctx(), p.reg.Name, p.reg, storage.RegFilter{})
 		if err != nil {
 			interpreter.RaiseUserError("Движения(" + p.reg.Name + "): " + err.Error())
 		}
