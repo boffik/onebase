@@ -3584,18 +3584,54 @@ document.querySelectorAll('details.cfg-tree').forEach(function(d){
     btn.style.display='';
     btn.addEventListener('click',function(){panel.style.display='flex';btn.style.display='none';prompt.focus();});
     document.getElementById('cfgai-close').addEventListener('click',function(){panel.style.display='none';btn.style.display='';});
+    // Код одного блока .code-wrap: живой Monaco-редактор внутри него,
+    // textarea (fallback-редактирование без Monaco) или подсвеченный pre.
+    function wrapCode(w){
+      if(window.monacoEditors)for(var k in monacoEditors){
+        var ed=monacoEditors[k],dom=ed&&ed.getDomNode&&ed.getDomNode();
+        if(dom&&w.contains(dom))return ed.getValue();
+      }
+      var ta=w.querySelector('textarea.os-edit');
+      if(ta&&ta.style.display!=='none')return ta.value;
+      var pre=w.querySelector('pre.os-code');
+      return pre?pre.textContent:'';
+    }
+    // Контекст для модели: последний фокусированный редактор (тот же механизм,
+    // что у синтакс-помощника), если он на экране; иначе — все блоки кода
+    // видимой панели. Глобальный перебор monaco.editor.getEditors() не годится:
+    // редакторы накапливаются при переключении панелей и не уничтожаются,
+    // поэтому первым в списке навсегда остаётся самый старый.
     function activeCode(){
-      try{ if(window.monaco&&monaco.editor){var es=monaco.editor.getEditors?monaco.editor.getEditors():[];for(var i=0;i<es.length;i++){var v=es[i].getValue();if(v&&v.trim())return v;}} }catch(e){}
-      var ta=document.querySelector('textarea:focus');if(ta&&ta.value)return ta.value;return '';
+      try{
+        var id=window._lastFocusedEditorId,ed=id&&window.monacoEditors&&monacoEditors[id];
+        if(ed){var dom=ed.getDomNode&&ed.getDomNode();if(dom&&dom.offsetParent!==null){var v=ed.getValue();if(v&&v.trim())return{text:v,label:id};}}
+      }catch(e){}
+      try{
+        var panel=document.querySelector('.cfg-panel.active');
+        if(panel){
+          var parts=[];
+          panel.querySelectorAll('.code-wrap').forEach(function(w){var t=wrapCode(w);if(t&&t.trim())parts.push(t.trim());});
+          if(parts.length){
+            var ttl=panel.querySelector('.panel-title');
+            return{text:parts.join('\n\n'),label:ttl?ttl.textContent.trim():panel.id};
+          }
+        }
+      }catch(e){}
+      return null;
     }
     send.addEventListener('click',function(){
       var p=prompt.value.trim();if(!p){msg.textContent='Введите запрос';msg.style.color='#c00';return;}
-      msg.textContent='Генерация...';msg.style.color='#666';out.textContent='';copy.style.display='none';send.disabled=true;
-      var body={prompt:p};if(useCode.checked){var c=activeCode();if(c)body.code=c;}
+      var body={prompt:p},ctxNote='';
+      if(useCode.checked){
+        var c=activeCode();
+        if(c){body.code=c.text;ctxNote=' (контекст: '+c.label+')';}
+        else ctxNote=' (код не найден — запрос без контекста)';
+      }
+      msg.textContent='Генерация...'+ctxNote;msg.style.color='#666';out.textContent='';copy.style.display='none';send.disabled=true;
       fetch('/bases/'+base+'/configurator/ai-assist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
         .then(function(r){return r.json();})
         .then(function(d){
-          if(d&&d.ok){out.textContent=d.text;copy.style.display='';msg.textContent='Модель: '+(d.model||'');msg.style.color='#16a34a';}
+          if(d&&d.ok){out.textContent=d.text;copy.style.display='';msg.textContent='Модель: '+(d.model||'')+ctxNote;msg.style.color='#16a34a';}
           else{out.textContent=(d&&d.error)||'Ошибка';msg.textContent='Ошибка';msg.style.color='#c00';}
         })
         .catch(function(){msg.textContent='Ошибка сети';msg.style.color='#c00';})
