@@ -484,13 +484,13 @@ func (h *handler) configuratorRestart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := h.runner.Restart(b); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 		return
 	}
 	b.LastOpened = time.Now()
 	h.store.Update(b)
 	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"url": h.runner.BaseURL(b)})
