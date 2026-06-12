@@ -2014,6 +2014,42 @@ const tplReport = `
 `
 
 const tplRegister = `
+{{define "reg-filter-form"}}
+{{- $flt := .Filter}}{{$refOpts := .RefOpts}}
+<form method="get" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">
+  {{range .Fields}}
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <label style="font-size:11px;color:#64748b">{{.DisplayName $.Lang}}</label>
+    {{if .RefEntity}}
+    <select name="flt_{{.Name}}" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+      <option value="">— {{t $.Lang "все"}} —</option>
+      {{$cur := index $flt .Name}}{{range index $refOpts .Name}}<option value="{{index . "id"}}" {{if eq (str (index . "id")) $cur}}selected{{end}}>{{index . "_label"}}</option>{{end}}
+    </select>
+    {{else}}
+    <input type="text" name="flt_{{.Name}}" value="{{index $flt .Name}}" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+    {{end}}
+  </div>
+  {{end}}
+  {{if .ShowFromTo}}
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <label style="font-size:11px;color:#64748b">{{t $.Lang "с"}}</label>
+    <input type="date" name="from" value="{{index $flt "from"}}" style="padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <label style="font-size:11px;color:#64748b">{{t $.Lang "по"}}</label>
+    <input type="date" name="to" value="{{index $flt "to"}}" style="padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+  </div>
+  {{else if .ShowToOnly}}
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <label style="font-size:11px;color:#64748b">{{t $.Lang "на дату"}}</label>
+    <input type="date" name="to" value="{{index $flt "to"}}" style="padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+  </div>
+  {{end}}
+  <button class="btn btn-sm btn-primary" type="submit">{{t $.Lang "Отобрать"}}</button>
+  {{if .HasFilters}}<a class="btn btn-sm" href="{{.ResetURL}}" style="background:#e2e8f0;color:#475569">{{t $.Lang "Сбросить"}}</a>{{end}}
+</form>
+{{end}}
+
 {{define "page-register-movements"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
@@ -2021,6 +2057,7 @@ const tplRegister = `
   <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "движения"}}</h2>
   <a class="btn btn-sm" href="/ui/register/{{lower .Register.Name}}/balances" style="background:#e2e8f0;color:#475569">{{t $.Lang "Остатки →"}}</a>
 </div>
+{{template "reg-filter-form" (dict "Fields" .Register.Dimensions "Filter" .Filter "RefOpts" .RefOpts "ShowFromTo" true "ShowToOnly" false "HasFilters" .HasFilters "ResetURL" (printf "/ui/register/%s" (lower .Register.Name)) "Lang" $.Lang)}}
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
@@ -2049,6 +2086,7 @@ const tplRegister = `
   <h2>{{.Register.DisplayName $.Lang}} — {{t $.Lang "остатки"}}</h2>
   <a class="btn btn-sm" href="/ui/register/{{lower .Register.Name}}" style="background:#e2e8f0;color:#475569">{{t $.Lang "← Движения"}}</a>
 </div>
+{{template "reg-filter-form" (dict "Fields" .Register.Dimensions "Filter" .Filter "RefOpts" .RefOpts "ShowFromTo" false "ShowToOnly" true "HasFilters" .HasFilters "ResetURL" (printf "/ui/register/%s/balances" (lower .Register.Name)) "Lang" $.Lang)}}
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
@@ -2239,6 +2277,7 @@ const tplInfoReg = `
   <h2>{{.InfoReg.DisplayName $.Lang}}{{if .InfoReg.Periodic}} <span style="font-size:13px;color:#64748b;font-weight:400">({{t $.Lang "периодический"}})</span>{{end}}</h2>
   {{if .CanWrite}}<a class="btn" href="/ui/inforeg/{{lower .InfoReg.Name}}/new">+ {{t $.Lang "Добавить запись"}}</a>{{end}}
 </div>
+{{template "reg-filter-form" (dict "Fields" .InfoReg.Dimensions "Filter" .Filter "RefOpts" .RefOpts "ShowFromTo" .InfoReg.Periodic "ShowToOnly" false "HasFilters" .HasFilters "ResetURL" (printf "/ui/inforeg/%s" (lower .InfoReg.Name)) "Lang" $.Lang)}}
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>
