@@ -2000,9 +2000,10 @@ function ldColWidth(n,i){
   if(!Array.isArray(s.data.columns))s.data.columns=[];
   while(s.data.columns.length<=i)s.data.columns.push({});
   var cur=s.data.columns[i].width||'';
-  var v=prompt('{{t $.Lang "Ширина колонки (напр. 120px, 30mm, пусто = авто):"}}',cur);
+  var v=prompt('{{t $.Lang "Ширина колонки (напр. 120px, 30mm, пусто = авто). %-ширины печатью НЕ поддерживаются."}}',cur);
   if(v===null)return;
   v=v.trim();
+  if(v.indexOf('%')>=0){alert('{{t $.Lang "%-ширины не поддерживаются печатью (PDF). Используйте px или mm."}}');return;}
   if(v==='')delete s.data.columns[i].width; else s.data.columns[i].width=v;
   // подрезаем хвост пустых элементов columns
   while(s.data.columns.length&&!s.data.columns[s.data.columns.length-1].width)s.data.columns.pop();
@@ -2088,6 +2089,111 @@ function ldSplit(n){
   // insert (span-1) empty cells to the right
   for(var i=0;i<span-1;i++){
     sel.row.cells.splice(sel.ci+1+i,0,{});
+  }
+  renderLayoutEditor(n);
+}
+// _ldColLayout раскладывает область по канону модели: для каждой строки строит
+// массив map (cellIndex → начальная визуальная колонка) с учётом спанов выше
+// и colspan внутри строки. Накрытые позиции в массиве cells ОТСУТСТВУЮТ (как в
+// BuildAreaCells / declarative.go). Возвращает {starts:[[...]], covered:{}}.
+function _ldColLayout(ar){
+  var rows=(ar&&ar.rows)?ar.rows:[];
+  var covered={};
+  var starts=[];
+  for(var r=0;r<rows.length;r++){
+    var cells=rows[r].cells||[];
+    var rowStarts=[];
+    var col=0;
+    for(var ci=0;ci<cells.length;ci++){
+      while(covered[r+','+col])col++;
+      rowStarts.push(col);
+      var c=cells[ci]||{};
+      var cs=(c.colspan&&c.colspan>1)?c.colspan:1;
+      var rs=(c.rowspan&&c.rowspan>1)?c.rowspan:1;
+      for(var dr=0;dr<rs;dr++)for(var dc=0;dc<cs;dc++){
+        if(dr===0&&dc===0)continue;
+        covered[(r+dr)+','+(col+dc)]=true;
+      }
+      col+=cs;
+    }
+    starts.push(rowStarts);
+  }
+  return {starts:starts,covered:covered};
+}
+// _ldVisualCol возвращает визуальную колонку выделенной ячейки (ci) в строке ri.
+function _ldVisualCol(ar,ri,ci){
+  var lay=_ldColLayout(ar);
+  if(ri<lay.starts.length&&ci<lay.starts[ri].length)return lay.starts[ri][ci];
+  return -1;
+}
+// _ldCellIndexAtCol находит индекс ячейки в строке ri, чья визуальная колонка == col.
+// Возвращает -1, если в этой строке нет ячейки, начинающейся в col (позиция накрыта).
+function _ldCellIndexAtCol(ar,ri,col){
+  var lay=_ldColLayout(ar);
+  if(ri>=lay.starts.length)return -1;
+  var rs=lay.starts[ri];
+  for(var i=0;i<rs.length;i++)if(rs[i]===col)return i;
+  return -1;
+}
+// ── Удаление одиночной ячейки (5b блок A.1) ───────────────────────
+// Удаляет выделенную ячейку из rows[ri].cells (соседи сдвигаются влево —
+// семантика модели: колонки определяются порядком в массиве cells).
+function ldDelCell(n){
+  var sel=_ldSel(n);
+  if(!sel){alert('{{t $.Lang "Выделите ячейку для удаления"}}');return;}
+  var cells=sel.row.cells||[];
+  if(sel.ci>=cells.length)return;
+  cells.splice(sel.ci,1);
+  sel.s.sel=null;
+  renderLayoutEditor(n);
+}
+// ── Вертикальный merge / unmerge (5b блок A.2) ────────────────────
+// ldMergeDown увеличивает rowspan выделенной ячейки на 1 И удаляет ячейку,
+// которая по канону модели стоит под ней в следующей строке (в той же
+// визуальной колонке). Без удаления накрытая ячейка «всплыла» бы вправо.
+function ldMergeDown(n){
+  var sel=_ldSel(n);
+  if(!sel){alert('{{t $.Lang "Выделите ячейку, которую нужно объединить с нижней"}}');return;}
+  var ar=sel.ar,ri=sel.ri,ci=sel.ci;
+  var c=sel.row.cells[ci];
+  var span=(c.rowspan&&c.rowspan>1)?c.rowspan:1;
+  var nextRi=ri+span; // строка под нижней границей текущего спана
+  if(nextRi>=ar.rows.length){alert('{{t $.Lang "Нет строки снизу для объединения"}}');return;}
+  var col=_ldVisualCol(ar,ri,ci);
+  // удаляем ячейку, которая займёт накрываемую позицию (col) в строке nextRi.
+  var delIdx=_ldCellIndexAtCol(ar,nextRi,col);
+  if(delIdx>=0){
+    var nrCells=ar.rows[nextRi].cells||[];
+    nrCells.splice(delIdx,1);
+  }
+  c.rowspan=span+1;
+  renderLayoutEditor(n);
+}
+// ldUnmergeDown возвращает rowspan=1 и ВСТАВЛЯЕТ пустые ячейки обратно в строки,
+// которые были накрыты (по канону модели — в нужную визуальную позицию).
+function ldUnmergeVertical(n){
+  var sel=_ldSel(n);
+  if(!sel){alert('{{t $.Lang "Выделите объединённую по вертикали ячейку"}}');return;}
+  var ar=sel.ar,ri=sel.ri,ci=sel.ci;
+  var c=sel.row.cells[ci];
+  if(!c.rowspan||c.rowspan<=1){alert('{{t $.Lang "Ячейка не объединена по вертикали"}}');return;}
+  var span=c.rowspan;
+  var cs=(c.colspan&&c.colspan>1)?c.colspan:1;
+  var col=_ldVisualCol(ar,ri,ci);
+  delete c.rowspan;
+  // в каждую ранее накрытую строку вставляем пустую ячейку (с colspan, если был).
+  for(var k=1;k<span;k++){
+    var tr=ri+k;
+    if(tr>=ar.rows.length)break;
+    if(!ar.rows[tr].cells)ar.rows[tr].cells=[];
+    // позиция вставки: индекс ячейки, чья визуальная колонка >= col (или конец).
+    var lay=_ldColLayout(ar);
+    var rowStarts=lay.starts[tr]||[];
+    var insAt=rowStarts.length;
+    for(var i=0;i<rowStarts.length;i++){if(rowStarts[i]>=col){insAt=i;break;}}
+    var blank={};
+    if(cs>1)blank.colspan=cs;
+    ar.rows[tr].cells.splice(insAt,0,blank);
   }
   renderLayoutEditor(n);
 }
@@ -4736,7 +4842,9 @@ const cfgTabTree = `{{define "tab-tree"}}
         <button type="button" onclick="ldDelColumn('{{.Name}}')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">{{t $.Lang "Удалить колонку"}}</button>
         <span style="width:1px;background:#d1d5db;align-self:stretch"></span>
         <button type="button" onclick="ldMerge('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Объединить"}} →</button>
-        <button type="button" onclick="ldSplit('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Разъединить"}}</button>
+        <button type="button" onclick="ldMergeDown('{{.Name}}')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Объединить вниз"}} ↓</button>
+        <button type="button" onclick="ldSplit('{{.Name}}')"      style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Разъединить"}} →</button>
+        <button type="button" onclick="ldUnmergeVertical('{{.Name}}')" style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Разъединить вниз"}} ↓</button>
       </div>
 
       {{/* Split view: YAML editor (left) + visual designer (right) */}}
@@ -4758,7 +4866,10 @@ const cfgTabTree = `{{define "tab-tree"}}
 
       {{/* Cell properties panel */}}
       <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
-        <div style="font-weight:bold;margin-bottom:6px;font-size:12px">{{t $.Lang "Свойства ячейки"}}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-weight:bold;font-size:12px">{{t $.Lang "Свойства ячейки"}}</span>
+          <button type="button" onclick="ldDelCell('{{.Name}}')" style="font-size:11px;padding:3px 8px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">{{t $.Lang "Удалить ячейку"}}</button>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px">
           <div><label>{{t $.Lang "Текст"}}</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
           <div><label>{{t $.Lang "Параметр"}}</label><br><input id="vp-param-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','parameter',this.value)"></div>

@@ -85,3 +85,40 @@ func TestLayoutEditor_V2JSFunctions(t *testing.T) {
 		}
 	}
 }
+
+// 5b блок A: операции многоуровневых шапок — удаление ячейки, вертикальный
+// merge/unmerge, раскладка по канону модели, отказ %-ширин.
+func TestLayoutEditor_StageBJSFunctions(t *testing.T) {
+	js := renderCfgFootJS(t)
+	for _, sub := range []string{
+		"function ldDelCell",         // A.1 удаление одиночной ячейки
+		"function ldMergeDown",       // A.2 вертикальный merge
+		"function ldUnmergeVertical", // A.2 разъединение вниз
+		"function _ldColLayout",      // канон раскладки спанов
+		"function _ldVisualCol",
+		"function _ldCellIndexAtCol",
+	} {
+		if !strings.Contains(js, sub) {
+			t.Errorf("в JS редактора нет функции: %q", sub)
+		}
+	}
+	// %-ширины отклоняются в ldColWidth.
+	if !strings.Contains(js, "indexOf('%')") {
+		t.Error("ldColWidth не отклоняет %-ширины")
+	}
+}
+
+// 5b блок A: HTML панели редактора содержит кнопки удаления ячейки и
+// вертикального merge/unmerge.
+func TestLayoutEditor_StageBControls(t *testing.T) {
+	html := renderLayoutPanelTree(t)
+	for _, sub := range []string{
+		`ldDelCell('Накладная')`,
+		`ldMergeDown('Накладная')`,
+		`ldUnmergeVertical('Накладная')`,
+	} {
+		if !strings.Contains(html, sub) {
+			t.Errorf("в HTML панели редактора нет фрагмента: %q", sub)
+		}
+	}
+}
