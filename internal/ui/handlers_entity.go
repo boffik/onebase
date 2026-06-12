@@ -597,6 +597,9 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"IsAdmin":       editIsAdmin,
 		"PrintForms":    s.reg.GetPrintForms(entity.Name),
 		"DSLPrintForms": s.reg.GetDSLPrintForms(entity.Name),
+		// AllPrintForms — единый список форм всех видов (план 64, этап 3);
+		// кнопка «Печать ▾» рисуется одним циклом по нему.
+		"AllPrintForms": s.reg.GetAllPrintForms(entity.Name),
 		"HasPrintProc":  s.reg.GetProcedure(entity.Name, "Печать") != nil || s.reg.GetProcedure(entity.Name, "Print") != nil,
 		"FolderOptions": folderOptsEdit,
 		"DocMovements":  docMovements,

@@ -256,3 +256,65 @@ func TestLoadDSLPrintForms_CaseInsensitiveCollision(t *testing.T) {
 		t.Error("YAML-форма должна была удалиться (case-insensitive collision)")
 	}
 }
+
+// GetAllPrintForms объединяет все виды форм и применяет приоритет коллизий
+// Declarative > DSL > Legacy (план 64, этап 3).
+func TestGetAllPrintForms_CollisionPriority(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	// Legacy YAML: две формы.
+	r.printForms["реализациятоваров"] = []*printform.PrintForm{
+		{Name: "Накладная", Document: "РеализацияТоваров"},
+		{Name: "ТолькоLegacy", Document: "РеализацияТоваров"},
+	}
+	// DSL: одна коллизия с YAML («Накладная»), одна уникальная.
+	r.dslPrintForms["реализациятоваров"] = []*printform.DSLPrintForm{
+		{Name: "Накладная", Document: "РеализацияТоваров"},
+		{Name: "ТолькоDSL", Document: "РеализацияТоваров"},
+	}
+	r.mu.Unlock()
+
+	// Declarative перебивает «Накладная» (и DSL, и Legacy).
+	r.LoadLayoutForms([]*printform.LayoutForm{
+		{Name: "Накладная", Document: "РеализацияТоваров", Layout: &printform.LayoutTemplate{Name: "Накладная"}},
+	})
+
+	refs := r.GetAllPrintForms("РеализацияТоваров")
+	byName := map[string]PrintFormRef{}
+	for _, ref := range refs {
+		if _, dup := byName[ref.Name]; dup {
+			t.Fatalf("дубль формы %q в GetAllPrintForms", ref.Name)
+		}
+		byName[ref.Name] = ref
+	}
+	if len(byName) != 3 {
+		t.Fatalf("ожидалось 3 уникальных формы (Накладная+ТолькоDSL+ТолькоLegacy), получили %d: %v", len(byName), byName)
+	}
+	if byName["Накладная"].Kind != PrintFormDeclarative {
+		t.Errorf("Накладная должна быть Declarative, получили %v", byName["Накладная"].Kind)
+	}
+	if byName["ТолькоDSL"].Kind != PrintFormDSL {
+		t.Errorf("ТолькоDSL должна быть DSL")
+	}
+	if byName["ТолькоLegacy"].Kind != PrintFormLegacy {
+		t.Errorf("ТолькоLegacy должна быть Legacy")
+	}
+}
+
+// GetPrintFormRef ищет форму по имени с учётом приоритета.
+func TestGetPrintFormRef(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.printForms["реализациятоваров"] = []*printform.PrintForm{
+		{Name: "Счёт", Document: "РеализацияТоваров"},
+	}
+	r.mu.Unlock()
+
+	ref, ok := r.GetPrintFormRef("реализациятоваров", "счёт")
+	if !ok || ref.Kind != PrintFormLegacy || ref.Legacy == nil {
+		t.Fatalf("GetPrintFormRef(счёт) = %+v ok=%v", ref, ok)
+	}
+	if _, ok := r.GetPrintFormRef("РеализацияТоваров", "нет"); ok {
+		t.Error("несуществующая форма не должна находиться")
+	}
+}

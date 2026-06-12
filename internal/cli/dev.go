@@ -142,6 +142,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 			PrintForms:      proj.PrintForms,
 		})
 		reg.LoadDSLPrintForms(proj.DSLPrintForms)
+		reg.LoadLayoutForms(proj.LayoutForms)
 		reg.LoadModules(proj.Modules)
 		reg.LoadProcessors(proj.Processors)
 		reg.LoadHTTPServices(proj.HTTPServices)

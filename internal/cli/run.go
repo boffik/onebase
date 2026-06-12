@@ -175,6 +175,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		PrintForms:      proj.PrintForms,
 	})
 	reg.LoadDSLPrintForms(proj.DSLPrintForms)
+	reg.LoadLayoutForms(proj.LayoutForms)
 	reg.LoadModules(proj.Modules)
 	reg.LoadProcessors(proj.Processors)
 	reg.LoadHTTPServices(proj.HTTPServices)
@@ -398,6 +399,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 				PrintForms:      newProj.PrintForms,
 			})
 			reg.LoadDSLPrintForms(newProj.DSLPrintForms)
+			reg.LoadLayoutForms(newProj.LayoutForms)
 			reg.LoadModules(newProj.Modules)
 			reg.LoadProcessors(newProj.Processors)
 			reg.LoadHTTPServices(newProj.HTTPServices)

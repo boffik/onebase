@@ -28,6 +28,7 @@ type Registry struct {
 	printForms      map[string][]*printform.PrintForm   // lowercase entity name → forms
 	extPrintForms   map[string][]*printform.PrintForm   // lowercase entity name → внешние формы (из БД)
 	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
+	layoutForms     map[string][]*printform.LayoutForm  // lowercase entity name → декларативные формы (.layout.yaml)
 	procs           map[string]map[string]*ast.ProcedureDecl
 	extProcs        map[string]map[string]*ast.ProcedureDecl // код внешних обработок (из БД), ключ — имя обработки
 	managerProcs    map[string]map[string]*ast.ProcedureDecl // lowercase entity → procs модуля менеджера
@@ -63,6 +64,7 @@ func NewRegistry() *Registry {
 		printForms:      make(map[string][]*printform.PrintForm),
 		extPrintForms:   make(map[string][]*printform.PrintForm),
 		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
+		layoutForms:     make(map[string][]*printform.LayoutForm),
 		procs:           make(map[string]map[string]*ast.ProcedureDecl),
 		managerProcs:    make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),
@@ -358,6 +360,129 @@ func (r *Registry) GetDSLPrintForm(entityName, pfName string) *printform.DSLPrin
 		}
 	}
 	return nil
+}
+
+// LoadLayoutForms registers declarative (standalone .layout.yaml) print forms
+// indexed by entity name. Декларативные формы перебивают одноимённые DSL- и
+// YAML-формы (приоритет коллизий Declarative > DSL > Legacy) — об этом пишется
+// warning. Должен вызываться ПОСЛЕ Load и LoadDSLPrintForms.
+func (r *Registry) LoadLayoutForms(forms []*printform.LayoutForm) {
+	m := make(map[string][]*printform.LayoutForm)
+	for _, f := range forms {
+		key := strings.ToLower(f.Document)
+		m[key] = append(m[key], f)
+	}
+	r.mu.Lock()
+	r.layoutForms = m
+	for entityKey, list := range m {
+		for _, lf := range list {
+			for _, df := range r.dslPrintForms[entityKey] {
+				if strings.EqualFold(df.Name, lf.Name) {
+					fmt.Fprintf(os.Stderr,
+						"warning: print form %q for %s — .layout.yaml перебивает .os (используется декларативная форма)\n",
+						lf.Name, lf.Document)
+				}
+			}
+			for _, yf := range r.printForms[entityKey] {
+				if strings.EqualFold(yf.Name, lf.Name) {
+					fmt.Fprintf(os.Stderr,
+						"warning: print form %q for %s — .layout.yaml перебивает YAML-форму (используется декларативная форма)\n",
+						lf.Name, lf.Document)
+				}
+			}
+		}
+	}
+	r.mu.Unlock()
+}
+
+// GetLayoutForms returns all declarative print forms for an entity (case-insensitive).
+func (r *Registry) GetLayoutForms(entityName string) []*printform.LayoutForm {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.layoutForms[strings.ToLower(entityName)]
+}
+
+// PrintFormKind — вид печатной формы в едином реестре (план 64, этап 3).
+type PrintFormKind int
+
+const (
+	// PrintFormDeclarative — standalone .layout.yaml, рендер через BuildSheet.
+	PrintFormDeclarative PrintFormKind = iota
+	// PrintFormDSL — .os модуль (+опц. макет), рендер через RunWithResult.
+	PrintFormDSL
+	// PrintFormLegacy — YAML-форма (printform.PrintForm), legacy-рендер.
+	PrintFormLegacy
+)
+
+// PrintFormRef — единая ссылка на печатную форму любого вида. Заполнено только
+// одно из Decl/DSL/Legacy в соответствии с Kind.
+type PrintFormRef struct {
+	Name     string
+	Document string
+	Kind     PrintFormKind
+	External bool // форма из внешнего контура (только для Legacy)
+	Decl     *printform.LayoutForm
+	DSL      *printform.DSLPrintForm
+	Legacy   *printform.PrintForm
+}
+
+// GetAllPrintForms возвращает все печатные формы сущности (case-insensitive) в
+// едином виде PrintFormRef. Приоритет коллизий по имени: Declarative > DSL >
+// Legacy — форма с более высоким приоритетом скрывает одноимённые ниже.
+// Порядок: сначала декларативные, затем DSL, затем legacy (конфигурационные,
+// потом внешние). Внутренний код (без блокировки) — вызывается под RLock.
+func (r *Registry) GetAllPrintForms(entityName string) []PrintFormRef {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	key := strings.ToLower(entityName)
+
+	var refs []PrintFormRef
+	seen := make(map[string]bool) // lower(name) → занято формой более высокого приоритета
+
+	for _, lf := range r.layoutForms[key] {
+		ln := strings.ToLower(lf.Name)
+		if seen[ln] {
+			continue
+		}
+		seen[ln] = true
+		refs = append(refs, PrintFormRef{Name: lf.Name, Document: lf.Document, Kind: PrintFormDeclarative, Decl: lf})
+	}
+	for _, df := range r.dslPrintForms[key] {
+		ln := strings.ToLower(df.Name)
+		if seen[ln] {
+			continue
+		}
+		seen[ln] = true
+		refs = append(refs, PrintFormRef{Name: df.Name, Document: df.Document, Kind: PrintFormDSL, DSL: df})
+	}
+	for _, yf := range r.printForms[key] {
+		ln := strings.ToLower(yf.Name)
+		if seen[ln] {
+			continue
+		}
+		seen[ln] = true
+		refs = append(refs, PrintFormRef{Name: yf.Name, Document: yf.Document, Kind: PrintFormLegacy, Legacy: yf})
+	}
+	for _, ef := range r.extPrintForms[key] {
+		ln := strings.ToLower(ef.Name)
+		if seen[ln] {
+			continue
+		}
+		seen[ln] = true
+		refs = append(refs, PrintFormRef{Name: ef.Name, Document: ef.Document, Kind: PrintFormLegacy, External: true, Legacy: ef})
+	}
+	return refs
+}
+
+// GetPrintFormRef ищет печатную форму сущности по имени (case-insensitive),
+// учитывая приоритет коллизий. Возвращает ref и ok.
+func (r *Registry) GetPrintFormRef(entityName, formName string) (PrintFormRef, bool) {
+	for _, ref := range r.GetAllPrintForms(entityName) {
+		if strings.EqualFold(ref.Name, formName) {
+			return ref, true
+		}
+	}
+	return PrintFormRef{}, false
 }
 
 func (r *Registry) GetReport(name string) *report.Report {
