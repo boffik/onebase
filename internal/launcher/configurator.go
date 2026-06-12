@@ -20,6 +20,7 @@ import (
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/converter"
 	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -1885,7 +1886,7 @@ func (h *handler) configuratorDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if delErr != nil {
-		data.Error = tr(lang, "Ошибка удаления") + ": " + delErr.Error()
+		data.Error = tr(lang, "Ошибка удаления") + ": " + errText(r, delErr)
 	} else {
 		data.Error = tr(lang, "Сущность «") + entityName + tr(lang, "» удалена")
 	}
@@ -1929,7 +1930,7 @@ func (h *handler) deleteEntityFromDB(ctx context.Context, b *Base, entityName st
 			return repo.DeleteFile(ctx, p)
 		}
 	}
-	return fmt.Errorf("сущность %q не найдена", entityName)
+	return i18nerr.Errorf("сущность %q не найдена", entityName)
 }
 
 func renderCfg(w http.ResponseWriter, r *http.Request, data *configuratorData) {

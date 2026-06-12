@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 )
 
 type managedProc struct {
@@ -58,19 +60,19 @@ func (r *Runner) Start(base *Base) error {
 	defer r.mu.Unlock()
 
 	if _, ok := r.procs[base.ID]; ok {
-		return fmt.Errorf("база %q уже запущена", base.Name)
+		return i18nerr.Errorf("база %q уже запущена", base.Name)
 	}
 
 	// check port conflict with other running bases (tracked)
 	for _, mp := range r.procs {
 		if mp.port == base.Port {
-			return fmt.Errorf("порт %d уже занят другой запущенной базой", base.Port)
+			return i18nerr.Errorf("порт %d уже занят другой запущенной базой", base.Port)
 		}
 	}
 
 	// OS-level port availability check: catches leftover processes not tracked by runner
 	if !portFree(base.Port) {
-		return fmt.Errorf("порт %d уже занят другим процессом — остановите его вручную или смените порт базы", base.Port)
+		return i18nerr.Errorf("порт %d уже занят другим процессом — остановите его вручную или смените порт базы", base.Port)
 	}
 
 	exe, err := os.Executable()
@@ -323,7 +325,7 @@ func (r *Runner) WaitReady(base *Base, timeout time.Duration) error {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return fmt.Errorf("сервер не ответил на порту %d за %s", base.Port, timeout)
+	return i18nerr.Errorf("сервер не ответил на порту %d за %s", base.Port, timeout)
 }
 
 func baseLogPath(id string) (string, error) {

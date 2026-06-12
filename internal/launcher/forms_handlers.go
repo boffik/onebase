@@ -226,7 +226,7 @@ func (h *handler) configuratorFormsList(w http.ResponseWriter, r *http.Request) 
 	}
 	forms, err := h.listManagedForms(r, b)
 	if err != nil {
-		http.Error(w, "Не удалось прочитать список форм: "+err.Error(), 500)
+		http.Error(w, tr(resolveLang(r), "Не удалось прочитать список форм")+": "+err.Error(), 500)
 		return
 	}
 	data := &configuratorData{Base: b, ManagedForms: forms, Lang: resolveLang(r)}
@@ -335,7 +335,7 @@ func (h *handler) configuratorFormsSave(w http.ResponseWriter, r *http.Request) 
 	yamlBody := r.FormValue("yaml")
 	osBody := r.FormValue("os")
 	if entity == "" || name == "" {
-		http.Error(w, "entity и name обязательны", 400)
+		http.Error(w, tr(resolveLang(r), "entity и name обязательны"), 400)
 		return
 	}
 
@@ -411,7 +411,7 @@ func (h *handler) configuratorFormsDelete(w http.ResponseWriter, r *http.Request
 	entity := strings.TrimSpace(r.FormValue("entity"))
 	name := strings.TrimSpace(r.FormValue("name"))
 	if entity == "" || name == "" {
-		http.Error(w, "entity и name обязательны", 400)
+		http.Error(w, tr(resolveLang(r), "entity и name обязательны"), 400)
 		return
 	}
 
@@ -547,10 +547,11 @@ func (h *handler) configuratorFormsImport1C(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), 400)
 		return
 	}
+	lang := resolveLang(r)
 	entity := strings.TrimSpace(r.FormValue("entity"))
 	formName := strings.TrimSpace(r.FormValue("name"))
 	if entity == "" {
-		http.Error(w, "не указана сущность", 400)
+		http.Error(w, tr(lang, "не указана сущность"), 400)
 		return
 	}
 	if formName == "" {
@@ -569,11 +570,11 @@ func (h *handler) configuratorFormsImport1C(w http.ResponseWriter, r *http.Reque
 
 	xmlPath, bslPath, itemsDir, err := extractImportSource(r, tmpDir)
 	if err != nil {
-		http.Error(w, "Ошибка чтения архива: "+err.Error(), 400)
+		http.Error(w, tr(lang, "Ошибка чтения архива")+": "+err.Error(), 400)
 		return
 	}
 	if xmlPath == "" {
-		http.Error(w, "Form.xml не найден в загруженных файлах", 400)
+		http.Error(w, tr(lang, "Form.xml не найден в загруженных файлах"), 400)
 		return
 	}
 
@@ -601,7 +602,7 @@ func (h *handler) configuratorFormsImport1C(w http.ResponseWriter, r *http.Reque
 		DstResourcesDir: dstResources,
 	})
 	if err != nil {
-		http.Error(w, "Импорт не удался: "+err.Error(), 500)
+		http.Error(w, tr(lang, "Импорт не удался")+": "+err.Error(), 500)
 		return
 	}
 
@@ -609,7 +610,7 @@ func (h *handler) configuratorFormsImport1C(w http.ResponseWriter, r *http.Reque
 		yamlBody, _ := os.ReadFile(dstYAML)
 		osBody, _ := os.ReadFile(dstOS)
 		if err := saveManagedForm(r, b, entity, formName, yamlBody, osBody); err != nil {
-			http.Error(w, "Сохранение в БД: "+err.Error(), 500)
+			http.Error(w, tr(lang, "Сохранение в БД")+": "+err.Error(), 500)
 			return
 		}
 	}

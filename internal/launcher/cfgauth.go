@@ -54,9 +54,9 @@ func CloseAuthPools() {
 	})
 }
 
-var cfgLoginTmpl = template.Must(template.New("cfg-login").Parse(`<!DOCTYPE html>
+var cfgLoginTmpl = template.Must(template.New("cfg-login").Funcs(template.FuncMap{"t": tr}).Parse(`<!DOCTYPE html>
 <html lang="{{.Lang}}">
-<head><meta charset="utf-8"><title>Конфигуратор — Вход</title>
+<head><meta charset="utf-8"><title>{{t $.Lang "Конфигуратор — Вход"}}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#ECE9D8;display:flex;align-items:center;justify-content:center;height:100vh}
@@ -74,18 +74,18 @@ input:focus,select:focus{border-color:#3070D8;box-shadow:0 0 0 2px rgba(48,112,2
 <body>
 <div class="box">
   {{if .LogoURL}}<div style="text-align:center;margin-bottom:16px"><img src="{{.LogoURL}}" alt="" style="max-height:120px;max-width:260px"></div>{{end}}
-  <h2>Конфигуратор — Вход</h2>
-  <div class="sub">Только для администраторов</div>
+  <h2>{{t $.Lang "Конфигуратор — Вход"}}</h2>
+  <div class="sub">{{t $.Lang "Только для администраторов"}}</div>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
   <form method="POST">
-    <label>Имя пользователя</label>
+    <label>{{t $.Lang "Имя пользователя"}}</label>
     <input name="login" id="loginInput" autofocus autocomplete="off" {{if .Users}}list="cfg-users"{{end}}>
     {{if .Users}}<datalist id="cfg-users">{{range .Users}}<option value="{{.Login}}">{{if .FullName}}{{.FullName}}{{end}}</option>{{end}}</datalist>{{end}}
-    <label>Пароль</label>
+    <label>{{t $.Lang "Пароль"}}</label>
     <input name="password" type="password" autocomplete="current-password">
-    <button class="btn" type="submit">Войти</button>
+    <button class="btn" type="submit">{{t $.Lang "Войти"}}</button>
   </form>
-  <a class="back" href="/">← Назад к списку баз</a>
+  <a class="back" href="/">← {{t $.Lang "Назад к списку баз"}}</a>
 </div>
 </body></html>`))
 
@@ -146,6 +146,7 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lang := resolveLang(r)
 	renderErr := func(code int, msg string) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(code)
@@ -160,24 +161,24 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
-		renderErr(500, "Ошибка подключения к БД: "+err.Error())
+		renderErr(500, tr(lang, "Ошибка подключения к БД")+": "+err.Error())
 		return
 	}
 
 	repo := auth.NewRepo(db)
 	if err := repo.EnsureSchema(r.Context()); err != nil {
-		renderErr(500, "Ошибка инициализации: "+err.Error())
+		renderErr(500, tr(lang, "Ошибка инициализации")+": "+err.Error())
 		return
 	}
 
 	user, err := repo.Authenticate(r.Context(), login, password)
 	if err != nil {
-		renderErr(401, "Неверное имя пользователя или пароль")
+		renderErr(401, tr(lang, "Неверное имя пользователя или пароль"))
 		return
 	}
 
 	if !user.IsAdmin {
-		renderErr(403, "Доступ запрещён. Только для администраторов.")
+		renderErr(403, tr(lang, "Доступ запрещён. Только для администраторов."))
 		return
 	}
 
