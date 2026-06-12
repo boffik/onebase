@@ -743,6 +743,29 @@ function cfgNewPrintFormShow() {
   document.getElementById('cfg-new-pf-name').value = '';
   document.getElementById('cfg-new-pf-name').focus();
 }
+// _cfgSubmitForm создаёт скрытую POST-форму и отправляет её (план 64, 6.4).
+function _cfgSubmitForm(action, fields) {
+  var f = document.createElement('form');
+  f.method = 'POST'; f.action = action; f.style.display = 'none';
+  for (var k in fields) {
+    if (!Object.prototype.hasOwnProperty.call(fields, k)) continue;
+    var inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = k; inp.value = fields[k];
+    f.appendChild(inp);
+  }
+  document.body.appendChild(f); f.submit();
+}
+// cfgNewLayout — «+ Печатная форма (макет)» у сущности: спрашивает имя и создаёт
+// декларативный макет со скелетом по первой ТЧ.
+function cfgNewLayout(action, entity) {
+  var name = prompt('{{t $.Lang "Имя печатной формы (макета):"}}');
+  if (!name) return;
+  _cfgSubmitForm(action, {entity: entity, name: name});
+}
+// cfgCreateOSLayout — «Создать макет» у DSL-формы без макета.
+function cfgCreateOSLayout(action, osform) {
+  _cfgSubmitForm(action, {osform: osform});
+}
 
 // ── Folder picker ──────────────────────────────────────────────
 function pickDir(inputId, title) {
@@ -4667,7 +4690,13 @@ const cfgTabTree = `{{define "tab-tree"}}
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/printform">
       <input type="hidden" name="printform_filename" value="{{.FileName}}">
       <input type="hidden" name="printform_dsl" value="1">
-      {{if .HasLayout}}<div class="section-hd" style="color:#4a9">{{t $.Lang "Макет привязан"}} (<code>{{.Name}}.layout.yaml</code>)</div>{{end}}
+      {{if .HasLayout}}<div class="section-hd" style="color:#4a9">{{t $.Lang "Макет привязан"}} (<code>{{.Name}}.layout.yaml</code>)</div>
+      {{else}}<div style="margin:6px 0">
+        <button type="button" onclick="cfgCreateOSLayout('/bases/{{$.Base.ID}}/configurator/new-layout','{{.Name}}')"
+                style="font-size:12px;padding:5px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer">
+          &#x1F4D0; {{t $.Lang "Создать макет"}}
+        </button>
+      </div>{{end}}
       <div class="section-hd">{{t $.Lang "Код формы"}} (.os) <span class="edit-hint">({{t $.Lang "кликните для редактирования"}})</span></div>
       <div class="code-wrap">
         <pre class="os-code" id="pre-dpf-{{.Name}}" onclick="startEdit('dpf-{{.Name}}')">{{.Source}}</pre>
@@ -5339,11 +5368,17 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{end}}
     </div>
     {{else}}
-    <div style="color:#94a3b8;font-size:12px;padding:8px 0">
+    <div style="color:#94a3b8;font-size:12px;padding:8px 0 4px">
       {{t $.Lang "Печатных форм нет."}}
       <a href="#" onclick="cfgNewObj('printform');return false" style="color:#1a4a80">{{t $.Lang "Создать печатную форму"}}</a>
     </div>
     {{end}}
+    <div style="margin-top:6px">
+      <button type="button" onclick="cfgNewLayout('/bases/{{.BaseID}}/configurator/new-layout','{{$e.Name}}')"
+              style="font-size:12px;padding:5px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer">
+        + {{t $.Lang "Печатная форма (макет)"}}
+      </button>
+    </div>
   </div>{{/* end ot-print */}}
 
   <div class="obj-pane" id="ot-modules-{{$e.Name}}">

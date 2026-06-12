@@ -137,6 +137,7 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/new", s.h.configuratorNewObject)
 		r.Post("/bases/{id}/configurator/printform", s.h.configuratorSavePrintForm)
 		r.Post("/bases/{id}/configurator/layout", s.h.configuratorSaveLayout)
+		r.Post("/bases/{id}/configurator/new-layout", s.h.configuratorNewLayout)
 		r.Post("/bases/{id}/configurator/new-printform", s.h.configuratorNewPrintForm)
 		// Управляемые формы (план 37, этап 4).
 		r.Get("/bases/{id}/configurator/forms", s.h.configuratorFormsList)
