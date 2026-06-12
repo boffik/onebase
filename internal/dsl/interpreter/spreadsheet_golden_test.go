@@ -31,6 +31,7 @@ func goldenCases() []goldenCase {
 	return []goldenCase{
 		{"simple", buildSimpleDoc},
 		{"spans", buildSpansDoc},
+		{"spans_tail", buildSpansTailDoc},
 		{"layout", buildLayoutDoc},
 		{"sizing", buildSizingDoc},
 	}
@@ -76,6 +77,24 @@ func buildSpansDoc() *SpreadsheetDocument {
 	a.Set("текст", "Итого")
 	a.CallMethod("объединить", nil)
 	d.CallMethod("вывести", []any{a})
+	return d
+}
+
+// buildSpansTailDoc — span-ячейка на ПОСЛЕДНЕЙ строке/колонке содержимого.
+// Без учёта RowSpan/ColSpan в ContentBounds перекрытые span'ом строки/колонки
+// обрезались бы при рендере. Ячейка (2,1) с RowSpan=2 — её нижняя половина
+// (строка 3) и (2,2) с ColSpan=2 — её правая половина (колонка 3) лежат за
+// пределами любых других ячеек, поэтому фиксируют расширение границ.
+func buildSpansTailDoc() *SpreadsheetDocument {
+	d := NewSpreadsheetDocument()
+	setCell(d, 1, 1, map[string]any{"текст": "A"})
+	setCell(d, 1, 2, map[string]any{"текст": "B"})
+	// RowSpan: занимает строки 2-3, колонка 1. Строка 3 — последняя по содержимому.
+	setCell(d, 2, 1, map[string]any{"текст": "Слева"})
+	d.CallMethod("объединить", []any{2.0, 1.0, 3.0, 1.0})
+	// ColSpan: занимает колонки 2-3, строка 2. Колонка 3 — последняя по содержимому.
+	setCell(d, 2, 2, map[string]any{"текст": "Шапка"})
+	d.CallMethod("объединить", []any{2.0, 2.0, 2.0, 3.0})
 	return d
 }
 

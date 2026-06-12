@@ -63,33 +63,45 @@ tr:nth-child(even) td{background:#f8fafc}
 	maxRow, maxCol := d.ContentBounds()
 
 	// Ячейки, перекрытые colspan/rowspan.
-	covered := make(map[string]bool)
+	covered := make(map[CellKey]bool)
 
 	for row := 0; row <= maxRow; row++ {
 		sb.WriteString("<tr>")
 		for col := 0; col <= maxCol; col++ {
-			key := fmt.Sprintf("%d,%d", row, col)
-			if covered[key] {
+			if covered[CellKey{row, col}] {
 				continue
 			}
 
 			cell := d.GetCell(row, col)
+			// Эффективные размеры: колоночная/строчная (1-based индексы на
+			// Document) имеют приоритет, иначе — индивидуальный размер ячейки.
+			width := d.ColWidths[col+1]
+			if width == 0 && cell != nil {
+				width = cell.Width
+			}
+			height := d.RowHeights[row+1]
+			if height == 0 && cell != nil {
+				height = cell.Height
+			}
+
 			var attrs, style string
 
 			if cell != nil {
-				style = buildCellStyle(cell)
+				style = buildCellStyle(cell, width, height)
 				if cell.ColSpan > 1 {
 					attrs += fmt.Sprintf(` colspan="%d"`, cell.ColSpan)
 					for c := col + 1; c < col+cell.ColSpan; c++ {
-						covered[fmt.Sprintf("%d,%d", row, c)] = true
+						covered[CellKey{row, c}] = true
 					}
 				}
 				if cell.RowSpan > 1 {
 					attrs += fmt.Sprintf(` rowspan="%d"`, cell.RowSpan)
 					for r := row + 1; r < row+cell.RowSpan; r++ {
-						covered[fmt.Sprintf("%d,%d", r, col)] = true
+						covered[CellKey{r, col}] = true
 					}
 				}
+			} else {
+				style = sizeStyle(width, height)
 			}
 
 			text := ""
@@ -113,8 +125,9 @@ tr:nth-child(even) td{background:#f8fafc}
 	return sb.String()
 }
 
-// buildCellStyle строит CSS-стиль ячейки (перенос из interpreter без изменений).
-func buildCellStyle(cell *Cell) string {
+// buildCellStyle строит CSS-стиль ячейки. width/height — эффективные размеры
+// (колоночная/строчная с Document либо индивидуальная ячейки), вычислены вызывающим.
+func buildCellStyle(cell *Cell, width, height float64) string {
 	var styles []string
 
 	if cell.Align != "" && cell.Align != "left" {
@@ -135,11 +148,11 @@ func buildCellStyle(cell *Cell) string {
 	if cell.FontFamily != "" && cell.FontFamily != "Times New Roman" {
 		styles = append(styles, "font-family:"+cell.FontFamily)
 	}
-	if cell.Width > 0 {
-		styles = append(styles, fmt.Sprintf("width:%.2fpx", cell.Width))
+	if width > 0 {
+		styles = append(styles, fmt.Sprintf("width:%.2fpx", width))
 	}
-	if cell.Height > 0 {
-		styles = append(styles, fmt.Sprintf("height:%.2fpx", cell.Height))
+	if height > 0 {
+		styles = append(styles, fmt.Sprintf("height:%.2fpx", height))
 	}
 	if cell.BackColor != "" {
 		styles = append(styles, "background-color:"+cell.BackColor)
@@ -148,6 +161,19 @@ func buildCellStyle(cell *Cell) string {
 		styles = append(styles, "color:"+cell.TextColor)
 	}
 
+	return strings.Join(styles, ";")
+}
+
+// sizeStyle строит CSS только из размеров — для пустой (несуществующей) ячейки
+// в пределах содержимого, где задана колоночная ширина / строчная высота.
+func sizeStyle(width, height float64) string {
+	var styles []string
+	if width > 0 {
+		styles = append(styles, fmt.Sprintf("width:%.2fpx", width))
+	}
+	if height > 0 {
+		styles = append(styles, fmt.Sprintf("height:%.2fpx", height))
+	}
 	return strings.Join(styles, ";")
 }
 

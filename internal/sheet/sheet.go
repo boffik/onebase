@@ -16,6 +16,13 @@ import (
 // Cell — одна ячейка табличного документа со стилями и спанами.
 // Поля экспортированы: interpreter-обёртки (Ячейка/Область/Параметры)
 // читают и пишут их напрямую, сохраняя прежний DSL-контракт.
+//
+// ColSpan/RowSpan: значения 0 и 1 эквивалентны (нет объединения); рендереры
+// обязаны трактовать любое значение <1 как 1.
+//
+// Width/Height — индивидуальные размеры ячейки (DSL Ячейка.Ширина/Высота).
+// Колоночные/строчные размеры (ШиринаКолонки/ВысотаСтроки) живут на Document
+// в ColWidths/RowHeights и при рендере накладываются на колонку/строку целиком.
 type Cell struct {
 	Text       string
 	Value      any
@@ -29,13 +36,22 @@ type Cell struct {
 	FontFamily string
 	BackColor  string
 	TextColor  string
-	Border     string
-	Fill       string
-	Picture    string
-	ColSpan    int
-	RowSpan    int
+	// Border — legacy-пресет рамки ("all"/""); этап 3 (план 64) добавит
+	// per-side Borders вместо одного строкового пресета.
+	Border  string
+	Picture string
+	ColSpan int
+	RowSpan int
 	// ParameterName — для макета: имя именованного параметра, заполняющего ячейку.
 	ParameterName string
+}
+
+// CellKey — типизированный ключ карты ячеек документа (0-based индексы строки
+// и колонки). Заменяет прежние строковые ключи "row,col": убирает Sprintf при
+// записи и Sscanf при чтении границ. На порядок HTML-рендера не влияет — обход
+// идёт по индексам строк/колонок, а не по карте.
+type CellKey struct {
+	Row, Col int
 }
 
 // NewCell создаёт ячейку с дефолтным форматированием (как в 1С:ТабличныйДокумент).
@@ -116,9 +132,14 @@ func (a *Area) Merge() {
 // (HTML/PDF) и операции вывода — методы этого пакета; DSL-протокол поверх —
 // в interpreter.SpreadsheetDocument, делегирующем сюда.
 type Document struct {
-	Cells        map[string]*Cell // "row,col" -> cell
-	RowCount     int
-	ColCount     int
+	Cells    map[CellKey]*Cell // (row,col) -> cell
+	RowCount int
+	ColCount int
+	// ColWidths/RowHeights — размеры колонок/строк (1-based индекс → размер в px).
+	// ШиринаКолонки/ВысотаСтроки пишут сюда, НЕ материализуя ячейки; HTML-рендер
+	// накладывает их на колонку/строку целиком.
+	ColWidths    map[int]float64
+	RowHeights   map[int]float64
 	CurrentRow   int
 	CurrentCol   int
 	PageBreaks   []int
@@ -133,7 +154,9 @@ type Document struct {
 // SpreadsheetDocument: 100×50).
 func NewDocument() *Document {
 	return &Document{
-		Cells:      make(map[string]*Cell),
+		Cells:      make(map[CellKey]*Cell),
+		ColWidths:  make(map[int]float64),
+		RowHeights: make(map[int]float64),
 		RowCount:   100,
 		ColCount:   50,
 		CurrentRow: 0,
@@ -143,13 +166,12 @@ func NewDocument() *Document {
 
 // GetCell возвращает ячейку или nil.
 func (d *Document) GetCell(row, col int) *Cell {
-	key := fmt.Sprintf("%d,%d", row, col)
-	return d.Cells[key]
+	return d.Cells[CellKey{row, col}]
 }
 
 // GetOrCreateCell возвращает (создавая при необходимости) ячейку (row, col).
 func (d *Document) GetOrCreateCell(row, col int) *Cell {
-	key := fmt.Sprintf("%d,%d", row, col)
+	key := CellKey{row, col}
 	if cell, ok := d.Cells[key]; ok {
 		return cell
 	}
@@ -194,7 +216,9 @@ func (d *Document) Append(area *Area) {
 	if area == nil {
 		return
 	}
-	// Найти правую границу текущей строки.
+	// Найти правую границу текущей строки (по реальным ячейкам). После выноса
+	// размеров на Document фантомных width-ячеек больше нет — соседняя область
+	// встаёт вплотную, а не уезжает в конец сетки.
 	maxCol := 0
 	for col := 0; col < d.ColCount; col++ {
 		if d.GetCell(d.CurrentRow, col) != nil {
@@ -221,7 +245,9 @@ func (d *Document) Append(area *Area) {
 
 // Clear очищает документ и сбрасывает позицию вывода.
 func (d *Document) Clear() {
-	d.Cells = make(map[string]*Cell)
+	d.Cells = make(map[CellKey]*Cell)
+	d.ColWidths = make(map[int]float64)
+	d.RowHeights = make(map[int]float64)
 	d.CurrentRow = 0
 	d.CurrentCol = 0
 	d.PageBreaks = nil
@@ -234,8 +260,7 @@ func (d *Document) RemoveArea(area *Area) {
 	}
 	for row := area.Top; row <= area.Bottom; row++ {
 		for col := area.Left; col <= area.Right; col++ {
-			key := fmt.Sprintf("%d,%d", row, col)
-			delete(d.Cells, key)
+			delete(d.Cells, CellKey{row, col})
 		}
 	}
 }
@@ -245,19 +270,23 @@ func (d *Document) PageBreak() {
 	d.PageBreaks = append(d.PageBreaks, d.CurrentRow)
 }
 
-// CheckOutput проверяет, поместится ли область на текущей странице (50 строк/стр.).
+// rowsPerPage — условная высота страницы в строках для пагинации вывода.
+// Этап 2 (план 64) заменит на расчёт по реальной высоте страницы/строк.
+const rowsPerPage = 50
+
+// CheckOutput проверяет, поместится ли область на текущей странице.
 func (d *Document) CheckOutput(area *Area) bool {
 	if area == nil {
 		return true
 	}
 	areaHeight := area.Rows()
-	rowsRemaining := 50 - (d.CurrentRow % 50)
+	rowsRemaining := rowsPerPage - (d.CurrentRow % rowsPerPage)
 	return float64(areaHeight) <= float64(rowsRemaining)
 }
 
 // EndPage завершает текущую страницу и переходит к началу следующей.
 func (d *Document) EndPage() {
-	nextPage := (d.CurrentRow/50 + 1) * 50
+	nextPage := (d.CurrentRow/rowsPerPage + 1) * rowsPerPage
 	d.CurrentRow = nextPage
 	d.CurrentCol = 0
 }
@@ -292,20 +321,32 @@ func (d *Document) GetPicture(area *Area) string {
 	return ""
 }
 
-// SetColumnWidth задаёт ширину колонки (1-based) — пишется во все строки сетки.
+// SetColumnWidth задаёт ширину колонки (1-based). Хранится на документе и
+// накладывается рендером на колонку целиком — ячейки НЕ материализуются.
 func (d *Document) SetColumnWidth(col int, width float64) {
-	for row := 0; row < d.RowCount; row++ {
-		cell := d.GetOrCreateCell(row, col-1)
-		cell.Width = width
+	if d.ColWidths == nil {
+		d.ColWidths = make(map[int]float64)
 	}
+	d.ColWidths[col] = width
 }
 
-// SetRowHeight задаёт высоту строки (1-based) — пишется во все колонки сетки.
+// ColumnWidth возвращает ширину колонки (1-based) или 0, если не задана.
+func (d *Document) ColumnWidth(col int) float64 {
+	return d.ColWidths[col]
+}
+
+// SetRowHeight задаёт высоту строки (1-based). Хранится на документе и
+// накладывается рендером на строку целиком — ячейки НЕ материализуются.
 func (d *Document) SetRowHeight(row int, height float64) {
-	for col := 0; col < d.ColCount; col++ {
-		cell := d.GetOrCreateCell(row-1, col)
-		cell.Height = height
+	if d.RowHeights == nil {
+		d.RowHeights = make(map[int]float64)
 	}
+	d.RowHeights[row] = height
+}
+
+// RowHeight возвращает высоту строки (1-based) или 0, если не задана.
+func (d *Document) RowHeight(row int) float64 {
+	return d.RowHeights[row]
 }
 
 // SetAlign задаёт выравнивание для прямоугольника области (координаты 0-based).
@@ -340,24 +381,26 @@ func (d *Document) Merge(top, left, bottom, right int) {
 }
 
 // ContentBounds возвращает максимальные индексы строки и колонки с содержимым
-// (с учётом colSpan).
+// (с учётом colSpan по колонкам и rowSpan по строкам).
 func (d *Document) ContentBounds() (int, int) {
 	maxRow, maxCol := 0, 0
 	for key, cell := range d.Cells {
 		if cell == nil {
 			continue
 		}
-		var r, c int
-		fmt.Sscanf(key, "%d,%d", &r, &c)
-		extent := c + cell.ColSpan - 1
-		if cell.ColSpan <= 0 {
-			extent = c
+		colExtent := key.Col
+		if cell.ColSpan > 1 {
+			colExtent = key.Col + cell.ColSpan - 1
 		}
-		if r > maxRow {
-			maxRow = r
+		rowExtent := key.Row
+		if cell.RowSpan > 1 {
+			rowExtent = key.Row + cell.RowSpan - 1
 		}
-		if extent > maxCol {
-			maxCol = extent
+		if rowExtent > maxRow {
+			maxRow = rowExtent
+		}
+		if colExtent > maxCol {
+			maxCol = colExtent
 		}
 	}
 	return maxRow, maxCol
