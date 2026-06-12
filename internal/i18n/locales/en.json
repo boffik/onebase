@@ -36,7 +36,6 @@
   "Имя макета обязательно": "Layout name is required",
   "Недопустимое имя файла": "Invalid file name",
   "Макет уже существует": "Layout already exists",
-  "Создание макета доступно только для файловых конфигураций": "Layout creation is only available for file-based configurations",
   "Ошибка создания макета": "Layout creation error",
   "+ Печатная форма (макет)": "+ Print form (layout)",
   "Gengen": "Gengen",

@@ -2112,7 +2112,7 @@ function ldToggleBorderSide(n,side){
 function ldBorderPreset(n,kind){
   var sc=_ldSelCell(n);if(!sc)return;
   var c=sc.c;
-  if(kind==='none'){delete c.borders;renderLayoutEditor(n);return;}
+  if(kind==='none'){delete c.borders;delete c.border;renderLayoutEditor(n);return;}
   var bw=document.getElementById('vp-bw-'+n);
   var w=(bw&&bw.value)?bw.value:'thin';
   c.borders={left:w,top:w,right:w,bottom:w};

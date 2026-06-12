@@ -37,7 +37,6 @@
   "Имя макета обязательно": "Layout-Name ist erforderlich",
   "Недопустимое имя файла": "Ungültiger Dateiname",
   "Макет уже существует": "Layout existiert bereits",
-  "Создание макета доступно только для файловых конфигураций": "Layout-Erstellung ist nur für dateibasierte Konfigurationen verfügbar",
   "Ошибка создания макета": "Fehler bei der Layout-Erstellung",
   "+ Печатная форма (макет)": "+ Druckform (Layout)",
   "Рабочий стол подсистемы": "Subsystem-Dashboard",
