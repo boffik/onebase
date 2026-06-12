@@ -65,6 +65,7 @@ func NewRegistry() *Registry {
 		extPrintForms:   make(map[string][]*printform.PrintForm),
 		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
 		layoutForms:     make(map[string][]*printform.LayoutForm),
+		extLayoutForms:  make(map[string][]*printform.LayoutForm),
 		procs:           make(map[string]map[string]*ast.ProcedureDecl),
 		managerProcs:    make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),

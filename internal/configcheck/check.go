@@ -40,22 +40,30 @@ type Issue struct {
 }
 
 // Result is the machine-readable check outcome: ok=true means clean.
+// Warnings are informational notices that do NOT affect OK or exit code.
 type Result struct {
-	OK     bool    `json:"ok"`
-	Total  int     `json:"total"`
-	Issues []Issue `json:"issues,omitempty"`
+	OK       bool    `json:"ok"`
+	Total    int     `json:"total"`
+	Issues   []Issue `json:"issues,omitempty"`
+	Warnings []Issue `json:"warnings,omitempty"`
 }
 
-// NewResult wraps a slice of issues into a Result (sets OK/Total).
-func NewResult(issues []Issue) Result {
-	return Result{OK: len(issues) == 0, Total: len(issues), Issues: issues}
+// NewResult wraps a slice of issues and warnings into a Result.
+// OK is determined solely by len(issues) == 0; warnings never set OK=false.
+func NewResult(issues []Issue, warnings ...[]Issue) Result {
+	var ws []Issue
+	for _, w := range warnings {
+		ws = append(ws, w...)
+	}
+	return Result{OK: len(issues) == 0, Total: len(issues), Issues: issues, Warnings: ws}
 }
 
 // CheckDir walks the configuration sources under dir so each broken file is
 // reported individually instead of aborting on the first error (which is what
 // project.Load would do). Covers YAML metadata + .os DSL files.
-func CheckDir(dir string) []Issue {
-	var issues []Issue
+// Returns (issues, warnings): issues cause check to fail; warnings are
+// informational and do not affect the exit code.
+func CheckDir(dir string) (issues, warnings []Issue) {
 
 	type yamlGroup struct {
 		subdir string
@@ -153,8 +161,9 @@ func CheckDir(dir string) []Issue {
 			})
 			continue
 		}
-		// Непустая legacy-форма валидна, но устарела — предлагаем миграцию в v2.
-		issues = append(issues, Issue{
+		// Непустая legacy-форма валидна, но устарела — предупреждение о миграции в v2.
+		// Предупреждение не влияет на OK / exit code (план 64, этап 4).
+		warnings = append(warnings, Issue{
 			File:    label,
 			Object:  object,
 			Kind:    "Печатная форма",
@@ -208,7 +217,7 @@ func CheckDir(dir string) []Issue {
 		issues = append(issues, CheckDSLCallsKnown(m.prog, m.label, projProcs)...)
 	}
 
-	return issues
+	return issues, warnings
 }
 
 // CheckQueries compiles every query in widgets and reports. Compilation needs

@@ -65,7 +65,7 @@ query: SELECT 1`)
 	mkFile(t, filepath.Join(dir, "src", "good.os"), `Процедура Y()
 КонецПроцедуры`)
 
-	issues := CheckDir(dir)
+	issues, _ := CheckDir(dir)
 	var hasBroken bool
 	for _, i := range issues {
 		if strings.Contains(i.File, "broken.os") {
@@ -74,6 +74,34 @@ query: SELECT 1`)
 	}
 	if !hasBroken {
 		t.Fatalf("expected broken.os issue, got: %+v", issues)
+	}
+}
+
+// TestCheckDir_LegacyFormWarning проверяет, что непустая legacy-форма даёт
+// OK=true и ровно 1 предупреждение (план 64, этап 4): exit code 0 не ломается.
+func TestCheckDir_LegacyFormWarning(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "printforms", "накладная.yaml"), `name: Накладная
+document: Реализация
+title: "Накладная № {{Номер}}"
+header: "**Поставщик**: {{Поставщик}}"`)
+
+	issues, warnings := CheckDir(dir)
+	if len(issues) != 0 {
+		t.Errorf("ожидалось 0 ошибок, получено %d: %+v", len(issues), issues)
+	}
+	if len(warnings) != 1 {
+		t.Errorf("ожидалось 1 предупреждение, получено %d: %+v", len(warnings), warnings)
+	}
+	if len(warnings) > 0 && !strings.Contains(warnings[0].Message, "устаревший формат") {
+		t.Errorf("неожиданное сообщение в предупреждении: %q", warnings[0].Message)
+	}
+	res := NewResult(issues, warnings)
+	if !res.OK {
+		t.Error("ожидался OK=true: legacy-форма — только предупреждение")
+	}
+	if len(res.Warnings) != 1 {
+		t.Errorf("ожидался 1 warning в Result, получено %d", len(res.Warnings))
 	}
 }
 
@@ -105,22 +133,36 @@ document: Док
 title: OK
 header: "**X**: {{X}}"`)
 
-	issues := CheckDir(dir)
-	want := map[string]bool{"journals/j.yaml": false, "roles/r.yaml": false, "printforms/p.yaml": false}
-	var okMigrate bool
+	issues, warnings := CheckDir(dir)
+
+	// Корректная legacy-форма не должна давать ошибок — только предупреждение.
 	for _, i := range issues {
-		if _, ok := want[i.File]; ok {
-			want[i.File] = true
-		}
 		if i.File == "printforms/ok.yaml" {
-			if !strings.Contains(i.Message, "устаревший формат") {
-				t.Errorf("корректная legacy-форма должна давать только предупреждение о миграции: %+v", i)
-			}
+			t.Errorf("корректная legacy-форма не должна быть в issues: %+v", i)
+		}
+	}
+
+	// Предупреждение о миграции должно быть в warnings.
+	var okMigrate bool
+	for _, w := range warnings {
+		if w.File == "printforms/ok.yaml" && strings.Contains(w.Message, "устаревший формат") {
 			okMigrate = true
 		}
 	}
 	if !okMigrate {
-		t.Errorf("ожидалось предупреждение о миграции для printforms/ok.yaml. issues=%+v", issues)
+		t.Errorf("ожидалось предупреждение о миграции для printforms/ok.yaml. warnings=%+v", warnings)
+	}
+
+	res := NewResult(issues, warnings)
+	if len(res.Warnings) == 0 {
+		t.Error("ожидался хотя бы 1 warning в Result")
+	}
+
+	want := map[string]bool{"journals/j.yaml": false, "roles/r.yaml": false, "printforms/p.yaml": false}
+	for _, i := range issues {
+		if _, ok := want[i.File]; ok {
+			want[i.File] = true
+		}
 	}
 	for f, found := range want {
 		if !found {

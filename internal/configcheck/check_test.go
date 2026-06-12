@@ -47,7 +47,7 @@ func TestCheckDir(t *testing.T) {
 	mustWrite(t, filepath.Join(src, "ok.os"), `Процедура П() Сообщить("ok"); КонецПроцедуры`)
 	mustWrite(t, filepath.Join(src, "bad.os"), "Процедура П()\n  ВызовНесуществующей();\nКонецПроцедуры")
 
-	issues := CheckDir(dir)
+	issues, _ := CheckDir(dir)
 	for _, is := range issues {
 		if strings.HasPrefix(is.File, "src/ok.os") {
 			t.Errorf("ok.os не должен иметь проблем: %+v", is)
@@ -78,7 +78,7 @@ func TestCheckDir_ProcessorWizardWarning(t *testing.T) {
 	// Обработка-мастер — должна вызвать предупреждение про wizard и steps.
 	mustWrite(t, filepath.Join(procs, "wiz.yaml"), "name: Мастер\nwizard: true\nsteps:\n  - title: Шаг 1\n    params:\n      - name: Файл\n        type: string\n")
 
-	issues := CheckDir(dir)
+	issues, _ := CheckDir(dir)
 	for _, is := range issues {
 		if strings.HasPrefix(is.File, "processors/flat.yaml") {
 			t.Errorf("плоская обработка не должна иметь проблем: %+v", is)
