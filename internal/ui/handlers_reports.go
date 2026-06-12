@@ -354,8 +354,7 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
-	filename := sanitizeFilename(rep.Name) + ".xlsx"
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Content-Disposition", contentDisposition(rep.Name+".xlsx"))
 	w.Write(data)
 }

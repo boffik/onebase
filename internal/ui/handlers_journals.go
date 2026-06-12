@@ -245,8 +245,7 @@ func (s *Server) journalExcel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
-	filename := sanitizeFilename(j.Name) + ".xlsx"
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Content-Disposition", contentDisposition(j.Name+".xlsx"))
 	w.Write(data)
 }

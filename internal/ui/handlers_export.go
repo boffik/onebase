@@ -5,6 +5,7 @@ package ui
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/excel"
@@ -46,10 +47,25 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
-	filename := sanitizeFilename(entity.Name) + ".xlsx"
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Content-Disposition", contentDisposition(entity.Name+".xlsx"))
 	w.Write(data)
+}
+
+// contentDisposition собирает заголовок Content-Disposition по RFC 6266:
+// ASCII-фолбэк в filename= (для старых клиентов) и полное имя в
+// filename*=UTF-8'' (issue #46 — сырой UTF-8 в quoted-string браузеры
+// декодируют как latin-1, имя файла превращается в кракозябры).
+func contentDisposition(filename string) string {
+	fallback := make([]rune, 0, len(filename))
+	for _, r := range sanitizeFilename(filename) {
+		if r < 0x80 {
+			fallback = append(fallback, r)
+		} else {
+			fallback = append(fallback, '_')
+		}
+	}
+	return "attachment; filename=\"" + string(fallback) + "\"; filename*=UTF-8''" + url.PathEscape(filename)
 }
 
 // sanitizeFilename replaces characters unsafe for Content-Disposition filename.

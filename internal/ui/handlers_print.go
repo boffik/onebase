@@ -214,13 +214,13 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := sanitizeFilename(form.Name) + ".pdf"
+	origName := form.Name + ".pdf"
 	if num, ok := row["Номер"].(string); ok && num != "" {
-		filename = sanitizeFilename(form.Name+"_"+num) + ".pdf"
+		origName = form.Name + "_" + num + ".pdf"
 	}
 
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Content-Disposition", contentDisposition(origName))
 	w.Write(pdfBytes)
 }
 

@@ -153,7 +153,7 @@ func (s *Server) adminExtReportExport(w http.ResponseWriter, r *http.Request) {
 	}
 	fname := rec.Name + ".obform"
 	w.Header().Set("Content-Type", "application/x-yaml; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fname))
+	w.Header().Set("Content-Disposition", contentDisposition(fname))
 	w.Write(bundle)
 }
 

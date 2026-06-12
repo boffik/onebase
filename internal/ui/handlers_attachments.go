@@ -104,7 +104,7 @@ func (s *Server) attachmentDownload(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 
 	w.Header().Set("Content-Type", att.MimeType)
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+sanitizeFilename(att.Filename)+"\"")
+	w.Header().Set("Content-Disposition", contentDisposition(att.Filename))
 	http.ServeContent(w, r, att.Filename, att.UploadedAt, f)
 }
 
