@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 )
 
 // Attachment represents a file attached to a document or catalog record.
@@ -91,7 +92,7 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 	}
 	if n > maxSizeBytes {
 		os.Remove(filePath)
-		return Attachment{}, fmt.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024))
+		return Attachment{}, i18nerr.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024))
 	}
 
 	q := fmt.Sprintf(`

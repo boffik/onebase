@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
@@ -117,7 +118,7 @@ func (mfl *ManagedFormLoader) parseYAML(data []byte, entityNameFallback string) 
 	}
 
 	if doc.Schema != "" && doc.Schema != "onebase.form/v1" {
-		return nil, fmt.Errorf("unsupported form schema %q (ожидается onebase.form/v1)", doc.Schema)
+		return nil, i18nerr.Errorf("unsupported form schema %q (ожидается onebase.form/v1)", doc.Schema)
 	}
 
 	entity := doc.Form.Entity
@@ -125,7 +126,7 @@ func (mfl *ManagedFormLoader) parseYAML(data []byte, entityNameFallback string) 
 		entity = entityNameFallback
 	}
 	if entity == "" {
-		return nil, fmt.Errorf("form.entity не указан и нет fallback")
+		return nil, i18nerr.New("form.entity не указан и нет fallback")
 	}
 
 	form := &metadata.FormModule{
@@ -147,7 +148,7 @@ func (mfl *ManagedFormLoader) parseYAML(data []byte, entityNameFallback string) 
 	}
 
 	if form.Name == "" {
-		return nil, fmt.Errorf("form.name пустой")
+		return nil, i18nerr.New("form.name пустой")
 	}
 	if form.Kind == "" {
 		form.Kind = "custom"

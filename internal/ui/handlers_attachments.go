@@ -27,7 +27,7 @@ func (s *Server) attachmentsList(w http.ResponseWriter, r *http.Request) {
 
 	atts, err := s.store.ListAttachments(r.Context(), string(entity.Kind), entity.Name, id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	if atts == nil {
@@ -56,13 +56,14 @@ func (s *Server) attachmentUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxSize+1024)
 
+	lang := s.resolveLang(r)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "Ошибка разбора формы: "+err.Error(), 400)
+		http.Error(w, s.tr(lang, "Ошибка разбора формы")+": "+s.errText(r, err), 400)
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "Нет файла в форме", 400)
+		http.Error(w, s.tr(lang, "Нет файла в форме"), 400)
 		return
 	}
 	defer file.Close()
@@ -80,7 +81,7 @@ func (s *Server) attachmentUpload(w http.ResponseWriter, r *http.Request) {
 	_, err = s.store.UploadAttachment(r.Context(), string(entity.Kind), entity.Name, id,
 		header.Filename, mimeType, uploadedBy, file, maxSize)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 
@@ -97,7 +98,7 @@ func (s *Server) attachmentDownload(w http.ResponseWriter, r *http.Request) {
 
 	f, att, err := s.store.OpenAttachment(r.Context(), aid)
 	if err != nil {
-		http.Error(w, "Файл не найден", 404)
+		http.Error(w, s.tr(s.resolveLang(r), "Файл не найден"), 404)
 		return
 	}
 	defer f.Close()
@@ -116,7 +117,7 @@ func (s *Server) attachmentDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.store.DeleteAttachment(r.Context(), aid); err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)

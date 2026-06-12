@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/shopspring/decimal"
@@ -1703,7 +1704,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				_, isAccumVT := accumVTKinds[vtU]
 				_, isInfoVT := infoVTKinds[vtU]
 				if isAccumVT || isInfoVT {
-					return Result{}, fmt.Errorf("виртуальная таблица %q требует круглые скобки: .%s(...)", vtName, vtName)
+					return Result{}, i18nerr.Errorf("виртуальная таблица %q требует круглые скобки: .%s(...)", vtName, vtName)
 				}
 			}
 

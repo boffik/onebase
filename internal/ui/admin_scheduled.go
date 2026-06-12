@@ -60,7 +60,7 @@ func (s *Server) scheduledRunNow(w http.ResponseWriter, r *http.Request) {
 		name = dec
 	}
 	if err := s.sched.RunNow(r.Context(), name); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, s.errText(r, err), 400)
 		return
 	}
 	http.Redirect(w, r, "/ui/admin/scheduled/"+url.PathEscape(name), http.StatusSeeOther)

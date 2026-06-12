@@ -52,7 +52,7 @@ func renderFormsList(w http.ResponseWriter, data *configuratorData) {
 const tplFormsBase = `
 {{define "forms-head"}}
 <!doctype html>
-<html lang="ru">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <title>Управляемые формы — {{.Base.Name}}</title>

@@ -22,7 +22,7 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 	params := parseListParams(r, entity, s.store.GetListPageSize(r.Context()))
 	rows, err := s.store.List(r.Context(), entity.Name, entity, params)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.resolveRefs(r.Context(), entity, rows)
@@ -43,7 +43,7 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 
 	data, err := excel.ExportList(cols, xlsRows)
 	if err != nil {
-		http.Error(w, "Excel error: "+err.Error(), 500)
+		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
 	filename := sanitizeFilename(entity.Name) + ".xlsx"

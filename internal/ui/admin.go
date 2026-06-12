@@ -205,7 +205,7 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := s.authRepo.List(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -236,7 +236,7 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 			showInList := r.FormValue("show_in_list") == "1"
 			aiData := r.FormValue("ai_data_access") == "1"
 			if err := s.authRepo.Update(r.Context(), userID, fullName, isAdmin, denyPasswd, showInList, aiData); err != nil {
-				data["Error"] = err.Error()
+				data["Error"] = s.errText(r, err)
 			} else {
 				u.FullName = fullName
 				u.IsAdmin = isAdmin
@@ -253,7 +253,7 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 			if newPwd != confirm {
 				data["Error"] = s.tr(lang, "Пароли не совпадают")
 			} else if err := s.authRepo.UpdatePassword(r.Context(), userID, newPwd); err != nil {
-				data["Error"] = err.Error()
+				data["Error"] = s.errText(r, err)
 			} else {
 				data["Success"] = s.tr(lang, "Пароль изменён")
 			}
@@ -297,7 +297,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 	u, err := s.authRepo.Create(r.Context(), login, password, fullName, isAdmin)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": err.Error()})
+		adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": s.errText(r, err)})
 		return
 	}
 	if denyPasswd || showInList || aiData {
@@ -357,7 +357,7 @@ func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.authRepo.UpdatePassword(r.Context(), userID, newPwd); err != nil {
-			data["Error"] = err.Error()
+			data["Error"] = s.errText(r, err)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 			return
@@ -405,7 +405,7 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.authRepo.UpdatePassword(r.Context(), u.ID, newPwd); err != nil {
-			data["Error"] = err.Error()
+			data["Error"] = s.errText(r, err)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 			return
@@ -491,7 +491,7 @@ func (s *Server) adminRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	roles, err := s.authRepo.ListRoles(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -646,7 +646,7 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.store.AuditByRecord(r.Context(), entity.Name, id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.enrichAuditEntries(r.Context(), entity, entries)
@@ -965,7 +965,7 @@ func (s *Server) adminWebhooks(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.store.ListWebhookLog(r.Context(), 200)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

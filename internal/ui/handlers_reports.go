@@ -49,7 +49,7 @@ func (s *Server) reportRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, s.errText(r, err), 400)
 		return
 	}
 	paramValues := make(map[string]any, len(rep.Params))
@@ -330,12 +330,12 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		Dialect:     s.store.Dialect(),
 	})
 	if err != nil {
-		http.Error(w, "query compile error: "+err.Error(), 400)
+		http.Error(w, "query compile error: "+s.errText(r, err), 400)
 		return
 	}
 	rows, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
 	if err != nil {
-		http.Error(w, "query error: "+err.Error(), 500)
+		http.Error(w, "query error: "+s.errText(r, err), 500)
 		return
 	}
 	s.resolveUUIDsInReport(r.Context(), rows)
@@ -351,7 +351,7 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 
 	data, err := excel.ExportList(cols, xlsRows)
 	if err != nil {
-		http.Error(w, "Excel error: "+err.Error(), 500)
+		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
 	filename := sanitizeFilename(rep.Name) + ".xlsx"

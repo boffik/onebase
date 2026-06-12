@@ -70,7 +70,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.store.List(r.Context(), entity.Name, entity, params)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.resolveRefs(r.Context(), entity, rows)
@@ -299,7 +299,7 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, s.errText(r, err), 400)
 		return
 	}
 	fields = formToFields(r, entity)
@@ -370,7 +370,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		Action:        action,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	if result.DSLError != "" {
@@ -428,7 +428,7 @@ func (s *Server) refCreateRedirect(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "entity")
 	ent := s.reg.GetEntity(name)
 	if ent == nil {
-		http.Error(w, "Сущность не найдена: "+name, http.StatusNotFound)
+		http.Error(w, s.tr(s.resolveLang(r), "Сущность не найдена")+": "+name, http.StatusNotFound)
 		return
 	}
 	kind := strings.ToLower(string(ent.Kind))
@@ -443,7 +443,7 @@ func (s *Server) refOpenRedirect(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ent := s.reg.GetEntity(name)
 	if ent == nil {
-		http.Error(w, "Сущность не найдена: "+name, http.StatusNotFound)
+		http.Error(w, s.tr(s.resolveLang(r), "Сущность не найдена")+": "+name, http.StatusNotFound)
 		return
 	}
 	kind := strings.ToLower(string(ent.Kind))
@@ -481,7 +481,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 	refOptions, _ := s.loadRefOptions(r.Context(), entity)
@@ -668,7 +668,7 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 			s.renderVersionConflict(w, r, entity, id)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	if result.DSLError != "" {
@@ -715,7 +715,7 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 
@@ -755,7 +755,7 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		return s.store.SetPosted(ctx, entity.Name, id, true)
 	}); err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	http.Redirect(w, r, docURL, http.StatusSeeOther)
@@ -828,7 +828,7 @@ func (s *Server) unpostDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		return s.store.SetPosted(ctx, entity.Name, id, false)
 	}); err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	// Веб-хук document.unpost (план 29) — после успешной транзакции.
@@ -863,7 +863,7 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 	// Снятие пометки на удаление (mark=0) — без возврата проведения.
 	if markParam == "0" {
 		if err := s.store.MarkForDeletion(r.Context(), entity.Name, id, false); err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, s.errText(r, err), 500)
 			return
 		}
 		http.Redirect(w, r, listURL(entity), http.StatusSeeOther)
@@ -876,7 +876,7 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 			return s.markForDeletion(ctx, entity, id, true)
 		}); err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, s.errText(r, err), 500)
 			return
 		}
 		http.Redirect(w, r, listURL(entity), http.StatusSeeOther)
@@ -889,8 +889,9 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		var msg strings.Builder
 		lang := s.resolveLang(r)
 		msg.WriteString(s.tr(lang, "Невозможно удалить: объект используется в:") + "\n")
+		recordsWord := s.tr(lang, "записей")
 		for _, ref := range refs {
-			fmt.Fprintf(&msg, "  • %s.%s (%d записей)\n", ref.EntityName, ref.FieldName, ref.Count)
+			fmt.Fprintf(&msg, "  • %s.%s (%d %s)\n", ref.EntityName, ref.FieldName, ref.Count, recordsWord)
 		}
 		http.Error(w, msg.String(), 409)
 		return
@@ -904,7 +905,7 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		}
 		return s.store.Delete(ctx, entity.Name, id)
 	}); err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	// Веб-хук <kind>.delete (план 29) — только физическое удаление
@@ -1018,7 +1019,7 @@ func (s *Server) deleteMarked(w http.ResponseWriter, r *http.Request) {
 
 	marked, err := s.store.ListMarked(r.Context(), entity.Name, entity)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 

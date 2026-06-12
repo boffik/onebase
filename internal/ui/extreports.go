@@ -25,7 +25,7 @@ func (s *Server) adminExtReports(w http.ResponseWriter, r *http.Request) {
 	}
 	recs, err := s.extreports.List(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -41,36 +41,37 @@ func (s *Server) adminExtReportUpload(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, r)
 		return
 	}
+	lang := s.resolveLang(r)
 	if err := r.ParseMultipartForm(s.maxFileSizeBytes); err != nil {
-		s.extReportRedirect(w, r, "", "не удалось прочитать файл: "+err.Error())
+		s.extReportRedirect(w, r, "", s.tr(lang, "не удалось прочитать файл")+": "+s.errText(r, err))
 		return
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		s.extReportRedirect(w, r, "", "файл не выбран")
+		s.extReportRedirect(w, r, "", s.tr(lang, "файл не выбран"))
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, s.maxFileSizeBytes))
 	if err != nil {
-		s.extReportRedirect(w, r, "", "ошибка чтения файла: "+err.Error())
+		s.extReportRedirect(w, r, "", s.tr(lang, "ошибка чтения файла")+": "+s.errText(r, err))
 		return
 	}
 
 	parsed, err := extform.ParseReportUpload(data)
 	if err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := extform.CheckMinPlatform(parsed.MinPlatform, s.cfg.PlatVersion); err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	// Валидация запроса по схеме конфигурации: компиляция в SQL + (на SQLite)
 	// проверка исполнимости. Не даём загрузить заведомо нерабочий отчёт.
 	rep, _ := report.ParseBytes(parsed.Content)
 	if err := s.validateReportQuery(r.Context(), rep); err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 
@@ -82,7 +83,7 @@ func (s *Server) adminExtReportUpload(w http.ResponseWriter, r *http.Request) {
 		UploadedBy: currentLogin(r),
 	}
 	if err := s.extreports.Save(r.Context(), rec); err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	s.auditExtReport(r, "extreport.upload", rec)
@@ -98,11 +99,11 @@ func (s *Server) adminExtReportToggle(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rec, err := s.extreports.Get(r.Context(), id)
 	if err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extreports.SetEnabled(r.Context(), id, !rec.Enabled); err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	action := "extreport.enable"
@@ -122,11 +123,11 @@ func (s *Server) adminExtReportDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rec, err := s.extreports.Get(r.Context(), id)
 	if err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extreports.Delete(r.Context(), id); err != nil {
-		s.extReportRedirect(w, r, "", err.Error())
+		s.extReportRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	s.auditExtReport(r, "extreport.delete", rec)
@@ -142,12 +143,12 @@ func (s *Server) adminExtReportExport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	rec, err := s.extreports.Get(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 	bundle, err := extform.BuildReportBundle(rec, s.cfg.PlatVersion)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	fname := rec.Name + ".obform"

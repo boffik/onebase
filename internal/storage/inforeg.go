@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
@@ -213,7 +214,7 @@ func (db *DB) WriteInfoMovements(ctx context.Context, regName, recorderType stri
 				if period != nil {
 					p = *period
 				} else {
-					return fmt.Errorf("info register %s: row %d has no Период and document has no period", regName, i+1)
+					return i18nerr.Errorf("info register %s: row %d has no Период and document has no period", regName, i+1)
 				}
 			}
 			cols = append(cols, "period")

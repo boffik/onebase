@@ -410,7 +410,7 @@ pre.convert-out{background:#f5f7fa;border:1px solid #e2e6ed;padding:12px;border-
 // ── Head / foot ───────────────────────────────────────────────────────────────
 
 const cfgHead = `{{define "cfg-head"}}<!DOCTYPE html>
-<html lang="ru">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <script>

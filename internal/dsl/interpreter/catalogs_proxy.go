@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
@@ -183,7 +184,7 @@ func (p *CatalogProxy) CallMethod(method string, args []any) any {
 func (p *CatalogProxy) DeleteRef(uuidStr string) error {
 	id, err := uuid.Parse(uuidStr)
 	if err != nil {
-		return fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
+		return i18nerr.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
 	return p.db.Delete(p.ctx(), p.entity.Name, id)
 }
@@ -194,7 +195,7 @@ func (p *CatalogProxy) DeleteRef(uuidStr string) error {
 func (p *CatalogProxy) LoadObject(uuidStr string) (any, error) {
 	id, err := uuid.Parse(uuidStr)
 	if err != nil {
-		return nil, fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
+		return nil, i18nerr.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
 	row, err := p.db.GetByID(p.ctx(), p.entity.Name, id, p.entity)
 	if err != nil {

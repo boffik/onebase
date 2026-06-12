@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
@@ -71,7 +72,7 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 		if pID, err := uuid.Parse(parentIDStr); err == nil {
 			if pID != id {
 				if cycle, _ := db.WouldCycle(ctx, table, id, pID); cycle {
-					return fmt.Errorf("нельзя переместить группу в её подчинённую группу")
+					return i18nerr.New("нельзя переместить группу в её подчинённую группу")
 				}
 			}
 			cols = append(cols, "parent_id")
@@ -597,7 +598,7 @@ func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error
 		fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = %s", tbl, d.Placeholder(1)),
 		idArg(d, id),
 	).Scan(&isPredefined); err == nil && isPredefined {
-		return fmt.Errorf("нельзя удалить предопределённый элемент %s", entityName)
+		return i18nerr.Errorf("нельзя удалить предопределённый элемент %s", entityName)
 	}
 
 	// For hierarchical catalogs, prevent deleting non-empty folders
@@ -607,7 +608,7 @@ func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error
 			tbl, d.Placeholder(1), boolFalseLit(d)),
 		idArg(d, id),
 	).Scan(&childCount); err == nil && childCount > 0 {
-		return fmt.Errorf("нельзя удалить группу: в ней есть элементы (%d шт.)", childCount)
+		return i18nerr.Errorf("нельзя удалить группу: в ней есть элементы (%d шт.)", childCount)
 	}
 
 	err := db.exec(ctx,
@@ -736,7 +737,7 @@ func applyNumberSpec(f metadata.Field, v any) (any, error) {
 			intDigits = 0
 		}
 		if intDigits > f.Length-f.Scale {
-			return nil, fmt.Errorf("поле %q: число превышает разрядность (%d,%d)", f.Name, f.Length, f.Scale)
+			return nil, i18nerr.Errorf("поле %q: число превышает разрядность (%d,%d)", f.Name, f.Length, f.Scale)
 		}
 	}
 	return dec, nil

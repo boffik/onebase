@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
@@ -206,7 +207,7 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 		if err := h.initDatabaseBase(r.Context(), b, scaffold); err != nil {
 			render(w, r, "page-form", map[string]any{
 				"Title": tr(lang, "onebase — Добавить базу"),
-				"IsNew": true, "Base": b, "Error": err.Error(),
+				"IsNew": true, "Base": b, "Error": errText(r, err),
 			})
 			return
 		}
@@ -352,7 +353,7 @@ func (h *handler) start(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := h.runner.Start(b); err != nil {
-			writeJSON(w, 500, map[string]any{"error": err.Error()})
+			writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 			return
 		}
 		b.LastOpened = time.Now()
@@ -361,7 +362,7 @@ func (h *handler) start(w http.ResponseWriter, r *http.Request) {
 
 	// Wait until the base server is ready before handing the URL to the browser
 	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 		return
 	}
 
@@ -483,13 +484,13 @@ func (h *handler) configuratorRestart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := h.runner.Restart(b); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 		return
 	}
 	b.LastOpened = time.Now()
 	h.store.Update(b)
 	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"url": h.runner.BaseURL(b)})
@@ -590,18 +591,18 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 func (h *handler) initDatabaseBase(ctx context.Context, b *Base, scaffold bool) error {
 	if b.DBType != "sqlite" {
 		if err := storage.EnsureDatabase(ctx, b.DB); err != nil {
-			return fmt.Errorf("создание БД: %w", err)
+			return i18nerr.Wrapf(err, "создание БД")
 		}
 	}
 	db, err := OpenDB(ctx, b)
 	if err != nil {
-		return fmt.Errorf("подключение к БД: %w", err)
+		return i18nerr.Wrapf(err, "подключение к БД")
 	}
 	defer db.Close()
 
 	repo := configdb.New(db)
 	if err := repo.EnsureSchema(ctx); err != nil {
-		return fmt.Errorf("создание схемы configdb: %w", err)
+		return i18nerr.Wrapf(err, "создание схемы configdb")
 	}
 
 	if scaffold {
@@ -616,10 +617,10 @@ func (h *handler) initDatabaseBase(ctx context.Context, b *Base, scaffold bool) 
 		defer os.RemoveAll(tmpDir)
 
 		if err := project.Scaffold(tmpDir, name); err != nil {
-			return fmt.Errorf("создание конфигурации: %w", err)
+			return i18nerr.Wrapf(err, "создание конфигурации")
 		}
 		if err := repo.ImportFromDir(ctx, tmpDir); err != nil {
-			return fmt.Errorf("загрузка конфигурации: %w", err)
+			return i18nerr.Wrapf(err, "загрузка конфигурации")
 		}
 	}
 	return nil
@@ -635,7 +636,10 @@ func workspacePath(baseID string) (string, error) {
 
 func resolveLang(r *http.Request) string {
 	if launcherBundle != nil {
-		return i18n.Resolve("", "ru", r.Header.Get("Accept-Language"), launcherBundle)
+		// baseLang пустой: иначе Resolve возвращает его сразу и до
+		// Accept-Language не доходит (issue #49 п.1); фолбэк "ru" встроен
+		// в Resolve.
+		return i18n.Resolve("", "", r.Header.Get("Accept-Language"), launcherBundle)
 	}
 	return "ru"
 }
@@ -645,6 +649,11 @@ func tr(lang, key string) string {
 		return launcherBundle.T(lang, key)
 	}
 	return key
+}
+
+// errText локализует сообщение об ошибке для языка текущего запроса.
+func errText(r *http.Request, err error) string {
+	return i18nerr.Localize(launcherBundle, resolveLang(r), err)
 }
 
 func render(w http.ResponseWriter, r *http.Request, name string, data map[string]any) {

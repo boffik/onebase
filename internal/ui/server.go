@@ -12,6 +12,7 @@ import (
 	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/extform"
 	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -659,10 +660,15 @@ func (s *Server) resolveLang(r *http.Request) string {
 	return i18n.Resolve(userLang, s.cfg.Lang, accept, s.cfg.Bundle)
 }
 
+// errText локализует сообщение об ошибке для языка текущего запроса.
+func (s *Server) errText(r *http.Request, err error) string {
+	return i18nerr.Localize(s.cfg.Bundle, s.resolveLang(r), err)
+}
+
 // setLang saves the user's preferred language.
 func (s *Server) setLang(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, s.errText(r, err), 400)
 		return
 	}
 	lang := r.FormValue("lang")

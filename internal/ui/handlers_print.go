@@ -55,7 +55,7 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 
@@ -78,7 +78,7 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 	pdfURL := r.URL.Path + "/pdf"
 	html, err := printform.RenderWithPDFURL(form, ctx, pdfURL)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -189,7 +189,7 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 
@@ -210,7 +210,7 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	pdfBytes, err := printform.RenderPDF(form, ctx)
 	if err != nil {
-		http.Error(w, "PDF error: "+err.Error(), 500)
+		http.Error(w, "PDF error: "+s.errText(r, err), 500)
 		return
 	}
 
@@ -270,7 +270,7 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 		p := parser.New(l)
 		prog, parseErr := p.ParseProgram()
 		if parseErr != nil {
-			http.Error(w, "parse error: "+parseErr.Error(), 500)
+			http.Error(w, "parse error: "+s.errText(r, parseErr), 500)
 			return
 		}
 		for _, proc := range prog.Procedures {
@@ -281,7 +281,7 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if procDecl == nil {
-			http.Error(w, "Функция Сформировать() не найдена в "+pfName+".os", 404)
+			http.Error(w, fmt.Sprintf(s.tr(s.resolveLang(r), "Функция Сформировать() не найдена в %s.os"), pfName), 404)
 			return
 		}
 	}
@@ -289,7 +289,7 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 	// 4. Load record data
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 
@@ -331,14 +331,14 @@ func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
 	var result any
 	err = s.interp.RunWithResult(procDecl, docData, &result, dslVars)
 	if err != nil {
-		http.Error(w, "DSL error: "+err.Error(), 500)
+		http.Error(w, "DSL error: "+s.errText(r, err), 500)
 		return
 	}
 
 	// 8. Render result
 	sd, ok := result.(*interpreter.SpreadsheetDocument)
 	if !ok {
-		http.Error(w, "Процедура должна возвращать ТабличныйДокумент", 500)
+		http.Error(w, s.tr(s.resolveLang(r), "Процедура должна возвращать ТабличныйДокумент"), 500)
 		return
 	}
 

@@ -1,9 +1,10 @@
 package interpreter
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 )
 
 // fileSandboxRoot — корень, которым ограничены файловые builtins
@@ -46,7 +47,7 @@ func resolveSafePath(p string) (string, error) {
 	}
 	rel, err := filepath.Rel(root, abs)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("доступ к файлу вне рабочего каталога базы запрещён: %s", p)
+		return "", i18nerr.Errorf("доступ к файлу вне рабочего каталога базы запрещён: %s", p)
 	}
 	return abs, nil
 }

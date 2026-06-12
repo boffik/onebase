@@ -24,7 +24,7 @@ func (s *Server) adminExtProcessors(w http.ResponseWriter, r *http.Request) {
 	}
 	recs, err := s.extprocessors.List(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -40,19 +40,20 @@ func (s *Server) adminExtProcessorUpload(w http.ResponseWriter, r *http.Request)
 		s.renderForbidden(w, r)
 		return
 	}
+	lang := s.resolveLang(r)
 	if err := r.ParseMultipartForm(s.maxFileSizeBytes); err != nil {
-		s.extProcRedirect(w, r, "", "не удалось прочитать файл: "+err.Error())
+		s.extProcRedirect(w, r, "", s.tr(lang, "не удалось прочитать файл")+": "+s.errText(r, err))
 		return
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		s.extProcRedirect(w, r, "", "файл не выбран")
+		s.extProcRedirect(w, r, "", s.tr(lang, "файл не выбран"))
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, s.maxFileSizeBytes))
 	if err != nil {
-		s.extProcRedirect(w, r, "", "ошибка чтения файла: "+err.Error())
+		s.extProcRedirect(w, r, "", s.tr(lang, "ошибка чтения файла")+": "+s.errText(r, err))
 		return
 	}
 
@@ -60,11 +61,11 @@ func (s *Server) adminExtProcessorUpload(w http.ResponseWriter, r *http.Request)
 	// компиляцию кода, наличие процедуры Выполнить().
 	parsed, err := extform.ParseProcessorUpload(data)
 	if err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := extform.CheckMinPlatform(parsed.MinPlatform, s.cfg.PlatVersion); err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 
@@ -76,7 +77,7 @@ func (s *Server) adminExtProcessorUpload(w http.ResponseWriter, r *http.Request)
 		UploadedBy: currentLogin(r),
 	}
 	if err := s.extprocessors.Save(r.Context(), rec); err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	s.auditExtProc(r, "extprocessor.upload", rec)
@@ -92,11 +93,11 @@ func (s *Server) adminExtProcessorToggle(w http.ResponseWriter, r *http.Request)
 	id := chi.URLParam(r, "id")
 	rec, err := s.extprocessors.Get(r.Context(), id)
 	if err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extprocessors.SetEnabled(r.Context(), id, !rec.Enabled); err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	action := "extprocessor.enable"
@@ -118,11 +119,11 @@ func (s *Server) adminExtProcessorTrust(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	rec, err := s.extprocessors.Get(r.Context(), id)
 	if err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extprocessors.SetTrusted(r.Context(), id, !rec.Trusted); err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	action := "extprocessor.trust"
@@ -142,11 +143,11 @@ func (s *Server) adminExtProcessorDelete(w http.ResponseWriter, r *http.Request)
 	id := chi.URLParam(r, "id")
 	rec, err := s.extprocessors.Get(r.Context(), id)
 	if err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	if err := s.extprocessors.Delete(r.Context(), id); err != nil {
-		s.extProcRedirect(w, r, "", err.Error())
+		s.extProcRedirect(w, r, "", s.errText(r, err))
 		return
 	}
 	s.auditExtProc(r, "extprocessor.delete", rec)
@@ -162,12 +163,12 @@ func (s *Server) adminExtProcessorExport(w http.ResponseWriter, r *http.Request)
 	id := chi.URLParam(r, "id")
 	rec, err := s.extprocessors.Get(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		http.Error(w, s.errText(r, err), 404)
 		return
 	}
 	bundle, err := extform.BuildProcessorBundle(rec, s.cfg.PlatVersion)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	fname := rec.Name + ".obform"

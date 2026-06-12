@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
@@ -238,7 +239,7 @@ func (db *DB) fixInfoRegPK(ctx context.Context, ir *metadata.InfoRegister) error
 		if _, err := db.Exec(ctx, copySQL); err != nil {
 			// Откатимся — дропнем tmp, оставим старую.
 			_, _ = db.Exec(ctx, "DROP TABLE "+sqliteIdent(tmp))
-			return fmt.Errorf("copy data (возможно дубликаты по новому PK): %w", err)
+			return i18nerr.Wrapf(err, "copy data (возможно дубликаты по новому PK)")
 		}
 	}
 	if _, err := db.Exec(ctx, "DROP TABLE "+sqliteIdent(table)); err != nil {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -198,7 +199,7 @@ func (f *dslFile) CallMethod(name string, args []any) any {
 // Used for uploaded file content that may not be UTF-8.
 func decodeFileBuiltin(args []any, file string, line int) (any, error) {
 	if len(args) == 0 {
-		return nil, fmt.Errorf("ДекодироватьФайл: требуется текст")
+		return nil, i18nerr.New("ДекодироватьФайл: требуется текст")
 	}
 	s := fmt.Sprintf("%v", args[0])
 	if utf8.ValidString(s) {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/jackc/pgx/v5"
 )
@@ -59,7 +60,7 @@ func (db *DB) MarkForDeletion(ctx context.Context, entityName string, id uuid.UU
 			fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = %s", table, d.Placeholder(1)),
 			idArg(d, id),
 		).Scan(&isPredefined); err == nil && isPredefined {
-			return fmt.Errorf("нельзя пометить предопределённый элемент %s на удаление", entityName)
+			return i18nerr.Errorf("нельзя пометить предопределённый элемент %s на удаление", entityName)
 		}
 	}
 	return db.exec(ctx,

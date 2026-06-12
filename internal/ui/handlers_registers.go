@@ -29,7 +29,7 @@ func (s *Server) registerMovements(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.store.GetMovements(r.Context(), name, reg)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.resolveRegisterRows(r.Context(), rows, reg)
@@ -51,7 +51,7 @@ func (s *Server) registerBalances(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.store.GetBalances(r.Context(), name, reg)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.resolveRegisterRows(r.Context(), rows, reg)
@@ -124,7 +124,7 @@ func (s *Server) infoRegList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.store.InfoRegList(r.Context(), ir)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.render(w, r, "page-inforeg-list", map[string]any{
@@ -251,7 +251,7 @@ func (s *Server) infoRegDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	dims := parseInfoRegFields(r, ir.Dimensions)
 	if err := s.store.InfoRegDelete(r.Context(), ir, dims, periodPtr); err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	http.Redirect(w, r, "/ui/inforeg/"+strings.ToLower(ir.Name), http.StatusFound)
@@ -327,7 +327,7 @@ func (s *Server) constantsList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) constantsSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, s.errText(r, err), 400)
 		return
 	}
 	consts := s.reg.Constants()
@@ -340,7 +340,7 @@ func (s *Server) constantsSave(w http.ResponseWriter, r *http.Request) {
 			v = val
 		}
 		if err := s.store.SetConstant(r.Context(), c.Name, v); err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, s.errText(r, err), 500)
 			return
 		}
 	}

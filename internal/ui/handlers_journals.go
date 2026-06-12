@@ -59,7 +59,7 @@ func (s *Server) journalList(w http.ResponseWriter, r *http.Request) {
 
 	rows, total, colRefMap, err := s.store.JournalQuery(r.Context(), j, docs, params, pageSize, offset)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 
@@ -218,7 +218,7 @@ func (s *Server) journalExcel(w http.ResponseWriter, r *http.Request) {
 
 	rows, _, colRefMap, err := s.store.JournalQuery(r.Context(), j, docs, params, 10000, 0)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	s.resolveJournalRefs(r.Context(), j, colRefMap, rows)
@@ -242,7 +242,7 @@ func (s *Server) journalExcel(w http.ResponseWriter, r *http.Request) {
 
 	data, err := excel.ExportList(cols, xlsRows)
 	if err != nil {
-		http.Error(w, "Excel error: "+err.Error(), 500)
+		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
 	filename := sanitizeFilename(j.Name) + ".xlsx"

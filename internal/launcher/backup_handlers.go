@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/backup"
 	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,11 +36,11 @@ func (h *handler) backupDir(b *Base) string {
 // Protects against path traversal (../, absolute paths) in the {file} URL param.
 func safeBackupPath(dir, file string) (string, error) {
 	if file == "" || strings.ContainsRune(file, 0) {
-		return "", fmt.Errorf("недопустимое имя файла")
+		return "", i18nerr.New("недопустимое имя файла")
 	}
 	// reject any path separators / traversal — backup files are flat names.
 	if strings.ContainsAny(file, `/\`) || file == ".." || strings.Contains(file, "..") {
-		return "", fmt.Errorf("недопустимое имя файла: %s", file)
+		return "", i18nerr.Errorf("недопустимое имя файла: %s", file)
 	}
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -48,7 +49,7 @@ func safeBackupPath(dir, file string) (string, error) {
 	fp := filepath.Join(absDir, file)
 	rel, err := filepath.Rel(absDir, fp)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("недопустимое имя файла: %s", file)
+		return "", i18nerr.Errorf("недопустимое имя файла: %s", file)
 	}
 	return fp, nil
 }
@@ -111,10 +112,10 @@ func checkBackupFileMismatch(b *Base, filename string) error {
 	isSQLiteDump := strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite")
 	targetSQLite := b.DBType == "sqlite"
 	if isPGDump && targetSQLite {
-		return fmt.Errorf("Нельзя восстановить PostgreSQL-бэкап в SQLite-базу (%s). Создайте базу с типом БД PostgreSQL.", filename)
+		return i18nerr.Errorf("Нельзя восстановить PostgreSQL-бэкап в SQLite-базу (%s). Создайте базу с типом БД PostgreSQL.", filename)
 	}
 	if isSQLiteDump && !targetSQLite {
-		return fmt.Errorf("Нельзя восстановить SQLite-бэкап в PostgreSQL-базу (%s). Создайте базу с типом БД SQLite.", filename)
+		return i18nerr.Errorf("Нельзя восстановить SQLite-бэкап в PostgreSQL-базу (%s). Создайте базу с типом БД SQLite.", filename)
 	}
 	return nil
 }
@@ -125,15 +126,16 @@ func (h *handler) backupCreate(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	dir := h.backupDir(b)
 	outPath, dumpErr := dumpForBase(r.Context(), b, dir)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if dumpErr != nil {
-		data.Error = "Ошибка бэкапа: " + dumpErr.Error()
+		data.Error = tr(lang, "Ошибка бэкапа") + ": " + dumpErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		data.BackupMessage = "Бэкап создан: " + filepath.Base(outPath)
+		data.BackupMessage = tr(lang, "Бэкап создан") + ": " + filepath.Base(outPath)
 	}
 	renderCfg(w, r, data)
 }
@@ -217,11 +219,11 @@ func (h *handler) backupSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if saveErr != nil {
-		data.Error = fmt.Sprintf("Ошибка сохранения: %s", saveErr.Error())
+		data.Error = tr(resolveLang(r), "Ошибка сохранения") + ": " + saveErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		data.BackupMessage = "Настройки бэкапа сохранены"
+		data.BackupMessage = tr(resolveLang(r), "Настройки бэкапа сохранены")
 	}
 	renderCfg(w, r, data)
 }
@@ -235,10 +237,11 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	dir := h.backupDir(b)
 	os.MkdirAll(dir, 0o755)
 
+	lang := resolveLang(r)
 	file, header, err := r.FormFile("backup_file")
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка загрузки: " + err.Error()
+		data.Error = tr(lang, "Ошибка загрузки") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
 	}
@@ -248,14 +251,14 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	outPath, err := safeBackupPath(dir, name)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Недопустимое имя файла"
+		data.Error = tr(lang, "Недопустимое имя файла")
 		renderCfg(w, r, data)
 		return
 	}
 	f, err := os.Create(outPath)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка сохранения: " + err.Error()
+		data.Error = tr(lang, "Ошибка сохранения") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
 	}
@@ -265,7 +268,7 @@ func (h *handler) backupUpload(w http.ResponseWriter, r *http.Request) {
 	data := h.loadCfgData(r.Context(), b, "backup")
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = "panel-backup"
-	data.BackupMessage = "Файл загружен: " + name
+	data.BackupMessage = tr(lang, "Файл загружен") + ": " + name
 	renderCfg(w, r, data)
 }
 
@@ -275,25 +278,26 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	lang := resolveLang(r)
 	file := chi.URLParam(r, "file")
 	dir := h.backupDir(b)
 	fp, err := safeBackupPath(dir, file)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Недопустимое имя файла"
+		data.Error = tr(lang, "Недопустимое имя файла")
 		renderCfg(w, r, data)
 		return
 	}
 	if _, err := os.Stat(fp); err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Файл не найден: " + file
+		data.Error = tr(lang, "Файл не найден") + ": " + file
 		renderCfg(w, r, data)
 		return
 	}
 
 	if err := checkBackupFileMismatch(b, file); err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = err.Error()
+		data.Error = errText(r, err)
 		renderCfg(w, r, data)
 		return
 	}
@@ -307,13 +311,13 @@ func (h *handler) backupRestore(w http.ResponseWriter, r *http.Request) {
 	restoreErr := restoreForBase(r.Context(), b, fp)
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if restoreErr != nil {
-		data.Error = "Ошибка восстановления: " + restoreErr.Error()
+		data.Error = tr(lang, "Ошибка восстановления") + ": " + restoreErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		msg := "База данных восстановлена из: " + file
+		msg := tr(lang, "База данных восстановлена из") + ": " + file
 		if wasRunning {
-			msg += ". База остановлена — запустите её заново для применения изменений."
+			msg += ". " + tr(lang, "База остановлена — запустите её заново для применения изменений.")
 		}
 		data.BackupMessage = msg
 	}
@@ -336,10 +340,12 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", "attachment; filename="+name)
 
+	lang := resolveLang(r)
+
 	if compatible {
 		db, cerr := OpenDB(r.Context(), b)
 		if cerr != nil {
-			http.Error(w, "DB connect error: "+cerr.Error(), 500)
+			http.Error(w, tr(lang, "Ошибка подключения к БД")+": "+errText(r, cerr), 500)
 			return
 		}
 		defer db.Close()
@@ -368,20 +374,20 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 
 	tmpDir, err := os.MkdirTemp("", "onebase-obz-dump-*")
 	if err != nil {
-		http.Error(w, "Temp dir error: "+err.Error(), 500)
+		http.Error(w, tr(lang, "Ошибка создания временной папки")+": "+errText(r, err), 500)
 		return
 	}
 	defer os.RemoveAll(tmpDir)
 
 	dumpPath, dumpErr := dumpForBase(r.Context(), b, tmpDir)
 	if dumpErr != nil {
-		http.Error(w, "Dump error: "+dumpErr.Error(), 500)
+		http.Error(w, tr(lang, "Ошибка выгрузки дампа")+": "+errText(r, dumpErr), 500)
 		return
 	}
 
 	dumpData, err := os.ReadFile(dumpPath)
 	if err != nil {
-		http.Error(w, "Read dump error: "+err.Error(), 500)
+		http.Error(w, tr(lang, "Ошибка чтения дампа")+": "+errText(r, err), 500)
 		return
 	}
 	dumpEntryName := "database.sql.gz"
@@ -452,10 +458,11 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lang := resolveLang(r)
 	file, _, err := r.FormFile("obz_file")
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка загрузки файла: " + err.Error()
+		data.Error = tr(lang, "Ошибка загрузки файла") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
 	}
@@ -464,7 +471,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	dtData, err := io.ReadAll(file)
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Ошибка чтения файла: " + err.Error()
+		data.Error = tr(lang, "Ошибка чтения файла") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
 	}
@@ -472,7 +479,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	reader, err := zip.NewReader(bytes.NewReader(dtData), int64(len(dtData)))
 	if err != nil {
 		data := h.loadCfgData(r.Context(), b, "backup")
-		data.Error = "Неверный формат файла .obz: " + err.Error()
+		data.Error = tr(lang, "Неверный формат файла .obz") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
 	}
@@ -523,7 +530,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 		}
 		if cerr != nil {
 			data := h.loadCfgData(r.Context(), b, "backup")
-			data.Error = "Ошибка подключения к БД: " + cerr.Error()
+			data.Error = tr(lang, "Ошибка подключения к БД") + ": " + cerr.Error()
 			renderCfg(w, r, data)
 			return
 		}
@@ -554,14 +561,14 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 
 		data := h.loadCfgData(r.Context(), b, "backup")
 		if importErr != nil {
-			data.Error = "Ошибка восстановления: " + importErr.Error()
+			data.Error = tr(lang, "Ошибка восстановления") + ": " + importErr.Error()
 		} else {
 			data.FieldsSaved = true
 			data.FieldsSavedEntity = "panel-backup"
-			msg := fmt.Sprintf("Полное восстановление выполнено: %d таблиц, %d файлов вложений",
+			msg := fmt.Sprintf(tr(lang, "Полное восстановление выполнено: %d таблиц, %d файлов вложений"),
 				len(report.Tables), report.Files)
 			if wasRunning {
-				msg += ". База остановлена — запустите её заново."
+				msg += ". " + tr(lang, "База остановлена — запустите её заново.")
 			}
 			data.BackupMessage = msg
 		}
@@ -617,7 +624,7 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 	if archiveDBType != "" && archiveDBType != targetDBType {
 		data := h.loadCfgData(r.Context(), b, "backup")
 		data.Error = fmt.Sprintf(
-			"Нельзя восстановить %s-бэкап в %s-базу (%s). Создайте новую базу с типом БД %s или используйте совместимый формат (.obz с галочкой).",
+			tr(lang, "Нельзя восстановить %s-бэкап в %s-базу (%s). Создайте новую базу с типом БД %s или используйте совместимый формат (.obz с галочкой)."),
 			archiveDBType, targetDBType, filepath.Base(r.FormValue("obz_file")), archiveDBType,
 		)
 		renderCfg(w, r, data)
@@ -674,15 +681,15 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 
 	data := h.loadCfgData(r.Context(), b, "backup")
 	if restoreErr != nil {
-		data.Error = "Ошибка восстановления БД: " + restoreErr.Error()
+		data.Error = tr(lang, "Ошибка восстановления БД") + ": " + restoreErr.Error()
 	} else if configErr != nil {
-		data.Error = "Ошибка импорта конфигурации: " + configErr.Error()
+		data.Error = tr(lang, "Ошибка импорта конфигурации") + ": " + configErr.Error()
 	} else {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = "panel-backup"
-		msg := "Полное восстановление выполнено: база данных + конфигурация"
+		msg := tr(lang, "Полное восстановление выполнено: база данных + конфигурация")
 		if wasRunning {
-			msg += ". База остановлена — запустите её заново для применения изменений."
+			msg += ". " + tr(lang, "База остановлена — запустите её заново для применения изменений.")
 		}
 		data.BackupMessage = msg
 	}

@@ -314,7 +314,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 		}
 	}
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, s.errText(r, err), 500)
 	}
 }
 
