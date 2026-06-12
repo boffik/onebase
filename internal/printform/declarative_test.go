@@ -1,8 +1,11 @@
 package printform
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/ivantit66/onebase/internal/sheet"
 )
 
 // buildSheetCtx — синтетический контекст: документ с одной ТЧ.
@@ -161,6 +164,59 @@ func TestBuildSheetDefaultSequence(t *testing.T) {
 	if ai == -1 || bi == -1 || ai > bi {
 		t.Fatalf("default sequence order wrong: alpha@%d beta@%d\n%s", ai, bi, text)
 	}
+}
+
+// TestBuildSheetEndToEnd: декларативный макет с page + per-side границами
+// рендерится в HTML и PDF без ошибок, кириллица попадает в HTML.
+func TestBuildSheetEndToEnd(t *testing.T) {
+	lt := &LayoutTemplate{
+		Name:     "УПД",
+		Document: "Реализация",
+		Page:     &sheet.PageSetup{Orientation: "landscape", Format: "A4", MarginsMM: sheet.Margins{Top: 5, Bottom: 5, Left: 8, Right: 8}},
+		Columns:  []LayoutColumn{{Width: "40mm"}, {Width: "auto"}},
+		Areas: []*LayoutArea{
+			{
+				Name: "Шапка",
+				Rows: []LayoutRow{
+					{Cells: []LayoutCell{
+						{Text: "Счёт № {{Номер}}", ColSpan: 2, Bold: true,
+							Borders: &CellBorders{Left: "thick", Top: "thick", Right: "thick", Bottom: "medium"}},
+					}},
+				},
+			},
+		},
+		Binding: &Binding{Sequence: []string{"Шапка"}},
+	}
+	ctx := &RenderContext{Document: map[string]any{"Номер": "42"}}
+
+	doc, err := BuildSheet(lt, ctx)
+	if err != nil {
+		t.Fatalf("BuildSheet: %v", err)
+	}
+	if doc.Page.Orientation != "landscape" {
+		t.Errorf("page orientation not applied: %+v", doc.Page)
+	}
+	html := doc.HTML(sheet.HTMLOptions{})
+	if !strings.Contains(html, "Счёт № 42") {
+		t.Errorf("HTML missing interpolated text: %s", html)
+	}
+	if !strings.Contains(html, "border-left:2px solid") {
+		t.Errorf("HTML missing per-side thick border")
+	}
+	pdf, err := doc.PDF(sheet.PDFOptions{Title: "УПД"})
+	if err != nil {
+		t.Fatalf("PDF: %v", err)
+	}
+	if !bytes.HasPrefix(pdf, []byte("%PDF")) {
+		t.Errorf("PDF output not a PDF (prefix=%q)", pdf[:min(8, len(pdf))])
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func TestBuildSheetColumnWidths(t *testing.T) {
