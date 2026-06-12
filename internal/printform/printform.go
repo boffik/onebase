@@ -1,7 +1,5 @@
 package printform
 
-import "html/template"
-
 // PrintForm describes a declarative print form loaded from YAML.
 type PrintForm struct {
 	Name     string        `yaml:"name"`
@@ -51,6 +49,3 @@ type RenderContext struct {
 	// контекст создаётся заново на каждый рендер, поэтому глобального состояния нет.
 	sumCache map[string]float64
 }
-
-// RenderedForm is the final HTML ready to be written to the response.
-type RenderedForm = template.HTML

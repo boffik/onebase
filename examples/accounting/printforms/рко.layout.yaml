@@ -1,0 +1,51 @@
+name: РКО
+document: РасходныйКассовыйОрдер
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Расходный кассовый ордер № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 1
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Организация: {{Организация.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Выдать: {{Контрагент.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Основание: {{Основание}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+    - name: Подвал
+      rows:
+        - cells:
+            - text: 'Сумма: {{Сумма | number:2}} руб.'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - colspan: 1
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Руководитель: _______________  Главный бухгалтер: _______________  Кассир: _______________'
+              colspan: 1
+        - cells:
+            - colspan: 1
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - Подвал

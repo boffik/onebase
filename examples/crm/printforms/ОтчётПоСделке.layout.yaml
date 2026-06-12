@@ -1,0 +1,139 @@
+name: ОтчётПоСделке
+document: Сделка
+columns:
+    - width: 40px
+    - {}
+    - {}
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Отчёт по сделке «{{Заголовок}}» № {{Номер}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 5
+    - name: Шапка
+      rows:
+        - cells:
+            - text: '{{Заголовок}}'
+              bold: true
+              fontSize: 14
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Клиент: {{Клиент.Наименование}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Ответственный: {{Ответственный.Наименование}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Стадия: {{Стадия.Наименование}} | Результат: {{Результат}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Сумма: {{Сумма | number:2}} руб. | Валюта: {{Валюта}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Вероятность: {{Вероятность}}%'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Ожидаемая дата: {{ОжидаемаяДата | date}} | Закрыта: {{ДатаЗакрытия | date}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Товар/услуга
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+            - text: Цена
+              bold: true
+              align: right
+              border: all
+            - text: Сумма
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+            - parameter: Кол4
+              align: right
+              border: all
+    - name: Итоги
+      rows:
+        - cells:
+            - border: all
+            - border: all
+            - border: all
+            - border: all
+            - text: 'Итого: {{Итог.ТоварыУслуги.Сумма | number:2}}'
+              bold: true
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 5
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Источник: {{Источник}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Описание: {{Описание}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Итоги
+        - Подвал
+    repeat:
+        - area: Строка
+          source: ТоварыУслуги
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура
+            Кол2: Количество
+            Кол3: Цена | number:2
+            Кол4: Сумма | number:2

@@ -190,10 +190,11 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	if err := extRepo.EnsureSchema(ctx); err != nil {
 		return fmt.Errorf("extform schema: %w", err)
 	}
-	if extForms, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
+	if extForms, extLayouts, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "external print forms:", err)
 	} else {
 		reg.SetExternalPrintForms(extForms)
+		reg.SetExternalLayoutForms(extLayouts)
 	}
 	extRepRepo := extform.NewReports(db)
 	if err := extRepRepo.EnsureSchema(ctx); err != nil {

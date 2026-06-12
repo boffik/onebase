@@ -1,0 +1,127 @@
+name: СчётПечать
+document: Счёт
+columns:
+    - width: 36px
+    - {}
+    - width: 70px
+    - width: 90px
+    - width: 100px
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Счёт № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 5
+    - name: Шапка
+      rows:
+        - cells:
+            - text: Счёт на оплату № {{Номер}} от {{Дата | date}}
+              bold: true
+              fontSize: 14
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Покупатель: {{Контрагент.Наименование}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - colspan: 5
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 5
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              align: center
+              border: all
+            - text: Наименование товара
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+            - text: Цена, руб.
+              bold: true
+              align: right
+              border: all
+            - text: Сумма, руб.
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              align: center
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+            - parameter: Кол4
+              align: right
+              border: all
+    - name: Итоги
+      rows:
+        - cells:
+            - border: all
+            - border: all
+            - border: all
+            - border: all
+            - text: 'Итого к оплате: {{Итог.Товары.Сумма | number:2}}'
+              bold: true
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 5
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Руководитель: _________________________ /________________________/'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Бухгалтер: _____________________________ /________________________/'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: МП
+              colspan: 5
+        - cells:
+            - colspan: 5
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Итоги
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Товары
+          parameters:
+            Кол0: '@row'
+            Кол1: Наименование
+            Кол2: Количество | number:0
+            Кол3: Цена | number:2
+            Кол4: Сумма | number:2

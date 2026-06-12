@@ -70,7 +70,8 @@ func (h *handler) configuratorCheckAll(w http.ResponseWriter, r *http.Request) {
 		defer cleanup()
 	}
 
-	issues := configcheck.CheckDir(dir)
+	dirIssues, dirWarnings := configcheck.CheckDir(dir)
+	issues := dirIssues
 
 	// project.Load surfaces cross-reference errors and gives a Project for
 	// query compilation. If file-level checks already failed it may fail too.
@@ -81,7 +82,7 @@ func (h *handler) configuratorCheckAll(w http.ResponseWriter, r *http.Request) {
 		issues = append(issues, configcheck.Issue{Message: "Project.Load: " + err.Error()})
 	}
 
-	writeJSON(w, http.StatusOK, configcheck.NewResult(issues))
+	writeJSON(w, http.StatusOK, configcheck.NewResult(issues, dirWarnings))
 }
 
 // materializeProject ensures the configuration is available as a directory tree

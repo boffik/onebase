@@ -35,9 +35,9 @@ type Parsed struct {
 //   - бандл *.obform с секциями manifest/form (для переноса между базами);
 //   - «голый» YAML печатной формы (как в printforms/*.yaml).
 //
-// В обоих случаях возвращает Content — «голый» YAML формы, который и
-// рендерится существующим printform.RenderPDF/RenderWithPDFURL. Имя и документ
-// берутся из самой формы, с откатом на manifest.
+// В обоих случаях возвращает Content — «голый» YAML формы, который при загрузке
+// конвертируется в макет v2 (ConvertLegacy) и рендерится декларативным движком.
+// Имя и документ берутся из самой формы, с откатом на manifest.
 func ParseUpload(data []byte) (*Parsed, error) {
 	var bd struct {
 		Manifest *Manifest `yaml:"manifest"`

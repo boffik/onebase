@@ -43,7 +43,9 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	}
 	defer bc.Cleanup()
 
-	issues := configcheck.CheckDir(bc.Dir)
+	dirIssues, dirWarnings := configcheck.CheckDir(bc.Dir)
+	issues := dirIssues
+	warnings := dirWarnings
 	// project.Load даёт кросс-ссылочные ошибки и Project для компиляции запросов.
 	if proj, lerr := project.Load(bc.Dir); lerr == nil {
 		issues = append(issues, configcheck.CheckQueries(proj)...)
@@ -74,7 +76,7 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	} else if !configcheck.AlreadyReported(issues, lerr.Error()) {
 		issues = append(issues, configcheck.Issue{Message: "Project.Load: " + lerr.Error()})
 	}
-	res := configcheck.NewResult(issues)
+	res := configcheck.NewResult(issues, warnings)
 
 	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
 		enc := json.NewEncoder(os.Stdout)
@@ -133,23 +135,36 @@ func buildSchemaDB(proj *project.Project) (*storage.DB, func(), error) {
 }
 
 func printIssuesText(res configcheck.Result) {
+	printIssueList := func(list []configcheck.Issue) {
+		for _, is := range list {
+			loc := is.File
+			if loc == "" {
+				loc = "(конфигурация)"
+			}
+			if is.Line > 0 {
+				loc = fmt.Sprintf("%s:%d:%d", loc, is.Line, is.Column)
+			}
+			prefix := ""
+			if is.Kind != "" {
+				prefix = "[" + is.Kind + "] "
+			}
+			fmt.Fprintf(os.Stdout, "%s: %s%s\n", loc, prefix, is.Message)
+		}
+	}
+
+	if len(res.Warnings) > 0 {
+		fmt.Fprintf(os.Stdout, "Предупреждения:\n")
+		printIssueList(res.Warnings)
+	}
+
 	if res.OK {
-		fmt.Fprintln(os.Stdout, "OK: ошибок не найдено")
+		if len(res.Warnings) > 0 {
+			fmt.Fprintf(os.Stdout, "OK: ошибок не найдено (%d предупреждений)\n", len(res.Warnings))
+		} else {
+			fmt.Fprintln(os.Stdout, "OK: ошибок не найдено")
+		}
 		return
 	}
-	for _, is := range res.Issues {
-		loc := is.File
-		if loc == "" {
-			loc = "(конфигурация)"
-		}
-		if is.Line > 0 {
-			loc = fmt.Sprintf("%s:%d:%d", loc, is.Line, is.Column)
-		}
-		prefix := ""
-		if is.Kind != "" {
-			prefix = "[" + is.Kind + "] "
-		}
-		fmt.Fprintf(os.Stdout, "%s: %s%s\n", loc, prefix, is.Message)
-	}
+	printIssueList(res.Issues)
 	fmt.Fprintf(os.Stderr, "\nНайдено ошибок: %d\n", res.Total)
 }

@@ -1196,24 +1196,35 @@ function runCheckAll() {
         body.innerHTML = '<div class="check-row check-err">⚠ ' + d.error + '</div>';
         return;
       }
-      if (d.ok) {
-        body.innerHTML = '<div class="check-row check-ok"><b>✓ Конфигурация корректна</b><br>Ошибок не найдено.</div>';
-        return;
-      }
-      var html = '<div class="check-row check-err" style="font-weight:600">Найдено ошибок: ' + d.total + '</div>';
-      (d.issues || []).forEach(function(i){
-        html += '<div class="check-row">';
+      var renderIssueRow = function(i, isWarn) {
+        var html = '<div class="check-row">';
         if (i.kind || i.object) {
           html += '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em">' +
                   (i.kind || '') + (i.object ? ' · ' + i.object : '') + '</div>';
         }
-        html += '<div style="color:#c00">' + escapeHtml(i.message) + '</div>';
+        var color = isWarn ? '#92400e' : '#c00';
+        var prefix = isWarn ? '[предупреждение] ' : '';
+        html += '<div style="color:' + color + '">' + prefix + escapeHtml(i.message) + '</div>';
         if (i.file) {
           html += '<div style="font-size:10px;color:#aaa;font-family:Consolas,monospace">' + i.file +
                   (i.line ? ':' + i.line : '') + '</div>';
         }
         html += '</div>';
-      });
+        return html;
+      };
+      if (d.ok) {
+        var warnCount = (d.warnings || []).length;
+        var okMsg = warnCount > 0
+          ? '<b>✓ Конфигурация корректна</b><br>Ошибок не найдено (' + warnCount + ' предупреждений).'
+          : '<b>✓ Конфигурация корректна</b><br>Ошибок не найдено.';
+        var warnHtml = '';
+        (d.warnings || []).forEach(function(i){ warnHtml += renderIssueRow(i, true); });
+        body.innerHTML = '<div class="check-row check-ok">' + okMsg + '</div>' + warnHtml;
+        return;
+      }
+      var html = '<div class="check-row check-err" style="font-weight:600">Найдено ошибок: ' + d.total + '</div>';
+      (d.issues || []).forEach(function(i){ html += renderIssueRow(i, false); });
+      (d.warnings || []).forEach(function(i){ html += renderIssueRow(i, true); });
       body.innerHTML = html;
     })
     .catch(function(e){

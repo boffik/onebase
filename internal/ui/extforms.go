@@ -165,12 +165,13 @@ func (s *Server) adminExtFormExport(w http.ResponseWriter, r *http.Request) {
 // reloadExtForms перечитывает включённые внешние формы из БД и обновляет
 // реестр, чтобы изменения сразу попадали в меню печати.
 func (s *Server) reloadExtForms(ctx context.Context) {
-	forms, err := s.extforms.LoadEnabledPrintForms(ctx)
+	forms, layouts, err := s.extforms.LoadEnabledPrintForms(ctx)
 	if err != nil {
 		fmt.Println("extform reload:", err)
 		return
 	}
 	s.reg.SetExternalPrintForms(forms)
+	s.reg.SetExternalLayoutForms(layouts)
 }
 
 func (s *Server) auditExtForm(r *http.Request, action string, rec *extform.Record) {

@@ -1,0 +1,56 @@
+name: АктПеревода
+document: Перевод
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Акт перевода № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 1
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Со счёта: {{СчётОтправитель.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'На счёт: {{СчётПолучатель.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Сумма перевода: {{Сумма | number:2}} руб.'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Комиссия: {{Комиссия | number:2}} руб.'
+              colspan: 1
+        - cells:
+            - colspan: 1
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 1
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Итого списано: {{Сумма + Комиссия | number:2}} руб.'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Описание: {{Описание}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - Подвал

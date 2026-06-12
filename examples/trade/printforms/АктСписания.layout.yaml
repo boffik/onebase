@@ -1,0 +1,97 @@
+name: АктСписания
+document: СписаниеТоваров
+columns:
+    - width: 40px
+    - {}
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Акт списания № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 4
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Склад: {{Склад.Наименование}}'
+              colspan: 4
+        - cells:
+            - colspan: 4
+        - cells:
+            - text: 'Причина: {{ПричинаСписания}}'
+              colspan: 4
+        - cells:
+            - colspan: 4
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Наименование
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+            - text: Себестоимость
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+    - name: Итоги
+      rows:
+        - cells:
+            - border: all
+            - border: all
+            - border: all
+            - text: 'Итого: {{Итог.Товары.Себестоимость | number:2}}'
+              bold: true
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 4
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 4
+        - cells:
+            - text: 'Члены комиссии: _________________________'
+              colspan: 4
+        - cells:
+            - colspan: 4
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Итоги
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Товары
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура.Наименование
+            Кол2: Количество
+            Кол3: Себестоимость | number:2

@@ -1,0 +1,88 @@
+name: КарточкаКлиента
+document: Клиент
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: 'Карточка клиента: {{Наименование}}'
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 1
+    - name: Шапка
+      rows:
+        - cells:
+            - text: '{{Наименование}}'
+              bold: true
+              fontSize: 14
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Тип: {{ТипКлиента}} | Статус: {{Статус}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'ИНН: {{ИНН}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Телефон: {{Телефон}} | Мобильный: {{МобильныйТелефон}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Email: {{Email}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Сайт: {{Сайт}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Источник: {{ИсточникКлиента}} | Отрасль: {{Отрасль}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Ответственный: {{Ответственный.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Дата регистрации: {{ДатаРегистрации | date}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 1
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Юридический адрес: {{ЮридическийАдрес}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Фактический адрес: {{ФактическийАдрес}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Комментарий: {{Комментарий}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - Подвал

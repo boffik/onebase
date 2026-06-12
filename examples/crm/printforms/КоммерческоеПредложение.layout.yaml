@@ -1,0 +1,148 @@
+name: КоммерческоеПредложение
+document: КоммерческоеПредложение
+columns:
+    - width: 40px
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Коммерческое предложение № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 6
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Клиент: {{Клиент.Наименование}}'
+              colspan: 6
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: 'Контактное лицо: {{КонтактноеЛицо.Наименование}}'
+              colspan: 6
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: 'Ответственный: {{Ответственный.Наименование}}'
+              colspan: 6
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: 'Действительно до: {{ДатаДействияДо | date}}'
+              colspan: 6
+        - cells:
+            - colspan: 6
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Наименование
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+            - text: Цена
+              bold: true
+              align: right
+              border: all
+            - text: Скидка, %
+              bold: true
+              align: right
+              border: all
+            - text: Сумма
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+            - parameter: Кол4
+              align: right
+              border: all
+            - parameter: Кол5
+              align: right
+              border: all
+    - name: Итоги
+      rows:
+        - cells:
+            - border: all
+            - border: all
+            - border: all
+            - border: all
+            - border: all
+            - text: 'Итого: {{Итог.Строки.Сумма | number:2}}'
+              bold: true
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 6
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: 'Сумма без скидки: {{СуммаБезСкидки | number:2}} руб.'
+              colspan: 6
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: 'Скидка: {{Скидка}}%'
+              colspan: 6
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: 'Итого со скидкой: {{СуммаСоСкидкой | number:2}} руб.'
+              colspan: 6
+        - cells:
+            - colspan: 6
+        - cells:
+            - colspan: 6
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 6
+        - cells:
+            - text: С уважением, {{Ответственный.Наименование}}
+              colspan: 6
+        - cells:
+            - colspan: 6
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Итоги
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Строки
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура
+            Кол2: Количество
+            Кол3: Цена | number:2
+            Кол4: Скидка
+            Кол5: Сумма | number:2

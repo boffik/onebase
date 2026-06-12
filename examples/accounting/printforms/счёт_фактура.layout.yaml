@@ -1,0 +1,139 @@
+name: СчётФактура
+document: РеализацияТоваров
+columns:
+    - width: 40px
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Счёт-фактура № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 7
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Продавец: {{Организация.Наименование}}'
+              colspan: 7
+        - cells:
+            - colspan: 7
+        - cells:
+            - text: 'Покупатель: {{Покупатель.Наименование}}'
+              colspan: 7
+        - cells:
+            - colspan: 7
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Наименование товара
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+            - text: Цена
+              bold: true
+              align: right
+              border: all
+            - text: Стоимость без НДС
+              bold: true
+              align: right
+              border: all
+            - text: Ставка НДС
+              bold: true
+              border: all
+            - text: Сумма НДС
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+            - parameter: Кол4
+              align: right
+              border: all
+            - parameter: Кол5
+              border: all
+            - parameter: Кол6
+              align: right
+              border: all
+    - name: Итоги
+      rows:
+        - cells:
+            - border: all
+            - border: all
+            - border: all
+            - border: all
+            - text: 'Итого: {{Итог.Товары.Сумма | number:2}}'
+              bold: true
+              align: right
+              border: all
+            - border: all
+            - text: 'Всего НДС: {{Итог.Товары.НДС | number:2}}'
+              bold: true
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 7
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 7
+        - cells:
+            - text: 'Всего к оплате: {{СуммаДокумента | number:2}} руб., в т.ч. НДС: {{НДС | number:2}} руб.'
+              colspan: 7
+        - cells:
+            - colspan: 7
+        - cells:
+            - colspan: 7
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 7
+        - cells:
+            - text: 'Руководитель: _______________  Главный бухгалтер: _______________'
+              colspan: 7
+        - cells:
+            - colspan: 7
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Итоги
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Товары
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура.Наименование
+            Кол2: Количество
+            Кол3: Цена | number:2
+            Кол4: Сумма | number:2
+            Кол5: СтавкаНДС
+            Кол6: НДС | number:2

@@ -40,22 +40,30 @@ type Issue struct {
 }
 
 // Result is the machine-readable check outcome: ok=true means clean.
+// Warnings are informational notices that do NOT affect OK or exit code.
 type Result struct {
-	OK     bool    `json:"ok"`
-	Total  int     `json:"total"`
-	Issues []Issue `json:"issues,omitempty"`
+	OK       bool    `json:"ok"`
+	Total    int     `json:"total"`
+	Issues   []Issue `json:"issues,omitempty"`
+	Warnings []Issue `json:"warnings,omitempty"`
 }
 
-// NewResult wraps a slice of issues into a Result (sets OK/Total).
-func NewResult(issues []Issue) Result {
-	return Result{OK: len(issues) == 0, Total: len(issues), Issues: issues}
+// NewResult wraps a slice of issues and warnings into a Result.
+// OK is determined solely by len(issues) == 0; warnings never set OK=false.
+func NewResult(issues []Issue, warnings ...[]Issue) Result {
+	var ws []Issue
+	for _, w := range warnings {
+		ws = append(ws, w...)
+	}
+	return Result{OK: len(issues) == 0, Total: len(issues), Issues: issues, Warnings: ws}
 }
 
 // CheckDir walks the configuration sources under dir so each broken file is
 // reported individually instead of aborting on the first error (which is what
 // project.Load would do). Covers YAML metadata + .os DSL files.
-func CheckDir(dir string) []Issue {
-	var issues []Issue
+// Returns (issues, warnings): issues cause check to fail; warnings are
+// informational and do not affect the exit code.
+func CheckDir(dir string) (issues, warnings []Issue) {
 
 	type yamlGroup struct {
 		subdir string
@@ -124,14 +132,16 @@ func CheckDir(dir string) []Issue {
 		}
 	}
 
-	// printforms/*.yaml — валидность + предупреждение о пустой форме. yaml.v3 молча
-	// игнорирует неизвестные ключи, поэтому форма в выдуманном формате (напр.
-	// «layout:» вместо header/table/footer) парсится без ошибки, но выводится
-	// пустой. Сообщаем явно: ни заголовка, ни шапки, ни таблицы, ни подвала.
+	// printforms/*.yaml — устаревший плоский формат печатных форм. Валидность +
+	// предупреждение о пустой форме + предупреждение о необходимости миграции в
+	// макет v2. Файлы *.layout.yaml (макет v2) сюда НЕ попадают — они проверяются
+	// валидатором binding в cross_refs (CheckCrossRefs). yaml.v3 молча игнорирует
+	// неизвестные ключи, поэтому пустую legacy-форму отлавливаем явно.
 	pfDir := filepath.Join(dir, "printforms")
 	pfEntries, _ := os.ReadDir(pfDir)
 	for _, e := range pfEntries {
-		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".yaml") {
+		lower := strings.ToLower(e.Name())
+		if e.IsDir() || !strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".layout.yaml") {
 			continue
 		}
 		path := filepath.Join(pfDir, e.Name())
@@ -149,7 +159,16 @@ func CheckDir(dir string) []Issue {
 				Kind:    "Печатная форма",
 				Message: "форма пустая: не заданы ни title, ни header, ни table, ни footer (проверьте формат — поддерживаются эти ключи, а не «layout»)",
 			})
+			continue
 		}
+		// Непустая legacy-форма валидна, но устарела — предупреждение о миграции в v2.
+		// Предупреждение не влияет на OK / exit code (план 64, этап 4).
+		warnings = append(warnings, Issue{
+			File:    label,
+			Object:  object,
+			Kind:    "Печатная форма",
+			Message: "устаревший формат печатной формы, выполните onebase printforms migrate",
+		})
 	}
 
 	// home_page.yaml — single file
@@ -198,7 +217,7 @@ func CheckDir(dir string) []Issue {
 		issues = append(issues, CheckDSLCallsKnown(m.prog, m.label, projProcs)...)
 	}
 
-	return issues
+	return issues, warnings
 }
 
 // CheckQueries compiles every query in widgets and reports. Compilation needs

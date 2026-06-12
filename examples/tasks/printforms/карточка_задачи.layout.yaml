@@ -1,0 +1,151 @@
+name: КарточкаЗадачи
+document: Задача
+columns:
+    - width: 40px
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Задача № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 3
+    - name: Шапка
+      rows:
+        - cells:
+            - text: Задача № {{Номер}} от {{Дата | date}}
+              bold: true
+              fontSize: 14
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Заголовок: {{Заголовок}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Проект: {{Проект.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Тип: {{ТипЗадачи}} | Приоритет: {{Приоритет}} | Статус: {{Статус}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - colspan: 3
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Исполнитель: {{Исполнитель.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Автор: {{Автор.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Срок: {{Срок | date}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Оценка: {{Оценка}} ч. | Story points: {{Сложность}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Прогресс: {{Прогресс}}%'
+              colspan: 3
+        - cells:
+            - colspan: 3
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Подзадача
+              bold: true
+              border: all
+            - text: Статус
+              bold: true
+              align: center
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: center
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 3
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: '### Описание'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: '{{Описание}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - colspan: 3
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Затрачено времени: {{ЗатраченноеВремя}} ч.'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Спринт: {{Спринт.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Веха: {{Веха.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Комментарий: {{Комментарий}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Подзадачи
+          parameters:
+            Кол0: '@row'
+            Кол1: Задача.Заголовок
+            Кол2: Статус

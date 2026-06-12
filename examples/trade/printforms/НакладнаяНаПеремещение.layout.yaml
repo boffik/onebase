@@ -1,0 +1,77 @@
+name: НакладнаяНаПеремещение
+document: ПеремещениеТоваров
+columns:
+    - width: 40px
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Накладная на перемещение № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 3
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Со склада: {{СкладОтправитель.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'На склад: {{СкладПолучатель.Наименование}}'
+              colspan: 3
+        - cells:
+            - colspan: 3
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Наименование
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 3
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 3
+        - cells:
+            - text: 'Сдал: _________________________ Принял: _________________________'
+              colspan: 3
+        - cells:
+            - colspan: 3
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Товары
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура.Наименование
+            Кол2: Количество

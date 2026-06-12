@@ -1,0 +1,118 @@
+name: ПриходнаяНакладная
+document: ПоступлениеТоваров
+columns:
+    - width: 40px
+    - {}
+    - {}
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Приходная накладная № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 5
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Поставщик: {{Поставщик.Наименование}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Склад: {{Склад.Наименование}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Наименование
+              bold: true
+              border: all
+            - text: Кол-во
+              bold: true
+              align: right
+              border: all
+            - text: Цена
+              bold: true
+              align: right
+              border: all
+            - text: Сумма
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+            - parameter: Кол4
+              align: right
+              border: all
+    - name: Итоги
+      rows:
+        - cells:
+            - border: all
+            - border: all
+            - border: all
+            - border: all
+            - text: 'Итого: {{Итог.Товары.Сумма | number:2}}'
+              bold: true
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 5
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Всего: {{Сумма | number:2}} руб., в т.ч. НДС: {{СуммаНДС | number:2}} руб.'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - colspan: 5
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Сдал: _________________________ Принял: _________________________'
+              colspan: 5
+        - cells:
+            - colspan: 5
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Итоги
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Товары
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура.Наименование
+            Кол2: Количество
+            Кол3: Цена | number:2
+            Кол4: Сумма | number:2

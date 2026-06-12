@@ -28,6 +28,7 @@ type Registry struct {
 	extPrintForms   map[string][]*printform.PrintForm   // lowercase entity name → внешние формы (из БД)
 	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
 	layoutForms     map[string][]*printform.LayoutForm  // lowercase entity name → декларативные формы (.layout.yaml)
+	extLayoutForms  map[string][]*printform.LayoutForm  // lowercase entity name → внешние v2-формы (из БД)
 	procs           map[string]map[string]*ast.ProcedureDecl
 	extProcs        map[string]map[string]*ast.ProcedureDecl // код внешних обработок (из БД), ключ — имя обработки
 	managerProcs    map[string]map[string]*ast.ProcedureDecl // lowercase entity → procs модуля менеджера
@@ -64,6 +65,7 @@ func NewRegistry() *Registry {
 		extPrintForms:   make(map[string][]*printform.PrintForm),
 		dslPrintForms:   make(map[string][]*printform.DSLPrintForm),
 		layoutForms:     make(map[string][]*printform.LayoutForm),
+		extLayoutForms:  make(map[string][]*printform.LayoutForm),
 		procs:           make(map[string]map[string]*ast.ProcedureDecl),
 		managerProcs:    make(map[string]map[string]*ast.ProcedureDecl),
 		moduleProcs:     make(map[string]*ast.ProcedureDecl),
@@ -293,6 +295,22 @@ func (r *Registry) SetExternalPrintForms(forms []*printform.PrintForm) {
 	r.extPrintForms = m
 }
 
+// SetExternalLayoutForms атомарно заменяет набор внешних декларативных форм
+// (макет v2 из БД — см. extform.LoadEnabledPrintForms сниффинг). Хранится
+// отдельно от layoutForms, поэтому reload конфигурации внешние формы не затирает.
+// В GetAllPrintForms они отдаются как Kind=Declarative, External=true и имеют
+// приоритет ниже одноимённых форм конфигурации.
+func (r *Registry) SetExternalLayoutForms(forms []*printform.LayoutForm) {
+	m := make(map[string][]*printform.LayoutForm)
+	for _, f := range forms {
+		key := strings.ToLower(f.Document)
+		m[key] = append(m[key], f)
+	}
+	r.mu.Lock()
+	r.extLayoutForms = m
+	r.mu.Unlock()
+}
+
 // LoadDSLPrintForms registers DSL (.os) print forms indexed by entity name.
 // при коллизии «один и тот же name для одного и того же
 // document» с YAML-формой .os перебивает YAML, а YAML удаляется из реестра.
@@ -468,7 +486,7 @@ func (r *Registry) GetAllPrintForms(entityName string) []PrintFormRef {
 			continue
 		}
 		seen[ln] = true
-		refs = append(refs, PrintFormRef{Name: yf.Name, Document: yf.Document, Kind: PrintFormLegacy, Legacy: yf})
+		refs = append(refs, legacyRef(yf, false))
 	}
 	for _, ef := range r.extPrintForms[key] {
 		ln := strings.ToLower(ef.Name)
@@ -476,9 +494,44 @@ func (r *Registry) GetAllPrintForms(entityName string) []PrintFormRef {
 			continue
 		}
 		seen[ln] = true
-		refs = append(refs, PrintFormRef{Name: ef.Name, Document: ef.Document, Kind: PrintFormLegacy, External: true, Legacy: ef})
+		refs = append(refs, legacyRef(ef, true))
+	}
+	// Внешние v2-формы (декларативный макет из БД) — приоритет ниже форм
+	// конфигурации, отдаются как Declarative с пометкой External.
+	for _, lf := range r.extLayoutForms[key] {
+		ln := strings.ToLower(lf.Name)
+		if seen[ln] {
+			continue
+		}
+		seen[ln] = true
+		refs = append(refs, PrintFormRef{Name: lf.Name, Document: lf.Document, Kind: PrintFormDeclarative, External: true, Decl: lf})
 	}
 	return refs
+}
+
+// legacyRef строит PrintFormRef для legacy YAML-формы, СРАЗУ конвертируя её в
+// макет v2 (план 64, этап 4): Decl несёт результат ConvertLegacy, по которому
+// рендерит декларативный движок (BuildSheet). Поле Legacy сохраняется для
+// справки (имя/документ/External) и валидации. При сбое конверсии Decl остаётся
+// nil — обработчик отдаст 500 с понятной ошибкой, а не упадёт.
+func legacyRef(pf *printform.PrintForm, external bool) PrintFormRef {
+	ref := PrintFormRef{
+		Name:     pf.Name,
+		Document: pf.Document,
+		Kind:     PrintFormLegacy,
+		External: external,
+		Legacy:   pf,
+	}
+	if lt, err := printform.ConvertLegacy(pf); err == nil {
+		ref.Decl = &printform.LayoutForm{
+			Name:     pf.Name,
+			Document: pf.Document,
+			Layout:   lt,
+		}
+	} else {
+		log.Printf("warning: конвертация legacy печатной формы %q (%s) не удалась: %v", pf.Name, pf.Document, err)
+	}
+	return ref
 }
 
 // GetPrintFormRef ищет печатную форму сущности по имени (case-insensitive),

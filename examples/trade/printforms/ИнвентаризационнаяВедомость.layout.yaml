@@ -1,0 +1,95 @@
+name: ИнвентаризационнаяВедомость
+document: Инвентаризация
+columns:
+    - width: 40px
+    - {}
+    - {}
+    - {}
+    - {}
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Инвентаризационная ведомость № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 5
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Склад: {{Склад.Наименование}}'
+              colspan: 5
+        - cells:
+            - colspan: 5
+    - name: ШапкаТаблицы
+      rows:
+        - cells:
+            - text: №
+              bold: true
+              border: all
+            - text: Наименование
+              bold: true
+              border: all
+            - text: По учёту
+              bold: true
+              align: right
+              border: all
+            - text: Фактически
+              bold: true
+              align: right
+              border: all
+            - text: Отклонение
+              bold: true
+              align: right
+              border: all
+    - name: Строка
+      rows:
+        - cells:
+            - parameter: Кол0
+              border: all
+            - parameter: Кол1
+              border: all
+            - parameter: Кол2
+              align: right
+              border: all
+            - parameter: Кол3
+              align: right
+              border: all
+            - parameter: Кол4
+              align: right
+              border: all
+    - name: Подвал
+      rows:
+        - cells:
+            - colspan: 5
+              borders:
+                bottom: thin
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Председатель комиссии: _________________________'
+              colspan: 5
+        - cells:
+            - colspan: 5
+        - cells:
+            - text: 'Члены комиссии: _________________________'
+              colspan: 5
+        - cells:
+            - colspan: 5
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - ШапкаТаблицы
+        - Строка
+        - Подвал
+    repeat:
+        - area: Строка
+          source: Товары
+          parameters:
+            Кол0: '@row'
+            Кол1: Номенклатура.Наименование
+            Кол2: КоличествоУчётное
+            Кол3: КоличествоФактическое
+            Кол4: Отклонение

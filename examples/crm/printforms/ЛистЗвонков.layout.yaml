@@ -1,0 +1,55 @@
+name: ЛистЗвонков
+document: Звонок
+areas:
+    - name: Заголовок
+      rows:
+        - cells:
+            - text: Звонок № {{Номер}} от {{Дата | date}}
+              bold: true
+              align: center
+              fontSize: 14
+              colspan: 1
+    - name: Шапка
+      rows:
+        - cells:
+            - text: 'Клиент: {{Клиент.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Контактное лицо: {{КонтактноеЛицо.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Ответственный: {{Ответственный.Наименование}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Направление: {{Направление}} | Длительность: {{ДлительностьМинут}} мин.'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Связанная сделка: {{Сделка.Заголовок}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+    - name: Подвал
+      rows:
+        - cells:
+            - text: 'Результат звонка: {{Результат}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+        - cells:
+            - text: 'Описание: {{Описание}}'
+              colspan: 1
+        - cells:
+            - colspan: 1
+binding:
+    sequence:
+        - Заголовок
+        - Шапка
+        - Подвал

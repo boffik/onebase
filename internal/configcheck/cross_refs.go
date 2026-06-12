@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/project"
 )
 
@@ -187,6 +188,11 @@ func CheckCrossRefs(proj *project.Project, roles []*auth.Role) []Issue {
 		}
 	}
 
+	// Печатные формы v2 (макеты .layout.yaml) — валидация binding.
+	for _, lf := range proj.LayoutForms {
+		issues = append(issues, checkLayoutForm(lf, docs, cats, entityByName)...)
+	}
+
 	// Регистры бухгалтерии → типы субконто ссылаются на существующие сущности.
 	// Ловит опечатки вида reference:НесуществующийСправочник в блоке subconto,
 	// которые иначе всплыли бы только при проведении (no such column / битый JOIN).
@@ -321,6 +327,204 @@ func tpFieldExists(field string, tp *metadata.TablePart) bool {
 		}
 	}
 	return false
+}
+
+// checkLayoutForm валидирует binding декларативной печатной формы v2 (макет
+// .layout.yaml). Проверяет: существование документа-источника; имена областей в
+// sequence/repeat/repeat_header присутствуют в areas; источник repeat — реальная
+// ТЧ сущности; выражения параметров ссылаются на существующие поля (насколько
+// позволяет инфраструктура — root проверяется в нужном контексте); ячейка-
+// параметр без записи в binding и без одноимённого поля — предупреждение.
+func checkLayoutForm(lf *printform.LayoutForm, docs, cats nameSet, entityByName map[string]*metadata.Entity) []Issue {
+	var issues []Issue
+	if lf == nil || lf.Layout == nil {
+		return nil
+	}
+	lt := lf.Layout
+	label := "printforms/" + lf.Name + ".layout.yaml"
+	add := func(msg string) {
+		issues = append(issues, Issue{File: label, Object: lf.Name, Kind: "Печатная форма", Message: msg})
+	}
+
+	// «general» — сводные формы без привязки к сущности: контекст не проверяем.
+	if strings.EqualFold(lt.Document, "general") {
+		return issues
+	}
+
+	// Документ-источник существует.
+	var entity *metadata.Entity
+	if lt.Document != "" {
+		entity = entityByName[strings.ToLower(lt.Document)]
+		if !docs.has(lt.Document) && !cats.has(lt.Document) {
+			add(fmt.Sprintf("источник %q не найден среди документов и справочников", lt.Document))
+		}
+	}
+
+	// Множество имён областей.
+	areaNames := nameSet{}
+	for _, a := range lt.Areas {
+		areaNames.add(a.Name)
+	}
+
+	binding := lt.Binding
+	if binding == nil {
+		return issues
+	}
+
+	// sequence → область существует.
+	for _, name := range binding.Sequence {
+		if !areaNames.has(name) {
+			add(fmt.Sprintf("в sequence указана несуществующая область %q", name))
+		}
+	}
+	// repeat_header → область существует.
+	if binding.RepeatHeader != "" && !areaNames.has(binding.RepeatHeader) {
+		add(fmt.Sprintf("repeat_header ссылается на несуществующую область %q", binding.RepeatHeader))
+	}
+
+	// repeat → область + источник-ТЧ существуют; параметры резолвятся в поля ТЧ.
+	repeatByArea := map[string]*printform.RepeatBinding{}
+	for i := range binding.Repeat {
+		rb := &binding.Repeat[i]
+		if !areaNames.has(rb.Area) {
+			add(fmt.Sprintf("repeat ссылается на несуществующую область %q", rb.Area))
+		}
+		repeatByArea[strings.ToLower(rb.Area)] = rb
+
+		var tp *metadata.TablePart
+		if entity != nil && rb.Source != "" {
+			tp = findTablePart(entity, rb.Source)
+			if tp == nil {
+				add(fmt.Sprintf("repeat области %q: табличная часть %q не найдена в %q", rb.Area, rb.Source, lt.Document))
+			}
+		}
+		// Параметры repeat — root-поле в ТЧ (или @row/Итог/Константы/ссылка).
+		for _, expr := range rb.Parameters {
+			if tp != nil {
+				if bad := badExprForTP(expr, tp); bad != "" {
+					add(fmt.Sprintf("repeat области %q: параметр-выражение ссылается на несуществующее поле %q табличной части %q", rb.Area, bad, rb.Source))
+				}
+			}
+		}
+	}
+
+	// Параметры контекста документа (binding.parameters) — root-поле в сущности.
+	for _, expr := range binding.Parameters {
+		if entity != nil {
+			if bad := badExprForEntity(expr, entity); bad != "" {
+				add(fmt.Sprintf("параметр-выражение ссылается на несуществующее поле %q документа %q", bad, lt.Document))
+			}
+		}
+	}
+
+	// Ячейки-параметры без записи в binding и без одноимённого поля — сирота.
+	for _, area := range lt.Areas {
+		rb := repeatByArea[strings.ToLower(area.Name)]
+		for _, row := range area.Rows {
+			for _, cell := range row.Cells {
+				if cell.Parameter == "" {
+					continue
+				}
+				if layoutParamBound(cell.Parameter, rb, binding, entity) {
+					continue
+				}
+				add(fmt.Sprintf("область %q: ячейка-параметр %q не имеет записи в binding и не совпадает с полем — останется пустой", area.Name, cell.Parameter))
+			}
+		}
+	}
+
+	return issues
+}
+
+// layoutParamBound сообщает, привязан ли именованный параметр ячейки: есть запись
+// в repeat.parameters (для repeat-области) либо в binding.parameters, либо имя
+// совпадает с полем сущности (автопривязка по одноимённому полю).
+func layoutParamBound(name string, rb *printform.RepeatBinding, binding *printform.Binding, entity *metadata.Entity) bool {
+	if rb != nil && hasParamKey(rb.Parameters, name) {
+		return true
+	}
+	if binding != nil && hasParamKey(binding.Parameters, name) {
+		return true
+	}
+	if entity != nil && fieldInEntity(entity, name) {
+		return true
+	}
+	return false
+}
+
+// hasParamKey ищет ключ параметра регистронезависимо.
+func hasParamKey(params map[string]string, name string) bool {
+	if params == nil {
+		return false
+	}
+	if _, ok := params[name]; ok {
+		return true
+	}
+	for k := range params {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// findTablePart ищет ТЧ сущности по имени (регистронезависимо).
+func findTablePart(e *metadata.Entity, name string) *metadata.TablePart {
+	for i := range e.TableParts {
+		if strings.EqualFold(e.TableParts[i].Name, name) {
+			return &e.TableParts[i]
+		}
+	}
+	return nil
+}
+
+// exprRoot выделяет корневое имя поля из выражения «поле[.подполе] | формат».
+// Возвращает ("", служебное) для @row/Итог.*/Константы.* — их не проверяем.
+func exprRoot(expr string) (root string, skip bool) {
+	expr = strings.TrimSpace(expr)
+	if i := strings.IndexByte(expr, '|'); i >= 0 {
+		expr = strings.TrimSpace(expr[:i])
+	}
+	if expr == "" || strings.HasPrefix(expr, "@") {
+		return "", true
+	}
+	low := strings.ToLower(expr)
+	if strings.HasPrefix(low, "итог.") || strings.HasPrefix(low, "константы.") {
+		return "", true
+	}
+	root = expr
+	if i := strings.IndexByte(root, '.'); i >= 0 {
+		root = root[:i]
+	}
+	return root, false
+}
+
+// badExprForTP возвращает корень выражения, если он НЕ резолвится в поле ТЧ
+// (иначе пустую строку). Служебные выражения (@row/Итог/Константы) валидны.
+func badExprForTP(expr string, tp *metadata.TablePart) string {
+	root, skip := exprRoot(expr)
+	if skip {
+		return ""
+	}
+	for i := range tp.Fields {
+		if strings.EqualFold(tp.Fields[i].Name, root) {
+			return ""
+		}
+	}
+	return root
+}
+
+// badExprForEntity возвращает корень выражения, если он НЕ резолвится в поле
+// сущности (иначе пустую строку). Служебные выражения валидны.
+func badExprForEntity(expr string, e *metadata.Entity) string {
+	root, skip := exprRoot(expr)
+	if skip {
+		return ""
+	}
+	if fieldInEntity(e, root) {
+		return ""
+	}
+	return root
 }
 
 // keys возвращает отсортированные ключи map прав (детерминированный порядок
