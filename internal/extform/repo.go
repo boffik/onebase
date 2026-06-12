@@ -164,17 +164,39 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// LoadEnabledPrintForms читает все включённые формы и парсит их в
-// printform.PrintForm для регистрации в реестре (reg.SetExternalPrintForms).
-// Записи с непарсящимся YAML пропускаются с предупреждением, чтобы одна
+// LoadEnabledPrintForms читает все включённые формы, сниффит формат содержимого
+// (план 64, этап 4) и разводит их по двум спискам:
+//   - legacy — устаревший плоский YAML (printform.PrintForm); конвертируется в
+//     макет v2 на загрузке в реестре (reg.SetExternalPrintForms → ConvertLegacy);
+//   - layout — декларативный макет v2 (printform.LayoutForm с top-level areas:);
+//     регистрируется как есть (reg.SetExternalLayoutForms).
+// Записи с непарсящимся содержимым пропускаются с предупреждением, чтобы одна
 // битая форма не валила загрузку остальных.
-func (r *Repo) LoadEnabledPrintForms(ctx context.Context) ([]*printform.PrintForm, error) {
+func (r *Repo) LoadEnabledPrintForms(ctx context.Context) ([]*printform.PrintForm, []*printform.LayoutForm, error) {
 	recs, err := r.ListEnabled(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var out []*printform.PrintForm
+	var legacy []*printform.PrintForm
+	var layout []*printform.LayoutForm
 	for _, rec := range recs {
+		if printform.IsLayoutV2(rec.Content) {
+			lt, err := printform.ParseLayoutBytes(rec.Content)
+			if err != nil {
+				fmt.Printf("extform: пропускаю v2-форму %s/%s: %v\n", rec.Document, rec.Name, err)
+				continue
+			}
+			name := lt.Name
+			if name == "" {
+				name = rec.Name
+			}
+			doc := lt.Document
+			if doc == "" {
+				doc = rec.Document
+			}
+			layout = append(layout, &printform.LayoutForm{Name: name, Document: doc, Layout: lt})
+			continue
+		}
 		pf, err := printform.ParseBytes(rec.Content)
 		if err != nil {
 			fmt.Printf("extform: пропускаю форму %s/%s: %v\n", rec.Document, rec.Name, err)
@@ -186,9 +208,9 @@ func (r *Repo) LoadEnabledPrintForms(ctx context.Context) ([]*printform.PrintFor
 		if pf.Document == "" {
 			pf.Document = rec.Document
 		}
-		out = append(out, pf)
+		legacy = append(legacy, pf)
 	}
-	return out, nil
+	return legacy, layout, nil
 }
 
 type rowScanner interface {

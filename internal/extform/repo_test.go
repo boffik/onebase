@@ -64,10 +64,13 @@ func TestRepo_CRUD(t *testing.T) {
 		t.Errorf("метаданные не сохранились: %+v", got)
 	}
 
-	// Включённые формы парсятся в PrintForm.
-	pfs, err := r.LoadEnabledPrintForms(ctx)
+	// Включённые legacy-формы парсятся в PrintForm; v2-форм здесь нет.
+	pfs, layouts, err := r.LoadEnabledPrintForms(ctx)
 	if err != nil || len(pfs) != 1 {
 		t.Fatalf("LoadEnabledPrintForms: got %d, err=%v", len(pfs), err)
+	}
+	if len(layouts) != 0 {
+		t.Errorf("v2-форм не ожидалось, got %d", len(layouts))
 	}
 	if pfs[0].Name != "Накладная-А4" || pfs[0].Title != "Расходная накладная" {
 		t.Errorf("форма распарсилась неверно: %+v", pfs[0])
@@ -95,6 +98,48 @@ func TestRepo_CRUD(t *testing.T) {
 	all, _ = r.List(ctx)
 	if len(all) != 0 {
 		t.Errorf("после Delete список должен быть пуст, got %d", len(all))
+	}
+}
+
+// Внешняя форма в формате макета v2 (top-level areas:) сниффится и попадает в
+// список layout-форм, а не legacy (план 64, этап 4.5).
+func TestRepo_LoadEnabledPrintForms_SniffsV2(t *testing.T) {
+	r, ctx := newRepo(t)
+	v2 := `name: НакладнаяV2
+document: Реализация
+areas:
+  - name: Заголовок
+    rows:
+      - cells:
+          - text: "Накладная № {{Номер}}"
+            colspan: 1
+binding:
+  sequence: [Заголовок]
+`
+	if err := r.Save(ctx, &Record{Document: "Реализация", Name: "НакладнаяV2", Content: []byte(v2)}); err != nil {
+		t.Fatal(err)
+	}
+	// плюс legacy-форма — должна попасть в другой список.
+	if err := r.Save(ctx, &Record{Document: "Реализация", Name: "Старая", Content: []byte(sampleForm)}); err != nil {
+		t.Fatal(err)
+	}
+
+	legacy, layouts, err := r.LoadEnabledPrintForms(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(layouts) != 1 {
+		t.Fatalf("ожидалась 1 v2-форма, got %d", len(layouts))
+	}
+	if layouts[0].Name != "НакладнаяV2" || layouts[0].Layout == nil {
+		t.Errorf("v2-форма распарсилась неверно: %+v", layouts[0])
+	}
+	if layouts[0].Layout.Area("Заголовок") == nil {
+		t.Error("в v2-форме потеряна область Заголовок")
+	}
+	// legacy-форма берёт имя из YAML (name: Накладная-А4), не из имени записи.
+	if len(legacy) != 1 || legacy[0].Name != "Накладная-А4" {
+		t.Errorf("legacy-форма должна остаться отдельно, got %+v", legacy)
 	}
 }
 

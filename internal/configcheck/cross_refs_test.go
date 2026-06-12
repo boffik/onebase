@@ -142,6 +142,123 @@ table:
 	}
 }
 
+// Валидация binding макета v2 (план 64, этап 4.6): источник repeat — реальная
+// ТЧ; имена областей в sequence/repeat существуют; выражения параметров ссылаются
+// на существующие поля; ячейка-параметр без записи в binding и без одноимённого
+// поля — предупреждение.
+func TestCheckCrossRefs_LayoutBinding(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "реализация.yaml"), `name: Реализация
+fields:
+  - name: Номер
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Сумма
+        type: number`)
+	// Хорошая форма: всё резолвится.
+	mkFile(t, filepath.Join(dir, "printforms", "хорошая.layout.yaml"), `name: Хорошая
+document: Реализация
+areas:
+  - name: Заголовок
+    rows:
+      - cells:
+          - text: "Накладная № {{Номер}}"
+  - name: Строка
+    rows:
+      - cells:
+          - parameter: С
+binding:
+  sequence: [Заголовок, Строка]
+  repeat:
+    - area: Строка
+      source: Товары
+      parameters:
+        С: Сумма | number:2
+`)
+	// Плохая форма: source-ТЧ нет, область в sequence не существует,
+	// ячейка-параметр без binding и без поля.
+	mkFile(t, filepath.Join(dir, "printforms", "плохая.layout.yaml"), `name: Плохая
+document: Реализация
+areas:
+  - name: Заголовок
+    rows:
+      - cells:
+          - parameter: Сирота
+  - name: Строка
+    rows:
+      - cells:
+          - parameter: С
+binding:
+  sequence: [Заголовок, НетТакойОбласти]
+  repeat:
+    - area: Строка
+      source: НетТакойТЧ
+      parameters:
+        С: Сумма
+`)
+	// Форма с валидной ТЧ, но параметром на несуществующее поле.
+	mkFile(t, filepath.Join(dir, "printforms", "полеплохо.layout.yaml"), `name: ПолеПлохо
+document: Реализация
+areas:
+  - name: Строка
+    rows:
+      - cells:
+          - parameter: С
+binding:
+  sequence: [Строка]
+  repeat:
+    - area: Строка
+      source: Товары
+      parameters:
+        С: НетПоля
+`)
+
+	proj, err := project.Load(dir)
+	if err != nil {
+		t.Fatalf("project.Load: %v", err)
+	}
+	defer proj.Close()
+
+	issues := CheckCrossRefs(proj, nil)
+	var badSource, badArea, badField, orphan, anyGood bool
+	for _, i := range issues {
+		if strings.EqualFold(i.Object, "Хорошая") {
+			anyGood = true
+		}
+		m := i.Message
+		if strings.EqualFold(i.Object, "Плохая") {
+			switch {
+			case strings.Contains(m, "НетТакойТЧ"):
+				badSource = true
+			case strings.Contains(m, "НетТакойОбласти"):
+				badArea = true
+			case strings.Contains(m, "Сирота"):
+				orphan = true
+			}
+		}
+		if strings.EqualFold(i.Object, "ПолеПлохо") && strings.Contains(m, "НетПоля") {
+			badField = true
+		}
+	}
+	if !badSource {
+		t.Errorf("ожидалась ошибка о несуществующей ТЧ НетТакойТЧ: %+v", issues)
+	}
+	if !badArea {
+		t.Errorf("ожидалась ошибка о несуществующей области НетТакойОбласти: %+v", issues)
+	}
+	if !badField {
+		t.Errorf("ожидалась ошибка о несуществующем поле НетПоля (валидная ТЧ): %+v", issues)
+	}
+	if !orphan {
+		t.Errorf("ожидалось предупреждение о ячейке-сироте Сирота: %+v", issues)
+	}
+	if anyGood {
+		t.Errorf("корректная форма Хорошая не должна давать ошибок: %+v", issues)
+	}
+}
+
 // CheckNameCollisions должен ловить справочник и документ с одинаковым именем
 // (делят одну таблицу lower(имя)) и молчать, когда имена различны (issue #20).
 func TestCheckNameCollisions(t *testing.T) {

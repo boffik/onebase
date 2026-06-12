@@ -156,10 +156,11 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		extRepo := extform.New(db)
 		if err := extRepo.EnsureSchema(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, "[dev] extform schema error:", err)
-		} else if extForms, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
+		} else if extForms, extLayouts, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, "[dev] external print forms:", err)
 		} else {
 			reg.SetExternalPrintForms(extForms)
+			reg.SetExternalLayoutForms(extLayouts)
 		}
 		extRepRepo := extform.NewReports(db)
 		if err := extRepRepo.EnsureSchema(ctx); err != nil {

@@ -98,7 +98,8 @@ document: Док
 layout: |
   Область Шапка
     Поле Дата`)
-	// корректная печатная форма — не должна попасть в issues
+	// корректная legacy печатная форма — валидна, но устарела: ожидаем
+	// предупреждение о миграции (план 64, этап 4.6), не ошибку «пустая».
 	mkFile(t, filepath.Join(dir, "printforms", "ok.yaml"), `name: OK
 document: Док
 title: OK
@@ -106,13 +107,20 @@ header: "**X**: {{X}}"`)
 
 	issues := CheckDir(dir)
 	want := map[string]bool{"journals/j.yaml": false, "roles/r.yaml": false, "printforms/p.yaml": false}
+	var okMigrate bool
 	for _, i := range issues {
 		if _, ok := want[i.File]; ok {
 			want[i.File] = true
 		}
 		if i.File == "printforms/ok.yaml" {
-			t.Errorf("корректная печатная форма не должна давать ошибку: %+v", i)
+			if !strings.Contains(i.Message, "устаревший формат") {
+				t.Errorf("корректная legacy-форма должна давать только предупреждение о миграции: %+v", i)
+			}
+			okMigrate = true
 		}
+	}
+	if !okMigrate {
+		t.Errorf("ожидалось предупреждение о миграции для printforms/ok.yaml. issues=%+v", issues)
 	}
 	for f, found := range want {
 		if !found {
