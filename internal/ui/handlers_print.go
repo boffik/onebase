@@ -26,7 +26,7 @@ import (
 // форм (план 64, этап 3). Находит PrintFormRef и диспетчеризует:
 //   - Declarative → BuildSheet → sheet.HTML;
 //   - DSL → существующий buildDSLPF-путь → sheet.HTML;
-//   - Legacy → прежний RenderWithPDFURL (этап 4 заменит конверсией).
+//   - Legacy → ConvertLegacy (при загрузке) → BuildSheet → sheet.HTML (этап 4).
 func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -81,17 +81,19 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(html))
 
-	default: // Legacy
-		ctx, err := s.loadPrintContext(r, entity, id)
-		if err != nil {
-			http.Error(w, s.errText(r, err), 404)
+	default: // Legacy — конвертируется в макет v2 при загрузке (ref.Decl) и
+		// рендерится тем же декларативным движком, что и Declarative (план 64, этап 4).
+		if ref.Decl == nil {
+			http.Error(w, "legacy print form conversion failed: "+ref.Name, 500)
 			return
 		}
-		html, err := printform.RenderWithPDFURL(ref.Legacy, ctx, r.URL.Path+"/pdf")
+		doc, _, err := s.buildDeclarativeSheet(r, entity, id, ref.Decl)
 		if err != nil {
 			http.Error(w, s.errText(r, err), 500)
 			return
 		}
+		backPath := fmt.Sprintf("/ui/%s/%s/%s", strings.ToLower(string(entity.Kind)), strings.ToLower(entity.Name), id.String())
+		html := doc.HTML(sheet.HTMLOptions{BackURL: backPath, PDFURL: r.URL.Path + "/pdf"})
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(html))
 	}
@@ -247,7 +249,7 @@ func (s *Server) resolveDSLRefs(row map[string]any, fields []metadata.Field, ref
 // видов форм (план 64, этап 3). Dispatch по Kind:
 //   - Declarative → BuildSheet → sheet.PDF;
 //   - DSL → buildDSLPF → sheet.PDF;
-//   - Legacy → прежний printform.RenderPDF (этап 4 заменит конверсией).
+//   - Legacy → ConvertLegacy (при загрузке) → BuildSheet → sheet.PDF (этап 4).
 func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -315,14 +317,19 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-	default: // Legacy
-		ctx, err := s.loadPrintContext(r, entity, id)
+	default: // Legacy — конвертируется в макет v2 при загрузке (ref.Decl) и
+		// рендерится тем же декларативным движком, что и Declarative (план 64, этап 4).
+		if ref.Decl == nil {
+			http.Error(w, "legacy print form conversion failed: "+ref.Name, 500)
+			return
+		}
+		doc, ctx, err := s.buildDeclarativeSheet(r, entity, id, ref.Decl)
 		if err != nil {
-			http.Error(w, s.errText(r, err), 404)
+			http.Error(w, s.errText(r, err), 500)
 			return
 		}
 		fileName = pdfFileName(ref.Name, docNumber(ctx.Document))
-		pdfBytes, err = printform.RenderPDF(ref.Legacy, ctx)
+		pdfBytes, err = doc.PDF(sheet.PDFOptions{Title: ref.Name})
 		if err != nil {
 			http.Error(w, "PDF error: "+s.errText(r, err), 500)
 			return

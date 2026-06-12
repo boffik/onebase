@@ -12,6 +12,45 @@ import (
 	"github.com/ivantit66/onebase/internal/report"
 )
 
+// Legacy YAML-форма СРАЗУ конвертируется в макет v2 при обращении к реестру:
+// PrintFormRef.Decl несёт результат ConvertLegacy (план 64, этап 4).
+func TestGetAllPrintForms_LegacyConvertedToDecl(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.printForms["реализация"] = []*printform.PrintForm{{
+		Name:     "Накладная",
+		Document: "Реализация",
+		Title:    "Накладная № {{Номер}}",
+		Table: &printform.TableSection{
+			Source:  "Товары",
+			Columns: []printform.Column{{Field: "Сумма", Label: "Сумма"}},
+			Totals:  []printform.TotalSpec{{Field: "Сумма", Sum: true, Label: "Итого"}},
+		},
+	}}
+	r.mu.Unlock()
+
+	refs := r.GetAllPrintForms("Реализация")
+	if len(refs) != 1 {
+		t.Fatalf("ожидалась 1 форма, получили %d", len(refs))
+	}
+	ref := refs[0]
+	if ref.Kind != PrintFormLegacy {
+		t.Errorf("Kind = %v, ожидался Legacy", ref.Kind)
+	}
+	if ref.Legacy == nil {
+		t.Error("Legacy не сохранён (нужен для справки/валидации)")
+	}
+	if ref.Decl == nil || ref.Decl.Layout == nil {
+		t.Fatal("Decl с конвертированным макетом не заполнен")
+	}
+	if ref.Decl.Layout.Area("Заголовок") == nil {
+		t.Error("в конвертированном макете нет области Заголовок")
+	}
+	if ref.Decl.Layout.Binding == nil || len(ref.Decl.Layout.Binding.Repeat) != 1 {
+		t.Error("в конвертированном макете нет repeat-binding по ТЧ")
+	}
+}
+
 // при коллизии YAML/.os одноимённой печатной формы
 // .os должна перебивать, YAML — удаляться из реестра, в лог идёт warning.
 func TestLoadDSLPrintForms_OverridesYAML(t *testing.T) {
