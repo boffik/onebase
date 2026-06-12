@@ -118,6 +118,47 @@ func TestGetMovements_FilterByPeriod(t *testing.T) {
 	}
 }
 
+// TestGetMovements_FilterTo_IncludesWholeDay проверяет, что граница «по дату»
+// включает весь день (движение в 12:30 попадает при To = конец того же дня).
+// Тест RED до фикса parseRegFilter (To должен быть 23:59:59.999999999, а не полночь).
+func TestGetMovements_FilterTo_IncludesWholeDay(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "testday.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	reg := &metadata.Register{
+		Name:       "ДневнойРегистр",
+		Dimensions: []metadata.Field{{Name: "Склад", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Кол", Type: metadata.FieldTypeNumber}},
+	}
+	if err := db.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Движение в 12:30 12-го июня — должно попасть в отбор «по 12.06»
+	p := time.Date(2026, 6, 12, 12, 30, 0, 0, time.UTC)
+	rec := uuid.New()
+	if err := db.WriteMovements(ctx, "ДневнойРегистр", "ПриходТовара", rec, []map[string]any{
+		{"ВидДвижения": "Приход", "Склад": "Склад1", "Кол": float64(1)},
+	}, reg, &p); err != nil {
+		t.Fatal(err)
+	}
+
+	// To = 12.06 23:59:59.999999999 — конец дня, как выдаёт parseRegFilter после фикса
+	endOfDay := time.Date(2026, 6, 12, 23, 59, 59, 999999999, time.UTC)
+	rows, err := db.GetMovements(ctx, "ДневнойРегистр", reg, RegFilter{To: &endOfDay})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("движение в 12:30 должно попадать при To=конец_дня, получено %d строк", len(rows))
+	}
+}
+
 func TestGetMovements_RejectsUnknownDimension(t *testing.T) {
 	db, ctx, reg, _, _ := setupAccumReg(t)
 	// Имя измерения, которого нет в reg — должно игнорироваться (защита от

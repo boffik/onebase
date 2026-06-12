@@ -89,7 +89,10 @@ func parseRegFilter(r *http.Request, fields []metadata.Field, periodic bool) sto
 			f.From = t
 		}
 		if t := parseFilterDate(q.Get("to")); t != nil {
-			f.To = t
+			// Сдвигаем к концу дня (23:59:59.999999999), чтобы отбор «по дату»
+			// включал весь день: period <= to сравнивается с TIMESTAMP (#45).
+			endOfDay := t.Add(24*time.Hour - time.Nanosecond)
+			f.To = &endOfDay
 		}
 	}
 	return f

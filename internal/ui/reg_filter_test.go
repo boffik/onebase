@@ -28,8 +28,10 @@ func TestParseRegFilter_DimsAndPeriod(t *testing.T) {
 	if f.From == nil || !f.From.Equal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local)) {
 		t.Errorf("From распарсен неверно: %v", f.From)
 	}
-	if f.To == nil || !f.To.Equal(time.Date(2026, 6, 30, 0, 0, 0, 0, time.Local)) {
-		t.Errorf("To распарсен неверно: %v", f.To)
+	// To должен быть концом дня (23:59:59.999999999), чтобы включать весь день.
+	wantTo := time.Date(2026, 6, 30, 23, 59, 59, 999999999, time.Local)
+	if f.To == nil || !f.To.Equal(wantTo) {
+		t.Errorf("To распарсен неверно (ожидался конец дня): %v", f.To)
 	}
 }
 
@@ -59,6 +61,25 @@ func TestParseRegFilter_NonPeriodicIgnoresPeriod(t *testing.T) {
 	if !f.IsEmpty() {
 		t.Errorf("фильтр должен быть пустым")
 	}
+}
+
+// TestParseRegFilter_ToIsEndOfDay проверяет, что граница «по дату» включает
+// весь день: To должен быть 23:59:59.999999999 (конец дня), а не полночь.
+// RED до фикса parseRegFilter.
+func TestParseRegFilter_ToIsEndOfDay(t *testing.T) {
+	fields := []metadata.Field{{Name: "Склад", Type: metadata.FieldTypeString}}
+	r := httptest.NewRequest("GET", "/ui/register/остатки?to=2026-06-12", nil)
+
+	f := parseRegFilter(r, fields, true)
+
+	if f.To == nil {
+		t.Fatal("To не должен быть nil")
+	}
+	wantEndOfDay := time.Date(2026, 6, 12, 23, 59, 59, 999999999, time.Local)
+	if !f.To.Equal(wantEndOfDay) {
+		t.Errorf("To должен быть концом дня (23:59:59.999999999), получено %v", f.To)
+	}
+	// From остаётся полночью — начало дня корректно
 }
 
 // filterFormValues возвращает текущие значения для подстановки в форму.
