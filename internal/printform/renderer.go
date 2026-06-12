@@ -8,7 +8,6 @@ import (
 )
 
 var (
-	reExpr   = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 	reBold   = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 	reItalic = regexp.MustCompile(`\*([^*]+)\*`)
 )
@@ -33,113 +32,15 @@ func RenderWithPDFURL(form *PrintForm, ctx *RenderContext, pdfURL string) (Rende
 	return RenderedForm(page), nil
 }
 
-// interpolate replaces {{...}} expressions in text with values from ctx.
-// rowNum is the current table row (for @row), 0 outside table context.
+// interpolate replaces {{...}} expressions in text with values from ctx (HTML-
+// escaped). rowNum is the current table row (for @row), 0 outside table context.
+// Делегирует резолв выражений в binding.go (единый язык), сохраняя HTML-escape.
 func interpolate(text string, ctx *RenderContext, rowNum int) string {
-	return reExpr.ReplaceAllStringFunc(text, func(match string) string {
-		inner := strings.TrimSpace(match[2 : len(match)-2])
-		// split on | for formatter
-		parts := strings.SplitN(inner, "|", 2)
-		expr := strings.TrimSpace(parts[0])
-		fmtSpec := ""
-		if len(parts) == 2 {
-			fmtSpec = strings.TrimSpace(parts[1])
-		}
-
-		val := resolveExpr(expr, ctx, rowNum, nil)
-		return template.HTMLEscapeString(ApplyFormat(val, fmtSpec))
+	return reInterp.ReplaceAllStringFunc(text, func(match string) string {
+		inner := match[2 : len(match)-2]
+		return template.HTMLEscapeString(ResolveValue(inner, ctx, nil, rowNum))
 	})
 }
-
-// interpolateRow is like interpolate but with a specific table row available.
-func interpolateRow(text string, ctx *RenderContext, row map[string]any, rowNum int) string {
-	return reExpr.ReplaceAllStringFunc(text, func(match string) string {
-		inner := strings.TrimSpace(match[2 : len(match)-2])
-		parts := strings.SplitN(inner, "|", 2)
-		expr := strings.TrimSpace(parts[0])
-		fmtSpec := ""
-		if len(parts) == 2 {
-			fmtSpec = strings.TrimSpace(parts[1])
-		}
-		val := resolveExpr(expr, ctx, rowNum, row)
-		return template.HTMLEscapeString(ApplyFormat(val, fmtSpec))
-	})
-}
-
-// resolveExpr resolves a dot-path expression against the render context.
-// currentRow is the current table row (may be nil when resolving header/footer).
-func resolveExpr(expr string, ctx *RenderContext, rowNum int, currentRow map[string]any) any {
-	if expr == "@row" {
-		return rowNum
-	}
-
-	// Константы.Name
-	if strings.HasPrefix(expr, "Константы.") {
-		key := strings.TrimPrefix(expr, "Константы.")
-		if ctx.Constants != nil {
-			return ctx.Constants[key]
-		}
-		return nil
-	}
-
-	// Итог.Field — totals are resolved during table rendering, not here
-	if strings.HasPrefix(expr, "Итог.") {
-		return nil
-	}
-
-	// FieldName.SubField — resolve reference
-	if idx := strings.Index(expr, "."); idx != -1 {
-		fieldName := expr[:idx]
-		subField := expr[idx+1:]
-		// first try to find in currentRow
-		if currentRow != nil {
-			if refVal, ok := currentRow[fieldName]; ok {
-				if refID, ok := refVal.(string); ok {
-					if refData, ok := ctx.Refs[refID]; ok {
-						return refData[subField]
-					}
-				}
-			}
-		}
-		// then try in document-level refs
-		if ctx.Refs != nil {
-			if docVal, ok := ctx.Document[fieldName]; ok {
-				if refID, ok := docVal.(string); ok {
-					if refData, ok := ctx.Refs[refID]; ok {
-						return refData[subField]
-					}
-				}
-			}
-		}
-		return nil
-	}
-
-	// Simple field — try current row first, then document
-	if currentRow != nil {
-		if v, ok := currentRow[expr]; ok {
-			return resolveRefValue(v, ctx)
-		}
-	}
-	if ctx.Document != nil {
-		if v, ok := ctx.Document[expr]; ok {
-			return resolveRefValue(v, ctx)
-		}
-	}
-	return nil
-}
-
-// resolveRefValue checks if v is a UUID present in ctx.Refs and returns its display name.
-func resolveRefValue(v any, ctx *RenderContext) any {
-	if id, ok := v.(string); ok && ctx.Refs != nil {
-		if refData, ok := ctx.Refs[id]; ok {
-			if name, ok := refData["наименование"]; ok {
-				return name
-			}
-		}
-	}
-	return v
-}
-
 
 func renderTable(ts *TableSection, ctx *RenderContext) string {
 	rows := ctx.TableParts[ts.Source]
@@ -190,6 +91,9 @@ func renderTable(ts *TableSection, ctx *RenderContext) string {
 			if align != "" {
 				style = "text-align:" + align + ";"
 			}
+			// TODO(этап 4): дублирует binding.ResolveExpr (@row/ПодПоле/ссылки);
+			// удаляется в этапе 4 вместе с renderer.go — legacy YAML-рендер
+			// заменяется декларативным движком (BuildSheet).
 			var val any
 			if col.Field == "@row" {
 				val = i + 1
@@ -205,7 +109,7 @@ func renderTable(ts *TableSection, ctx *RenderContext) string {
 					}
 				}
 			} else {
-				val = resolveRefValue(row[col.Field], ctx)
+				val = resolveRefDisplay(row[col.Field], ctx)
 			}
 			cell := template.HTMLEscapeString(ApplyFormat(val, col.Format))
 			if style != "" {

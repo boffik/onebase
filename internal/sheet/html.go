@@ -171,8 +171,48 @@ func buildCellStyle(cell *Cell, width, height float64) string {
 	if cell.TextColor != "" {
 		styles = append(styles, "color:"+cell.TextColor)
 	}
+	styles = append(styles, borderStyles(cell)...)
 
 	return strings.Join(styles, ";")
+}
+
+// borderStyles возвращает CSS-объявления рамок ячейки. Per-side границы
+// (BorderLeft/Top/Right/Bottom) имеют приоритет над legacy-пресетом Border:
+// при наличии хотя бы одной стороны переопределяются все четыре, иначе
+// применяется таблично-широкая рамка (Border == "none" → border:none).
+func borderStyles(cell *Cell) []string {
+	if hasPerSideBorders(cell) {
+		return []string{
+			"border-left:" + cssBorder(cell.BorderLeft),
+			"border-top:" + cssBorder(cell.BorderTop),
+			"border-right:" + cssBorder(cell.BorderRight),
+			"border-bottom:" + cssBorder(cell.BorderBottom),
+		}
+	}
+	if strings.EqualFold(cell.Border, "none") {
+		return []string{"border:none"}
+	}
+	return nil
+}
+
+// hasPerSideBorders сообщает, задана ли хотя бы одна сторона рамки.
+func hasPerSideBorders(cell *Cell) bool {
+	return cell.BorderLeft != "" || cell.BorderTop != "" ||
+		cell.BorderRight != "" || cell.BorderBottom != ""
+}
+
+// cssBorder переводит пресет стороны в CSS-объявление рамки.
+func cssBorder(side string) string {
+	switch strings.ToLower(side) {
+	case "", "none":
+		return "none"
+	case "medium":
+		return "1.5px solid #000"
+	case "thick":
+		return "2px solid #000"
+	default: // thin
+		return "1px solid #000"
+	}
 }
 
 // sizeStyle строит CSS только из размеров — для пустой (несуществующей) ячейки

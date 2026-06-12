@@ -22,7 +22,11 @@ import (
 	"github.com/ivantit66/onebase/internal/sheet"
 )
 
-// printDocument renders a print form for a specific document/catalog record.
+// printDocument — единый HTML-маршрут печати (/print/{form}) для всех видов
+// форм (план 64, этап 3). Находит PrintFormRef и диспетчеризует:
+//   - Declarative → BuildSheet → sheet.HTML;
+//   - DSL → существующий buildDSLPF-путь → sheet.HTML;
+//   - Legacy → прежний RenderWithPDFURL (этап 4 заменит конверсией).
 func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -36,54 +40,137 @@ func (s *Server) printDocument(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", 400)
 		return
 	}
-	formName := chi.URLParam(r, "form")
-	if dec, err2 := url.PathUnescape(formName); err2 == nil {
-		formName = dec
-	}
+	formName := printFormParam(r, "form")
 
-	forms := s.reg.GetPrintForms(entity.Name)
-	var form *printform.PrintForm
-	for _, f := range forms {
-		if strings.EqualFold(f.Name, formName) {
-			form = f
-			break
+	ref, ok := s.reg.GetPrintFormRef(entity.Name, formName)
+	if !ok {
+		// Fallback: модульная процедура «Печать» (form == "_module") или иной
+		// DSL-вход — buildDSLPF сам найдёт процедуру модуля.
+		sd, ok := s.buildDSLPF(w, r, entity, id, formName)
+		if !ok {
+			return
 		}
-	}
-	if form == nil {
-		http.Error(w, "print form not found: "+formName, 404)
+		backPath := fmt.Sprintf("/ui/%s/%s/%s", strings.ToLower(string(entity.Kind)), strings.ToLower(entity.Name), id.String())
+		sd.SetBackURL(backPath)
+		html := sd.Doc.HTML(sheet.HTMLOptions{BackURL: sd.Doc.BackURL, PDFURL: r.URL.Path + "/pdf"})
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
 		return
 	}
 
+	switch ref.Kind {
+	case runtime.PrintFormDeclarative:
+		doc, _, err := s.buildDeclarativeSheet(r, entity, id, ref.Decl)
+		if err != nil {
+			http.Error(w, s.errText(r, err), 500)
+			return
+		}
+		backPath := fmt.Sprintf("/ui/%s/%s/%s", strings.ToLower(string(entity.Kind)), strings.ToLower(entity.Name), id.String())
+		html := doc.HTML(sheet.HTMLOptions{BackURL: backPath, PDFURL: r.URL.Path + "/pdf"})
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+
+	case runtime.PrintFormDSL:
+		sd, ok := s.buildDSLPF(w, r, entity, id, ref.Name)
+		if !ok {
+			return
+		}
+		backPath := fmt.Sprintf("/ui/%s/%s/%s", strings.ToLower(string(entity.Kind)), strings.ToLower(entity.Name), id.String())
+		sd.SetBackURL(backPath)
+		html := sd.Doc.HTML(sheet.HTMLOptions{BackURL: sd.Doc.BackURL, PDFURL: r.URL.Path + "/pdf"})
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+
+	default: // Legacy
+		ctx, err := s.loadPrintContext(r, entity, id)
+		if err != nil {
+			http.Error(w, s.errText(r, err), 404)
+			return
+		}
+		html, err := printform.RenderWithPDFURL(ref.Legacy, ctx, r.URL.Path+"/pdf")
+		if err != nil {
+			http.Error(w, s.errText(r, err), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+	}
+}
+
+// printFormParam извлекает и url-декодирует параметр маршрута печати.
+func printFormParam(r *http.Request, key string) string {
+	v := chi.URLParam(r, key)
+	if dec, err := url.PathUnescape(v); err == nil {
+		return dec
+	}
+	return v
+}
+
+// loadPrintContext загружает запись, табличные части, ссылки и константы в
+// RenderContext (для legacy- и декларативного путей). Ссылки НЕ оборачиваются в
+// MapThis (это нужно только DSL-пути).
+func (s *Server) loadPrintContext(r *http.Request, entity *metadata.Entity, id uuid.UUID) (*printform.RenderContext, error) {
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
 	if err != nil {
-		http.Error(w, s.errText(r, err), 404)
-		return
+		return nil, err
 	}
-
 	tpRows := make(map[string][]map[string]any)
 	for _, tp := range entity.TableParts {
 		rows, _ := s.store.GetTablePartRows(r.Context(), entity.Name, tp.Name, id, tp)
 		tpRows[tp.Name] = rows
 	}
-
 	refs := s.buildPrintRefs(r.Context(), row, entity, tpRows)
-
 	constants, _ := s.store.ListConstants(r.Context())
-
-	ctx := &printform.RenderContext{
+	return &printform.RenderContext{
 		Document:   row,
 		TableParts: tpRows,
 		Constants:  constants,
 		Refs:       refs,
-	}
-	pdfURL := r.URL.Path + "/pdf"
-	html, err := printform.RenderWithPDFURL(form, ctx, pdfURL)
+	}, nil
+}
+
+// buildDeclarativeSheet строит sheet.Document по декларативной форме (макет +
+// binding) и данным записи. Возвращает также загруженный RenderContext, чтобы
+// вызывающий мог взять номер документа из уже прочитанной записи (имя PDF-файла)
+// без повторного GetByID.
+func (s *Server) buildDeclarativeSheet(r *http.Request, entity *metadata.Entity, id uuid.UUID, lf *printform.LayoutForm) (*sheet.Document, *printform.RenderContext, error) {
+	ctx, err := s.loadPrintContext(r, entity, id)
 	if err != nil {
-		http.Error(w, s.errText(r, err), 500)
-		return
+		return nil, nil, err
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(html))
+	doc, err := printform.BuildSheet(lf.Layout, ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return doc, ctx, nil
+}
+
+// docNumber извлекает поле «Номер» из записи документа (для имени PDF-файла).
+func docNumber(row map[string]any) string {
+	if row == nil {
+		return ""
+	}
+	if num, ok := row["Номер"].(string); ok {
+		return num
+	}
+	return ""
+}
+
+// pdfFileName собирает имя PDF-файла печатной формы: «<форма>_<номер>.pdf» при
+// непустом номере, иначе «<форма>.pdf».
+func pdfFileName(formName, num string) string {
+	if num != "" {
+		return formName + "_" + num + ".pdf"
+	}
+	return formName + ".pdf"
+}
+
+// ensurePDFExt гарантирует расширение .pdf у явного имени файла (DSL).
+func ensurePDFExt(name string) string {
+	if strings.HasSuffix(strings.ToLower(name), ".pdf") {
+		return name
+	}
+	return name + ".pdf"
 }
 
 // buildPrintRefs returns a map of UUID → {fields...} for all reference fields in the entity and table parts.
@@ -156,7 +243,11 @@ func (s *Server) resolveDSLRefs(row map[string]any, fields []metadata.Field, ref
 	}
 }
 
-// printDocumentPDF renders a print form as PDF and sends it as a download.
+// printDocumentPDF — единый PDF-маршрут печати (/print/{form}/pdf) для всех
+// видов форм (план 64, этап 3). Dispatch по Kind:
+//   - Declarative → BuildSheet → sheet.PDF;
+//   - DSL → buildDSLPF → sheet.PDF;
+//   - Legacy → прежний printform.RenderPDF (этап 4 заменит конверсией).
 func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -170,58 +261,76 @@ func (s *Server) printDocumentPDF(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", 400)
 		return
 	}
-	formName := chi.URLParam(r, "form")
-	if dec, err2 := url.PathUnescape(formName); err2 == nil {
-		formName = dec
-	}
+	formName := printFormParam(r, "form")
 
-	forms := s.reg.GetPrintForms(entity.Name)
-	var form *printform.PrintForm
-	for _, f := range forms {
-		if strings.EqualFold(f.Name, formName) {
-			form = f
-			break
+	ref, ok := s.reg.GetPrintFormRef(entity.Name, formName)
+	if !ok {
+		// Fallback: модульная процедура «Печать» (form == "_module") → PDF.
+		sd, ok := s.buildDSLPF(w, r, entity, id, formName)
+		if !ok {
+			return
 		}
-	}
-	if form == nil {
-		http.Error(w, "print form not found: "+formName, 404)
+		pdfBytes, err := sd.Doc.PDF(sheet.PDFOptions{Title: formName})
+		if err != nil {
+			http.Error(w, "PDF error: "+s.errText(r, err), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", contentDisposition(formName+".pdf"))
+		w.Write(pdfBytes)
 		return
 	}
 
-	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
-	if err != nil {
-		http.Error(w, s.errText(r, err), 404)
-		return
-	}
+	var pdfBytes []byte
+	// fileName — имя PDF-файла. Берётся из уже загруженного контекста (без
+	// повторного GetByID): номер документа (Declarative/Legacy) либо явное
+	// ТабличныйДокумент.ИмяФайла (DSL), иначе «<форма>.pdf».
+	fileName := ref.Name + ".pdf"
+	switch ref.Kind {
+	case runtime.PrintFormDeclarative:
+		doc, ctx, err := s.buildDeclarativeSheet(r, entity, id, ref.Decl)
+		if err != nil {
+			http.Error(w, s.errText(r, err), 500)
+			return
+		}
+		fileName = pdfFileName(ref.Name, docNumber(ctx.Document))
+		pdfBytes, err = doc.PDF(sheet.PDFOptions{Title: ref.Name})
+		if err != nil {
+			http.Error(w, "PDF error: "+s.errText(r, err), 500)
+			return
+		}
 
-	tpRows := make(map[string][]map[string]any)
-	for _, tp := range entity.TableParts {
-		rows, _ := s.store.GetTablePartRows(r.Context(), entity.Name, tp.Name, id, tp)
-		tpRows[tp.Name] = rows
-	}
+	case runtime.PrintFormDSL:
+		sd, ok := s.buildDSLPF(w, r, entity, id, ref.Name)
+		if !ok {
+			return
+		}
+		// DSL-форма может сама задать имя файла (ТабличныйДокумент.ИмяФайла).
+		if sd.Doc.FileName != "" {
+			fileName = ensurePDFExt(sd.Doc.FileName)
+		}
+		pdfBytes, err = sd.Doc.PDF(sheet.PDFOptions{Title: ref.Name})
+		if err != nil {
+			http.Error(w, "PDF error: "+s.errText(r, err), 500)
+			return
+		}
 
-	refs := s.buildPrintRefs(r.Context(), row, entity, tpRows)
-	constants, _ := s.store.ListConstants(r.Context())
-
-	ctx := &printform.RenderContext{
-		Document:   row,
-		TableParts: tpRows,
-		Constants:  constants,
-		Refs:       refs,
-	}
-	pdfBytes, err := printform.RenderPDF(form, ctx)
-	if err != nil {
-		http.Error(w, "PDF error: "+s.errText(r, err), 500)
-		return
-	}
-
-	origName := form.Name + ".pdf"
-	if num, ok := row["Номер"].(string); ok && num != "" {
-		origName = form.Name + "_" + num + ".pdf"
+	default: // Legacy
+		ctx, err := s.loadPrintContext(r, entity, id)
+		if err != nil {
+			http.Error(w, s.errText(r, err), 404)
+			return
+		}
+		fileName = pdfFileName(ref.Name, docNumber(ctx.Document))
+		pdfBytes, err = printform.RenderPDF(ref.Legacy, ctx)
+		if err != nil {
+			http.Error(w, "PDF error: "+s.errText(r, err), 500)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", contentDisposition(origName))
+	w.Header().Set("Content-Disposition", contentDisposition(fileName))
 	w.Write(pdfBytes)
 }
 
@@ -330,67 +439,21 @@ func (s *Server) buildDSLPF(w http.ResponseWriter, r *http.Request, entity *meta
 	return sd, true
 }
 
-// dslPFParams извлекает entity/id/pfName и проверяет права. ok=false означает,
-// что ответ уже записан.
-func (s *Server) dslPFParams(w http.ResponseWriter, r *http.Request) (*metadata.Entity, uuid.UUID, string, bool) {
-	entity := s.getEntity(w, r)
-	if entity == nil {
-		return nil, uuid.Nil, "", false
+// redirectDSLPrint — обратная совместимость: старый /print-dsl/{pfName}[/pdf]
+// отвечает 301 на единый /print/{pfName}[/pdf] (план 64, этап 3). Маршруты
+// печати объединены; буква пути сохраняется (pfName и хвост /pdf).
+func (s *Server) redirectDSLPrint(w http.ResponseWriter, r *http.Request) {
+	kind := chi.URLParam(r, "kind")
+	ent := chi.URLParam(r, "entity")
+	id := chi.URLParam(r, "id")
+	pfName := chi.URLParam(r, "pfName") // уже %-encoded в исходном пути
+	target := fmt.Sprintf("/ui/%s/%s/%s/print/%s", kind, ent, id, pfName)
+	if strings.HasSuffix(r.URL.Path, "/pdf") {
+		target += "/pdf"
 	}
-	if !s.requirePerm(w, r, string(entity.Kind), entity.Name, "read") {
-		return nil, uuid.Nil, "", false
+	// Сохраняем строку запроса (например ?form=...) при 301.
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
 	}
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "invalid id", 400)
-		return nil, uuid.Nil, "", false
-	}
-	pfName := chi.URLParam(r, "pfName")
-	if dec, err2 := url.PathUnescape(pfName); err2 == nil {
-		pfName = dec
-	}
-	return entity, id, pfName, true
-}
-
-// printDocumentDSLPF renders a DSL (.os) print form for a document/catalog record.
-func (s *Server) printDocumentDSLPF(w http.ResponseWriter, r *http.Request) {
-	entity, id, pfName, ok := s.dslPFParams(w, r)
-	if !ok {
-		return
-	}
-	sd, ok := s.buildDSLPF(w, r, entity, id, pfName)
-	if !ok {
-		return
-	}
-
-	// Set back URL for the Назад button
-	backPath := fmt.Sprintf("/ui/%s/%s/%s", strings.ToLower(string(entity.Kind)), strings.ToLower(entity.Name), id.String())
-	sd.SetBackURL(backPath)
-
-	html := sd.Doc.HTML(sheet.HTMLOptions{BackURL: sd.Doc.BackURL, PDFURL: r.URL.Path + "/pdf"})
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(html))
-}
-
-// printDocumentDSLPFPDF renders a DSL (.os) print form as PDF (server-side,
-// embedded PT fonts, no transliteration) and sends it as a download — план 64, этап 2.
-func (s *Server) printDocumentDSLPFPDF(w http.ResponseWriter, r *http.Request) {
-	entity, id, pfName, ok := s.dslPFParams(w, r)
-	if !ok {
-		return
-	}
-	sd, ok := s.buildDSLPF(w, r, entity, id, pfName)
-	if !ok {
-		return
-	}
-
-	pdfBytes, err := sd.Doc.PDF(sheet.PDFOptions{Title: pfName})
-	if err != nil {
-		http.Error(w, "PDF error: "+s.errText(r, err), 500)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", contentDisposition(pfName+".pdf"))
-	w.Write(pdfBytes)
+	http.Redirect(w, r, target, http.StatusMovedPermanently)
 }

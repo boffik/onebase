@@ -36,12 +36,19 @@ type Cell struct {
 	FontFamily string
 	BackColor  string
 	TextColor  string
-	// Border — legacy-пресет рамки ("all"/""); этап 3 (план 64) добавит
-	// per-side Borders вместо одного строкового пресета.
-	Border  string
-	Picture string
-	ColSpan int
-	RowSpan int
+	// Border — legacy-пресет рамки ("all"/""/"thin"/"thick"/"none"). Если задана
+	// хотя бы одна из per-side границ (BorderLeft/Top/Right/Bottom), она имеет
+	// приоритет над этим пресетом при рендере (html.go/pdf.go).
+	Border string
+	// BorderLeft/Top/Right/Bottom — per-side рамки ("" = не задана, иначе
+	// none/thin/medium/thick). Заполняет декларативный движок из LayoutCell.Borders.
+	BorderLeft   string
+	BorderTop    string
+	BorderRight  string
+	BorderBottom string
+	Picture      string
+	ColSpan      int
+	RowSpan      int
 	// ParameterName — для макета: имя именованного параметра, заполняющего ячейку.
 	ParameterName string
 }

@@ -1,11 +1,9 @@
 package interpreter
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/sheet"
 )
 
 // Макет wraps a LayoutTemplate as a DSL-accessible object.
@@ -54,92 +52,20 @@ func (m *Макет) CallMethod(name string, args []any) any {
 // getArea returns a FRESH SpreadsheetDocumentArea for the named layout area.
 // Each call creates a new area with its own cell storage, so the same area
 // definition can be used multiple times with different parameter values (e.g., in loops).
+//
+// Ядро материализации (LayoutArea → sheet.Area со статическими текстами и
+// именами параметров) вынесено в printform.BuildAreaCells — общее с
+// декларативным движком BuildSheet (план 64, этап 3). DSL-путь не интерполирует
+// {{...}} в text-ячейках: значения подставляются через Область.Параметры.X.
 func (m *Макет) getArea(name string) *SpreadsheetDocumentArea {
-	if m.template == nil || m.template.Areas == nil {
+	if m.template == nil {
 		return nil
 	}
-	areaDef, ok := m.template.Areas[strings.ToLower(name)]
-	if !ok {
-		// Try case-sensitive
-		for k, v := range m.template.Areas {
-			if strings.EqualFold(k, name) {
-				areaDef = v
-				ok = true
-				break
-			}
-		}
-	}
-	if !ok {
+	areaDef := m.template.Area(name) // case-insensitive (см. LayoutTemplate.Area)
+	if areaDef == nil {
 		return nil
 	}
-
-	rows := len(areaDef.Rows)
-	cols := 0
-	for _, row := range areaDef.Rows {
-		c := 0
-		for _, cell := range row.Cells {
-			if cell.ColSpan > 1 {
-				c += cell.ColSpan
-			} else {
-				c++
-			}
-		}
-		if c > cols {
-			cols = c
-		}
+	return &SpreadsheetDocumentArea{
+		Area: printform.BuildAreaCells(areaDef),
 	}
-
-	area := &SpreadsheetDocumentArea{
-		Area: sheet.NewArea(0, 0, rows-1, cols-1),
-	}
-
-	for r, row := range areaDef.Rows {
-		colIdx := 0
-		for _, cellDef := range row.Cells {
-			cell := NewSpreadsheetDocumentCell(cellDef.Text)
-			cell.Bold = cellDef.Bold
-			cell.Italic = cellDef.Italic
-			if cellDef.Align != "" {
-				cell.Align = strings.ToLower(cellDef.Align)
-			}
-			if cellDef.VAlign != "" {
-				cell.Vertical = strings.ToLower(cellDef.VAlign)
-			}
-			if cellDef.FontSize > 0 {
-				cell.FontSize = cellDef.FontSize
-			}
-			if cellDef.FontFamily != "" {
-				cell.FontFamily = cellDef.FontFamily
-			}
-			if cellDef.BackColor != "" {
-				cell.BackColor = cellDef.BackColor
-			}
-			if cellDef.TextColor != "" {
-				cell.TextColor = cellDef.TextColor
-			}
-			if cellDef.Border != "" {
-				cell.Border = strings.ToLower(cellDef.Border)
-			}
-			if cellDef.ColSpan > 1 {
-				cell.ColSpan = cellDef.ColSpan
-			}
-			if cellDef.RowSpan > 1 {
-				cell.RowSpan = cellDef.RowSpan
-			}
-			// Store parameter name for named parameter access
-			if cellDef.Parameter != "" {
-				cell.ParameterName = cellDef.Parameter
-			}
-
-			key := fmt.Sprintf("%d,%d", r, colIdx)
-			area.Area.Cells[key] = cell
-
-			colIdx += cell.ColSpan
-			if cell.ColSpan <= 0 {
-				colIdx++
-			}
-		}
-	}
-
-	return area
 }

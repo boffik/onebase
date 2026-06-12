@@ -497,9 +497,15 @@ func drawCell(pdf *fpdf.Fpdf, cell *Cell, x, y, w, h float64) {
 	drawCellBorder(pdf, cell, x, y, w, h)
 }
 
-// drawCellBorder рисует рамку ячейки по legacy-пресету Border ("all"/"thin"/
-// "thick"/"none"/""). thin=0.2мм, thick=0.5мм. Цвет — чёрный.
+// drawCellBorder рисует рамку ячейки. Per-side границы (BorderLeft/Top/Right/
+// Bottom) имеют приоритет: каждая сторона рисуется отдельной линией своей
+// толщиной (thin=0.2/medium=0.4/thick=0.6мм). Иначе — legacy-пресет Border
+// ("all"/"thin"/"thick"/"none"/"") целиком прямоугольником. Цвет — чёрный.
 func drawCellBorder(pdf *fpdf.Fpdf, cell *Cell, x, y, w, h float64) {
+	if hasPerSideBorders(cell) {
+		drawPerSideBorders(pdf, cell, x, y, w, h)
+		return
+	}
 	preset := strings.ToLower(strings.TrimSpace(cell.Border))
 	var lw float64
 	switch preset {
@@ -515,6 +521,41 @@ func drawCellBorder(pdf *fpdf.Fpdf, cell *Cell, x, y, w, h float64) {
 	pdf.SetLineWidth(lw)
 	pdf.SetDrawColor(0, 0, 0)
 	pdf.Rect(x, y, w, h, "D")
+}
+
+// drawPerSideBorders рисует каждую заданную сторону рамки отдельной линией.
+func drawPerSideBorders(pdf *fpdf.Fpdf, cell *Cell, x, y, w, h float64) {
+	pdf.SetDrawColor(0, 0, 0)
+	if lw := sideWidthMM(cell.BorderTop); lw > 0 {
+		pdf.SetLineWidth(lw)
+		pdf.Line(x, y, x+w, y)
+	}
+	if lw := sideWidthMM(cell.BorderBottom); lw > 0 {
+		pdf.SetLineWidth(lw)
+		pdf.Line(x, y+h, x+w, y+h)
+	}
+	if lw := sideWidthMM(cell.BorderLeft); lw > 0 {
+		pdf.SetLineWidth(lw)
+		pdf.Line(x, y, x, y+h)
+	}
+	if lw := sideWidthMM(cell.BorderRight); lw > 0 {
+		pdf.SetLineWidth(lw)
+		pdf.Line(x+w, y, x+w, y+h)
+	}
+}
+
+// sideWidthMM возвращает толщину линии стороны рамки в мм (0 = не рисуем).
+func sideWidthMM(side string) float64 {
+	switch strings.ToLower(strings.TrimSpace(side)) {
+	case "", "none":
+		return 0
+	case "medium":
+		return 0.4
+	case "thick":
+		return 0.6
+	default: // thin
+		return 0.2
+	}
 }
 
 // pdfAlign конвертирует выравнивание ячейки в горизонтальный флаг fpdf.

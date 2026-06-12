@@ -44,6 +44,12 @@ type RenderContext struct {
 	TableParts map[string][]map[string]any // table part name → rows
 	Constants  map[string]any              // global constants
 	Refs       map[string]map[string]any   // field name → expanded reference fields
+
+	// sumCache мемоизирует Итог.<ТЧ>.<Поле> в пределах одного рендера: при
+	// использовании Итог внутри repeat-строки наивный sumColumn пересчитывал бы
+	// сумму на каждой строке (O(N²)). Лениво инициализируется в sumColumn;
+	// контекст создаётся заново на каждый рендер, поэтому глобального состояния нет.
+	sumCache map[string]float64
 }
 
 // RenderedForm is the final HTML ready to be written to the response.

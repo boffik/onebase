@@ -45,7 +45,7 @@ func TestWriteTemplatesProcessorLayouts(t *testing.T) {
 		t.Fatalf("ожидались 2 области, получено %d: %+v", len(lt.Areas), lt.Areas)
 	}
 	for _, area := range []string{"Заголовок", "Строка"} {
-		if _, ok := lt.Areas[area]; !ok {
+		if lt.Area(area) == nil {
 			t.Errorf("нет области %q", area)
 		}
 	}

@@ -9,7 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestLayoutRoundTrip ensures every new field survives marshal → unmarshal.
+// TestLayoutRoundTrip ensures every field survives marshal → unmarshal in the
+// new sequence-based model (Areas slice).
 func TestLayoutRoundTrip(t *testing.T) {
 	src := &LayoutTemplate{
 		Name:     "Накладная",
@@ -18,8 +19,9 @@ func TestLayoutRoundTrip(t *testing.T) {
 			{Width: "120px"},
 			{Width: "auto"},
 		},
-		Areas: map[string]*LayoutArea{
-			"Шапка": {
+		Areas: []*LayoutArea{
+			{
+				Name: "Шапка",
 				Rows: []LayoutRow{
 					{
 						Height: "20px",
@@ -38,6 +40,7 @@ func TestLayoutRoundTrip(t *testing.T) {
 								RowSpan:     1,
 								Border:      "thick",
 								BorderColor: "#333",
+								Borders:     &CellBorders{Left: "thin", Top: "medium", Right: "thick", Bottom: "none"},
 							},
 							{
 								Parameter: "ИмяПоставщика",
@@ -47,11 +50,23 @@ func TestLayoutRoundTrip(t *testing.T) {
 				},
 			},
 		},
+		Binding: &Binding{
+			Sequence:     []string{"Шапка"},
+			RepeatHeader: "Шапка",
+			Parameters:   map[string]string{"НомерУПД": "Номер"},
+			Repeat: []RepeatBinding{
+				{Area: "Строка", Source: "Товары", Parameters: map[string]string{"Кол": "Количество"}},
+			},
+		},
 	}
 
 	data, err := yaml.Marshal(src)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
+	}
+	// MarshalYAML must produce a sequence form for areas.
+	if !strings.Contains(string(data), "- name: Шапка") {
+		t.Fatalf("expected sequence areas in marshal output, got:\n%s", data)
 	}
 
 	var got LayoutTemplate
@@ -65,8 +80,8 @@ func TestLayoutRoundTrip(t *testing.T) {
 	if len(got.Columns) != 2 || got.Columns[0].Width != "120px" {
 		t.Fatalf("columns lost: %+v", got.Columns)
 	}
-	area, ok := got.Areas["Шапка"]
-	if !ok {
+	area := got.Area("Шапка")
+	if area == nil {
 		t.Fatalf("area Шапка missing")
 	}
 	if len(area.Rows) != 1 || area.Rows[0].Height != "20px" {
@@ -81,17 +96,31 @@ func TestLayoutRoundTrip(t *testing.T) {
 		c.Border != "thick" || c.BorderColor != "#333" {
 		t.Fatalf("cell fields lost: %+v", c)
 	}
+	if c.Borders == nil || c.Borders.Left != "thin" || c.Borders.Top != "medium" ||
+		c.Borders.Right != "thick" || c.Borders.Bottom != "none" {
+		t.Fatalf("per-side borders lost: %+v", c.Borders)
+	}
 	if area.Rows[0].Cells[1].Parameter != "ИмяПоставщика" {
 		t.Fatalf("parameter cell lost: %+v", area.Rows[0].Cells[1])
 	}
+	if got.Binding == nil || got.Binding.RepeatHeader != "Шапка" ||
+		got.Binding.Parameters["НомерУПД"] != "Номер" ||
+		len(got.Binding.Repeat) != 1 || got.Binding.Repeat[0].Source != "Товары" {
+		t.Fatalf("binding lost: %+v", got.Binding)
+	}
 }
 
-// TestLayoutBackwardCompat ensures old YAML without new fields still parses.
-func TestLayoutBackwardCompat(t *testing.T) {
+// TestLayoutLegacyMappingOrder ensures old YAML with areas as a mapping parses
+// AND preserves document order of the areas (yaml.v3 keeps key order).
+func TestLayoutLegacyMappingOrder(t *testing.T) {
 	src := `
 name: Старый
 document: Реализация
 areas:
+  Заголовок:
+    rows:
+      - cells:
+          - text: "Док"
   Шапка:
     rows:
       - cells:
@@ -100,23 +129,59 @@ areas:
             align: center
             colspan: 3
             backColor: "#EEE"
+  Подвал:
+    rows:
+      - cells:
+          - text: "Подпись"
 `
 	var lt LayoutTemplate
 	if err := yaml.Unmarshal([]byte(src), &lt); err != nil {
 		t.Fatalf("unmarshal legacy: %v", err)
 	}
-	c := lt.Areas["Шапка"].Rows[0].Cells[0]
+	if len(lt.Areas) != 3 {
+		t.Fatalf("expected 3 areas, got %d", len(lt.Areas))
+	}
+	wantOrder := []string{"Заголовок", "Шапка", "Подвал"}
+	for i, w := range wantOrder {
+		if lt.Areas[i].Name != w {
+			t.Fatalf("area order lost: at %d want %q got %q (all: %v)", i, w, lt.Areas[i].Name, names(lt.Areas))
+		}
+	}
+	c := lt.Area("Шапка").Rows[0].Cells[0]
 	if c.Text != "Заголовок" || !c.Bold || c.Align != "center" || c.ColSpan != 3 {
 		t.Fatalf("legacy fields lost: %+v", c)
 	}
-	// New fields are zero values, no panic on PreviewHTML.
+	// PreviewHTML must not panic and include text.
 	html := lt.PreviewHTML()
 	if !strings.Contains(html, "Заголовок") {
 		t.Fatalf("PreviewHTML missing text: %s", html)
 	}
 }
 
-// TestPreviewHTMLNewFields ensures PreviewHTML renders new CSS for new fields.
+// TestLayoutAreaCaseInsensitive verifies Area() lookup is case-insensitive.
+func TestLayoutAreaCaseInsensitive(t *testing.T) {
+	lt := &LayoutTemplate{Areas: []*LayoutArea{{Name: "ШапкаТаблицы"}}}
+	if lt.Area("шапкатаблицы") == nil {
+		t.Fatalf("case-insensitive Area lookup failed (lower)")
+	}
+	if lt.Area("ШАПКАТАБЛИЦЫ") == nil {
+		t.Fatalf("case-insensitive Area lookup failed (upper)")
+	}
+	if lt.Area("Несуществующая") != nil {
+		t.Fatalf("Area returned non-nil for missing name")
+	}
+}
+
+func names(areas []*LayoutArea) []string {
+	out := make([]string, len(areas))
+	for i, a := range areas {
+		out[i] = a.Name
+	}
+	return out
+}
+
+// TestPreviewHTMLNewFields ensures PreviewHTML renders CSS for new fields,
+// including per-side borders.
 func TestPreviewHTMLNewFields(t *testing.T) {
 	lt := &LayoutTemplate{
 		Name: "T",
@@ -124,8 +189,9 @@ func TestPreviewHTMLNewFields(t *testing.T) {
 			{Width: "80px"},
 			{Width: "auto"},
 		},
-		Areas: map[string]*LayoutArea{
-			"A": {
+		Areas: []*LayoutArea{
+			{
+				Name: "A",
 				Rows: []LayoutRow{
 					{
 						Height: "30px",
@@ -139,6 +205,7 @@ func TestPreviewHTMLNewFields(t *testing.T) {
 								RowSpan:     2,
 							},
 							{Text: "Y", Border: "none"},
+							{Text: "Z", Borders: &CellBorders{Left: "thin", Bottom: "thick"}},
 						},
 					},
 				},
@@ -155,6 +222,8 @@ func TestPreviewHTMLNewFields(t *testing.T) {
 		`rowspan="2"`,
 		"height:30px",
 		"border:none",
+		"border-left:1px solid", // per-side thin
+		"border-bottom:2px solid",
 	}
 	for _, sub := range checks {
 		if !strings.Contains(out, sub) {
@@ -165,8 +234,7 @@ func TestPreviewHTMLNewFields(t *testing.T) {
 
 // TestLayoutAcceptsRealExample parses a representative legacy layout (areas /
 // rows / cells with a parameter placeholder) and makes sure the model loads it
-// cleanly and renders a preview. Inlined into a temp file so the test does not
-// depend on example files under examples/ (which get reorganized).
+// cleanly and renders a preview.
 func TestLayoutAcceptsRealExample(t *testing.T) {
 	const src = `name: Накладная
 document: РеализацияТоваров
@@ -196,10 +264,9 @@ areas:
 	if lt.Name != "Накладная" || lt.Document != "РеализацияТоваров" {
 		t.Fatalf("header: %+v", lt)
 	}
-	if _, ok := lt.Areas["Заголовок"]; !ok {
+	if lt.Area("Заголовок") == nil {
 		t.Fatalf("Заголовок missing")
 	}
-	// Preview must include known title text and a parameter placeholder.
 	html := lt.PreviewHTML()
 	if !strings.Contains(html, "Накладная") {
 		t.Errorf("preview missing title: %s", html)
@@ -216,18 +283,56 @@ areas:
 	if err := yaml.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	titleCell := got.Areas["Заголовок"].Rows[0].Cells[0]
+	titleCell := got.Area("Заголовок").Rows[0].Cells[0]
 	if titleCell.Text != "Накладная" || !titleCell.Bold || titleCell.ColSpan != 4 ||
 		titleCell.Align != "center" || titleCell.FontSize != 16 {
 		t.Errorf("title cell lost fields after round-trip: %+v", titleCell)
 	}
 }
 
+// TestLayoutPageRoundTrip ensures page: setup survives load/marshal.
+func TestLayoutPageRoundTrip(t *testing.T) {
+	const src = `name: УПД
+document: РеализацияТоваров
+page:
+  orientation: landscape
+  format: A4
+  marginsmm:
+    top: 5
+    bottom: 5
+    left: 8
+    right: 8
+areas:
+  - name: Страница1
+    rows:
+      - cells:
+          - text: "X"
+`
+	lt, err := ParseLayoutBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if lt.Page == nil || lt.Page.Orientation != "landscape" || lt.Page.MarginsMM.Left != 8 {
+		t.Fatalf("page lost: %+v", lt.Page)
+	}
+	data, err := yaml.Marshal(lt)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got LayoutTemplate
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Page == nil || got.Page.Orientation != "landscape" {
+		t.Fatalf("page lost after round-trip: %+v", got.Page)
+	}
+}
+
 // TestPreviewHTMLEscapesText ensures user text/parameter cannot inject HTML.
 func TestPreviewHTMLEscapesText(t *testing.T) {
 	lt := &LayoutTemplate{
-		Areas: map[string]*LayoutArea{
-			"A": {Rows: []LayoutRow{{Cells: []LayoutCell{
+		Areas: []*LayoutArea{
+			{Name: "A", Rows: []LayoutRow{{Cells: []LayoutCell{
 				{Text: "<script>alert(1)</script>"},
 				{Parameter: "<b>bad</b>"},
 			}}}},

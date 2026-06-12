@@ -112,7 +112,7 @@ func writeProcessorLayouts(groups map[string][]templateSource, outDir string, no
 	}
 	sort.Strings(owners)
 	for _, owner := range owners {
-		lt := printform.LayoutTemplate{Name: owner, Areas: map[string]*printform.LayoutArea{}}
+		lt := printform.LayoutTemplate{Name: owner}
 		for _, t := range groups[owner] {
 			srcNote := ""
 			if t.Src != "" {
@@ -125,9 +125,12 @@ func writeProcessorLayouts(groups map[string][]templateSource, outDir string, no
 					srcNote = " (исходник: src/" + srcName + ")"
 				}
 			}
-			lt.Areas[t.Name] = &printform.LayoutArea{Rows: []printform.LayoutRow{{
-				Cells: []printform.LayoutCell{{Text: "TODO: перенесите оформление макета 1С «" + t.Name + "»" + srcNote}},
-			}}}
+			lt.Areas = append(lt.Areas, &printform.LayoutArea{
+				Name: t.Name,
+				Rows: []printform.LayoutRow{{
+					Cells: []printform.LayoutCell{{Text: "TODO: перенесите оформление макета 1С «" + t.Name + "»" + srcNote}},
+				}},
+			})
 			// notes.Templates НЕ инкрементируем: макеты обработок теперь не
 			// printform-шаблоны, а заготовки src/*.proc.layout.yaml. Они
 			// перечисляются отдельно в секции ProcessorLayouts отчёта, поэтому

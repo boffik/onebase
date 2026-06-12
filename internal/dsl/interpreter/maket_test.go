@@ -12,8 +12,9 @@ import (
 func TestMaketGetArea_NewFields(t *testing.T) {
 	lt := &printform.LayoutTemplate{
 		Name: "T",
-		Areas: map[string]*printform.LayoutArea{
-			"Шапка": {
+		Areas: []*printform.LayoutArea{
+			{
+				Name: "Шапка",
 				Rows: []printform.LayoutRow{
 					{Cells: []printform.LayoutCell{
 						{
@@ -62,7 +63,7 @@ func TestMaketGetArea_NewFields(t *testing.T) {
 func TestInjectMaket(t *testing.T) {
 	lt := &printform.LayoutTemplate{
 		Name:  "T",
-		Areas: map[string]*printform.LayoutArea{"A": {Rows: []printform.LayoutRow{{Cells: []printform.LayoutCell{{Text: "x"}}}}}},
+		Areas: []*printform.LayoutArea{{Name: "A", Rows: []printform.LayoutRow{{Cells: []printform.LayoutCell{{Text: "x"}}}}}},
 	}
 
 	// С layout — переменная добавлена и это *Макет.
@@ -91,8 +92,8 @@ func TestInjectMaket(t *testing.T) {
 // still produce cells with sensible defaults.
 func TestMaketGetArea_DefaultsPreserved(t *testing.T) {
 	lt := &printform.LayoutTemplate{
-		Areas: map[string]*printform.LayoutArea{
-			"A": {Rows: []printform.LayoutRow{
+		Areas: []*printform.LayoutArea{
+			{Name: "A", Rows: []printform.LayoutRow{
 				{Cells: []printform.LayoutCell{{Text: "x"}}},
 			}},
 		},

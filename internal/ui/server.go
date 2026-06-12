@@ -273,11 +273,12 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/constants", s.constantsList)
 	r.Post("/ui/constants", s.constantsSave)
 
-	// Print forms
+	// Print forms — единые маршруты для всех видов (декларативные/DSL/legacy),
+	// план 64, этап 3. Старый /print-dsl/ оставлен как 301-редирект на /print/.
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}", s.printDocument)
 	r.Get("/ui/{kind}/{entity}/{id}/print/{form}/pdf", s.printDocumentPDF)
-	r.Get("/ui/{kind}/{entity}/{id}/print-dsl/{pfName}", s.printDocumentDSLPF)
-	r.Get("/ui/{kind}/{entity}/{id}/print-dsl/{pfName}/pdf", s.printDocumentDSLPFPDF)
+	r.Get("/ui/{kind}/{entity}/{id}/print-dsl/{pfName}", s.redirectDSLPrint)
+	r.Get("/ui/{kind}/{entity}/{id}/print-dsl/{pfName}/pdf", s.redirectDSLPrint)
 
 	// Attachments
 	r.Get("/ui/{kind}/{entity}/{id}/attachments", s.attachmentsList)

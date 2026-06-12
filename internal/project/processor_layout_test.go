@@ -58,7 +58,7 @@ func TestLoadProcessorLayout(t *testing.T) {
 	if proc.Layout == nil {
 		t.Fatal("proc.Layout == nil — макет обработки не загружен")
 	}
-	if _, ok := proc.Layout.Areas["Заголовок"]; !ok {
+	if proc.Layout.Area("Заголовок") == nil {
 		t.Errorf("в макете нет области «Заголовок»: %+v", proc.Layout.Areas)
 	}
 }
