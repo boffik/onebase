@@ -262,3 +262,127 @@ func TestWrapTextWithFonts(t *testing.T) {
 		t.Error("wrapText вернул пустоту")
 	}
 }
+
+// newMeasuredPDF создаёт fpdf-инстанс с зарегистрированными шрифтами и одной
+// страницей — пригоден для измерения переноса (wrapText/SplitText) в тестах.
+func newMeasuredPDF() *fpdf.Fpdf {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	registerFonts(pdf)
+	pdf.AddPage()
+	return pdf
+}
+
+// realWrappedLines измеряет фактическое число строк ячейки тем же движком, что и
+// рендер: устанавливает шрифт/размер/начертание и считает строки wrapText.
+func realWrappedLines(pdf *fpdf.Fpdf, cell *Cell, availMM float64) int {
+	family, style := resolveFont(cell.FontFamily, cell.Bold, cell.Italic)
+	pdf.SetFont(family, style, fontSizeOr(cell))
+	return len(wrapText(pdf, cell.Text, availMM))
+}
+
+// TestRowHeightFitsCyrillicWrap — регресс на дефект 1 (недооценка высоты строк
+// для кириллицы). Узкая колонка + длинный кириллический текст: высота строки,
+// посчитанная computeRowHeightsMM, ДОЛЖНА вмещать реальное число строк
+// переноса. Репро ревью: «Стол письменный дубовый с ящиками» @25мм/10pt → 4
+// строки, а старая эвристика давала 3 → текст вываливался за ячейку.
+func TestRowHeightFitsCyrillicWrap(t *testing.T) {
+	pdf := newMeasuredPDF()
+
+	d := NewDocument()
+	// Колонка 1 — 25мм (≈94.5px), колонка 2 — 30мм.
+	d.SetColumnWidth(1, 25.0/mmPerInch*pxPerInch)
+	d.SetColumnWidth(2, 30.0/mmPerInch*pxPerInch)
+	c0 := d.GetOrCreateCell(0, 0)
+	c0.Text = "Стол письменный дубовый с ящиками"
+	c1 := d.GetOrCreateCell(0, 1)
+	c1.Text = "Очень длинное наименование товарной позиции для проверки переноса"
+
+	maxRow, maxCol := d.ContentBounds()
+	colWidths := d.resolveColumnWidthsMM(190, maxCol+1)
+	heights := d.computeRowHeightsMM(pdf, maxRow, colWidths)
+
+	for row := 0; row <= maxRow; row++ {
+		var needLines int
+		for col := 0; col < len(colWidths); col++ {
+			cell := d.GetCell(row, col)
+			if cell == nil || cell.Text == "" {
+				continue
+			}
+			cw := colWidths[col]
+			for cs := 1; cs < cell.ColSpan && col+cs < len(colWidths); cs++ {
+				cw += colWidths[col+cs]
+			}
+			avail := cw - 2*cellPadMM
+			if avail <= 0 {
+				avail = cw
+			}
+			if n := realWrappedLines(pdf, cell, avail); n > needLines {
+				needLines = n
+			}
+		}
+		fs := 10.0
+		lineH := fs * ptToMM * lineGap
+		minNeeded := float64(needLines)*lineH + 2*cellPadMM
+		if heights[row] < minNeeded-1e-6 {
+			t.Errorf("строка %d: высота %.2fмм < требуемой %.2fмм (%d строк × %.2f + паддинг)",
+				row, heights[row], minNeeded, needLines, lineH)
+		}
+	}
+}
+
+// TestRepeatHeaderHeightNotMinRow — регресс на дефект 2 (повторная шапка
+// сжимается до minRowMM). Многострочная ячейка шапки УПД на 2-й странице не
+// должна сжиматься в minRowMM на строку — высота должна считаться тем же
+// движком рендера.
+func TestRepeatHeaderHeightNotMinRow(t *testing.T) {
+	pdf := newMeasuredPDF()
+
+	area := NewArea(0, 0, 0, 0)
+	hc := area.GetOrCreateCell(0, 0)
+	hc.Text = "Универсальный передаточный документ (счёт-фактура) по форме приложения"
+	hc.Bold = true
+
+	colWidths := []float64{40} // узкая колонка → многострочная шапка
+	heights := area.computeAreaRowHeightsMM(pdf, colWidths)
+	if len(heights) != 1 {
+		t.Fatalf("ожидалась 1 строка шапки, получено %d", len(heights))
+	}
+
+	avail := colWidths[0] - 2*cellPadMM
+	realLines := realWrappedLines(pdf, hc, avail)
+	if realLines < 2 {
+		t.Fatalf("ожидался многострочный перенос шапки, получено %d строк", realLines)
+	}
+	lineH := 10.0 * ptToMM * lineGap
+	minNeeded := float64(realLines)*lineH + 2*cellPadMM
+	if heights[0] < minNeeded-1e-6 {
+		t.Errorf("высота шапки %.2fмм < требуемой %.2fмм (сжата до minRow?)", heights[0], minNeeded)
+	}
+	if heights[0] <= minRowMM+1e-6 {
+		t.Errorf("высота шапки %.2fмм ≈ minRowMM (%.2f) — шапка сжата", heights[0], minRowMM)
+	}
+}
+
+// TestColumnWidthsClampedToUsable — регресс на дефект 3 (ширины колонок не
+// клампятся). 5 колонок по 400px (≈105.8мм каждая → 529мм) против usable 190мм:
+// после раздачи суммарная ширина должна быть смасштабирована до usable, иначе
+// контент уезжает за край листа.
+func TestColumnWidthsClampedToUsable(t *testing.T) {
+	d := NewDocument()
+	for c := 1; c <= 5; c++ {
+		d.SetColumnWidth(c, 400)
+	}
+	usable := 190.0
+	widths := d.resolveColumnWidthsMM(usable, 5)
+	sum := 0.0
+	for _, w := range widths {
+		sum += w
+	}
+	if sum > usable+1e-6 {
+		t.Errorf("суммарная ширина %.2fмм > usable %.2fмм — ширины не склампены", sum, usable)
+	}
+	// При клампе все колонки умещаются и сумма близка к usable.
+	if sum < usable-1.0 {
+		t.Errorf("суммарная ширина %.2fмм существенно меньше usable %.2fмм — клампинг переусердствовал", sum, usable)
+	}
+}

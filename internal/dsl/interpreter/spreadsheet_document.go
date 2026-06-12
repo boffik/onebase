@@ -461,7 +461,12 @@ func (d *SpreadsheetDocument) HTMLString() string {
 	return d.Doc.HTMLString()
 }
 
-// write saves the document to a file.
+// write сериализует документ и ВОЗВРАЩАЕТ его содержимое (а не пишет на диск —
+// сохранение делает вызывающий DSL-код через ЗаписатьТекстФайла и т.п.).
+// Формат содержимого зависит от типа:
+//   - "pdf"        → base64-строка PDF-байтов (как ВыгрузитьВExcel);
+//   - "html"/""    → сырой HTML-текст;
+//   - "txt"        → сырой табличный текст (колонки \t, строки \n).
 func (d *SpreadsheetDocument) write(fileName string, args []any) any {
 	d.Doc.FileName = fileName
 	fileType := "html"
@@ -487,14 +492,17 @@ func (d *SpreadsheetDocument) writeHTML(fileName string) any {
 	return html
 }
 
-// writePDF экспортирует документ в PDF и возвращает base64-строку (как
-// ВыгрузитьВExcel) — план 64, этап 2. Кириллица рендерится встроенными
-// PT-шрифтами без транслитерации. При ошибке возвращает пустую строку.
+// writePDF экспортирует документ в PDF и возвращает base64-строку PDF-байтов
+// (как ВыгрузитьВExcel) — план 64, этап 2. Кириллица рендерится встроенными
+// PT-шрифтами без транслитерации. При ошибке НЕ молчит пустой строкой (иначе
+// вызывающий код запишет пустой файл, не заметив сбоя), а возвращает текст
+// ошибки — он виден в DSL-коде, присвоившем результат Записать.
 func (d *SpreadsheetDocument) writePDF(fileName string) any {
 	b, err := d.Doc.PDF(sheet.PDFOptions{Title: fileName})
 	if err != nil {
-		fmt.Printf("// Ошибка записи PDF %s: %v\n", fileName, err)
-		return ""
+		msg := fmt.Sprintf("Ошибка формирования PDF %q: %v", fileName, err)
+		fmt.Printf("// %s\n", msg)
+		return msg
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }

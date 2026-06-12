@@ -12,6 +12,14 @@ import (
 // covered (как в html.go), границы legacy-пресетом, фоны, выравнивания H/V,
 // авто- и явные разрывы страниц с повтором HeaderArea. Кириллица — через
 // встроенные PT-шрифты (fonts.go), без транслитерации.
+//
+// Известные ограничения (roadmap, этап 3+):
+//   - Границы соседних ячеек рисуются дважды (каждая ячейка обводит свой
+//     прямоугольник через drawCellBorder), из-за чего на общих рёбрах линия
+//     удваивается по толщине. Этап 3 заменит legacy-пресет на per-side Borders
+//     с единым обходом рёбер сетки.
+//   - registerFonts парсит встроенные TTF на каждый запрос PDF(). При большом
+//     потоке печати стоит закэшировать разобранные шрифты/инстанс fpdf.
 
 // Единицы и константы геометрии.
 const (
@@ -145,6 +153,20 @@ func (d *Document) resolveColumnWidthsMM(usable float64, colCount int) []float64
 			widths[c] = each
 		}
 	}
+
+	// Клампинг: если суммарная ширина не помещается в usable (например, 5 колонок
+	// по 400px ≈ 529мм против 190мм usable A4), масштабируем ВСЕ колонки
+	// коэффициентом usable/sum — контент не уезжает за правый край листа.
+	sum := 0.0
+	for _, w := range widths {
+		sum += w
+	}
+	if sum > usable && sum > 0 {
+		scale := usable / sum
+		for c := range widths {
+			widths[c] *= scale
+		}
+	}
 	return widths
 }
 
@@ -201,7 +223,10 @@ func (d *Document) PDF(opts PDFOptions) ([]byte, error) {
 		colX[c+1] = colX[c] + colWidths[c]
 	}
 
-	rowHeights := d.computeRowHeightsMM(maxRow, colWidths)
+	// Высоты строк считаются тем же движком, что и рендер: pdf-инстанс со
+	// шрифтами уже создан выше (registerFonts), поэтому передаём его в
+	// измеритель — wrapText/SplitText с установленным шрифтом ячейки.
+	rowHeights := d.computeRowHeightsMM(pdf, maxRow, colWidths)
 
 	// Множество строк с явным разрывом страницы ПЕРЕД ними.
 	breakBefore := make(map[int]bool, len(d.PageBreaks))
@@ -211,15 +236,14 @@ func (d *Document) PDF(opts PDFOptions) ([]byte, error) {
 
 	covered := make(map[CellKey]bool)
 
-	// headerHeights — высоты строк повторяемой шапки (если задана).
+	// headerHeights — высоты строк повторяемой шапки (если задана). Считаем тем
+	// же измерителем, что и тело документа: многострочная шапка УПД на 2-й и
+	// далее страницах не сожмётся в minRowMM (дефект 2).
 	var headerRows int
 	var headerHeights []float64
 	if d.RepeatHeader && d.HeaderArea != nil {
 		headerRows = d.HeaderArea.Rows()
-		headerHeights = make([]float64, headerRows)
-		for hr := 0; hr < headerRows; hr++ {
-			headerHeights[hr] = minRowMM
-		}
+		headerHeights = d.HeaderArea.computeAreaRowHeightsMM(pdf, colWidths)
 	}
 
 	y := m.Top
@@ -272,7 +296,16 @@ func (d *Document) PDF(opts PDFOptions) ([]byte, error) {
 // строчная высота (RowHeights, px) приоритетна; иначе авто = max по ячейкам
 // строки: число строк текста при переносе по ширине ячейки × line height +
 // паддинг.
-func (d *Document) computeRowHeightsMM(maxRow int, colWidths []float64) []float64 {
+//
+// Измеряем ТЕМ ЖЕ движком, что и рендер (drawCell): wrapText → pdf.SplitText с
+// установленным шрифтом ячейки. Шрифт/размер/начертание влияют на SplitText,
+// поэтому SetFont перед измерением обязателен. Это устраняет расхождение со
+// старой эвристикой по средней ширине символа, из-за которого кириллический
+// текст недооценивался и вываливался за ячейку (репро: «Стол письменный
+// дубовый с ящиками» @25мм/10pt — реально 4 строки, эвристика 3). Требует
+// готовый pdf-инстанс с зарегистрированными шрифтами, поэтому PDF() создаёт его
+// до расчёта высот.
+func (d *Document) computeRowHeightsMM(pdf *fpdf.Fpdf, maxRow int, colWidths []float64) []float64 {
 	heights := make([]float64, maxRow+1)
 	for row := 0; row <= maxRow; row++ {
 		if px := d.RowHeights[row+1]; px > 0 {
@@ -293,14 +326,7 @@ func (d *Document) computeRowHeightsMM(maxRow int, colWidths []float64) []float6
 			for cs := 1; cs < cell.ColSpan && col+cs < len(colWidths); cs++ {
 				cw += colWidths[col+cs]
 			}
-			fs := fontSizeOr(cell)
-			lineH := fs * ptToMM * lineGap
-			avail := cw - 2*cellPadMM
-			if avail <= 0 {
-				avail = cw
-			}
-			lines := countWrappedLines(cell.Text, avail, fs)
-			needed := float64(lines)*lineH + 2*cellPadMM
+			needed := cellHeightMM(pdf, cell, cw)
 			// rowspan распределяет высоту на несколько строк — здесь упрощённо
 			// учитываем как высоту одной строки (известное ограничение MVP).
 			if cell.RowSpan > 1 {
@@ -313,6 +339,50 @@ func (d *Document) computeRowHeightsMM(maxRow int, colWidths []float64) []float6
 		heights[row] = h
 	}
 	return heights
+}
+
+// computeAreaRowHeightsMM вычисляет высоты строк области (HeaderArea) тем же
+// измерителем, что и computeRowHeightsMM. Используется для повторяемой шапки:
+// раньше высоты строк шапки фиксировались на minRowMM, из-за чего многострочная
+// шапка (УПД) на 2-й и далее страницах сжималась и текст обрезался.
+func (a *Area) computeAreaRowHeightsMM(pdf *fpdf.Fpdf, colWidths []float64) []float64 {
+	rows := a.Rows()
+	cols := a.Cols()
+	heights := make([]float64, rows)
+	for r := 0; r < rows; r++ {
+		h := minRowMM
+		for c := 0; c < cols && c < len(colWidths); c++ {
+			cell := a.Cells[fmt.Sprintf("%d,%d", r, c)]
+			if cell == nil || cell.Text == "" {
+				continue
+			}
+			cw := colWidths[c]
+			for cs := 1; cs < cell.ColSpan && c+cs < len(colWidths); cs++ {
+				cw += colWidths[c+cs]
+			}
+			if needed := cellHeightMM(pdf, cell, cw); needed > h {
+				h = needed
+			}
+		}
+		heights[r] = h
+	}
+	return heights
+}
+
+// cellHeightMM возвращает высоту ячейки (мм), необходимую для размещения её
+// текста при переносе по ширине cw (мм). Шрифт ячейки устанавливается перед
+// измерением — он влияет на разбиение pdf.SplitText.
+func cellHeightMM(pdf *fpdf.Fpdf, cell *Cell, cw float64) float64 {
+	fs := fontSizeOr(cell)
+	lineH := fs * ptToMM * lineGap
+	avail := cw - 2*cellPadMM
+	if avail <= 0 {
+		avail = cw
+	}
+	family, style := resolveFont(cell.FontFamily, cell.Bold, cell.Italic)
+	pdf.SetFont(family, style, fs)
+	lines := len(wrapText(pdf, cell.Text, avail))
+	return float64(lines)*lineH + 2*cellPadMM
 }
 
 // drawDocRow рисует одну строку документа: фон, границы, текст для каждой не
@@ -475,40 +545,6 @@ func wrapText(pdf *fpdf.Fpdf, text string, avail float64) []string {
 		out = []string{""}
 	}
 	return out
-}
-
-// countWrappedLines оценивает число строк текста при переносе по ширине avail
-// (мм) для шрифта размера fs (pt) — для расчёта высоты строки до выбора шрифта
-// на конкретной ячейке. Эвристика по средней ширине символа (≈0.5×fs в pt).
-func countWrappedLines(text string, avail float64, fs float64) int {
-	if avail <= 0 {
-		return 1
-	}
-	total := 0
-	avgCharMM := fs * 0.5 * ptToMM
-	if avgCharMM <= 0 {
-		avgCharMM = 1
-	}
-	perLine := int(avail / avgCharMM)
-	if perLine < 1 {
-		perLine = 1
-	}
-	for _, para := range strings.Split(text, "\n") {
-		runes := len([]rune(para))
-		if runes == 0 {
-			total++
-			continue
-		}
-		n := (runes + perLine - 1) / perLine
-		if n < 1 {
-			n = 1
-		}
-		total += n
-	}
-	if total < 1 {
-		total = 1
-	}
-	return total
 }
 
 // parseHexColor парсит "#rrggbb"/"#rgb" в компоненты RGB.
