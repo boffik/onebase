@@ -122,3 +122,15 @@ func TestLayoutEditor_StageBControls(t *testing.T) {
 		}
 	}
 }
+
+// Этап 6: JS редактора содержит операцию разреза области перед строкой и
+// диалог импорта макета из PDF.
+func TestLayoutEditor_SplitAndImportJS(t *testing.T) {
+	js := renderCfgFootJS(t)
+	if !strings.Contains(js, "function splitLayoutArea") {
+		t.Error("в JS редактора нет функции splitLayoutArea (разрез области)")
+	}
+	if !strings.Contains(js, "function cfgImportPdfLayout") {
+		t.Error("в JS нет функции cfgImportPdfLayout (диалог импорта из PDF)")
+	}
+}

@@ -784,6 +784,57 @@ function cfgNewLayout(action, entity) {
 function cfgCreateOSLayout(action, osform) {
   _cfgSubmitForm(action, {osform: osform});
 }
+// cfgImportPdfLayout — «Создать макет из PDF»: модальный диалог (имя + файл +
+// № страницы), затем multipart-POST на import-pdf. После импорта сервер
+// открывает редактор макета (план 64, этап 6).
+function cfgImportPdfLayout(action) {
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:8px;padding:20px;min-width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.3);font-size:13px';
+  box.innerHTML =
+    '<div style="font-weight:600;font-size:15px;margin-bottom:12px">{{t $.Lang "Создать макет из PDF"}}</div>' +
+    '<div style="color:#64748b;font-size:12px;margin-bottom:12px">{{t $.Lang "Подходит вектор с текстовым слоем (выгрузка из 1С/Excel). Сканы импортировать нельзя. Черновик нужно доработать в редакторе."}}</div>' +
+    '<label style="display:block;margin-bottom:8px">{{t $.Lang "Имя макета"}}<br><input type="text" id="_pdfName" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box"></label>' +
+    '<label style="display:block;margin-bottom:8px">{{t $.Lang "PDF-файл"}}<br><input type="file" id="_pdfFile" accept="application/pdf,.pdf" style="width:100%"></label>' +
+    '<label style="display:block;margin-bottom:14px">{{t $.Lang "Номер страницы"}}<br><input type="number" id="_pdfPage" value="1" min="1" style="width:80px;padding:6px;border:1px solid #cbd5e1;border-radius:4px"></label>' +
+    '<div id="_pdfErr" style="color:#dc2626;font-size:12px;margin-bottom:8px;display:none"></div>' +
+    '<div style="text-align:right">' +
+    '<button type="button" id="_pdfCancel" style="padding:6px 14px;margin-right:8px;background:#e2e8f0;border:none;border-radius:4px;cursor:pointer">{{t $.Lang "Отмена"}}</button>' +
+    '<button type="button" id="_pdfOk" style="padding:6px 14px;background:#0369a1;color:#fff;border:none;border-radius:4px;cursor:pointer">{{t $.Lang "Импортировать"}}</button>' +
+    '</div>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  function close() { document.body.removeChild(overlay); }
+  document.getElementById('_pdfCancel').onclick = close;
+  overlay.onclick = function(e){ if (e.target === overlay) close(); };
+  var okBtn = document.getElementById('_pdfOk');
+  okBtn.onclick = function() {
+    var name = (document.getElementById('_pdfName').value || '').trim();
+    var fileInp = document.getElementById('_pdfFile');
+    var page = document.getElementById('_pdfPage').value || '1';
+    var err = document.getElementById('_pdfErr');
+    err.style.display = 'none';
+    if (!name) { err.textContent = '{{t $.Lang "Имя макета обязательно"}}'; err.style.display = ''; return; }
+    if (!fileInp.files || !fileInp.files[0]) { err.textContent = '{{t $.Lang "Выберите PDF-файл"}}'; err.style.display = ''; return; }
+    var fd = new FormData();
+    fd.append('file', fileInp.files[0]);
+    fd.append('name', name);
+    fd.append('page', page);
+    okBtn.disabled = true; okBtn.textContent = '{{t $.Lang "Импорт..."}}';
+    fetch(action, {method:'POST', body:fd})
+      .then(function(resp){ return resp.text().then(function(html){ return {ok:resp.ok, html:html}; }); })
+      .then(function(res){
+        // Сервер всегда возвращает полную страницу конфигуратора (успех — с
+        // открытым редактором, ошибка — с баннером). Заменяем документ целиком.
+        document.open(); document.write(res.html); document.close();
+      })
+      .catch(function(e){
+        okBtn.disabled = false; okBtn.textContent = '{{t $.Lang "Импортировать"}}';
+        err.textContent = String(e); err.style.display = '';
+      });
+  };
+}
 
 // ── Folder picker ──────────────────────────────────────────────
 function pickDir(inputId, title) {
@@ -1843,7 +1894,9 @@ function renderLayoutEditor(n,noYamlSync){
         if(!txt)txt='&nbsp;';
         h+='<td style="'+st+'"'+at+' onclick="selectCell(\''+n+"','"+esc(an)+"',"+ri+','+ci+')">'+txt+'</td>';
       }
-      h+='<td style="border:none;padding:2px"><button type="button" style="font-size:10px;color:#c33;border:none;cursor:pointer;background:transparent" onclick="delLayoutRow(\''+n+"','"+esc(an)+"',"+ri+')\">✕</button></td>';
+      h+='<td style="border:none;padding:2px;white-space:nowrap">';
+      if(ri>0){h+='<button type="button" title="{{t $.Lang "Разрезать область перед этой строкой"}}" style="font-size:10px;color:#0369a1;border:none;cursor:pointer;background:transparent" onclick="splitLayoutArea(\''+n+"','"+esc(an)+"',"+ri+')\">✂</button>';}
+      h+='<button type="button" title="{{t $.Lang "Удалить строку"}}" style="font-size:10px;color:#c33;border:none;cursor:pointer;background:transparent" onclick="delLayoutRow(\''+n+"','"+esc(an)+"',"+ri+')\">✕</button></td>';
       h+='</tr>';
     }
     h+='</table></div>';
@@ -2269,6 +2322,28 @@ function delLayoutRow(n,a,ri){
   var s=_led[n];if(!s)return;
   var ar=_ldAreaByName(n,a);if(!ar||!ar.rows)return;
   ar.rows.splice(ri,1);
+  s.sel=null;
+  renderLayoutEditor(n);
+}
+// splitLayoutArea разрезает область a перед строкой ri на две: строки [0..ri)
+// остаются в первой части, [ri..] переходят во вторую. Нужно, чтобы выделить
+// из импортированной «Страница1» область-повтор (план 64, этап 6). Имена по
+// умолчанию «<a>_1»/«<a>_2», но запрашиваются у пользователя.
+function splitLayoutArea(n,a,ri){
+  var s=_led[n];if(!s||!Array.isArray(s.data.areas))return;
+  var idx=_ldAreaIndex(n,a);if(idx<0)return;
+  var ar=s.data.areas[idx];
+  var rows=ar.rows||[];
+  if(ri<=0||ri>=rows.length){alert('{{t $.Lang "Разрез возможен только перед строкой внутри области (не первой и не после последней)."}}');return;}
+  var n1=prompt('{{t $.Lang "Имя первой части (строки до разреза):"}}',a+'_1');
+  if(n1===null)return; n1=n1.trim(); if(!n1)return;
+  var n2=prompt('{{t $.Lang "Имя второй части (строки от разреза):"}}',a+'_2');
+  if(n2===null)return; n2=n2.trim(); if(!n2)return;
+  if(_ldAreaIndex(n,n1)>=0&&n1!==a){alert('{{t $.Lang "Область с таким именем уже есть"}}'+': '+n1);return;}
+  if(_ldAreaIndex(n,n2)>=0){alert('{{t $.Lang "Область с таким именем уже есть"}}'+': '+n2);return;}
+  var top=rows.slice(0,ri), bottom=rows.slice(ri);
+  ar.name=n1; ar.rows=top;
+  s.data.areas.splice(idx+1,0,{name:n2,rows:bottom});
   s.sel=null;
   renderLayoutEditor(n);
 }
@@ -5797,6 +5872,11 @@ const cfgTabTree = `{{define "tab-tree"}}
       <button type="button" onclick="cfgNewLayout('/bases/{{.BaseID}}/configurator/new-layout','{{$e.Name}}')"
               style="font-size:12px;padding:5px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer">
         + {{t $.Lang "Печатная форма (макет)"}}
+      </button>
+      <button type="button" onclick="cfgImportPdfLayout('/bases/{{.BaseID}}/configurator/layout/import-pdf')"
+              style="font-size:12px;padding:5px 12px;background:#0369a1;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-left:6px"
+              title="{{t $.Lang "Извлечь черновик макета из PDF (выгрузка 1С/Excel с текстовым слоем)"}}">
+        &#x1F4C4; {{t $.Lang "Создать макет из PDF"}}
       </button>
     </div>
   </div>{{/* end ot-print */}}
