@@ -1,6 +1,7 @@
 package pdfimport
 
 import (
+	"fmt"
 	"math"
 
 	pdf "github.com/ivantit66/onebase/internal/pdfimport/pdfparse"
@@ -27,6 +28,17 @@ type lineSeg struct {
 	Width          float64 // толщина линии (pt), из оператора w
 	Horizontal     bool
 }
+
+// Верхние границы объёма извлечения — защита от OOM на враждебном/распухшем PDF
+// (таймаут аллокацию не останавливает). Решение по обработке превышения разное:
+//   - maxRuns: текст частично полезен → молча обрезаем сбор runs (черновик
+//     остаётся пригодным к доводке, просто неполный).
+//   - maxLines: сетка из десятков тысяч линий всё равно бессмысленна и опасна
+//     для buildFromGrid → возвращаем ErrParse (честнее, чем тихо отдать кашу).
+const (
+	maxRuns  = 200000
+	maxLines = 50000
+)
 
 // pageGeom — геометрия страницы из словаря Page.
 type pageGeom struct {
@@ -68,6 +80,10 @@ func extractPage(r *pdf.Reader, pageNum int) (*extractedPage, error) {
 		if t.S == "" {
 			continue
 		}
+		if len(out.Runs) >= maxRuns {
+			// Враждебный/распухший PDF: обрезаем сбор — текст частично полезен.
+			break
+		}
 		bold, italic := fontFlags(t.Font)
 		out.Runs = append(out.Runs, textRun{
 			X:        t.X,
@@ -86,6 +102,10 @@ func extractPage(r *pdf.Reader, pageNum int) (*extractedPage, error) {
 	// контуры (f/W n) пропускаем. Для устойчивости копим все m/l-сегменты, а
 	// фильтруем по обводке через флаг последней операции рисования пути.
 	out.Lines = extractLines(p)
+	if len(out.Lines) > maxLines {
+		// Десятки тысяч линий — сетка бессмысленна и опасна для buildFromGrid.
+		return nil, fmt.Errorf("%w: слишком много линий (%d)", ErrParse, len(out.Lines))
+	}
 
 	return out, nil
 }

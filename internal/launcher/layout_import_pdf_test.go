@@ -161,10 +161,11 @@ func TestImportPDF_Oversize(t *testing.T) {
 	// Тело больше лимита: набиваем мусором сверх maxPDFUpload.
 	big := bytes.Repeat([]byte("A"), maxPDFUpload+1024)
 	rec := postImportPDF(t, h, b, "Большой", "1", big)
-	// MaxBytesReader/ParseMultipartForm должны отвергнуть — баннер ошибки.
+	// MaxBytesReader/ParseMultipartForm должны отвергнуть: макет НЕ создаётся.
+	// Сообщение об ошибке oversize — «Файл слишком большой или форма повреждена».
 	body := rec.Body.String()
-	if !strings.Contains(body, "слишком большой") && !strings.Contains(body, "повреждена") && rec.Code == http.StatusOK && strings.Contains(body, "layout.yaml") {
-		t.Errorf("oversize не отвергнут, тело:\n%s", truncate(body, 400))
+	if rec.Code == http.StatusOK && strings.Contains(body, ".layout.yaml") && !strings.Contains(body, "слишком большой") {
+		t.Errorf("oversize PDF не должен создавать макет, тело:\n%s", truncate(body, 400))
 	}
 }
 

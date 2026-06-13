@@ -429,7 +429,7 @@ func readCmap(toUnicode Value) *cmap {
 			stk.Pop().Name() // key
 			stk.Push(value)
 		default:
-			println("interp\t", op)
+			// неизвестный оператор CMap — игнорируем
 		}
 	})
 	if !ok {

@@ -35,7 +35,6 @@ func clusterWords(runs []textRun) []word {
 	var words []word
 	var cur *word
 	var lastX, lastY float64
-	hadGap := false // был ли заметный X-зазор перед текущим глифом (вставить пробел)
 
 	flush := func() {
 		if cur != nil {
@@ -64,20 +63,15 @@ func clusterWords(runs []textRun) []word {
 				FontSize: r.FontSize, Bold: r.Bold, Italic: r.Italic,
 				S: r.S,
 			}
-			hadGap = false
 		} else {
-			// Глиф продолжает текущее слово (X почти не изменился). Небольшой
-			// положительный зазор (пробел в исходнике) уже приходит как глиф " ".
-			if hadGap && cur.S != "" && !strings.HasSuffix(cur.S, " ") {
-				cur.S += " "
-			}
+			// Глиф продолжает текущее слово (X почти не изменился). Пробелы внутри
+			// слова уже приходят отдельным глифом " ", отдельной вставки не нужно.
 			cur.S += r.S
 			if r.FontSize > cur.FontSize {
 				cur.FontSize = r.FontSize
 			}
 			cur.Bold = cur.Bold || r.Bold
 			cur.Italic = cur.Italic || r.Italic
-			hadGap = false
 		}
 		lastX = r.X
 		lastY = r.Y

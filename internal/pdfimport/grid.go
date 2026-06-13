@@ -17,6 +17,7 @@ const (
 	mergeGapEps  = 2.0  // максимальный разрыв между коллинеарными сегментами для слияния (pt)
 	thickLineW   = 1.0  // линия толще этого (pt) считается thick границей
 	minGridLines = 4    // меньше линий каждого направления → fallback-кластеризация
+	maxGridLines = 2000 // больше cut'ов в направлении → fallback (защита от OOM)
 	wordGapPt    = 2.0  // зазор между глифами больше — новый «токен»
 )
 
@@ -32,7 +33,7 @@ func buildLayout(ep *extractedPage) *printform.LayoutTemplate {
 	hCuts, vCuts := buildCuts(ep.Lines, flipY, ep.Geom)
 
 	var tpl *printform.LayoutTemplate
-	if len(hCuts) >= minGridLines && len(vCuts) >= minGridLines {
+	if gridFeasible(len(hCuts), len(vCuts)) {
 		tpl = buildFromGrid(ep, hCuts, vCuts, flipY)
 	} else {
 		tpl = buildFallback(ep, flipY)
@@ -42,6 +43,18 @@ func buildLayout(ep *extractedPage) *printform.LayoutTemplate {
 		tpl.Name = "ИзPDF"
 	}
 	return tpl
+}
+
+// gridFeasible решает, строить ли макет по сетке (buildFromGrid) или уйти в
+// дешёвый fallback, по числу cut'ов в каждом направлении.
+//
+// Ниже minGridLines — сетки фактически нет. Выше maxGridLines — это враждебный/
+// распухший PDF: buildFromGrid выделит O(nRows×nCols) памяти и сделает span-детект
+// O(nRows×nCols×(nRows+nCols)), что уронит процесс по OOM (контекст-таймаут
+// аллокацию уже не остановит). В обоих случаях возвращаем false → fallback.
+func gridFeasible(nH, nV int) bool {
+	return nH >= minGridLines && nV >= minGridLines &&
+		nH <= maxGridLines && nV <= maxGridLines
 }
 
 // buildPageSetup переводит MediaBox+Rotate в PageSetup (ориентация/формат/поля).
