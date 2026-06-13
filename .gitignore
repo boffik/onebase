@@ -7,6 +7,8 @@ onebase-arm64
 dbquery.exe
 *.exe~
 *.test
+*.test.exe
+*.prof
 
 # Test/coverage artifacts
 coverage.out
