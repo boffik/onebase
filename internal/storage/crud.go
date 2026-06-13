@@ -265,6 +265,16 @@ func normalizeUUID(v any) any {
 
 // List returns rows for an entity with optional filtering and sorting.
 // For documents, also returns "posted" bool.
+// dateUpperBound возвращает верхнюю границу фильтра по дате и оператор. Для
+// суточного значения «2006-01-02» — следующий день и «<» (включить весь день,
+// DST-устойчиво через AddDate). Если задано время — оставляет значение и «<=».
+func dateUpperBound(to string) (string, string) {
+	if t, err := time.Parse("2006-01-02", to); err == nil {
+		return t.AddDate(0, 0, 1).Format("2006-01-02"), "<"
+	}
+	return to, "<="
+}
+
 func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Entity, params ListParams) ([]map[string]any, error) {
 	d := db.dialect
 	table := metadata.TableName(entityName)
@@ -313,8 +323,13 @@ func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Enti
 				argIdx++
 			}
 			if fv.To != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s <= %s", col, d.Placeholder(argIdx)))
-				args = append(args, fv.To)
+				// Включаем весь выбранный день: для суточного «по дату» сравниваем
+				// «< следующего дня», иначе документы этого дня с временем > 00:00
+				// выпадали бы (а на SQLite, где дата хранится как RFC3339-строка,
+				// исключался весь граничный день).
+				bound, op := dateUpperBound(fv.To)
+				whereParts = append(whereParts, fmt.Sprintf("%s %s %s", col, op, d.Placeholder(argIdx)))
+				args = append(args, bound)
 				argIdx++
 			}
 		case f.RefEntity != "":
@@ -468,8 +483,13 @@ func (db *DB) CountList(ctx context.Context, entityName string, entity *metadata
 				argIdx++
 			}
 			if fv.To != "" {
-				whereParts = append(whereParts, fmt.Sprintf("%s <= %s", col, d.Placeholder(argIdx)))
-				args = append(args, fv.To)
+				// Включаем весь выбранный день: для суточного «по дату» сравниваем
+				// «< следующего дня», иначе документы этого дня с временем > 00:00
+				// выпадали бы (а на SQLite, где дата хранится как RFC3339-строка,
+				// исключался весь граничный день).
+				bound, op := dateUpperBound(fv.To)
+				whereParts = append(whereParts, fmt.Sprintf("%s %s %s", col, op, d.Placeholder(argIdx)))
+				args = append(args, bound)
 				argIdx++
 			}
 		case f.RefEntity != "":

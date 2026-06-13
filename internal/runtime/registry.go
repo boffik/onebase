@@ -591,6 +591,24 @@ func (r *Registry) GetReport(name string) *report.Report {
 	return nil
 }
 
+// existsCI сообщает, есть ли в карте ключ, совпадающий с name без учёта регистра.
+// Имена отчётов/обработок резолвятся регистронезависимо (GetReport/GetProcessor),
+// поэтому проверка занятости имени конфигурацией должна быть такой же — иначе
+// внешний объект с именем в другом регистре (например «продажи» при «Продажи»)
+// дублируется в меню и открывает чужой объект.
+func existsCI[V any](m map[string]V, name string) bool {
+	if _, ok := m[name]; ok {
+		return true
+	}
+	nl := strings.ToLower(name)
+	for k := range m {
+		if strings.ToLower(k) == nl {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Registry) Reports() []*report.Report {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -600,7 +618,7 @@ func (r *Registry) Reports() []*report.Report {
 	}
 	// внешние отчёты, чьё имя не занято конфигурацией
 	for name, rep := range r.extReports {
-		if _, busy := r.reports[name]; busy {
+		if existsCI(r.reports, name) {
 			continue
 		}
 		out = append(out, rep)
@@ -622,7 +640,7 @@ func (r *Registry) SetExternalReports(reports []*report.Report) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for name := range m {
-		if _, busy := r.reports[name]; busy {
+		if existsCI(r.reports, name) {
 			log.Printf("extform: внешний отчёт %q совпадает по имени с отчётом конфигурации — используется отчёт конфигурации", name)
 		}
 	}
@@ -827,7 +845,7 @@ func (r *Registry) Processors() []*processor.Processor {
 	}
 	// внешние обработки, чьё имя не занято конфигурацией
 	for name, p := range r.extProcessors {
-		if _, busy := r.processors[name]; busy {
+		if existsCI(r.processors, name) {
 			continue
 		}
 		out = append(out, p)
@@ -857,7 +875,7 @@ func (r *Registry) SetExternalProcessors(procs []*processor.Processor, programs 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for name := range pm {
-		if _, busy := r.processors[name]; busy {
+		if existsCI(r.processors, name) {
 			log.Printf("extform: внешняя обработка %q совпадает по имени с обработкой конфигурации — используется обработка конфигурации", name)
 		}
 	}

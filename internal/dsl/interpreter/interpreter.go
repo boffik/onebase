@@ -26,6 +26,7 @@ type userError struct {
 	Msg  string
 	File string
 	Line int
+	Err  error // исходная ошибка (например i18nerr) для локализации по цепочке
 }
 
 // RaiseUserError panics with a DSL user error. Предназначено для
@@ -34,6 +35,13 @@ type userError struct {
 // перехватывается Run/RunWithResult и Попыткой так же, как Error().
 func RaiseUserError(msg string) {
 	panic(userError{Msg: msg})
+}
+
+// RaiseUserErrorWrap — как RaiseUserError, но сохраняет исходную error (i18nerr)
+// в userError.Err → DSLError.Err, чтобы i18nerr.Localize локализовал сообщение
+// по цепочке, а не показывал русский текст не-русскому пользователю.
+func RaiseUserErrorWrap(msg string, err error) {
+	panic(userError{Msg: msg, Err: err})
 }
 
 // loopBreak — выход из цикла через Прервать
@@ -108,7 +116,7 @@ func (i *Interpreter) Call(proc *ast.ProcedureDecl, this This, args []any, extra
 			case dslStop:
 				err = s.err
 			case userError:
-				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg}
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg, Err: s.Err}
 			default:
 				panic(r)
 			}
@@ -132,7 +140,7 @@ func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *
 			case dslStop:
 				err = s.err
 			case userError:
-				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg}
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg, Err: s.Err}
 			case dslReturn:
 				if result != nil {
 					*result = s.val
@@ -161,7 +169,7 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 			case dslStop:
 				err = s.err
 			case userError:
-				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg}
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg, Err: s.Err}
 			case dslReturn:
 				// early return from procedure — not an error
 			default:

@@ -54,10 +54,12 @@ func (l *Lexer) skip() {
 			for l.pos < len(l.input) && l.peek() != '\n' {
 				l.next()
 			}
-		case r == '#':
-			// Директива препроцессора 1С (#Область, #Если…) — пропускаем
-			// строку как комментарий: конвертер 1С→OneBase вырезает их сам,
-			// но копипаст из 1С не должен валить разбор (issue #48 п.2).
+		case r == '#' && l.directiveLineStart():
+			// Директива препроцессора 1С (#Область, #Если…) в начале строки —
+			// пропускаем строку как комментарий: конвертер 1С→OneBase вырезает
+			// их сам, но копипаст из 1С не должен валить разбор (issue #48 п.2).
+			// '#' в середине строки сюда НЕ попадает — он даст ILLEGAL в
+			// NextToken (громкая ошибка вместо тихого съедания остатка строки).
 			for l.pos < len(l.input) && l.peek() != '\n' {
 				l.next()
 			}
@@ -65,6 +67,23 @@ func (l *Lexer) skip() {
 			return
 		}
 	}
+}
+
+// directiveLineStart сообщает, что текущий '#' стоит в начале строки (до него на
+// этой строке только пробелы/табы). Тогда это директива препроцессора 1С, а не
+// случайный '#' посреди выражения, который должен стать ILLEGAL.
+func (l *Lexer) directiveLineStart() bool {
+	for i := l.pos - 1; i >= 0; i-- {
+		switch l.input[i] {
+		case '\n':
+			return true
+		case ' ', '\t', '\r':
+			continue
+		default:
+			return false
+		}
+	}
+	return true // начало ввода
 }
 
 func (l *Lexer) tok(t token.Type, lit string, line, col int) token.Token {
