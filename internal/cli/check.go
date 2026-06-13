@@ -54,6 +54,9 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 		// отдельно — они не часть project.Project.
 		roles, _ := auth.LoadRolesYAML(filepath.Join(bc.Dir, "roles"))
 		issues = append(issues, configcheck.CheckCrossRefs(proj, roles)...)
+		// Неблокирующие предупреждения по макетам v2 (например rowspan в repeat-
+		// области может некорректно разрываться по страницам PDF).
+		warnings = append(warnings, configcheck.CheckLayoutWarnings(proj)...)
 		// HTTP-сервисы (план 61): дубли root_url, наличие обработчиков, auth.
 		issues = append(issues, configcheck.CheckHTTPServices(proj)...)
 		// Коллизии имён таблиц: справочник и документ с одинаковым именем

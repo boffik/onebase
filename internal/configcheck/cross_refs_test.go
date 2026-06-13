@@ -259,6 +259,84 @@ binding:
 	}
 }
 
+// CheckLayoutWarnings: rowspan>1 в repeat-области даёт НЕблокирующее
+// предупреждение; rowspan в обычной (одноразовой) области и repeat-область без
+// rowspan — не предупреждают.
+func TestCheckLayoutWarnings_RowSpanInRepeat(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "реализация.yaml"), `name: Реализация
+fields:
+  - name: Номер
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Сумма
+        type: number`)
+	// repeat-область со rowspan → предупреждение.
+	mkFile(t, filepath.Join(dir, "printforms", "сросспан.layout.yaml"), `name: СоСпаном
+document: Реализация
+areas:
+  - name: Строка
+    rows:
+      - cells:
+          - parameter: С
+            rowspan: 2
+binding:
+  sequence: [Строка]
+  repeat:
+    - area: Строка
+      source: Товары
+      parameters:
+        С: Сумма | number:2
+`)
+	// repeat-область без rowspan + одноразовая шапка со rowspan → без предупреждений.
+	mkFile(t, filepath.Join(dir, "printforms", "безспана.layout.yaml"), `name: БезСпана
+document: Реализация
+areas:
+  - name: Шапка
+    rows:
+      - cells:
+          - text: "Накладная"
+            rowspan: 2
+  - name: Строка
+    rows:
+      - cells:
+          - parameter: С
+binding:
+  sequence: [Шапка, Строка]
+  repeat:
+    - area: Строка
+      source: Товары
+      parameters:
+        С: Сумма | number:2
+`)
+
+	proj, err := project.Load(dir)
+	if err != nil {
+		t.Fatalf("project.Load: %v", err)
+	}
+	defer proj.Close()
+
+	warns := CheckLayoutWarnings(proj)
+	// Имя формы (Object) = имя файла без расширения; источник ТЧ — в сообщении.
+	var withSpan, withoutSpan bool
+	for _, w := range warns {
+		if strings.Contains(w.File, "сросспан") && strings.Contains(w.Message, "rowspan") {
+			withSpan = true
+		}
+		if strings.Contains(w.File, "безспана") {
+			withoutSpan = true
+		}
+	}
+	if !withSpan {
+		t.Errorf("ожидалось предупреждение о rowspan в repeat-области (сросспан): %+v", warns)
+	}
+	if withoutSpan {
+		t.Errorf("форма безспана (rowspan только в одноразовой шапке) не должна предупреждать: %+v", warns)
+	}
+}
+
 // CheckNameCollisions должен ловить справочник и документ с одинаковым именем
 // (делят одну таблицу lower(имя)) и молчать, когда имена различны (issue #20).
 func TestCheckNameCollisions(t *testing.T) {

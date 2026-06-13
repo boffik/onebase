@@ -452,6 +452,57 @@ func layoutParamBound(name string, rb *printform.RepeatBinding, binding *printfo
 	return false
 }
 
+// CheckLayoutWarnings собирает НЕблокирующие предупреждения по декларативным
+// макетам печатных форм v2. Сейчас — единственное: область, повторяемая по
+// строкам табличной части (binding.repeat), содержит ячейку с rowspan>1.
+//
+// Почему предупреждение, а не ошибка: PDF-рендер (sheet/pdf.go) в MVP не умеет
+// корректно разрывать rowspan-ячейку через границу страницы — при попадании
+// высокого объединения на разрыв оно рисуется за нижнее поле и накладывается на
+// шапку следующей страницы. Для repeat-области (тиражируется на каждую строку
+// ТЧ — десятки/сотни строк) это почти гарантированно случится на длинном
+// документе. Одноразовые области (шапка/итог) в начале/конце на разрыв почти не
+// попадают, поэтому здесь не предупреждаем (меньше шума). Полный перенос
+// rowspan через страницу — follow-up плана 64.
+func CheckLayoutWarnings(proj *project.Project) []Issue {
+	var warns []Issue
+	for _, lf := range proj.LayoutForms {
+		if lf == nil || lf.Layout == nil || lf.Layout.Binding == nil {
+			continue
+		}
+		lt := lf.Layout
+		for i := range lt.Binding.Repeat {
+			rb := &lt.Binding.Repeat[i]
+			area := lt.Area(rb.Area)
+			if area == nil {
+				continue // несуществующая область — это уже ошибка checkLayoutForm
+			}
+			if areaHasRowSpan(area) {
+				warns = append(warns, Issue{
+					File:   "printforms/" + lf.Name + ".layout.yaml",
+					Object: lf.Name,
+					Kind:   "Печатная форма",
+					Message: fmt.Sprintf("область %q (повтор по ТЧ %q) содержит объединение по строкам (rowspan): "+
+						"при печати в PDF такое объединение может некорректно разрываться по страницам", rb.Area, rb.Source),
+				})
+			}
+		}
+	}
+	return warns
+}
+
+// areaHasRowSpan сообщает, есть ли в области ячейка с rowspan>1.
+func areaHasRowSpan(area *printform.LayoutArea) bool {
+	for _, row := range area.Rows {
+		for _, cell := range row.Cells {
+			if cell.RowSpan > 1 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // hasParamKey ищет ключ параметра регистронезависимо.
 func hasParamKey(params map[string]string, name string) bool {
 	if params == nil {
