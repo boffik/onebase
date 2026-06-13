@@ -13,8 +13,11 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -142,6 +145,25 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// CSRF-эквивалент для /hs/* (глобальный CSRF с сервисов снят, см.
+	// api.csrfExceptServices): мутирующий запрос с чужим Origin исполняем,
+	// только если источник явно разрешён CORS-политикой сервиса. Иначе —
+	// браузерная межсайтовая атака (cookie session/basic) отклоняется.
+	if isMutatingMethod(r.Method) {
+		if origin := r.Header.Get("Origin"); origin != "" && !sameOriginHost(origin, r.Host) {
+			allowed := false
+			if svc.CORS != nil {
+				if _, _, ok := matchOrigin(svc.CORS.Origins, origin); ok {
+					allowed = true
+				}
+			}
+			if !allowed {
+				writeServiceError(w, http.StatusForbidden, "cross-origin запрос отклонён")
+				return
+			}
+		}
+	}
+
 	tmpl, pathParams, ok := svc.Match("/" + remainder)
 	if !ok {
 		writeServiceError(w, http.StatusNotFound, "ресурс не найден: /"+remainder)
@@ -155,8 +177,10 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rate-limit уровня сервиса (поглощено из плана 58): защищает публичные
-	// приёмники вебхуков от спама и cost-DoS.
-	if svc.RateLimit > 0 && !s.endpointLimit.allow(svc.RootURL, svc.RateLimit) {
+	// приёмники вебхуков от спама и cost-DoS. Ключуем по (сервис, IP клиента),
+	// иначе один отправитель флудом исчерпал бы общую квоту и заблокировал
+	// легитимные вебхуки остальных.
+	if svc.RateLimit > 0 && !s.endpointLimit.allow(svc.RootURL+"|"+clientIP(r), svc.RateLimit) {
 		w.Header().Set("Retry-After", "60")
 		writeServiceError(w, http.StatusTooManyRequests, "превышен лимит запросов")
 		return
@@ -167,8 +191,20 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 	// байты/строку без возни с потоком.
 	var body []byte
 	if r.Body != nil {
-		body, _ = io.ReadAll(http.MaxBytesReader(w, r.Body, s.maxFileSizeBytes))
+		var rerr error
+		body, rerr = io.ReadAll(http.MaxBytesReader(w, r.Body, s.maxFileSizeBytes))
 		r.Body.Close()
+		if rerr != nil {
+			// Тело больше лимита нельзя молча усекать: hmac посчитал бы подпись
+			// по огрызку (ложный 401), а обработчик обработал бы битые данные.
+			var maxErr *http.MaxBytesError
+			if errors.As(rerr, &maxErr) {
+				writeServiceError(w, http.StatusRequestEntityTooLarge, "тело запроса превышает допустимый размер")
+			} else {
+				writeServiceError(w, http.StatusBadRequest, "не удалось прочитать тело запроса")
+			}
+			return
+		}
 	}
 
 	ctx, ok := s.resolveServiceAuth(svc, w, r, body)
@@ -247,10 +283,21 @@ func (s *Server) resolveServiceAuth(svc *httpservice.Service, w http.ResponseWri
 		if !has || s.authRepo == nil {
 			return s.denyBasic(w)
 		}
+		// Брутфорс-защита: тот же лимитер попыток, что у формы входа. Без него
+		// поток Authorization: Basic перебирал бы пароль без блокировки (+ cost-DoS
+		// на bcrypt). Ключ — (IP, логин), как у /login.
+		limKey := clientIP(r) + "|" + strings.ToLower(strings.TrimSpace(login))
+		if ok, retry := s.loginLimit.Allow(limKey); !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+			writeServiceError(w, http.StatusTooManyRequests, "слишком много попыток входа, повторите позже")
+			return nil, false
+		}
 		u, err := s.authRepo.Authenticate(r.Context(), login, pass)
 		if err != nil {
+			s.loginLimit.Fail(limKey)
 			return s.denyBasic(w)
 		}
+		s.loginLimit.Reset(limKey)
 		return s.serviceUserCtx(r.Context(), u), true
 
 	case "session":
@@ -334,27 +381,64 @@ func writeServiceError(w http.ResponseWriter, code int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": msg})
 }
 
-// sessionToken повторяет логику session-middleware: cookie onebase_session либо
-// query-параметр _tk (для конфигуратора на другом порту).
+// sessionToken читает токен сессии ТОЛЬКО из cookie onebase_session. Приём из
+// query-параметра _tk убран (план 53): токен в URL утекает в историю браузера,
+// Referer и access-логи прокси. Это совпадает с auth.Middleware, где _tk тоже
+// больше не принимается.
 func sessionToken(r *http.Request) string {
 	if c, err := r.Cookie("onebase_session"); err == nil && c.Value != "" {
 		return c.Value
 	}
-	return r.URL.Query().Get("_tk")
+	return ""
+}
+
+// clientIP возвращает IP-адрес клиента из RemoteAddr (без порта). X-Forwarded-For
+// намеренно не используется — без доверенного прокси заголовок подделывается и
+// позволил бы обходить лимиты или блокировать чужие IP.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// isMutatingMethod — методы, для которых проверяем cross-origin (как CSRFProtect).
+func isMutatingMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+// sameOriginHost сравнивает host:port из Origin с Host запроса.
+func sameOriginHost(origin, host string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, host)
 }
 
 // setCORSHeaders ставит Access-Control-Allow-Origin (+ credentials) согласно
 // политике сервиса. С credentials нельзя отвечать «*» — эхо конкретного источника.
 func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request, svc *httpservice.Service) {
 	origin := r.Header.Get("Origin")
-	allow, ok := matchOrigin(svc.CORS.Origins, origin)
+	allow, wildcard, ok := matchOrigin(svc.CORS.Origins, origin)
 	if !ok {
 		return
 	}
 	if svc.CORS.Credentials {
-		if origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
+		// Учётные данные (cookie session/basic) с CORS требуют ЯВНОГО источника.
+		// Если Origin совпал только по «*», credentialed CORS НЕ выдаём: иначе
+		// любой сайт прочитал бы ответ сервиса с куками жертвы (отражение
+		// произвольного Origin + Allow-Credentials: true).
+		if wildcard {
+			return
 		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	} else {
 		w.Header().Set("Access-Control-Allow-Origin", allow)
@@ -391,19 +475,24 @@ func (s *Server) writeCORSPreflight(w http.ResponseWriter, r *http.Request, svc 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// matchOrigin возвращает значение для Allow-Origin и признак совпадения.
-// «*» среди источников разрешает любой (возвращает "*"); иначе ищется точное
-// совпадение с заголовком Origin.
-func matchOrigin(origins []string, origin string) (string, bool) {
+// matchOrigin возвращает значение для Allow-Origin, признак совпадения по
+// wildcard «*» и признак совпадения вообще. Явное совпадение источника имеет
+// приоритет над «*» (важно для credentialed CORS, где «*» недопустим).
+func matchOrigin(origins []string, origin string) (allow string, wildcard bool, ok bool) {
+	hasWildcard := false
 	for _, o := range origins {
 		if o == "*" {
-			return "*", true
+			hasWildcard = true
+			continue
 		}
 		if origin != "" && strings.EqualFold(o, origin) {
-			return origin, true
+			return origin, false, true
 		}
 	}
-	return "", false
+	if hasWildcard {
+		return "*", true, true
+	}
+	return "", false, false
 }
 
 func sortedMethods(methods map[string]string) []string {

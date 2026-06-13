@@ -547,10 +547,10 @@ func (s *Server) gengenGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Prompt  string   `json:"prompt"`
-		Domain  string   `json:"domain"`
-		Addons  []string `json:"addons"`
-		YAML    map[string]string `json:"yaml"`
+		Prompt string            `json:"prompt"`
+		Domain string            `json:"domain"`
+		Addons []string          `json:"addons"`
+		YAML   map[string]string `json:"yaml"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonResp(w, 400, map[string]any{"error": "Некорректный запрос"})
@@ -599,7 +599,13 @@ func (s *Server) gengenGenerate(w http.ResponseWriter, r *http.Request) {
 		if content == "" {
 			continue
 		}
-		fullPath := filepath.Join(outDir, relPath)
+		fullPath, err := safeJoinWithin(outDir, relPath)
+		if err != nil {
+			// relPath приходит из тела запроса — не даём вырваться за outDir
+			// (path traversal с перезаписью произвольного файла на диске).
+			jsonResp(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 			jsonResp(w, 500, map[string]any{"error": err.Error()})
 			return
@@ -628,6 +634,18 @@ func (s *Server) gengenGenerate(w http.ResponseWriter, r *http.Request) {
 		"output":   outDir,
 		"files":    files,
 	})
+}
+
+// safeJoinWithin соединяет base и relPath и гарантирует, что результат не
+// выходит за пределы base. relPath из недоверенного источника (тело запроса)
+// может содержать «..» или абсолютный путь — тогда возвращается ошибка.
+func safeJoinWithin(base, relPath string) (string, error) {
+	full := filepath.Join(base, relPath)
+	rel, err := filepath.Rel(base, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("недопустимый путь файла: %q", relPath)
+	}
+	return full, nil
 }
 
 func (s *Server) gengenMerge(w http.ResponseWriter, r *http.Request) {
