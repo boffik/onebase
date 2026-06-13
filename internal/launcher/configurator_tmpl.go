@@ -1867,8 +1867,8 @@ function renderLayoutEditor(n,noYamlSync){
     h+='<span style="font-weight:bold;color:#4a9">'+esc(an)+'</span>';
     h+='<button type="button" title="{{t $.Lang "Вверх"}}" '+(ai===0?'disabled ':'')+'style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer'+(ai===0?';opacity:.3':'')+'" onclick="moveLayoutArea(\''+n+'\','+ai+',-1)">↑</button>';
     h+='<button type="button" title="{{t $.Lang "Вниз"}}" '+(ai===areas.length-1?'disabled ':'')+'style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer'+(ai===areas.length-1?';opacity:.3':'')+'" onclick="moveLayoutArea(\''+n+'\','+ai+',1)">↓</button>';
-    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer" onclick="addLayoutRow(\''+n+"','"+esc(an)+"')\">+ {{t $.Lang "Строка"}}</button>";
-    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #fcc;border-radius:3px;cursor:pointer;color:#c33" onclick="delLayoutArea(\''+n+"','"+esc(an)+"')\">✕</button>";
+    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;cursor:pointer" onclick="addLayoutRow(\''+escJsAttr(n)+"','"+escJsAttr(an)+"')\">+ {{t $.Lang "Строка"}}</button>";
+    h+='<button type="button" style="font-size:10px;padding:1px 6px;border:1px solid #fcc;border-radius:3px;cursor:pointer;color:#c33" onclick="delLayoutArea(\''+escJsAttr(n)+"','"+escJsAttr(an)+"')\">✕</button>";
     h+='</div>';
     h+=_ldAreaBindingRow(n,an);
     h+='<table style="border-collapse:collapse">'+cg;
@@ -1878,7 +1878,7 @@ function renderLayoutEditor(n,noYamlSync){
       h+='<tr'+rowStyle+'>';
       // Левая ручка строки (6.2): клик → высота строки.
       var hLbl=rows[ri].height?esc(rows[ri].height):'↕';
-      h+='<td onclick="ldRowHeight(\''+n+"','"+esc(an)+"',"+ri+')" style="border:1px solid #e2e8f0;background:#f1f5f9;color:#888;font-size:9px;text-align:center;cursor:pointer;width:16px;padding:0" title="{{t $.Lang "Высота строки"}}">'+hLbl+'</td>';
+      h+='<td onclick="ldRowHeight(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+')" style="border:1px solid #e2e8f0;background:#f1f5f9;color:#888;font-size:9px;text-align:center;cursor:pointer;width:16px;padding:0" title="{{t $.Lang "Высота строки"}}">'+hLbl+'</td>';
       var cells=rows[ri].cells||[];
       for(var ci=0;ci<cells.length;ci++){
         var c=cells[ci];
@@ -1892,11 +1892,11 @@ function renderLayoutEditor(n,noYamlSync){
         var txt=c.text?esc(c.text):'';
         if(c.parameter)txt='<span style="color:#888">['+esc(c.parameter)+']</span>';
         if(!txt)txt='&nbsp;';
-        h+='<td style="'+st+'"'+at+' onclick="selectCell(\''+n+"','"+esc(an)+"',"+ri+','+ci+')">'+txt+'</td>';
+        h+='<td style="'+st+'"'+at+' onclick="selectCell(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+','+ci+')">'+txt+'</td>';
       }
       h+='<td style="border:none;padding:2px;white-space:nowrap">';
-      if(ri>0){h+='<button type="button" title="{{t $.Lang "Разрезать область перед этой строкой"}}" style="font-size:10px;color:#0369a1;border:none;cursor:pointer;background:transparent" onclick="splitLayoutArea(\''+n+"','"+esc(an)+"',"+ri+')\">✂</button>';}
-      h+='<button type="button" title="{{t $.Lang "Удалить строку"}}" style="font-size:10px;color:#c33;border:none;cursor:pointer;background:transparent" onclick="delLayoutRow(\''+n+"','"+esc(an)+"',"+ri+')\">✕</button></td>';
+      if(ri>0){h+='<button type="button" title="{{t $.Lang "Разрезать область перед этой строкой"}}" style="font-size:10px;color:#0369a1;border:none;cursor:pointer;background:transparent" onclick="splitLayoutArea(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+')\">✂</button>';}
+      h+='<button type="button" title="{{t $.Lang "Удалить строку"}}" style="font-size:10px;color:#c33;border:none;cursor:pointer;background:transparent" onclick="delLayoutRow(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+')\">✕</button></td>';
       h+='</tr>';
     }
     h+='</table></div>';
@@ -2128,7 +2128,7 @@ function _ldAreaBindingRow(n,areaName){
   var rb=_ldRepeatForArea(n,areaName);
   var b=_ldBinding(n,false);
   var rh=(b&&(b.repeat_header||'').toLowerCase()===(areaName||'').toLowerCase());
-  var jn=areaName.replace(/'/g,"\\'");
+  var jn=escJsAttr(areaName);
   var h='<div style="display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:11px;color:#64748b">';
   h+='<label style="display:flex;align-items:center;gap:3px">'+esc('{{t $.Lang "Повтор по ТЧ"}}')+':';
   h+='<select style="font-size:11px;padding:1px 2px" onchange="ldSetAreaRepeat(\''+n+'\',\''+jn+'\',this.value)">';
@@ -2181,7 +2181,7 @@ function renderDataPanel(n){
     if(cs.length){
       h+='<div style="font-weight:600;color:#475569;margin:6px 0 2px">'+esc('{{t $.Lang "Константы"}}')+'</div>';
       for(var ci=0;ci<cs.length;ci++){
-        h+='<div class="ld-data-fld" style="padding:2px 4px;cursor:pointer;border-radius:3px" onclick="onDataFieldClick(\''+n+'\',\'const\',\''+esc(cs[ci])+'\')" title="{{t $.Lang "Кликните по ячейке, затем по полю"}}">'+esc(cs[ci])+'</div>';
+        h+='<div class="ld-data-fld" style="padding:2px 4px;cursor:pointer;border-radius:3px" onclick="onDataFieldClick(\''+escJsAttr(n)+'\',\'const\',\''+escJsAttr(cs[ci])+'\')" title="{{t $.Lang "Кликните по ячейке, затем по полю"}}">'+esc(cs[ci])+'</div>';
       }
     }
   }
@@ -2194,7 +2194,7 @@ function _ldFieldList(n,fields,scope){
   for(var i=0;i<fields.length;i++){
     var f=fields[i];
     var sub=(f.ref?' →':'');
-    h+='<div class="ld-data-fld" style="padding:2px 4px;cursor:pointer;border-radius:3px" onclick="onDataFieldClick(\''+n+'\',\''+scope+'\',\''+esc(f.name)+'\')" title="{{t $.Lang "Кликните по ячейке, затем по полю"}}">'+esc(f.name)+sub+'</div>';
+    h+='<div class="ld-data-fld" style="padding:2px 4px;cursor:pointer;border-radius:3px" onclick="onDataFieldClick(\''+escJsAttr(n)+'\',\''+escJsAttr(scope)+'\',\''+escJsAttr(f.name)+'\')" title="{{t $.Lang "Кликните по ячейке, затем по полю"}}">'+esc(f.name)+sub+'</div>';
   }
   if(!fields.length)h='<div style="color:#cbd5e1;font-size:11px;padding:2px 4px">—</div>';
   return h;
@@ -2425,10 +2425,22 @@ function ldDelColumn(n){
 function ldMerge(n){
   var sel=_ldSel(n);
   if(!sel){alert('{{t $.Lang "Выделите ячейку, которую нужно объединить с правой соседкой"}}');return;}
-  var row=sel.row,ci=sel.ci;
+  var ar=sel.ar,row=sel.row,ri=sel.ri,ci=sel.ci;
   if(ci+1>=row.cells.length){alert('{{t $.Lang "Нет ячейки справа для объединения"}}');return;}
   var c=row.cells[ci];
   var span=(c.colspan&&c.colspan>1)?c.colspan:1;
+  var rs=(c.rowspan&&c.rowspan>1)?c.rowspan:1;
+  // Новая визуальная колонка, которую накроет расширенный colspan.
+  var col=_ldVisualCol(ar,ri,ci);
+  var newCol=col+span; // первая колонка, добавляемая к спану
+  // Если ячейка многострочная (rowspan>1), расширение вправо накрывает newCol
+  // и в каждой строке ниже (ri+1..ri+rs-1). Симметрично vertical-фиксу
+  // (ldMergeDown): без удаления накрытая ячейка из строки ниже «всплыла» бы
+  // вправо. Удаляем сначала нижние строки, потом соседа в текущей строке.
+  for(var dr=rs-1;dr>=1;dr--){
+    var di=_ldCellIndexAtCol(ar,ri+dr,newCol);
+    if(di>=0)ar.rows[ri+dr].cells.splice(di,1);
+  }
   c.colspan=span+1;
   row.cells.splice(ci+1,1);
   renderLayoutEditor(n);
@@ -2640,6 +2652,12 @@ if(document.readyState==='loading'){
 
 // ── HTML escape (shared) ────────────────────────────────────────
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+// escJsAttr экранирует строку для безопасной вставки в одинарно-кавыченный
+// JS-строковый литерал ВНУТРИ HTML-атрибута onclick="..." (двойные кавычки).
+// Без этого апостроф в имени области/формы (имена приходят из prompt() и из
+// ключей YAML — произвольный текст) рвёт JS-строку, а &/< — HTML-атрибут.
+// Экранируем backslash, апостроф (для JS) и & < > " (для HTML-атрибута).
+function escJsAttr(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ── Syntax highlight ───────────────────────────────────────────
 (function(){

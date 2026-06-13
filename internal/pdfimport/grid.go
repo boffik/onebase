@@ -126,8 +126,16 @@ func buildCuts(lines []lineSeg, flipY func(float64) float64, g pageGeom) (hCuts,
 	return
 }
 
-// snapPositions сортирует позиции и схлопывает близкие (в пределах eps) в одну
-// (среднюю), возвращая отсортированный список уникальных cut'ов.
+// snapPositions сортирует позиции и схлопывает близкие в одну (среднюю),
+// возвращая отсортированный список уникальных cut'ов.
+//
+// Близость проверяется относительно ТЕКУЩЕГО ЦЕНТРА группы (среднего уже
+// накопленных точек), а не относительно последней добавленной точки. Сравнение
+// с последней точкой допускало неограниченный «дрейф»: цепочка точек, каждая в
+// пределах eps от предыдущей (0, 1, 2, 3, … при eps=1.2), схлопывалась в один
+// cut, хотя крайние точки отстоят далеко. Привязка к центру группы делает
+// разбиение устойчивым: новая точка присоединяется, только если она в пределах
+// eps от среднего группы.
 func snapPositions(pos []float64, eps float64) []float64 {
 	if len(pos) == 0 {
 		return nil
@@ -136,9 +144,9 @@ func snapPositions(pos []float64, eps float64) []float64 {
 	var out []float64
 	groupSum := pos[0]
 	groupCnt := 1.0
-	groupLast := pos[0]
 	for i := 1; i < len(pos); i++ {
-		if pos[i]-groupLast <= eps {
+		center := groupSum / groupCnt
+		if pos[i]-center <= eps {
 			groupSum += pos[i]
 			groupCnt++
 		} else {
@@ -146,7 +154,6 @@ func snapPositions(pos []float64, eps float64) []float64 {
 			groupSum = pos[i]
 			groupCnt = 1
 		}
-		groupLast = pos[i]
 	}
 	out = append(out, groupSum/groupCnt)
 	return out
