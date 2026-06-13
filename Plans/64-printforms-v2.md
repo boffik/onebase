@@ -101,7 +101,7 @@ binding:
 | 4 | Legacy: ConvertLegacy на загрузке, команда `printforms migrate`, перевод examples/*, сниффинг _ext_printforms, удаление renderer.go/pdf.go, configcheck binding | 3 | M |
 | 5 | Дизайнер: 6.1–6.4 («УПД руками»), затем 6.5–6.6 (привязка+preview) — можно двумя PR | 3 | L |
 | 6 | PDF-импорт: спайк → vendored pdfparse + ToUnicode + линии; grid.go; endpoint+UI; acceptance на реальном УПД пользователя | 3,5 | L–XL |
-| 7 | Полировка: картинки HTML+PDF, rowspan через страницу, DEVELOPER.md/ai-guide, перф (накладная 1000 строк, кэш SplitText) | 2–4 | S–M |
+| 7 | Полировка: картинки HTML+PDF, rowspan через страницу (edge: горизонтальный merge при rowspan>1), экранирование esc() апострофов, DEVELOPER.md/ai-guide, перф (накладная 1000 строк, кэш SplitText) | 2–4 | S–M |
 
 **MVP = этапы 1–3** (любая форма печатается в PDF с кириллицей; простые формы — без кода).
 

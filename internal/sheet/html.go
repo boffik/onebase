@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -157,7 +158,9 @@ func buildCellStyle(cell *Cell, width, height float64) string {
 		styles = append(styles, fmt.Sprintf("font-size:%dpt", cell.FontSize))
 	}
 	if cell.FontFamily != "" && cell.FontFamily != "Times New Roman" {
-		styles = append(styles, "font-family:"+cell.FontFamily)
+		if safe := safeFontFamily(cell.FontFamily); safe != "" {
+			styles = append(styles, "font-family:"+safe)
+		}
 	}
 	if width > 0 {
 		styles = append(styles, fmt.Sprintf("width:%.2fpx", width))
@@ -166,10 +169,14 @@ func buildCellStyle(cell *Cell, width, height float64) string {
 		styles = append(styles, fmt.Sprintf("height:%.2fpx", height))
 	}
 	if cell.BackColor != "" {
-		styles = append(styles, "background-color:"+cell.BackColor)
+		if safe := safeColor(cell.BackColor); safe != "" {
+			styles = append(styles, "background-color:"+safe)
+		}
 	}
 	if cell.TextColor != "" {
-		styles = append(styles, "color:"+cell.TextColor)
+		if safe := safeColor(cell.TextColor); safe != "" {
+			styles = append(styles, "color:"+safe)
+		}
 	}
 	styles = append(styles, borderStyles(cell)...)
 
@@ -235,4 +242,32 @@ func escapeHTML(s string) string {
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")
 	return s
+}
+
+// reHexColor принимает #rgb, #rrggbb и #rrggbbaa.
+var reHexColor = regexp.MustCompile(`(?i)^#[0-9a-f]{3}(?:[0-9a-f]{3}(?:[0-9a-f]{2})?)?$`)
+
+// reCSSIdent принимает CSS-идентификаторы (имена цветов: red, dark-blue …).
+var reCSSIdent = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*$`)
+
+// safeColor возвращает значение цвета без изменений, если оно соответствует
+// #hex или CSS-имени цвета (только [a-zA-Z][a-zA-Z0-9-]*). Иначе — "".
+// Цель: не допустить разрыва атрибута style через YAML с кавычками / тегами.
+func safeColor(s string) string {
+	if reHexColor.MatchString(s) || reCSSIdent.MatchString(s) {
+		return s
+	}
+	return ""
+}
+
+// safeFontFamily вырезает из font-family символы, способные разорвать
+// атрибут style: " ' < > ; (инъекция через YAML).
+func safeFontFamily(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '"', '\'', '<', '>', ';':
+			return -1
+		}
+		return r
+	}, s)
 }

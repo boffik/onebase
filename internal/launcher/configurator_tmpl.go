@@ -636,7 +636,13 @@ const cfgFoot = `{{define "cfg-foot"}}
       <button onclick="ldClosePreview()" style="background:#e8ecf2;color:#333;border:1px solid #c8d0de;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px">{{t $.Lang "Закрыть"}}</button>
     </div>
     <div style="flex:1;min-height:0;background:#fff;border-radius:0 0 8px 8px;overflow:hidden">
-      <iframe id="ld-preview-frame" style="width:100%;height:100%;border:none" title="{{t $.Lang "Предпросмотр печатной формы"}}"></iframe>
+      {{/* sandbox: allow-same-origin (blob URL, конфигуратор same-origin) +
+           allow-scripts (window.print в тулбаре HTML-предпросмотра) +
+           allow-modals (window.print/alert).
+           Текст ячеек экранирован escapeHTML() — sandbox здесь defense-in-depth. */}}
+      <iframe id="ld-preview-frame" style="width:100%;height:100%;border:none"
+              sandbox="allow-same-origin allow-scripts allow-modals"
+              title="{{t $.Lang "Предпросмотр печатной формы"}}"></iframe>
     </div>
   </div>
 </div>

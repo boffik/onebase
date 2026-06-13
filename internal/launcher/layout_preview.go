@@ -101,8 +101,32 @@ func parseLayoutSafe(data []byte) (lt *printform.LayoutTemplate, err error) {
 // buildPreviewContext собирает RenderContext для предпросмотра: пытается взять
 // последнюю запись сущности из БД базы; при недоступности БД/сущности/записей —
 // синтетические данные (поля = «<Имя>», ТЧ = 3 строки-заглушки).
+// Проект грузится ОДИН раз: сущность и индекс ссылок берутся из одного объекта.
 func (h *handler) buildPreviewContext(r *http.Request, b *Base, entityName string) *printform.RenderContext {
-	ent := h.findEntity(r, b, entityName)
+	ctx := r.Context()
+
+	// Однократная загрузка проекта.
+	proj, err := h.loadProjectFor(ctx, b)
+	if err != nil {
+		// нет метаданных — минимальная синтетика без структуры.
+		return &printform.RenderContext{
+			Document:   map[string]any{"Номер": "000000001", "Дата": "01.01.2025"},
+			TableParts: map[string][]map[string]any{},
+		}
+	}
+	defer proj.Close()
+
+	// Индекс сущностей из уже загруженного проекта.
+	refEntities := make(map[string]*metadata.Entity, len(proj.Entities))
+	for _, e := range proj.Entities {
+		refEntities[strings.ToLower(e.Name)] = e
+	}
+
+	// Найти целевую сущность по имени (регистронезависимо).
+	var ent *metadata.Entity
+	if entityName != "" {
+		ent = refEntities[strings.ToLower(entityName)]
+	}
 	if ent == nil {
 		// нет метаданных — минимальная синтетика без структуры.
 		return &printform.RenderContext{
@@ -111,15 +135,16 @@ func (h *handler) buildPreviewContext(r *http.Request, b *Base, entityName strin
 		}
 	}
 
-	if ctx := h.loadLastRecordContext(r.Context(), b, ent); ctx != nil {
-		return ctx
+	if rctx := h.loadLastRecordContext(ctx, b, ent, refEntities); rctx != nil {
+		return rctx
 	}
 	return syntheticContext(ent)
 }
 
 // loadLastRecordContext загружает последнюю запись сущности и её ТЧ/ссылки/константы.
+// refEntities — индекс из уже загруженного проекта (проект НЕ грузится повторно).
 // Возвращает nil, если БД недоступна или записей нет (вызывающий → синтетика).
-func (h *handler) loadLastRecordContext(ctx context.Context, b *Base, ent *metadata.Entity) *printform.RenderContext {
+func (h *handler) loadLastRecordContext(ctx context.Context, b *Base, ent *metadata.Entity, refEntities map[string]*metadata.Entity) *printform.RenderContext {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return nil
@@ -143,8 +168,6 @@ func (h *handler) loadLastRecordContext(ctx context.Context, b *Base, ent *metad
 		}
 	}
 
-	// Метаданные ссылочных сущностей берём из проекта (по имени).
-	refEntities := h.refEntityIndex(ctx, b)
 	refs := buildPreviewRefs(ctx, db, row, ent, tpRows, refEntities)
 	constants, _ := db.ListConstants(ctx)
 
@@ -154,21 +177,6 @@ func (h *handler) loadLastRecordContext(ctx context.Context, b *Base, ent *metad
 		Constants:  constants,
 		Refs:       refs,
 	}
-}
-
-// refEntityIndex строит индекс «имя сущности (lower) → *metadata.Entity» из проекта
-// для резолва ссылок в предпросмотре. Пустой при недоступности проекта.
-func (h *handler) refEntityIndex(ctx context.Context, b *Base) map[string]*metadata.Entity {
-	idx := make(map[string]*metadata.Entity)
-	proj, err := h.loadProjectFor(ctx, b)
-	if err != nil {
-		return idx
-	}
-	defer proj.Close()
-	for _, e := range proj.Entities {
-		idx[strings.ToLower(e.Name)] = e
-	}
-	return idx
 }
 
 // buildPreviewRefs резолвит ссылочные поля записи и строк ТЧ в map UUID→поля
