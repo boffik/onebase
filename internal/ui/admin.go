@@ -301,7 +301,13 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if denyPasswd || showInList || aiData {
-		s.authRepo.Update(r.Context(), u.ID, fullName, isAdmin, denyPasswd, showInList, aiData)
+		// Ошибку применения флагов (в т.ч. ai_data_access — доступ ИИ к данным)
+		// не глотаем: иначе админ уверен, что выставил флаг, а он не применился.
+		if err := s.authRepo.Update(r.Context(), u.ID, fullName, isAdmin, denyPasswd, showInList, aiData); err != nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			adminTmpl.ExecuteTemplate(w, "admin-user-form", map[string]any{"Error": s.errText(r, err)})
+			return
+		}
 	}
 	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
 }
