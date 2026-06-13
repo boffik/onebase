@@ -136,12 +136,25 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 		timeout = 10 * time.Second
 	}
 
-	attempts := h.Retry + 1
+	// Число повторов ограничено сверху: без клампа большое retry из app.yaml
+	// при сдвиге d.retryBase << (try-1) переполняло бы Duration в отрицательную
+	// (Sleep=0, долбёж чужого сервера), а средние значения давали сон на сутки.
+	const maxRetry = 10
+	const maxBackoff = 5 * time.Minute
+	retry := h.Retry
+	if retry > maxRetry {
+		retry = maxRetry
+	}
+	attempts := retry + 1
 	for try := 0; try < attempts; try++ {
 		entry.Attempts = try + 1
 		if try > 0 {
-			// экспоненциальная задержка: base, 2*base, 4*base, …
-			time.Sleep(d.retryBase << (try - 1))
+			// экспоненциальная задержка с потолком: base, 2*base, 4*base, …, maxBackoff.
+			delay := d.retryBase << (try - 1)
+			if delay <= 0 || delay > maxBackoff {
+				delay = maxBackoff
+			}
+			time.Sleep(delay)
 		}
 		code, err := d.send(method, h, body, timeout)
 		entry.StatusCode = code

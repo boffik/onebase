@@ -54,6 +54,17 @@ func CheckHTTPServices(proj *project.Project) []Issue {
 			add(svc.Name, fmt.Sprintf("неизвестный auth %q (none|basic|session|token|hmac)", svc.Auth))
 		}
 
+		// roles требует аутентифицированного пользователя в контексте, а его
+		// кладут только basic/session. При none/token/hmac ветка roles в рантайме
+		// всегда даёт 403 (UserFromContext==nil) — сервис нерабочий молча.
+		if len(svc.Roles) > 0 {
+			switch strings.ToLower(strings.TrimSpace(svc.Auth)) {
+			case "basic", "session":
+			default:
+				add(svc.Name, fmt.Sprintf("roles заданы при auth %q — отбор по ролям требует basic или session (иначе всегда 403)", svc.Auth))
+			}
+		}
+
 		prog, ok := progByLower[strings.ToLower(svc.Name)]
 		if !ok {
 			add(svc.Name, fmt.Sprintf("не найден модуль обработчиков src/%s.service.os", strings.ToLower(svc.Name)))
