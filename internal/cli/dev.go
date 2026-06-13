@@ -11,7 +11,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/api"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/configdb"
@@ -26,6 +25,7 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/ui"
 	"github.com/ivantit66/onebase/internal/version"
+	"github.com/spf13/cobra"
 )
 
 var devCmd = &cobra.Command{
@@ -134,6 +134,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 			Entities:        proj.Entities,
 			Programs:        proj.Programs,
 			ManagerPrograms: proj.ManagerPrograms,
+			ServicePrograms: proj.ServicePrograms,
 			Registers:       proj.Registers,
 			InfoRegs:        proj.InfoRegisters,
 			Enums:           proj.Enums,

@@ -22,6 +22,7 @@ func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage
 		Entities:        proj.Entities,
 		Programs:        proj.Programs,
 		ManagerPrograms: proj.ManagerPrograms,
+		ServicePrograms: proj.ServicePrograms,
 		Registers:       proj.Registers,
 		InfoRegs:        proj.InfoRegisters,
 		Enums:           proj.Enums,

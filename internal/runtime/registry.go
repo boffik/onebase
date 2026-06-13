@@ -23,21 +23,22 @@ type Registry struct {
 	enums           map[string]*metadata.Enum
 	constants       map[string]*metadata.Constant
 	reports         map[string]*report.Report
-	extReports      map[string]*report.Report           // внешние отчёты (из БД), ключ — Name
-	printForms      map[string][]*printform.PrintForm   // lowercase entity name → forms
-	extPrintForms   map[string][]*printform.PrintForm   // lowercase entity name → внешние формы (из БД)
+	extReports      map[string]*report.Report            // внешние отчёты (из БД), ключ — Name
+	printForms      map[string][]*printform.PrintForm    // lowercase entity name → forms
+	extPrintForms   map[string][]*printform.PrintForm    // lowercase entity name → внешние формы (из БД)
 	dslPrintForms   map[string][]*printform.DSLPrintForm // lowercase entity name → DSL forms
-	layoutForms     map[string][]*printform.LayoutForm  // lowercase entity name → декларативные формы (.layout.yaml)
-	extLayoutForms  map[string][]*printform.LayoutForm  // lowercase entity name → внешние v2-формы (из БД)
+	layoutForms     map[string][]*printform.LayoutForm   // lowercase entity name → декларативные формы (.layout.yaml)
+	extLayoutForms  map[string][]*printform.LayoutForm   // lowercase entity name → внешние v2-формы (из БД)
 	procs           map[string]map[string]*ast.ProcedureDecl
 	extProcs        map[string]map[string]*ast.ProcedureDecl // код внешних обработок (из БД), ключ — имя обработки
+	serviceProcs    map[string]map[string]*ast.ProcedureDecl // план 61: имя сервиса → обработчики .service.os
 	managerProcs    map[string]map[string]*ast.ProcedureDecl // lowercase entity → procs модуля менеджера
-	moduleProcs     map[string]*ast.ProcedureDecl // flat: proc name → decl
+	moduleProcs     map[string]*ast.ProcedureDecl            // flat: proc name → decl
 	moduleByName    map[string]map[string]*ast.ProcedureDecl // lowercase module → procs in it
 	processors      map[string]*processor.Processor
 	httpServices    map[string]*httpservice.Service // lowercase name → HTTP-сервис
 	extProcessors   map[string]*processor.Processor // внешние обработки (из БД), ключ — Name
-	subsystems      []*metadata.Subsystem // sorted by Order
+	subsystems      []*metadata.Subsystem           // sorted by Order
 	journals        map[string]*metadata.Journal
 	accountRegs     map[string]*metadata.AccountRegister
 	chartsOfAccount map[string]*metadata.ChartOfAccounts
@@ -74,6 +75,7 @@ func NewRegistry() *Registry {
 		httpServices:    make(map[string]*httpservice.Service),
 		extProcessors:   make(map[string]*processor.Processor),
 		extProcs:        make(map[string]map[string]*ast.ProcedureDecl),
+		serviceProcs:    make(map[string]map[string]*ast.ProcedureDecl),
 		journals:        make(map[string]*metadata.Journal),
 		accountRegs:     make(map[string]*metadata.AccountRegister),
 		chartsOfAccount: make(map[string]*metadata.ChartOfAccounts),
@@ -139,6 +141,7 @@ type LoadOptions struct {
 	Entities        []*metadata.Entity
 	Programs        map[string]*ast.Program
 	ManagerPrograms map[string]*ast.Program // entity name → процедуры модуля менеджера
+	ServicePrograms map[string]*ast.Program // план 61: service name → обработчики .service.os
 	Registers       []*metadata.Register
 	InfoRegs        []*metadata.InfoRegister
 	Enums           []*metadata.Enum
@@ -197,6 +200,14 @@ func (r *Registry) Load(opts LoadOptions) {
 		}
 		newManagerProcs[strings.ToLower(entityName)] = pm
 	}
+	newServiceProcs := make(map[string]map[string]*ast.ProcedureDecl)
+	for svcName, prog := range opts.ServicePrograms {
+		pm := make(map[string]*ast.ProcedureDecl, len(prog.Procedures))
+		for _, p := range prog.Procedures {
+			pm[strings.ToLower(p.Name.Literal)] = p
+		}
+		newServiceProcs[svcName] = pm
+	}
 	newPrintForms := make(map[string][]*printform.PrintForm)
 	for _, pf := range opts.PrintForms {
 		key := strings.ToLower(pf.Document)
@@ -214,8 +225,18 @@ func (r *Registry) Load(opts LoadOptions) {
 	r.printForms = newPrintForms
 	r.procs = newProcs
 	r.managerProcs = newManagerProcs
+	r.serviceProcs = newServiceProcs
 	r.basedOnIndex = newBasedOn
 	r.mu.Unlock()
+}
+
+// GetServiceProcedure resolves a handler procedure declared in an HTTP service
+// module (X.service.os, план 61). Хранится отдельно от procs, поэтому сервис и
+// одноимённый документ не конфликтуют. Регистронезависимо по обоим именам.
+func (r *Registry) GetServiceProcedure(serviceName, handlerName string) *ast.ProcedureDecl {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return lookupProc(r.serviceProcs, serviceName, handlerName)
 }
 
 // GetManagerProc resolves a procedure declared in the manager module

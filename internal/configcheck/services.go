@@ -19,9 +19,11 @@ func CheckHTTPServices(proj *project.Project) []Issue {
 		issues = append(issues, Issue{File: "services", Object: object, Kind: "HTTP-сервис", Message: msg})
 	}
 
-	// Programs ключуется капитализированным именем файла — ищем регистронезависимо.
+	// ServicePrograms ключуется капитализированным именем файла — ищем
+	// регистронезависимо. Сервисы хранятся отдельно от Programs (план 61),
+	// чтобы не конфликтовать с модулем одноимённого документа.
 	progByLower := map[string]*ast.Program{}
-	for name, prog := range proj.Programs {
+	for name, prog := range proj.ServicePrograms {
 		progByLower[strings.ToLower(name)] = prog
 	}
 

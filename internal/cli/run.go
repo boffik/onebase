@@ -24,9 +24,9 @@ import (
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/ui"
 	"github.com/ivantit66/onebase/internal/version"
+	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/spf13/cobra"
 )
 
@@ -167,6 +167,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		Entities:        proj.Entities,
 		Programs:        proj.Programs,
 		ManagerPrograms: proj.ManagerPrograms,
+		ServicePrograms: proj.ServicePrograms,
 		Registers:       proj.Registers,
 		InfoRegs:        proj.InfoRegisters,
 		Enums:           proj.Enums,
@@ -392,6 +393,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 				Entities:        newProj.Entities,
 				Programs:        newProj.Programs,
 				ManagerPrograms: newProj.ManagerPrograms,
+				ServicePrograms: newProj.ServicePrograms,
 				Registers:       newProj.Registers,
 				InfoRegs:        newProj.InfoRegisters,
 				Enums:           newProj.Enums,

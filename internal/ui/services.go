@@ -186,7 +186,7 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	procDecl := s.reg.GetProcedure(svc.Name, handlerName)
+	procDecl := s.reg.GetServiceProcedure(svc.Name, handlerName)
 	if procDecl == nil {
 		writeServiceError(w, http.StatusInternalServerError,
 			"обработчик "+handlerName+" не найден в src/"+strings.ToLower(svc.Name)+".service.os")

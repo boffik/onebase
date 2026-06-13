@@ -17,11 +17,11 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/httpservice"
 	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/webhook"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,11 +36,12 @@ type Project struct {
 	PrintForms       []*printform.PrintForm
 	DSLPrintForms    []*printform.DSLPrintForm
 	LayoutForms      []*printform.LayoutForm // декларативные формы (standalone .layout.yaml)
-	Programs         map[string]*ast.Program  // entity name → parsed DSL (модуль объекта)
-	ManagerPrograms  map[string]*ast.Program  // entity name → parsed DSL (модуль менеджера)
+	Programs         map[string]*ast.Program // entity name → parsed DSL (модуль объекта)
+	ManagerPrograms  map[string]*ast.Program // entity name → parsed DSL (модуль менеджера)
+	ServicePrograms  map[string]*ast.Program // план 61: service name → обработчики .service.os (отдельный namespace, чтобы не затирать модуль одноимённого документа)
 	Processors       []*processor.Processor
-	HTTPServices     []*httpservice.Service   // план 61: опубликованные HTTP-сервисы
-	Modules          map[string]*ast.Program  // module name → parsed procs
+	HTTPServices     []*httpservice.Service  // план 61: опубликованные HTTP-сервисы
+	Modules          map[string]*ast.Program // module name → parsed procs
 	Subsystems       []*metadata.Subsystem
 	Journals         []*metadata.Journal
 	ScheduledJobs    []*metadata.ScheduledJob
@@ -78,8 +79,8 @@ type AttachmentsConfig struct {
 type DemoConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 	ResetBackup   string `yaml:"reset_backup"`   // путь к .obz относительно директории проекта
-	ResetSchedule string `yaml:"reset_schedule"`  // cron, по умолчанию "0 2 * * *"
-	Message       string `yaml:"message"`         // текст баннера
+	ResetSchedule string `yaml:"reset_schedule"` // cron, по умолчанию "0 2 * * *"
+	Message       string `yaml:"message"`        // текст баннера
 }
 
 // AppConfig holds the optional config/app.yaml metadata.
@@ -183,6 +184,7 @@ func Load(dir string) (*Project, error) {
 		Dir:             dir,
 		Programs:        make(map[string]*ast.Program),
 		ManagerPrograms: make(map[string]*ast.Program),
+		ServicePrograms: make(map[string]*ast.Program),
 		Modules:         make(map[string]*ast.Program),
 	}
 	if err := p.loadMetadata(); err != nil {
@@ -545,14 +547,16 @@ func (p *Project) loadDSL() error {
 			continue
 		}
 		if isService {
-			// Обработчики HTTP-сервиса (план 61). Кладём в Programs под
-			// капитализированным именем файла; роутер достаёт процедуру через
-			// GetProcedure(serviceName, handlerName) с регистронезависимым
-			// фолбэком, поэтому имя файла должно совпадать с именем сервиса
-			// (без учёта регистра).
+			// Обработчики HTTP-сервиса (план 61). Кладём в ОТДЕЛЬНУЮ карту
+			// ServicePrograms (не в Programs!): иначе сервис, названный как
+			// одноимённый документ, затирал бы модуль документа вместе со
+			// слитой ОбработкаПроведения — и документ молча проводился без
+			// движений. Роутер достаёт процедуру через GetServiceProcedure
+			// с регистронезависимым фолбэком, поэтому имя файла должно
+			// совпадать с именем сервиса (без учёта регистра).
 			base := strings.TrimSuffix(name, ".service.os")
 			entityName := fileNameToEntityBase(base)
-			p.Programs[entityName] = prog
+			p.ServicePrograms[entityName] = prog
 			continue
 		}
 		if isReport {

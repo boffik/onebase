@@ -39,13 +39,13 @@ func TestCheckHTTPServices(t *testing.T) {
 	proj := &project.Project{
 		HTTPServices: []*httpservice.Service{
 			mk("Заказы", "orders", "none", "", okTmpl),
-			mk("Дубль", "orders", "none", "", okTmpl),            // дубль root_url
-			mk("БезМодуля", "nomod", "none", "", okTmpl),         // нет src-модуля
-			mk("Заказы2", "orders2", "none", "", badTmpl),        // нет процедуры
-			mk("БезСекрета", "tok", "token", "", okTmpl),         // token без секрета
-			mk("Странный", "weird", "странный", "", okTmpl),      // неизвестный auth
+			mk("Дубль", "orders", "none", "", okTmpl),       // дубль root_url
+			mk("БезМодуля", "nomod", "none", "", okTmpl),    // нет src-модуля
+			mk("Заказы2", "orders2", "none", "", badTmpl),   // нет процедуры
+			mk("БезСекрета", "tok", "token", "", okTmpl),    // token без секрета
+			mk("Странный", "weird", "странный", "", okTmpl), // неизвестный auth
 		},
-		Programs: map[string]*ast.Program{
+		ServicePrograms: map[string]*ast.Program{
 			"Заказы":     good,
 			"Дубль":      good,
 			"Заказы2":    good,
