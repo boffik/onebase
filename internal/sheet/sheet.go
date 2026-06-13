@@ -136,20 +136,21 @@ func (a *Area) Merge() {
 
 // Margins — поля страницы PDF в миллиметрах.
 type Margins struct {
-	Top    float64
-	Bottom float64
-	Left   float64
-	Right  float64
+	Top    float64 `yaml:"top,omitempty"`
+	Bottom float64 `yaml:"bottom,omitempty"`
+	Left   float64 `yaml:"left,omitempty"`
+	Right  float64 `yaml:"right,omitempty"`
 }
 
 // PageSetup — параметры страницы для PDF-рендера (план 64, этап 2).
 // Orientation: "portrait"/"landscape" (плюс рус. синонимы нормализуются
 // в DSL-обвязке). Format: "A4"/"A5"/"Letter" и т.п. (передаётся в fpdf).
-// MarginsMM — поля в мм. Этап 3 наполнит это из page: YAML-макета.
+// MarginsMM — поля в мм; YAML-ключ — естественный margins: (поле остаётся
+// MarginsMM в Go). Наполняется из page: YAML-макета (план 64, этап 3+).
 type PageSetup struct {
-	Orientation string
-	Format      string
-	MarginsMM   Margins
+	Orientation string  `yaml:"orientation,omitempty"`
+	Format      string  `yaml:"format,omitempty"`
+	MarginsMM   Margins `yaml:"margins,omitempty"`
 }
 
 // DefaultPageSetup — A4, портрет, поля 10 мм со всех сторон.

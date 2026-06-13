@@ -116,6 +116,44 @@ func TestPDFEmbedsPicture(t *testing.T) {
 	}
 }
 
+// TestPictureCacheName — имя кэша зависит от содержимого, а не от длины: две
+// разные картинки одного формата и одинаковой длины получают разные имена
+// (иначе fpdf вернул бы первую из кэша — коллизия).
+func TestPictureCacheName(t *testing.T) {
+	a := []byte{1, 2, 3, 4}
+	b := []byte{4, 3, 2, 1} // та же длина, другое содержимое
+	na := pictureCacheName("PNG", a)
+	nb := pictureCacheName("PNG", b)
+	if na == nb {
+		t.Errorf("разные картинки одной длины дали одно имя кэша: %q", na)
+	}
+	// Идентичные данные → одно имя (дедупликация ресурса).
+	if got := pictureCacheName("PNG", []byte{1, 2, 3, 4}); got != na {
+		t.Errorf("идентичные данные дали разные имена: %q != %q", got, na)
+	}
+	// Тип входит в имя — одинаковые данные разных форматов различимы.
+	if pictureCacheName("PNG", a) == pictureCacheName("JPG", a) {
+		t.Errorf("тип картинки не отражён в имени кэша")
+	}
+}
+
+// TestPDFTwoDistinctPicturesSameLength — два разных PNG одинаковой длины в одном
+// документе встраиваются как два РАЗНЫХ образа (раньше ключ кэша по длине давал
+// коллизию: вторая картинка рисовалась первой).
+func TestPDFTwoDistinctPicturesSameLength(t *testing.T) {
+	a, _, okA := decodeDataURIImage(testPNGDataURI)
+	if !okA {
+		t.Fatal("не удалось декодировать тестовый PNG")
+	}
+	// Имена двух картинок одинаковой длины не должны совпасть, если данные
+	// различаются хотя бы одним байтом.
+	b := append([]byte(nil), a...)
+	b[len(b)-1] ^= 0xFF
+	if pictureCacheName("PNG", a) == pictureCacheName("PNG", b) {
+		t.Errorf("две разные картинки одинаковой длины делят имя кэша")
+	}
+}
+
 // TestPDFUnsupportedPictureNoCrash — неподдерживаемый Picture не валит PDF.
 func TestPDFUnsupportedPictureNoCrash(t *testing.T) {
 	d := NewDocument()

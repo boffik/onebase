@@ -297,7 +297,7 @@ document: РеализацияТоваров
 page:
   orientation: landscape
   format: A4
-  marginsmm:
+  margins:
     top: 5
     bottom: 5
     left: 8
@@ -325,6 +325,63 @@ areas:
 	}
 	if got.Page == nil || got.Page.Orientation != "landscape" {
 		t.Fatalf("page lost after round-trip: %+v", got.Page)
+	}
+}
+
+// TestLayoutPageMarginsBinding проверяет, что документированные ключи page:
+// (orientation/format/margins{top,bottom,left,right}) биндятся в PageSetup.
+// До добавления yaml-тегов margins: молча игнорировался (нули).
+func TestLayoutPageMarginsBinding(t *testing.T) {
+	const src = `name: M
+page: {orientation: landscape, format: A5, margins: {top: 7, left: 5}}
+areas:
+  - name: A
+    rows:
+      - cells:
+          - text: "X"
+`
+	lt, err := ParseLayoutBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if lt.Page == nil {
+		t.Fatalf("page nil")
+	}
+	if lt.Page.Orientation != "landscape" {
+		t.Errorf("orientation = %q, want landscape", lt.Page.Orientation)
+	}
+	if lt.Page.Format != "A5" {
+		t.Errorf("format = %q, want A5", lt.Page.Format)
+	}
+	if lt.Page.MarginsMM.Top != 7 {
+		t.Errorf("margins.top = %v, want 7", lt.Page.MarginsMM.Top)
+	}
+	if lt.Page.MarginsMM.Left != 5 {
+		t.Errorf("margins.left = %v, want 5", lt.Page.MarginsMM.Left)
+	}
+	// Незаданные поля — нули.
+	if lt.Page.MarginsMM.Bottom != 0 || lt.Page.MarginsMM.Right != 0 {
+		t.Errorf("unset margins not zero: %+v", lt.Page.MarginsMM)
+	}
+
+	// Round-trip: MarshalYAML должен писать естественный ключ margins:, а не
+	// marginsmm: — иначе документированный формат не читается обратно.
+	data, err := yaml.Marshal(lt)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), "marginsmm") {
+		t.Errorf("marshal wrote legacy key marginsmm:\n%s", data)
+	}
+	if !strings.Contains(string(data), "margins:") {
+		t.Errorf("marshal did not write margins::\n%s", data)
+	}
+	var got LayoutTemplate
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatalf("re-unmarshal: %v", err)
+	}
+	if got.Page == nil || got.Page.MarginsMM.Top != 7 || got.Page.MarginsMM.Left != 5 {
+		t.Errorf("margins lost after round-trip: %+v", got.Page)
 	}
 }
 
