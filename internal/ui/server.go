@@ -44,6 +44,10 @@ type Config struct {
 	// nil = не настроены. Прокидывается в entityservice (save/post) и
 	// используется обработчиками unpost/delete.
 	Webhooks *webhook.Dispatcher
+	// LoginLimit — общий лимитер попыток входа (тот же, что у формы /login).
+	// Используется basic-auth HTTP-сервисов для защиты от брутфорса. nil →
+	// New создаёт собственный, чтобы поле никогда не было пустым.
+	LoginLimit *auth.LoginLimiter
 }
 
 type Server struct {
@@ -62,6 +66,7 @@ type Server struct {
 	entitySvc        *entityservice.Service // упсёрт + ТЧ + движения + проведение, разделяется с api
 	aiChatLimit      *aiWindowLimiter       // лимит частоты ИИ-чата на пользователя (план 54)
 	endpointLimit    endpointLimiter        // rate-limit HTTP-сервисов (план 61)
+	loginLimit       *auth.LoginLimiter     // брутфорс-защита basic-auth сервисов (общий с формой входа)
 	extforms         *extform.Repo          // внешний контур: печатные формы из БД
 	extreports       *extform.ReportRepo    // внешний контур: отчёты из БД
 	extprocessors    *extform.ProcessorRepo // внешний контур: обработки из БД
@@ -72,7 +77,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if maxBytes <= 0 {
 		maxBytes = 50 * 1024 * 1024
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store)}
+	loginLimit := cfg.LoginLimit
+	if loginLimit == nil {
+		loginLimit = auth.NewLoginLimiter(5, time.Minute)
+	}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store)}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,

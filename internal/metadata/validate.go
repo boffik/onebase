@@ -20,6 +20,13 @@ func Validate(entities []*Entity, enums []*Enum) error {
 				return fmt.Errorf("entity %s: field %s references unknown enum %s", e.Name, f.Name, f.EnumName)
 			}
 		}
+		for _, tp := range e.TableParts {
+			for _, f := range tp.Fields {
+				if IsRichText(f.Type) {
+					return fmt.Errorf("поле %s.%s: тип richtext не поддерживается в табличных частях", tp.Name, f.Name)
+				}
+			}
+		}
 		for _, src := range e.BasedOn {
 			if !entityNames[src] {
 				return fmt.Errorf("entity %s: based_on references unknown entity %s", e.Name, src)

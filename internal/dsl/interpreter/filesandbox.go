@@ -58,7 +58,10 @@ func resolveSafePath(p string) (string, error) {
 func safePathOrRaise(op, p string) string {
 	safe, err := resolveSafePath(p)
 	if err != nil {
-		RaiseUserError(op + ": " + err.Error())
+		// Сохраняем i18nerr (err) для локализации по цепочке: не-русский
+		// пользователь увидит переведённое «доступ к файлу вне рабочего
+		// каталога базы запрещён», а не русский текст.
+		RaiseUserErrorWrap(op+": "+err.Error(), err)
 	}
 	return safe
 }

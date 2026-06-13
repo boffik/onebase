@@ -302,6 +302,12 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 		http.Error(w, s.errText(r, err), 400)
 		return
 	}
+	// Лимит richtext проверяем по СЫРОМУ значению формы (до санитайза в
+	// formToFields) — чтобы не прогонять гигантский blob через санитайзер.
+	if err := checkRichTextLimits(r, entity); err != nil {
+		http.Error(w, s.errText(r, err), 400)
+		return
+	}
 	fields = formToFields(r, entity)
 	tpRows = parseTablePartRows(r, entity)
 
@@ -957,7 +963,7 @@ func (s *Server) deleteMarkedAll(w http.ResponseWriter, r *http.Request) {
 					skipped++
 					continue
 				}
-				s.store.WithTx(r.Context(), func(ctx context.Context) error {
+				if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 					if entity.Posting {
 						if err := s.clearMovements(ctx, entity.Name, id); err != nil {
 							return err
@@ -967,7 +973,11 @@ func (s *Server) deleteMarkedAll(w http.ResponseWriter, r *http.Request) {
 						s.store.Exec(ctx, "DELETE FROM "+metadata.TablePartTableName(entity.Name, tp.Name)+" WHERE parent_id = "+s.store.Dialect().Placeholder(1), id)
 					}
 					return s.store.Delete(ctx, entity.Name, id)
-				})
+				}); err != nil {
+					// Удаление не прошло (откат транзакции) — не рапортуем успех.
+					skipped++
+					continue
+				}
 				deleted++
 			}
 		}
@@ -1038,14 +1048,18 @@ func (s *Server) deleteMarked(w http.ResponseWriter, r *http.Request) {
 			skipped++
 			continue
 		}
-		s.store.WithTx(r.Context(), func(ctx context.Context) error {
+		if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 			if entity.Posting {
 				if err := s.clearMovements(ctx, entity.Name, id); err != nil {
 					return err
 				}
 			}
 			return s.store.Delete(ctx, entity.Name, id)
-		})
+		}); err != nil {
+			// Удаление не прошло (откат транзакции) — не рапортуем успех.
+			skipped++
+			continue
+		}
 		deleted++
 	}
 

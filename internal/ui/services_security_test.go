@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
@@ -39,7 +40,7 @@ func newSecuredServiceServer(t *testing.T, svc *httpservice.Service) *Server {
 		t.Fatal(err)
 	}
 	registry := runtime.NewRegistry()
-	registry.Load(runtime.LoadOptions{Programs: map[string]*ast.Program{svc.Name: prog}})
+	registry.Load(runtime.LoadOptions{ServicePrograms: map[string]*ast.Program{svc.Name: prog}})
 	svc.Normalize()
 	registry.LoadHTTPServices([]*httpservice.Service{svc})
 
@@ -60,6 +61,7 @@ func newSecuredServiceServer(t *testing.T, svc *httpservice.Service) *Server {
 		lockMgr:          runtime.NewLockManager(),
 		messages:         NewMessageStore(),
 		maxFileSizeBytes: 1 << 20,
+		loginLimit:       auth.NewLoginLimiter(5, time.Minute),
 	}
 }
 

@@ -136,12 +136,25 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 		timeout = 10 * time.Second
 	}
 
-	attempts := h.Retry + 1
+	// Число повторов ограничено сверху: без клампа большое retry из app.yaml
+	// при сдвиге d.retryBase << (try-1) переполняло бы Duration в отрицательную
+	// (Sleep=0, долбёж чужого сервера), а средние значения давали сон на сутки.
+	const maxRetry = 10
+	const maxBackoff = 5 * time.Minute
+	retry := h.Retry
+	if retry > maxRetry {
+		retry = maxRetry
+	}
+	attempts := retry + 1
 	for try := 0; try < attempts; try++ {
 		entry.Attempts = try + 1
 		if try > 0 {
-			// экспоненциальная задержка: base, 2*base, 4*base, …
-			time.Sleep(d.retryBase << (try - 1))
+			// экспоненциальная задержка с потолком: base, 2*base, 4*base, …, maxBackoff.
+			delay := d.retryBase << (try - 1)
+			if delay <= 0 || delay > maxBackoff {
+				delay = maxBackoff
+			}
+			time.Sleep(delay)
 		}
 		code, err := d.send(method, h, body, timeout)
 		entry.StatusCode = code
@@ -198,10 +211,13 @@ func renderBody(tpl string, e Event) (string, error) {
 	if tpl == "" {
 		return "", nil
 	}
+	// Базовые поля тоже экранируем: user — это логин (может содержать кавычку/
+	// перевод строки), entity задаётся конфигурацией, id — UUID. Без экранирования
+	// спецсимвол в логине ломал бы JSON-тело или инъецировал поля в payload.
 	data := map[string]any{
-		"id":        e.ID,
-		"entity":    e.Entity,
-		"user":      e.User,
+		"id":        jsonEscape(e.ID),
+		"entity":    jsonEscape(e.Entity),
+		"user":      jsonEscape(e.User),
 		"timestamp": time.Now().Format(time.RFC3339),
 	}
 	for k, v := range e.Record {

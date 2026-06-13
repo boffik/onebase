@@ -16,6 +16,9 @@ fields:
     type: number
   - name: Описание
     type: string
+  - name: ПодробноеОписание
+    title: Подробное описание (HTML)
+    type: richtext
   - name: СтавкаНДС
     type: reference:СтавкаНДС
   - name: Вес

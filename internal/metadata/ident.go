@@ -19,8 +19,11 @@ import (
 var identRe = regexp.MustCompile(`^[\p{L}_][\p{L}\p{N}_]*$`)
 
 // systemColumns — служебные колонки, которые платформа добавляет к таблицам
-// сущностей. Реквизит с совпадающим именем (после ToLower) затёр бы системную
-// колонку и привёл бы к неоднозначному/битому DDL.
+// сущностей, регистров накопления и регистров сведений (см. CreateTableSQL,
+// CreateRegisterSQL, CreateInfoRegisterSQL в internal/storage/ddl.go и
+// AddColumnIfMissing в migrate.go). Реквизит/измерение с совпадающим именем
+// (после ToLower) затёр бы системную колонку: либо duplicate column в
+// CREATE TABLE, либо двойное присваивание в UPDATE (например _version).
 var systemColumns = map[string]bool{
 	"id":               true,
 	"posted":           true,
@@ -29,8 +32,22 @@ var systemColumns = map[string]bool{
 	"is_folder":        true,
 	"period":           true,
 	"recorder":         true,
+	"recorder_type":    true, // регистры/инфорегистры
+	"line_number":      true, // регистры накопления
+	"вид_движения":     true, // регистры накопления (приход/расход)
+	"updated_at":       true, // регистры сведений
+	"_version":         true, // оптимистичная блокировка сущностей
 	"_is_predefined":   true,
 	"_predefined_name": true,
+}
+
+// tablePartReservedColumns — колонки, которые платформа добавляет к таблице
+// табличной части помимо общих systemColumns (см. CreateTablePartSQL). Колонка
+// «строка» хранит номер строки ТЧ; одноимённый реквизит дал бы duplicate column.
+// Проверяется только для полей ТЧ, чтобы не запрещать «Строка» как имя реквизита
+// обычной сущности (там такой колонки нет).
+var tablePartReservedColumns = map[string]bool{
+	"строка": true,
 }
 
 // ValidIdent сообщает, пригодно ли имя как идентификатор объекта/реквизита
@@ -101,8 +118,14 @@ func ValidateIdentifiers(
 			if err := checkIdent(fmt.Sprintf("табличная часть %s %q", role, e.Name), tp.Name); err != nil {
 				return err
 			}
-			if err := checkFields(fmt.Sprintf("реквизит ТЧ %q.%q", e.Name, tp.Name), tp.Fields); err != nil {
+			tpRole := fmt.Sprintf("реквизит ТЧ %q.%q", e.Name, tp.Name)
+			if err := checkFields(tpRole, tp.Fields); err != nil {
 				return err
+			}
+			for _, f := range tp.Fields {
+				if tablePartReservedColumns[strings.ToLower(f.Name)] {
+					return fmt.Errorf("%s %q: имя совпадает со служебной колонкой табличной части — выберите другое", tpRole, f.Name)
+				}
 			}
 		}
 	}

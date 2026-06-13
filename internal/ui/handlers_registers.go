@@ -89,9 +89,12 @@ func parseRegFilter(r *http.Request, fields []metadata.Field, periodic bool) sto
 			f.From = t
 		}
 		if t := parseFilterDate(q.Get("to")); t != nil {
-			// Сдвигаем к концу дня (23:59:59.999999999), чтобы отбор «по дату»
+			// Конец выбранного дня (последняя наносекунда), чтобы отбор «по дату»
 			// включал весь день: period <= to сравнивается с TIMESTAMP (#45).
-			endOfDay := t.Add(24*time.Hour - time.Nanosecond)
+			// Считаем как полночь следующего календарного дня минус наносекунду —
+			// в зонах с переходом часов (DST) это корректнее, чем Add(24h).
+			y, mo, da := t.Date()
+			endOfDay := time.Date(y, mo, da+1, 0, 0, 0, 0, t.Location()).Add(-time.Nanosecond)
 			f.To = &endOfDay
 		}
 	}
@@ -332,14 +335,16 @@ func (s *Server) infoRegDelete(w http.ResponseWriter, r *http.Request) {
 
 	var periodPtr *time.Time
 	if ir.Periodic {
-		if pStr := r.FormValue("period"); pStr != "" {
-			for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
-				if t, err := time.Parse(layout, pStr); err == nil {
-					periodPtr = &t
-					break
-				}
-			}
+		// Период берём из машинного ключа period_key (его кладёт InfoRegList в
+		// hidden-поле списка). Если ключ не разобран — ОТКАЗЫВАЕМ в удалении:
+		// иначе InfoRegDelete с nil-периодом снесёт все периоды комбинации
+		// измерений (критическая потеря данных).
+		t, ok := storage.ParseRegPeriod(r.FormValue("period"))
+		if !ok {
+			http.Error(w, s.tr(s.resolveLang(r), "Не удалось определить период записи для удаления"), http.StatusBadRequest)
+			return
 		}
+		periodPtr = &t
 	}
 	dims := parseInfoRegFields(r, ir.Dimensions)
 	if err := s.store.InfoRegDelete(r.Context(), ir, dims, periodPtr); err != nil {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
@@ -60,8 +61,8 @@ func newServiceTestServer(t *testing.T) (*Server, context.Context) {
 
 	registry := runtime.NewRegistry()
 	// Один и тот же модуль зарегистрирован под именами всех сервисов —
-	// GetProcedure(serviceName, handlerName) находит обработчик по имени сервиса.
-	registry.Load(runtime.LoadOptions{Programs: map[string]*ast.Program{"Echo": prog, "Secure": prog, "RG": prog}})
+	// GetServiceProcedure(serviceName, handlerName) находит обработчик по имени сервиса.
+	registry.Load(runtime.LoadOptions{ServicePrograms: map[string]*ast.Program{"Echo": prog, "Secure": prog, "RG": prog}})
 
 	echo := &httpservice.Service{Name: "Echo", RootURL: "echo", Auth: "none",
 		CORS: &httpservice.CORSConfig{Origins: []string{"*"}, Headers: []string{"Content-Type"}, MaxAge: 600},
@@ -103,6 +104,7 @@ func newServiceTestServer(t *testing.T) (*Server, context.Context) {
 		lockMgr:          runtime.NewLockManager(),
 		messages:         NewMessageStore(),
 		maxFileSizeBytes: 1 << 20,
+		loginLimit:       auth.NewLoginLimiter(5, time.Minute),
 	}
 	return s, ctx
 }

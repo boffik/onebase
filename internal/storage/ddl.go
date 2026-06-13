@@ -19,6 +19,10 @@ func fieldType(d Dialect, f metadata.Field) string {
 		return d.TypeNumber(f.Length, f.Scale)
 	case metadata.FieldTypeBool:
 		return d.TypeBool()
+	case metadata.FieldTypeRichText:
+		// richtext хранится как HTML в TEXT-колонке (поведение совпадает с
+		// default; ветка явная — для читаемости и явной привязки типа).
+		return d.TypeText()
 	default:
 		return d.TypeText()
 	}

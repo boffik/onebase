@@ -89,7 +89,7 @@ func (r *DSLServiceRequest) CallMethod(name string, args []any) any {
 			return r.headers.Get(fmt.Sprintf("%v", args[0]))
 		}
 		return ""
-	case "параметрурл", "urlparameter":
+	case "параметрurl", "urlparameter":
 		if len(args) > 0 {
 			return r.pathParams[fmt.Sprintf("%v", args[0])]
 		}
@@ -198,7 +198,7 @@ func (r *DSLServiceResponse) CallMethod(name string, args []any) any {
 
 // StatusCodeValue, BodyBytes, HeadersMap — экспортированные аксессоры для роутера.
 func (r *DSLServiceResponse) StatusCodeValue() int { return r.statusCode }
-func (r *DSLServiceResponse) BodyBytes() []byte     { return r.body }
+func (r *DSLServiceResponse) BodyBytes() []byte    { return r.body }
 
 // HeadersMap разворачивает Соответствие-заголовки в обычную карту строк.
 func (r *DSLServiceResponse) HeadersMap() map[string]string {

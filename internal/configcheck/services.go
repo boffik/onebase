@@ -19,9 +19,11 @@ func CheckHTTPServices(proj *project.Project) []Issue {
 		issues = append(issues, Issue{File: "services", Object: object, Kind: "HTTP-сервис", Message: msg})
 	}
 
-	// Programs ключуется капитализированным именем файла — ищем регистронезависимо.
+	// ServicePrograms ключуется капитализированным именем файла — ищем
+	// регистронезависимо. Сервисы хранятся отдельно от Programs (план 61),
+	// чтобы не конфликтовать с модулем одноимённого документа.
 	progByLower := map[string]*ast.Program{}
-	for name, prog := range proj.Programs {
+	for name, prog := range proj.ServicePrograms {
 		progByLower[strings.ToLower(name)] = prog
 	}
 
@@ -50,6 +52,17 @@ func CheckHTTPServices(proj *project.Project) []Issue {
 			}
 		default:
 			add(svc.Name, fmt.Sprintf("неизвестный auth %q (none|basic|session|token|hmac)", svc.Auth))
+		}
+
+		// roles требует аутентифицированного пользователя в контексте, а его
+		// кладут только basic/session. При none/token/hmac ветка roles в рантайме
+		// всегда даёт 403 (UserFromContext==nil) — сервис нерабочий молча.
+		if len(svc.Roles) > 0 {
+			switch strings.ToLower(strings.TrimSpace(svc.Auth)) {
+			case "basic", "session":
+			default:
+				add(svc.Name, fmt.Sprintf("roles заданы при auth %q — отбор по ролям требует basic или session (иначе всегда 403)", svc.Auth))
+			}
 		}
 
 		prog, ok := progByLower[strings.ToLower(svc.Name)]

@@ -18,6 +18,10 @@ type DSLError struct {
 	File string
 	Line int
 	Msg  string
+	// Err — исходная ошибка (если есть), например i18nerr с ключом перевода.
+	// Unwrap отдаёт её, чтобы i18nerr.Localize смог локализовать сообщение по
+	// цепочке (иначе текст сплющивался бы в строку и перевод терялся).
+	Err error
 }
 
 func (e *DSLError) Error() string {
@@ -26,6 +30,8 @@ func (e *DSLError) Error() string {
 	}
 	return e.Msg
 }
+
+func (e *DSLError) Unwrap() error { return e.Err }
 
 var builtins = map[string]func(args []any, file string, line int) (any, error){
 

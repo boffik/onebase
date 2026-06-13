@@ -142,6 +142,11 @@ function ggGenerate() {
 
   let yaml = {};
   if (override) {
+    // Сначала фиксируем правки активной вкладки (она ещё не сохранена в карту),
+    // иначе последние изменения не попали бы в отправку.
+    if (ggActiveYamlTab) {
+      ggYamlFiles[ggActiveYamlTab] = document.getElementById('gg-yaml-content').value;
+    }
     yaml = ggYamlFiles;
   }
 
@@ -208,7 +213,9 @@ function ggRenderYamlTabs() {
       }
       document.querySelectorAll('#gg-yaml-tabs button').forEach(t => t.style.cssText = 'background:#e2e8f0;color:#475569;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px');
       btn.style.cssText = 'background:#3b82f6;color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px';
-      document.getElementById('gg-yaml-content').value = content;
+      // Загружаем сохранённые правки этой вкладки, а не исходный content из
+      // замыкания — иначе переключение вкладок затирало бы изменения.
+      document.getElementById('gg-yaml-content').value = ggYamlFiles[name];
       ggActiveYamlTab = name;
     };
     tabs.appendChild(btn);

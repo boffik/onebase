@@ -12,10 +12,11 @@ const (
 type FieldType string
 
 const (
-	FieldTypeString FieldType = "string"
-	FieldTypeDate   FieldType = "date"
-	FieldTypeNumber FieldType = "number"
-	FieldTypeBool   FieldType = "bool"
+	FieldTypeString   FieldType = "string"
+	FieldTypeDate     FieldType = "date"
+	FieldTypeNumber   FieldType = "number"
+	FieldTypeBool     FieldType = "bool"
+	FieldTypeRichText FieldType = "richtext"
 )
 
 type Field struct {
@@ -246,6 +247,13 @@ func RefName(ft FieldType) string {
 
 func IsEnum(ft FieldType) bool {
 	return strings.HasPrefix(string(ft), "enum:")
+}
+
+// IsRichText сообщает, что поле хранит форматированный HTML (тип richtext).
+// Такие поля санитизируются на записи и выводе и не допускаются в табличных
+// частях (см. Validate).
+func IsRichText(ft FieldType) bool {
+	return ft == FieldTypeRichText
 }
 
 func EnumTypeName(ft FieldType) string {
