@@ -109,3 +109,38 @@ func TestSlickGridHandlerServesCriticalFiles(t *testing.T) {
 		t.Errorf("Cache-Control = %q, want max-age", cc)
 	}
 }
+
+// TestQuillHandlerServesBundle guards that the Quill WYSIWYG editor is embedded
+// and served offline — richtext-fields load quill.js and quill.snow.css from
+// /vendor/quill/.
+func TestQuillHandlerServesBundle(t *testing.T) {
+	h := http.StripPrefix("/vendor/quill/", QuillHandler())
+	for _, f := range []string{"quill.js", "quill.snow.css"} {
+		req := httptest.NewRequest(http.MethodGet, "/vendor/quill/"+f, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", f, rec.Code)
+			continue
+		}
+		if rec.Body.Len() == 0 {
+			t.Errorf("%s: empty body", f)
+		}
+	}
+
+	// A path outside the embedded tree must 404, not leak the filesystem.
+	req := httptest.NewRequest(http.MethodGet, "/vendor/quill/nonexistent.js", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("absent file: status = %d, want 404", rec.Code)
+	}
+
+	// Cache header must be set for long-lived versioned assets.
+	req = httptest.NewRequest(http.MethodGet, "/vendor/quill/quill.js", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "max-age") {
+		t.Errorf("Cache-Control = %q, want max-age", cc)
+	}
+}
