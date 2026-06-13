@@ -41,6 +41,16 @@ var echartsFS embed.FS
 //go:embed slickgrid
 var slickgridFS embed.FS
 
+// Quill (snow theme, BSD-3) vendored for the richtext field WYSIWYG editor.
+// Only the self-contained UMD bundle (quill.js) and the snow theme CSS are
+// embedded — Quill 2.x bundles all its dependencies and inlines toolbar icons
+// as data-URI SVG in the CSS, so no separate icon/font files are needed.
+// Самохостинг вместо CDN: редактор richtext работает офлайн, десктопная база не
+// зависит от интернета.
+//
+//go:embed quill
+var quillFS embed.FS
+
 // MonacoHandler serves the embedded Monaco tree. Mount it under
 // /vendor/monaco/ in every server that renders a Monaco editor.
 func MonacoHandler() http.Handler {
@@ -78,6 +88,21 @@ func EChartsHandler() http.Handler {
 // (base UI managed forms).
 func SlickGridHandler() http.Handler {
 	sub, err := fs.Sub(slickgridFS, "slickgrid")
+	if err != nil {
+		return http.NotFoundHandler()
+	}
+	fileSrv := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		fileSrv.ServeHTTP(w, req)
+	})
+}
+
+// QuillHandler serves the embedded Quill bundle. Mount it under /vendor/quill/
+// in the base UI server — richtext-fields on entity forms load quill.js and
+// quill.snow.css from there.
+func QuillHandler() http.Handler {
+	sub, err := fs.Sub(quillFS, "quill")
 	if err != nil {
 		return http.NotFoundHandler()
 	}

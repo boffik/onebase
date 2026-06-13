@@ -49,6 +49,20 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"isRef":      func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum":     func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
 	"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
+	// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
+	// Quill (vendor-ассеты + init) грузятся на форме только при true, чтобы не
+	// тянуть редактор на формы без richtext-полей.
+	"entityHasRichText": func(e *metadata.Entity) bool {
+		if e == nil {
+			return false
+		}
+		for _, f := range e.Fields {
+			if metadata.IsRichText(f.Type) {
+				return true
+			}
+		}
+		return false
+	},
 	// richPlain — текстовая проекция richtext-значения для ячейки списка
 	// (усечённая, чтобы HTML не разъезжал таблицу).
 	"richPlain": func(v any) string {
@@ -1330,9 +1344,13 @@ const tplForm = `
       <option value="true"  {{if eq (index $.Values $fn) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
   {{else if isRichText (str .Type)}}
-    {{/* Этап 1: сырой HTML в textarea. html/template экранирует тело textarea —
-         браузер показывает HTML как текст для редактирования. Quill — этап 2. */}}
+    {{/* textarea — скрытое form-backing поле (хранит санитизированный HTML).
+         Без JS остаётся видимым и рабочим (прогрессивное улучшение). С JS
+         Quill (этап 2) инициализируется над .richtext-editor и синхронизирует
+         содержимое обратно в textarea перед submit — серверный санитайзер
+         обрабатывает результат. */}}
     <textarea name="{{$fn}}" class="richtext-field" rows="8" style="width:100%">{{index $.Values $fn}}</textarea>
+    <div class="richtext-editor"></div>
   {{else}}
     <input type="text" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$flabel}}">
   {{end}}
@@ -1475,6 +1493,92 @@ const tplForm = `
      page-managed-form. Внутри: глобалы window._tpRefOpts/_tpRefMeta,
      функции addTpRow / recalcTpRow / openRefPicker / openRefCreate. */}}
 {{define "form-shared-js"}}
+{{if entityHasRichText .Entity}}
+{{/* Quill (WYSIWYG для richtext-полей, план 65 этап 2). Вендор-ассеты грузятся
+     ТОЛЬКО когда у сущности есть richtext-реквизит. Прогрессивное улучшение:
+     без JS textarea.richtext-field остаётся видимым и рабочим; при загрузке
+     Quill монтируется на соседний .richtext-editor, textarea скрывается и
+     служит form-backing полем (Quill пишет в неё HTML перед submit — серверный
+     санитайзер обрабатывает результат). */}}
+<link rel="stylesheet" href="/vendor/quill/quill.snow.css">
+<script src="/vendor/quill/quill.js"></script>
+<script>
+(function(){
+  function initRichText(){
+    if (typeof Quill === "undefined") return; // ассет не загрузился — textarea остаётся
+    var fields = document.querySelectorAll("textarea.richtext-field");
+    fields.forEach(function(ta){
+      // Контейнер Quill — соседний .richtext-editor; нет (read-only) → пропуск.
+      var holder = ta.nextElementSibling;
+      if (!holder || !holder.classList || !holder.classList.contains("richtext-editor")) return;
+      if (holder.getAttribute("data-ql-ready") === "1") return;
+      holder.setAttribute("data-ql-ready", "1");
+      var q = new Quill(holder, {
+        theme: "snow",
+        modules: { toolbar: [
+          [{ "header": [1, 2, 3, false] }],
+          ["bold", "italic", "underline", "strike"],
+          [{ "list": "ordered" }, { "list": "bullet" }],
+          ["blockquote", "link", "image"],
+          ["clean"]
+        ]}
+      });
+      // Инициализация содержимым из textarea (санитизированный HTML с сервера).
+      // Грузим через clipboard.convert → Delta, а НЕ через root.innerHTML:
+      // innerHTML вставляет сырой DOM мимо парсера Quill, контент не попадает
+      // в Delta/Parchment-модель, и при повторном открытии сохранённого
+      // документа семантические <ul>/<ol> (без data-list) не распознаются
+      // нативным list-blot → списки искажаются при первом же редактировании.
+      // clipboard.convert прогоняет HTML через matcher (<ul>→bullet,<ol>→ordered)
+      // и строит корректную Delta. "silent" — без записи в историю undo.
+      q.setContents(q.clipboard.convert({ html: ta.value }), "silent");
+      ta.style.display = "none";
+      // Синхронизация: на каждое изменение и принудительно перед submit.
+      // normalizeLists: Quill 2.x все списки рендерит как <ol> с
+      // <li data-list="bullet|ordered">, а маркер рисует CSS-псевдоэлементом.
+      // Наш санитайзер вырезает data-list → маркированный список схлопнулся бы в
+      // нумерованный. Поэтому перед записью переводим Quill-разметку в
+      // семантические <ul>/<ol> (оба в allowlist санитайзера).
+      function normalizeLists(html){
+        var box = document.createElement("div");
+        box.innerHTML = html;
+        box.querySelectorAll("ol").forEach(function(ol){
+          var items = Array.prototype.slice.call(ol.children).filter(function(el){
+            return el.tagName === "LI";
+          });
+          if (!items.length) return;
+          // Тип top-level списка определяем по первому <li>: data-list="bullet"
+          // → <ul>, иначе оставляем <ol>. (Вложенность в Quill 2.x — это НЕ
+          // отдельные <ol>, а плоские <li class="ql-indent-N"> в том же списке;
+          // вложенные уровни/отступы вне MVP — классы ql-indent вырезает
+          // санитайзер, список схлопывается в один уровень.)
+          var isBullet = items[0].getAttribute("data-list") === "bullet";
+          if (isBullet) {
+            var ul = document.createElement("ul");
+            while (ol.firstChild) ul.appendChild(ol.firstChild);
+            ol.parentNode.replaceChild(ul, ol);
+          }
+        });
+        // Убираем служебные атрибуты/узлы Quill (вырезались бы санитайзером,
+        // но чище отдать уже без них).
+        box.querySelectorAll("li[data-list]").forEach(function(li){ li.removeAttribute("data-list"); });
+        box.querySelectorAll(".ql-ui").forEach(function(n){ n.remove(); });
+        return box.innerHTML;
+      }
+      function sync(){ ta.value = normalizeLists(q.root.innerHTML); }
+      q.on("text-change", sync);
+      var form = ta.form;
+      if (form) form.addEventListener("submit", sync);
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initRichText);
+  } else {
+    initRichText();
+  }
+})();
+</script>
+{{end}}
 <script>
 window._tpRefOpts = {{jsJSON .TPRefOptions}};
 window._tpRefMeta = {{jsJSON .TPRefMeta}};

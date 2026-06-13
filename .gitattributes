@@ -7,6 +7,11 @@ internal/onec_forms/fixtures/* -text
 # нормализации EOL, чтобы апгрейд версии давал чистый предсказуемый diff.
 internal/webassets/monaco/** -text
 
+# Вендоренный Quill (snow theme, BSD-3) — минифицированный bundle + CSS,
+# храним байт-в-байт без нормализации EOL.
+internal/webassets/quill/quill.js -text
+internal/webassets/quill/quill.snow.css -text
+
 # Встроенные TTF-шрифты для PDF (PT Serif/PT Sans, OFL) — бинарные, без
 # нормализации EOL.
 internal/sheet/fonts/*.ttf binary

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -72,5 +73,75 @@ func TestCheckRichTextLimits_WithinLimit(t *testing.T) {
 
 	if err := checkRichTextLimits(req, richtextEntity()); err != nil {
 		t.Fatalf("неожиданная ошибка: %v", err)
+	}
+}
+
+// TestPageForm_RichTextLoadsQuill: форма сущности с richtext-полем рендерит
+// контейнер Quill (.richtext-editor) и подключает офлайн-ассеты из
+// /vendor/quill/ (этап 2). textarea остаётся (прогрессивное улучшение).
+func TestPageForm_RichTextLoadsQuill(t *testing.T) {
+	data := map[string]any{
+		"Entity":        richtextEntity(),
+		"IsNew":         true,
+		"Values":        map[string]string{"Наименование": "", "Результат": "<p>привет</p>"},
+		"RefOptions":    map[string]any{},
+		"EnumOptions":   map[string]any{},
+		"TPRefOptions":  map[string]any{},
+		"TPRefMeta":     map[string]any{},
+		"TablePartRows": map[string]any{},
+		"IsPopup":       true, // без nav — проще данные шаблона
+		"Lang":          "ru",
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "page-form", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	html := buf.String()
+
+	for _, want := range []string{
+		`<textarea name="Результат" class="richtext-field"`, // textarea сохранён
+		`<div class="richtext-editor"></div>`,               // контейнер Quill
+		`/vendor/quill/quill.snow.css`,                      // CSS офлайн
+		`/vendor/quill/quill.js`,                            // bundle офлайн
+		`new Quill(`,                                        // init-код
+		`q.clipboard.convert(`,                              // загрузка через парсер Quill
+		`q.setContents(`,                                    // Delta, а не сырой innerHTML
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("page-form не содержит %q", want)
+		}
+	}
+}
+
+// TestPageForm_NoRichTextNoQuill: форма без richtext-поля НЕ тянет Quill —
+// ассеты грузятся только когда они нужны.
+func TestPageForm_NoRichTextNoQuill(t *testing.T) {
+	ent := &metadata.Entity{
+		Name: "Контрагент",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	data := map[string]any{
+		"Entity":        ent,
+		"IsNew":         true,
+		"Values":        map[string]string{"Наименование": ""},
+		"RefOptions":    map[string]any{},
+		"EnumOptions":   map[string]any{},
+		"TPRefOptions":  map[string]any{},
+		"TPRefMeta":     map[string]any{},
+		"TablePartRows": map[string]any{},
+		"IsPopup":       true,
+		"Lang":          "ru",
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "page-form", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	if strings.Contains(buf.String(), "/vendor/quill/") {
+		t.Error("форма без richtext-поля не должна подключать Quill")
 	}
 }

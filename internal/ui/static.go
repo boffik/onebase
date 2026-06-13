@@ -19,4 +19,8 @@ func mountStatic(r chi.Router) {
 	r.Handle("/vendor/monaco/*", http.StripPrefix("/vendor/monaco/", webassets.MonacoHandler()))
 	// SlickGrid — грид для редактируемых табличных частей managed-форм.
 	r.Handle("/vendor/slickgrid/*", http.StripPrefix("/vendor/slickgrid/", webassets.SlickGridHandler()))
+	// Quill — WYSIWYG-редактор для richtext-полей (план 65). Раздаётся только в
+	// пользовательском режиме: формы сущностей с richtext-реквизитами здесь.
+	// Конфигуратор лаунчера правит метаданные, а не данные — Quill ему не нужен.
+	r.Handle("/vendor/quill/*", http.StripPrefix("/vendor/quill/", webassets.QuillHandler()))
 }
