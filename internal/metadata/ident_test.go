@@ -94,3 +94,52 @@ func TestValidateIdentifiers_Rejects(t *testing.T) {
 		}
 	}
 }
+
+// Регрессия (план критических фиксов, #3): systemColumns не содержал _version,
+// recorder_type, line_number, вид_движения, updated_at — поле/измерение с таким
+// именем проходило валидацию и ломало DDL/UPDATE (duplicate column либо двойное
+// присваивание _version). Колонка ТЧ «строка» проверяется отдельно.
+func TestValidateIdentifiers_ReservedColumns(t *testing.T) {
+	reject := []struct {
+		name string
+		run  func() error
+	}{
+		{"реквизит _version", func() error {
+			e := &Entity{Name: "Контрагент", Kind: KindCatalog, Fields: []Field{{Name: "_version", Type: FieldTypeNumber}}}
+			return ValidateIdentifiers([]*Entity{e}, nil, nil, nil, nil, nil)
+		}},
+		{"реквизит recorder_type (регистронезависимо)", func() error {
+			e := &Entity{Name: "Контрагент", Kind: KindCatalog, Fields: []Field{{Name: "Recorder_Type", Type: FieldTypeString}}}
+			return ValidateIdentifiers([]*Entity{e}, nil, nil, nil, nil, nil)
+		}},
+		{"измерение регистра вид_движения", func() error {
+			r := &Register{Name: "Остатки", Dimensions: []Field{{Name: "вид_движения", Type: FieldTypeString}}}
+			return ValidateIdentifiers(nil, []*Register{r}, nil, nil, nil, nil)
+		}},
+		{"измерение регистра line_number", func() error {
+			r := &Register{Name: "Остатки", Dimensions: []Field{{Name: "line_number", Type: FieldTypeNumber}}}
+			return ValidateIdentifiers(nil, []*Register{r}, nil, nil, nil, nil)
+		}},
+		{"измерение инфорегистра updated_at", func() error {
+			ir := &InfoRegister{Name: "Цены", Dimensions: []Field{{Name: "updated_at", Type: FieldTypeString}}}
+			return ValidateIdentifiers(nil, nil, []*InfoRegister{ir}, nil, nil, nil)
+		}},
+		{"реквизит ТЧ Строка", func() error {
+			e := &Entity{Name: "Поступление", Kind: KindDocument, TableParts: []TablePart{
+				{Name: "Товары", Fields: []Field{{Name: "Строка", Type: FieldTypeString}}}}}
+			return ValidateIdentifiers([]*Entity{e}, nil, nil, nil, nil, nil)
+		}},
+	}
+	for _, tt := range reject {
+		if err := tt.run(); err == nil {
+			t.Errorf("%s: ожидалась ошибка валидации, получено nil", tt.name)
+		}
+	}
+
+	// «Строка» как реквизит обычной сущности (НЕ ТЧ) должна оставаться допустимой —
+	// такой колонки в таблице сущности нет, глобально запрещать имя не нужно.
+	e := &Entity{Name: "Заметка", Kind: KindCatalog, Fields: []Field{{Name: "Строка", Type: FieldTypeString}}}
+	if err := ValidateIdentifiers([]*Entity{e}, nil, nil, nil, nil, nil); err != nil {
+		t.Errorf("«Строка» как реквизит сущности должна быть допустима: %v", err)
+	}
+}
