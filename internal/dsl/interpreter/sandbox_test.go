@@ -77,3 +77,47 @@ func TestSandbox_NoProfileNoRegression(t *testing.T) {
 	// DSL числа возвращаются как decimal.Decimal — сравниваем через строку.
 	assert.Equal(t, "500500", fmt.Sprintf("%v", result))
 }
+
+// Строгий профиль запрещает файлы; запрет ловится Попыткой (catchable).
+func TestSandbox_FileDeniedCatchable(t *testing.T) {
+	src := `Процедура Тест()
+  Попытка
+    КопироватьФайл("a.txt", "b.txt");
+    Возврат "без ошибки";
+  Исключение
+    Возврат ОписаниеОшибки();
+  КонецПопытки;
+КонецПроцедуры`
+	p := interpreter.RestrictedProfile()
+	var result any
+	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result, p.Vars())
+	require.NoError(t, err)
+	assert.Contains(t, result.(string), "файловые операции запрещены")
+}
+
+// Строгий профиль запрещает сеть/почту; запрет ловится Попыткой.
+func TestSandbox_NetDeniedCatchable(t *testing.T) {
+	src := `Процедура Тест()
+  Попытка
+    ОтправитьПисьмо("x@y.com", "тема", "текст");
+    Возврат "без ошибки";
+  Исключение
+    Возврат ОписаниеОшибки();
+  КонецПопытки;
+КонецПроцедуры`
+	p := interpreter.RestrictedProfile()
+	var result any
+	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result, p.Vars())
+	require.NoError(t, err)
+	assert.Contains(t, result.(string), "сеть запрещена")
+}
+
+// При AllowNet/AllowFile профиль не внедряет запретов — нет регрессии.
+func TestSandbox_AllowedNoVars(t *testing.T) {
+	p := interpreter.SandboxProfile{AllowNet: true, AllowFile: true}
+	v := p.Vars()
+	_, hasFile := v["копироватьфайл"]
+	_, hasMail := v["отправитьписьмо"]
+	assert.False(t, hasFile, "при AllowFile не должно быть файловых запретов")
+	assert.False(t, hasMail, "при AllowNet не должно быть сетевых запретов")
+}

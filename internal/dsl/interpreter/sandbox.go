@@ -31,6 +31,34 @@ func RestrictedProfile() SandboxProfile {
 	}
 }
 
+// Vars возвращает extraVars, навязывающие запреты возможностей профиля
+// (сеть/email/файлы). Мержить ПОСЛЕ обычных переменных запуска, чтобы deny-
+// guard'ы перекрыли стандартные функции. Разрешённые возможности не внедряются —
+// остаются обычные функции (с глобальным предохранителем сети, план 62).
+func (p SandboxProfile) Vars() map[string]any {
+	m := map[string]any{}
+	if !p.AllowNet {
+		deny := NetGuard(func() error {
+			return errors.New("сеть запрещена в этом режиме (песочница)")
+		})
+		for k, v := range NewHTTPFunctions(deny) {
+			m[k] = v
+		}
+		for k, v := range NewEmailFunctions(nil, deny) {
+			m[k] = v
+		}
+	}
+	if !p.AllowFile {
+		deny := FileGuard(func() error {
+			return errors.New("файловые операции запрещены в этом режиме (песочница)")
+		})
+		for k, v := range NewFileFunctions(deny) {
+			m[k] = v
+		}
+	}
+	return m
+}
+
 // RunSandboxed исполняет процедуру с ресурсными лимитами профиля (wall-clock и
 // итерации). Запреты возможностей (сеть/файлы) подаются вызывающим через
 // extraVars (см. SandboxProfile.Vars). Возвращаемое значение — в result.
