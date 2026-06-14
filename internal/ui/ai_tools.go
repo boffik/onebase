@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivantit66/onebase/internal/aicontext"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -42,7 +42,7 @@ func (s *Server) aiTools(r *http.Request) ([]llm.Tool, llm.ToolExecutor) {
 	tools := []llm.Tool{
 		{
 			Name:        "описание_данных",
-			Description:  "Вернуть карту конфигурации: справочники, документы, регистры (накопления, сведений, бухгалтерии), планы счетов, перечисления и константы с их полями, а также готовые отчёты, обработки, журналы и подсистемы. Вызови первым, чтобы понять, что есть в системе и что можно запросить.",
+			Description: "Вернуть карту конфигурации: справочники, документы, регистры (накопления, сведений, бухгалтерии), планы счетов, перечисления и константы с их полями, а также готовые отчёты, обработки, журналы и подсистемы. Вызови первым, чтобы понять, что есть в системе и что можно запросить.",
 			Schema:      map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
@@ -76,113 +76,27 @@ func (s *Server) aiTools(r *http.Request) ([]llm.Tool, llm.ToolExecutor) {
 
 // aiSchemaText кратко описывает доступные объекты конфигурации для модели.
 func (s *Server) aiSchemaText() string {
-	var b strings.Builder
-	var catalogs, documents []*metadata.Entity
-	for _, e := range s.reg.Entities() {
-		if e.Kind == metadata.KindCatalog {
-			catalogs = append(catalogs, e)
-		} else if e.Kind == metadata.KindDocument {
-			documents = append(documents, e)
-		}
+	reports := make([]aicontext.NamedTitle, 0)
+	for _, rp := range s.reg.Reports() {
+		reports = append(reports, aicontext.NamedTitle{Name: rp.Name, Title: rp.Title})
 	}
-	writeFields := func(fs []metadata.Field) string {
-		names := make([]string, 0, len(fs))
-		for _, f := range fs {
-			names = append(names, f.Name)
-		}
-		return strings.Join(names, ", ")
+	procs := make([]aicontext.NamedTitle, 0)
+	for _, p := range s.reg.Processors() {
+		procs = append(procs, aicontext.NamedTitle{Name: p.Name, Title: p.Title})
 	}
-	// nameTitle — «Имя — Заголовок», если заголовок задан и отличается от имени.
-	nameTitle := func(name, title string) string {
-		if title != "" && title != name {
-			return name + " — " + title
-		}
-		return name
-	}
-	if len(catalogs) > 0 {
-		b.WriteString("Справочники:\n")
-		for _, e := range catalogs {
-			fmt.Fprintf(&b, "  %s: %s\n", e.Name, writeFields(e.Fields))
-		}
-	}
-	if len(documents) > 0 {
-		b.WriteString("Документы:\n")
-		for _, e := range documents {
-			fmt.Fprintf(&b, "  %s: %s\n", e.Name, writeFields(e.Fields))
-		}
-	}
-	if regs := s.reg.Registers(); len(regs) > 0 {
-		b.WriteString("Регистры накопления (доступны .Остатки/.Обороты):\n")
-		for _, rg := range regs {
-			fmt.Fprintf(&b, "  %s: измерения [%s]; ресурсы [%s]\n",
-				rg.Name, writeFields(rg.Dimensions), writeFields(rg.Resources))
-		}
-	}
-	if irs := s.reg.InfoRegisters(); len(irs) > 0 {
-		b.WriteString("Регистры сведений (доступен .СрезПоследних):\n")
-		for _, ir := range irs {
-			fmt.Fprintf(&b, "  %s: измерения [%s]; ресурсы [%s]\n",
-				ir.Name, writeFields(ir.Dimensions), writeFields(ir.Resources))
-		}
-	}
-	if charts := s.reg.ChartsOfAccounts(); len(charts) > 0 {
-		b.WriteString("Планы счетов:\n")
-		for _, ch := range charts {
-			codes := make([]string, 0, len(ch.Accounts))
-			for _, a := range ch.Accounts {
-				codes = append(codes, a.Code)
-			}
-			fmt.Fprintf(&b, "  %s: счета %s\n", nameTitle(ch.Name, ch.Title), strings.Join(codes, ", "))
-		}
-	}
-	if ars := s.reg.AccountRegisters(); len(ars) > 0 {
-		b.WriteString("Регистры бухгалтерии (доступны .Остатки/.Обороты по счетам и субконто):\n")
-		for _, ar := range ars {
-			fmt.Fprintf(&b, "  %s: ресурсы [%s]; субконто [%s]; план счетов %s\n",
-				nameTitle(ar.Name, ar.Title), writeFields(ar.Resources), writeFields(ar.Subconto), ar.Accounts)
-		}
-	}
-	if enums := s.reg.Enums(); len(enums) > 0 {
-		b.WriteString("Перечисления:\n")
-		for _, en := range enums {
-			fmt.Fprintf(&b, "  %s: %s\n", en.Name, strings.Join(en.Values, ", "))
-		}
-	}
-	if consts := s.reg.Constants(); len(consts) > 0 {
-		names := make([]string, 0, len(consts))
-		for _, c := range consts {
-			names = append(names, c.Name)
-		}
-		fmt.Fprintf(&b, "Константы: %s\n", strings.Join(names, ", "))
-	}
-	if reports := s.reg.Reports(); len(reports) > 0 {
-		b.WriteString("Отчёты (готовые, открываются в интерфейсе; не используются как таблицы в запросах):\n")
-		for _, rp := range reports {
-			fmt.Fprintf(&b, "  %s\n", nameTitle(rp.Name, rp.Title))
-		}
-	}
-	if procs := s.reg.Processors(); len(procs) > 0 {
-		b.WriteString("Обработки (запускаются в интерфейсе):\n")
-		for _, p := range procs {
-			fmt.Fprintf(&b, "  %s\n", nameTitle(p.Name, p.Title))
-		}
-	}
-	if journals := s.reg.Journals(); len(journals) > 0 {
-		b.WriteString("Журналы документов:\n")
-		for _, j := range journals {
-			fmt.Fprintf(&b, "  %s: документы [%s]\n", nameTitle(j.Name, j.Title), strings.Join(j.Documents, ", "))
-		}
-	}
-	if subs := s.reg.Subsystems(); len(subs) > 0 {
-		b.WriteString("Подсистемы (разделы интерфейса):\n")
-		for _, sub := range subs {
-			fmt.Fprintf(&b, "  %s\n", nameTitle(sub.Name, sub.Title))
-		}
-	}
-	if b.Len() == 0 {
-		return "В конфигурации нет объектов для запроса."
-	}
-	return b.String()
+	return aicontext.SchemaText(aicontext.Input{
+		Entities:         s.reg.Entities(),
+		Registers:        s.reg.Registers(),
+		InfoRegisters:    s.reg.InfoRegisters(),
+		AccountRegisters: s.reg.AccountRegisters(),
+		ChartsOfAccounts: s.reg.ChartsOfAccounts(),
+		Enums:            s.reg.Enums(),
+		Constants:        s.reg.Constants(),
+		Reports:          reports,
+		Processors:       procs,
+		Journals:         s.reg.Journals(),
+		Subsystems:       s.reg.Subsystems(),
+	})
 }
 
 // aiRunQuery компилирует и выполняет запрос инструмента, возвращая строки в JSON.

@@ -149,6 +149,24 @@ func TestAITools_AdminGetsTools(t *testing.T) {
 	}
 }
 
+// Делегирование в aicontext: ui-путь теперь отдаёт ТЧ и пометку проведения.
+func TestAISchemaText_TablePartsAndPosting(t *testing.T) {
+	doc := &metadata.Entity{
+		Name: "Заказ", Kind: metadata.KindDocument, Posting: true,
+		Fields: []metadata.Field{{Name: "Дата", Type: metadata.FieldTypeDate}},
+		TableParts: []metadata.TablePart{
+			{Name: "Товары", Fields: []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}}},
+		},
+	}
+	s, _ := newSubmitTestServer(t, []*metadata.Entity{doc})
+	txt := s.aiSchemaText()
+	for _, sub := range []string{"Заказ", "(проводится)", "ТЧ Товары", "Количество"} {
+		if !strings.Contains(txt, sub) {
+			t.Fatalf("в срезе нет %q: %s", sub, txt)
+		}
+	}
+}
+
 // TestAITools_FlaggedUserGetsTools проверяет, что не-администратор с флагом
 // AIDataAccess получает инструменты ИИ-чата. Прогоняет весь путь флага: схема
 // (ALTER) → Update (сохранение) → GetByID (чтение) → ContextWithUser (гейт).
