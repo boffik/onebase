@@ -117,7 +117,7 @@ func TestSandbox_AllowedNoVars(t *testing.T) {
 	p := interpreter.SandboxProfile{AllowNet: true, AllowFile: true}
 	v := p.Vars()
 	_, hasFile := v["копироватьфайл"]
-	_, hasMail := v["отправитьписьмо"]
+	_, hasMail := v["ОтправитьПисьмо"] // ключ NewEmailFunctions — смешанный регистр
 	assert.False(t, hasFile, "при AllowFile не должно быть файловых запретов")
 	assert.False(t, hasMail, "при AllowNet не должно быть сетевых запретов")
 }

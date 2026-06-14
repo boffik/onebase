@@ -44,6 +44,8 @@ func (p SandboxProfile) Vars() map[string]any {
 		for k, v := range NewHTTPFunctions(deny) {
 			m[k] = v
 		}
+		// nil sender: deny-guard срабатывает (checkNet) раньше обращения к
+		// отправителю, поэтому реальный EmailSender здесь не нужен.
 		for k, v := range NewEmailFunctions(nil, deny) {
 			m[k] = v
 		}
