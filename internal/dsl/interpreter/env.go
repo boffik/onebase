@@ -45,9 +45,9 @@ func (m *MapThis) Set(name string, v any) {
 // кадрами, поэтому конкурентные запуски на одном *Interpreter не гонят по
 // curFile/curLine и видят только свой debug hook (план 52).
 type execCtx struct {
-	curFile string // last executed statement location (for error reporting)
-	curLine int
-	debug   DebugHook // hook этого запуска; nil = без отладки, нулевые накладные
+	curFile      string // last executed statement location (for error reporting)
+	curLine      int
+	debug        DebugHook // hook этого запуска; nil = без отладки, нулевые накладные
 	deadline     time.Time // wall-clock запуска; zero = без лимита
 	maxLoopIters int       // потолок итераций цикла; 0 = maxWhileIter
 }
