@@ -45,7 +45,13 @@ body{font-family:'Times New Roman',Times,serif;font-size:10pt;color:#000;padding
 table{border-collapse:collapse;width:auto}
 td,th{border:1px solid #cbd5e1;padding:3px 6px;empty-cells:show;font-size:13px}
 tr:nth-child(even) td{background:#f8fafc}
-@media print{.doc-toolbar{display:none}.doc-content{padding:0}}
+@media print{.doc-toolbar{display:none}.doc-content{padding:0}}`)
+	// richtext-CSS (план 65, этап 3) добавляется ТОЛЬКО когда в документе есть
+	// ячейка с RichHTML — иначе вывод бит-в-бит совпадает с прежним (golden).
+	if d.hasRichContent() {
+		sb.WriteString("\n.rich img{max-width:100%;height:auto}\n.rich p{margin:0 0 .3em}\n.rich ul,.rich ol{margin:0 0 .3em 1.2em}")
+	}
+	sb.WriteString(`
 </style>
 </head>
 <body>
@@ -118,7 +124,16 @@ tr:nth-child(even) td{background:#f8fafc}
 
 			text := ""
 			if cell != nil {
-				text = escapeHTML(cell.Text)
+				if cell.RichHTML != "" {
+					// richtext-контент (план 65, этап 3): выводим как HTML-блок
+					// БЕЗ экранирования — контракт Cell.RichHTML требует, чтобы он
+					// был предварительно санитизирован вызывающим (printform).
+					// Контейнер ограничивает контент шириной ячейки и переносит
+					// длинные строки/картинки, чтобы richtext не разъезжался.
+					text = `<div class="rich" style="overflow-wrap:break-word;word-break:break-word">` + cell.RichHTML + `</div>`
+				} else {
+					text = escapeHTML(cell.Text)
+				}
 				if img := pictureHTML(cell.Picture); img != "" {
 					text += img
 				}
@@ -138,6 +153,19 @@ tr:nth-child(even) td{background:#f8fafc}
 </body>
 </html>`)
 	return sb.String()
+}
+
+// hasRichContent сообщает, есть ли в документе хотя бы одна ячейка с richtext-
+// контентом (Cell.RichHTML). Используется HTML-рендером, чтобы добавлять
+// richtext-CSS только при необходимости — вывод документов без richtext остаётся
+// бит-в-бит прежним (golden, план 65, этап 3).
+func (d *Document) hasRichContent() bool {
+	for _, cell := range d.Cells {
+		if cell != nil && cell.RichHTML != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // buildCellStyle строит CSS-стиль ячейки. width/height — эффективные размеры

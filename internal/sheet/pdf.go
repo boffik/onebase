@@ -320,7 +320,7 @@ func (d *Document) computeRowHeightsMM(pdf *fpdf.Fpdf, maxRow int, colWidths []f
 		h := minRowMM
 		for col := 0; col < len(colWidths); col++ {
 			cell := d.GetCell(row, col)
-			if cell == nil || cell.Text == "" {
+			if cell == nil || (cell.Text == "" && cell.RichHTML == "") {
 				continue
 			}
 			// Ширина для переноса с учётом colspan.
@@ -375,6 +375,10 @@ func (a *Area) computeAreaRowHeightsMM(pdf *fpdf.Fpdf, colWidths []float64) []fl
 // текста при переносе по ширине cw (мм). Шрифт ячейки устанавливается перед
 // измерением — он влияет на разбиение pdf.SplitText.
 func cellHeightMM(pdf *fpdf.Fpdf, cell *Cell, cw float64) float64 {
+	// richtext-проекция считает высоту собственным измерителем (план 65, этап 3).
+	if cell.RichHTML != "" {
+		return richCellHeightMM(pdf, cell, cw)
+	}
 	fs := fontSizeOr(cell)
 	lineH := fs * ptToMM * lineGap
 	avail := cw - 2*cellPadMM
@@ -452,6 +456,22 @@ func drawCell(pdf *fpdf.Fpdf, cell *Cell, x, y, w, h float64) {
 			pdf.SetFillColor(r, g, b)
 			pdf.Rect(x, y, w, h, "F")
 		}
+	}
+
+	// richtext-проекция (план 65, этап 3): вместо plain-текста рисуем разбор
+	// ограниченного HTML (абзацы/начертания/списки + data-URI картинки). recover
+	// гасит панику на битом HTML/картинке — печать документа не падает.
+	if cell.RichHTML != "" {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					pdf.ClearError()
+				}
+			}()
+			drawRichText(pdf, cell, x, y, w, h, false)
+		}()
+		drawCellBorder(pdf, cell, x, y, w, h)
+		return
 	}
 
 	// Текст.
