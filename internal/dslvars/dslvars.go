@@ -68,7 +68,7 @@ func (c Common) Build() map[string]any {
 	for k, v := range interpreter.NewEmailFunctions(c.Mailer, c.NetGuard) {
 		vars[k] = v
 	}
-	for k, v := range interpreter.NewFileFunctions() {
+	for k, v := range interpreter.NewFileFunctions(nil) {
 		vars[k] = v
 	}
 	for k, v := range interpreter.NewLLMFunctions(aiassist.New(c.Ctx, c.Store, nil)) {
