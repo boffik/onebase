@@ -74,9 +74,9 @@ type richStyle struct {
 
 // richBuilder накапливает блоки/сегменты при обходе HTML-дерева.
 type richBuilder struct {
-	blocks []richBlock
-	cur    richBlock
-	started bool // открыт ли текущий блок (для авто-переноса между блочными тегами)
+	blocks  []richBlock
+	cur     richBlock
+	started bool  // открыт ли текущий блок (для авто-переноса между блочными тегами)
 	olCount []int // счётчики нумерации вложенных <ol>
 }
 
@@ -342,13 +342,10 @@ func drawRichBlockSegs(pdf *fpdf.Fpdf, blk richBlock, family string, fs, lineH, 
 			style += "I"
 		}
 		pdf.SetFont(family, style, fs)
-		// Разбиваем сегмент на слова и переносим по ширине.
-		words := splitWords(seg.text)
-		for wi, word := range words {
-			piece := word
-			if wi > 0 || lineHasContent {
-				// пробел-разделитель уже включён splitWords как отдельный токен
-			}
+		// Разбиваем сегмент на слова и пробелы (отдельные токены) и переносим по
+		// ширине. Пробел-разделитель — самостоятельный токен, поэтому ширина строки
+		// учитывается корректно при переносе по словам.
+		for _, piece := range splitWords(seg.text) {
 			pw := pdf.GetStringWidth(piece)
 			if cx+pw > x+avail && lineHasContent && strings.TrimSpace(piece) != "" {
 				newline()
