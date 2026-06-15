@@ -16,3 +16,15 @@ func TestQueryHintSystem(t *testing.T) {
 		t.Error("пустой schema не должен добавлять секцию конфигурации")
 	}
 }
+
+func TestConfigurator_ExplainQueryWired(t *testing.T) {
+	html := renderCfgFoot(t)
+	for _, sub := range []string{
+		"configurator/ai-explain", "configurator/ai-query",
+		"explainCheckErrors", "qb-ai-desc", "qb-ai-gen", "mqb-qry",
+	} {
+		if !strings.Contains(html, sub) {
+			t.Errorf("в cfg-foot нет %q — хук не подключён", sub)
+		}
+	}
+}

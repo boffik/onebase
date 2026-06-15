@@ -566,6 +566,10 @@ const cfgFoot = `{{define "cfg-foot"}}
     </div>
   </div>
   <div class="qb-modal-bd">
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <input id="qb-ai-desc" type="text" placeholder="Опишите запрос словами, напр.: средний чек по менеджерам за месяц" style="flex:1;font-size:12px;border:1px solid #c8d0de;border-radius:4px;padding:5px 8px">
+      <button id="qb-ai-gen" type="button" style="background:#7c3aed;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap">🤖 Сгенерировать</button>
+    </div>
     <div class="qb-grid">
       <!-- LEFT -->
       <div>
@@ -1328,6 +1332,22 @@ function runCheckAll() {
 
 function closeCheckAll() {
   document.getElementById('check-all-panel').style.display = 'none';
+}
+function explainCheckErrors(btn){
+  var body=document.getElementById('check-all-body');
+  var out=document.getElementById('check-all-explain-out');
+  var text=body?body.innerText.trim():'';
+  if(!text){return;}
+  if(btn){btn.disabled=true;}
+  out.style.display='';out.textContent='Объясняю...';out.style.color='#888';
+  fetch('/bases/'+_dbgBase+'/configurator/ai-explain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d&&d.ok){out.textContent=d.text;out.style.color='#1e293b';}
+      else{out.textContent=(d&&d.error)||'Ошибка';out.style.color='#c00';}
+    })
+    .catch(function(){out.textContent='Ошибка сети';out.style.color='#c00';})
+    .finally(function(){if(btn){btn.disabled=false;}});
 }
 
 function escapeHtml(s) {
@@ -3007,6 +3027,19 @@ Object.keys(groups).forEach(function(g){
   sel.appendChild(og);
 });
 document.getElementById('qb-close').onclick=function(){document.getElementById('qb-overlay').classList.remove('active');};
+var _qbAiGen=document.getElementById('qb-ai-gen');
+if(_qbAiGen)_qbAiGen.onclick=function(){
+  var desc=document.getElementById('qb-ai-desc').value.trim();if(!desc)return;
+  var btn=this;btn.disabled=true;var old=btn.textContent;btn.textContent='...';
+  fetch('/bases/'+_dbgBase+'/configurator/ai-query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:desc})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d&&d.ok&&d.query){document.getElementById('mqb-qry').value=d.query;document.getElementById('qb-mode').value='query';}
+      else{alert((d&&d.error)||'Ошибка генерации запроса');}
+    })
+    .catch(function(){alert('Ошибка сети');})
+    .finally(function(){btn.disabled=false;btn.textContent=old;});
+};
 document.getElementById('qb-insert').onclick=function(){
   var mode=document.getElementById('qb-mode').value;
   var txt=mode==='query'?document.getElementById('mqb-qry').value:document.getElementById('mqb-dsl').value;
@@ -4653,9 +4686,12 @@ const cfgTabTree = `{{define "tab-tree"}}
 <div id="check-all-panel">
   <header>
     <span>{{t $.Lang "Проверка конфигурации"}}</span>
+    <span style="flex:1"></span>
+    <button type="button" onclick="explainCheckErrors(this)" title="Объяснить ошибки с помощью ИИ">🤖 Объяснить</button>
     <button type="button" onclick="closeCheckAll()" title="{{t $.Lang "Закрыть"}}">✕</button>
   </header>
   <div id="check-all-body"></div>
+  <div id="check-all-explain-out" style="display:none;padding:8px 10px;border-top:1px solid #eef1f6;font-size:12px;white-space:pre-wrap;max-height:220px;overflow:auto;color:#1e293b"></div>
 </div>
 
 {{/* ── Right panel ── */}}
