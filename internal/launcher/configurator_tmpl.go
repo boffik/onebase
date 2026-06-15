@@ -1773,7 +1773,7 @@ function initLayoutEditor(n){
   if(!d||typeof d!=='object')d={areas:[]};
   _ldNormAreas(d);
   _led[n]={data:d,sel:null,init:true};
-  if(_ldAreas(n).length>0){renderLayoutEditor(n);}
+  if(_ldAreas(n).length>0){renderLayoutEditor(n);}else{_ldSyncPagePanel(n);}
 }
 // _ldBorderWidth переводит толщину (thin/medium/thick/all) в CSS-ширину.
 function _ldBorderWidth(v){
@@ -1837,10 +1837,65 @@ function _ldColCount(n){
   }
   return max;
 }
+// _ldGridCols — число колонок фоновой сетки конструктора (как табличный документ
+// 1С): не меньше 8, иначе по фактической ширине макета.
+function _ldGridCols(n){var c=_ldColCount(n);return c>8?c:8;}
+// ── Границы листа (формат/ориентация/поля) ────────────────────────
+// Чтобы вписать форму в размер: печатная ширина = ширина формата − левое − правое
+// поле; колонки px→мм при 96dpi (как pxToMM в sheet/pdf.go).
+// _ldFmtDims — портретные размеры формата (мм), как formatSizeMM в sheet/pdf.go.
+function _ldFmtDims(fmt){
+  var t={A4:[210,297],A5:[148,210],A3:[297,420],LETTER:[215.9,279.4],LEGAL:[215.9,355.6]};
+  return t[String(fmt||'A4').toUpperCase().trim()]||t.A4;
+}
+// _ldEffMargins — действующие поля (мм). Повторяет движок: page отсутствует →
+// 10мм (DefaultPageSetup); page есть, но поле не задано → 0 (declarative.go:29).
+function _ldEffMargins(n){
+  var s=_led[n],p=(s&&s.data&&s.data.page)?s.data.page:null;
+  var d=p?0:10,m=(p&&p.margins)?p.margins:{};
+  return {top:(m.top!=null?+m.top:d),right:(m.right!=null?+m.right:d),
+          bottom:(m.bottom!=null?+m.bottom:d),left:(m.left!=null?+m.left:d)};
+}
+// _ldPageInfo — печатная ширина листа (мм и CSS-px) + подпись формата.
+function _ldPageInfo(n){
+  var s=_led[n],p=(s&&s.data&&s.data.page)?s.data.page:null;
+  var fmt=String((p&&p.format)||'A4').toUpperCase().trim();
+  var dm=_ldFmtDims(fmt),w=dm[0],hh=dm[1];
+  var land=/^(land|альб|гор)/i.test((p&&p.orientation)||'');
+  if(land){var tmp=w;w=hh;hh=tmp;}
+  var em=_ldEffMargins(n);
+  var cmm=w-em.left-em.right;if(cmm<10)cmm=10;
+  var disp={A4:'A4',A5:'A5',A3:'A3',LETTER:'Letter',LEGAL:'Legal'}[fmt]||'A4';
+  return {contentMM:cmm,contentPx:cmm*96/25.4,fmt:disp,land:land,
+          label:disp+(land?' {{t $.Lang "альбомная"}}':' {{t $.Lang "книжная"}}')+' · '+Math.round(cmm)+' {{t $.Lang "мм"}}'};
+}
+// ldEnsurePage создаёт page с действующими значениями (вывод не меняется).
+function ldEnsurePage(n){
+  var s=_led[n];if(!s)return null;
+  var info=_ldPageInfo(n),em=_ldEffMargins(n);
+  if(!s.data.page)s.data.page={};
+  var p=s.data.page;
+  if(!p.format)p.format=info.fmt;
+  if(!p.orientation)p.orientation=info.land?'landscape':'portrait';
+  if(!p.margins)p.margins={top:em.top,right:em.right,bottom:em.bottom,left:em.left};
+  return p;
+}
+function ldSetPageField(n,field,val){var p=ldEnsurePage(n);if(!p)return;p[field]=val;renderLayoutEditor(n);}
+function ldSetPageMargin(n,side,val){var p=ldEnsurePage(n);if(!p)return;var x=parseFloat(val);p.margins[side]=isNaN(x)?0:x;renderLayoutEditor(n);}
+// _ldSyncPagePanel заполняет контролы «Лист» действующими значениями.
+function _ldSyncPagePanel(n){
+  var info=_ldPageInfo(n),em=_ldEffMargins(n);
+  _setVal('pg-fmt-'+n,info.fmt);
+  _setVal('pg-ori-'+n,info.land?'landscape':'portrait');
+  _setVal('pg-ml-'+n,em.left);_setVal('pg-mt-'+n,em.top);
+  _setVal('pg-mr-'+n,em.right);_setVal('pg-mb-'+n,em.bottom);
+  var el=document.getElementById('pg-info-'+n);
+  if(el)el.textContent='{{t $.Lang "печатная ширина"}} '+Math.round(info.contentMM)+' {{t $.Lang "мм"}} (≈'+Math.round(info.contentPx)+' px)';
+}
 // _ldRuler рисует линейку колонок (6.2): по клетке на колонку, клик → ширина.
 // columns — ГЛОБАЛЬНЫЕ для макета; линейка выводится один раз над первой областью.
 function _ldRuler(n){
-  var nc=_ldColCount(n);if(nc<=0)return '';
+  var nc=_ldGridCols(n);if(nc<=0)return '';
   var s=_led[n],cols=(s&&s.data&&Array.isArray(s.data.columns))?s.data.columns:[];
   var h='<div style="display:flex;margin:0 0 2px 18px" title="{{t $.Lang "Ширины колонок"}}">';
   for(var i=0;i<nc;i++){
@@ -1857,8 +1912,10 @@ function renderLayoutEditor(n,noYamlSync){
     _ldSyncTextarea(n);
   }
   if(s.init)s.init=false;
-  var areas=_ldAreas(n),h='<div style="font-family:Arial,sans-serif;font-size:12px">';
-  var cg=_ldColgroup(s.data);
+  var areas=_ldAreas(n);
+  var cg=_ldColgroup(s.data),gc=_ldGridCols(n);
+  var pi=_ldPageInfo(n),guideLeft=Math.round(18+pi.contentPx);
+  var h='<div style="font-family:Arial,sans-serif;font-size:12px;position:relative;min-width:'+(guideLeft+40)+'px">';
   h+=_ldRuler(n);
   for(var ai=0;ai<areas.length;ai++){
     var ar=areas[ai],an=ar.name;
@@ -1894,6 +1951,12 @@ function renderLayoutEditor(n,noYamlSync){
         if(!txt)txt='&nbsp;';
         h+='<td style="'+st+'"'+at+' onclick="selectCell(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+','+ci+')">'+txt+'</td>';
       }
+      // Фоновая сетка (как в 1С): добиваем строку пустыми кликабельными клетками
+      // до ширины сетки. Клик по пустой клетке добавляет ячейку в строку.
+      var used=0;for(var ui=0;ui<cells.length;ui++){var uc=cells[ui];used+=(uc&&uc.colspan>1)?uc.colspan:1;}
+      for(var pe=used;pe<gc;pe++){
+        h+='<td onclick="ldAddCellAt(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+')" style="border:1px dashed #dce4ee;min-width:38px;height:16px;cursor:cell" title="{{t $.Lang "Добавить ячейку"}}">&nbsp;</td>';
+      }
       h+='<td style="border:none;padding:2px;white-space:nowrap">';
       if(ri>0){h+='<button type="button" title="{{t $.Lang "Разрезать область перед этой строкой"}}" style="font-size:10px;color:#0369a1;border:none;cursor:pointer;background:transparent" onclick="splitLayoutArea(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+')\">✂</button>';}
       h+='<button type="button" title="{{t $.Lang "Удалить строку"}}" style="font-size:10px;color:#c33;border:none;cursor:pointer;background:transparent" onclick="delLayoutRow(\''+escJsAttr(n)+"','"+escJsAttr(an)+"',"+ri+')\">✕</button></td>';
@@ -1901,9 +1964,13 @@ function renderLayoutEditor(n,noYamlSync){
     }
     h+='</table></div>';
   }
+  // Граница листа: красная пунктирная линия + подпись на печатной ширине страницы.
+  h+='<div style="position:absolute;top:0;bottom:0;left:'+guideLeft+'px;border-left:2px dashed #ef4444;pointer-events:none;z-index:3"></div>';
+  h+='<div style="position:absolute;top:2px;left:'+(guideLeft+4)+'px;font-size:9px;color:#ef4444;background:rgba(255,255,255,.85);padding:0 3px;pointer-events:none;z-index:3;white-space:nowrap" title="{{t $.Lang "Край печатной области листа"}}">'+esc(pi.label)+'</div>';
   h+='</div>';
   var ved=document.getElementById('veditor-'+n);
   if(ved)ved.innerHTML=h;
+  _ldSyncPagePanel(n);
   renderPreviewOnly(n);
   syncProps(n);
   renderDataPanel(n);
@@ -1954,6 +2021,18 @@ function selectCell(n,a,r,c){
   s.sel={area:a,row:r,col:c};
   renderLayoutEditor(n,true); // don't reformat YAML on cell selection
 }
+// ldAddCellAt добавляет новую пустую ячейку в конец строки (клик по фоновой
+// сетке) и выделяет её.
+function ldAddCellAt(n,a,r){
+  var s=_led[n];if(!s)return;
+  var ar=_ldAreaByName(n,a);if(!ar||!ar.rows||!ar.rows[r])return;
+  var row=ar.rows[r];if(!row.cells)row.cells=[];
+  row.cells.push({});
+  s.sel={area:a,row:r,col:row.cells.length-1};
+  renderLayoutEditor(n);
+}
+// ldDeselect снимает выделение (закрывает закреплённую панель свойств).
+function ldDeselect(n){var s=_led[n];if(!s)return;s.sel=null;renderLayoutEditor(n,true);}
 function _setVal(id,v){var el=document.getElementById(id);if(el)el.value=v;}
 function _setChk(id,v){var el=document.getElementById(id);if(el)el.checked=v;}
 // _ldSelCell возвращает выделенную ячейку {area,row,cell,c} или null.
@@ -1975,7 +2054,6 @@ function syncProps(n){
   if(!sc){pp.style.display='none';return;}
   var c=sc.c;
   pp.style.display='block';
-  pp.scrollIntoView({behavior:'smooth',block:'nearest'});
   _setVal('vp-text-'+n,c.text||'');
   _setVal('vp-param-'+n,c.parameter||'');
   _setChk('vp-bold-'+n,!!c.bold);
@@ -2252,13 +2330,18 @@ function ldPreview(n,entity,format){
   var ta=document.getElementById('ta-mkt-'+n);
   var yaml=ta?ta.value:'';
   var url='/bases/'+_dbgBase+'/configurator/layout/preview';
-  if(format==='pdf')url+='?format=pdf';
+  var isPdf=(format==='pdf');
+  // PDF: в WebView2 нет встроенного просмотрщика (inline-iframe → «заблокировано
+  // Microsoft Edge»), поэтому сервер открывает PDF во внешнем приложении ОС.
+  if(isPdf)url+='?format=pdf&open=1';
   fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({yaml:yaml,entity:entity||''})})
     .then(function(resp){
       if(!resp.ok)return resp.text().then(function(t){throw new Error(t||('HTTP '+resp.status));});
+      if(isPdf){cfgToast('{{t $.Lang "PDF открыт во внешнем приложении"}}');return null;}
       return resp.blob();
     })
     .then(function(blob){
+      if(!blob)return;
       var u=URL.createObjectURL(blob);
       var frame=document.getElementById('ld-preview-frame');
       if(frame)frame.src=u;
@@ -2271,6 +2354,27 @@ function ldClosePreview(){
   if(ov)ov.classList.remove('active');
   var frame=document.getElementById('ld-preview-frame');
   if(frame)frame.src='about:blank';
+}
+// ldToggleYaml сворачивает/разворачивает левую YAML-панель редактора макета,
+// отдавая всю ширину конструктору.
+function ldToggleYaml(n){
+  var pane=document.getElementById('yamlpane-'+n);if(!pane)return;
+  var ta=document.getElementById('ta-mkt-'+n);
+  var btn=document.getElementById('yamltgl-'+n);
+  var lbl=document.getElementById('yamllbl-'+n);
+  if(pane.getAttribute('data-collapsed')==='1'){
+    pane.style.flex='0 0 42%';
+    if(ta)ta.style.display='';
+    if(lbl)lbl.style.display='';
+    if(btn)btn.textContent='⮜';
+    pane.setAttribute('data-collapsed','0');
+  }else{
+    pane.style.flex='0 0 30px';
+    if(ta)ta.style.display='none';
+    if(lbl)lbl.style.display='none';
+    if(btn)btn.textContent='⮞';
+    pane.setAttribute('data-collapsed','1');
+  }
 }
 // _ldEnsure инициализирует _led[n] из textarea, если ещё не инициализирован.
 function _ldEnsure(n){
@@ -5225,14 +5329,36 @@ const cfgTabTree = `{{define "tab-tree"}}
         <button type="button" onclick="ldUnmergeVertical('{{.Name}}')" style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Разъединить вниз"}} ↓</button>
         <span style="width:1px;background:#d1d5db;align-self:stretch"></span>
         <button type="button" onclick="ldPreview('{{.Name}}','{{.Document}}','html')" style="font-size:12px;padding:4px 10px;background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer">{{t $.Lang "Предпросмотр"}}</button>
-        <button type="button" onclick="ldPreview('{{.Name}}','{{.Document}}','pdf')"  style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Предпросмотр PDF"}}</button>
+        <button type="button" onclick="ldPreview('{{.Name}}','{{.Document}}','pdf')"  title="{{t $.Lang "Откроется во внешнем приложении (системный просмотрщик PDF)"}}" style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">{{t $.Lang "Предпросмотр PDF"}}</button>
+        <span style="width:1px;background:#d1d5db;align-self:stretch"></span>
+        <button type="button" onclick="cfgImportPdfLayout('/bases/{{$.Base.ID}}/configurator/layout/import-pdf')" title="{{t $.Lang "Извлечь черновик макета из PDF (выгрузка 1С/Excel с текстовым слоем)"}}" style="font-size:12px;padding:4px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer">&#x1F4C4; {{t $.Lang "Из PDF"}}</button>
+      </div>
+
+      {{/* Параметры листа: формат/ориентация/поля → печатная граница в конструкторе */}}
+      <div style="display:flex;gap:8px;align-items:center;margin:0 0 8px;font-size:12px;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:6px 10px">
+        <span style="font-weight:600;color:#475569">&#x1F4C4; {{t $.Lang "Лист"}}:</span>
+        <select id="pg-fmt-{{.Name}}" onchange="ldSetPageField('{{.Name}}','format',this.value)" style="padding:3px">
+          <option>A4</option><option>A5</option><option>A3</option><option value="Letter">Letter</option><option value="Legal">Legal</option>
+        </select>
+        <select id="pg-ori-{{.Name}}" onchange="ldSetPageField('{{.Name}}','orientation',this.value)" style="padding:3px">
+          <option value="portrait">{{t $.Lang "книжная"}}</option><option value="landscape">{{t $.Lang "альбомная"}}</option>
+        </select>
+        <span style="color:#475569">{{t $.Lang "Поля, мм"}}:</span>
+        <input id="pg-ml-{{.Name}}" type="number" min="0" step="1" title="{{t $.Lang "Левое"}}"  onchange="ldSetPageMargin('{{.Name}}','left',this.value)"   style="width:46px;padding:3px">
+        <input id="pg-mt-{{.Name}}" type="number" min="0" step="1" title="{{t $.Lang "Верхнее"}}" onchange="ldSetPageMargin('{{.Name}}','top',this.value)"    style="width:46px;padding:3px">
+        <input id="pg-mr-{{.Name}}" type="number" min="0" step="1" title="{{t $.Lang "Правое"}}"  onchange="ldSetPageMargin('{{.Name}}','right',this.value)"  style="width:46px;padding:3px">
+        <input id="pg-mb-{{.Name}}" type="number" min="0" step="1" title="{{t $.Lang "Нижнее"}}"  onchange="ldSetPageMargin('{{.Name}}','bottom',this.value)" style="width:46px;padding:3px">
+        <span id="pg-info-{{.Name}}" style="color:#ef4444;font-weight:600"></span>
       </div>
 
       {{/* Split view: YAML editor (left) + visual designer (right) */}}
       <div style="display:flex;border:1px solid #d1d5db;border-radius:0 0 6px 6px;overflow:hidden;min-height:340px">
         {{/* Left pane: YAML */}}
-        <div style="flex:0 0 42%;border-right:1px solid #d1d5db;display:flex;flex-direction:column;min-width:0">
-          <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:3px 10px;font-size:11px;font-weight:600;color:#64748b;flex-shrink:0;letter-spacing:.03em">YAML</div>
+        <div id="yamlpane-{{.Name}}" data-collapsed="0" style="flex:0 0 42%;border-right:1px solid #d1d5db;display:flex;flex-direction:column;min-width:0;overflow:hidden">
+          <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:3px 4px 3px 10px;font-size:11px;font-weight:600;color:#64748b;flex-shrink:0;letter-spacing:.03em;display:flex;align-items:center;justify-content:space-between;white-space:nowrap">
+            <span id="yamllbl-{{.Name}}">YAML</span>
+            <button type="button" id="yamltgl-{{.Name}}" onclick="ldToggleYaml('{{.Name}}')" title="{{t $.Lang "Свернуть/развернуть YAML"}}" style="border:none;background:transparent;cursor:pointer;font-size:13px;color:#64748b;padding:0 2px;line-height:1">⮜</button>
+          </div>
           <textarea id="ta-mkt-{{.Name}}" name="source"
                     style="flex:1;padding:8px;border:none;outline:none;font-family:'Cascadia Code','Consolas',monospace;font-size:11px;resize:none;tab-size:2;background:#fafbfc;min-height:300px;width:100%;box-sizing:border-box;line-height:1.5"
                     oninput="scheduleYamlSync('{{.Name}}')"
@@ -5250,11 +5376,15 @@ const cfgTabTree = `{{define "tab-tree"}}
         </div>
       </div>
 
-      {{/* Cell properties panel */}}
-      <div id="vprops-{{.Name}}" style="display:none;background:#f0f8ff;border:1px solid #b0d0f0;border-radius:4px;padding:10px;margin-top:8px">
+      {{/* Cell properties panel — закреплённый док снизу (не проматывает страницу
+           при выборе ячейки). На неактивной cfg-panel скрыт через display:none. */}}
+      <div id="vprops-{{.Name}}" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;max-height:44vh;overflow:auto;background:#f0f8ff;border-top:2px solid #b0d0f0;box-shadow:0 -4px 16px rgba(15,23,42,.18);padding:10px 14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <span style="font-weight:bold;font-size:12px">{{t $.Lang "Свойства ячейки"}}</span>
-          <button type="button" onclick="ldDelCell('{{.Name}}')" style="font-size:11px;padding:3px 8px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">{{t $.Lang "Удалить ячейку"}}</button>
+          <span>
+            <button type="button" onclick="ldDelCell('{{.Name}}')" style="font-size:11px;padding:3px 8px;background:#fff;border:1px solid #fcc;border-radius:4px;cursor:pointer;color:#c33">{{t $.Lang "Удалить ячейку"}}</button>
+            <button type="button" onclick="ldDeselect('{{.Name}}')" title="{{t $.Lang "Закрыть"}}" style="font-size:13px;padding:3px 9px;margin-left:6px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer;color:#334155">✕</button>
+          </span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px">
           <div><label>{{t $.Lang "Текст"}}</label><br><input id="vp-text-{{.Name}}" style="width:100%;padding:3px" oninput="updateCellProp('{{.Name}}','text',this.value)"></div>
@@ -5270,6 +5400,12 @@ const cfgTabTree = `{{define "tab-tree"}}
               <option value="upper">{{t $.Lang "ВЕРХНИЙ регистр"}}</option>
               <option value="lower">{{t $.Lang "нижний регистр"}}</option>
             </select>
+          </div>
+          <div style="grid-column:1/4;font-size:11px;color:#5b7088;background:#eef5ff;border:1px solid #d6e4f5;border-radius:4px;padding:5px 8px;margin:2px 0">
+            &#x1F4A1; {{t $.Lang "В поле «Текст» можно вставлять выражения:"}}
+            <code>{{"{{"}}{{t $.Lang "Номер"}}{{"}}"}}</code>,
+            <code>{{"{{"}}{{t $.Lang "Дата"}}|date{{"}}"}}</code>,
+            <code>{{"{{"}}{{t $.Lang "Контрагент.Наименование"}}{{"}}"}}</code>
           </div>
           <div><label>{{t $.Lang "Шрифт"}}</label><br>
             <select id="vp-ff-{{.Name}}" style="width:100%;padding:3px" onchange="updateCellProp('{{.Name}}','fontFamily',this.value)">

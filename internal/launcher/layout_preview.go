@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -74,6 +76,31 @@ func (h *handler) configuratorLayoutPreview(w http.ResponseWriter, r *http.Reque
 		pdfBytes, err := doc.PDF(sheet.PDFOptions{Title: lt.Name})
 		if err != nil {
 			http.Error(w, "PDF error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// open=1 → сохранить во временный файл и открыть системным приложением.
+		// В GUI-сборке (WebView2) нет встроенного PDF-просмотрщика — inline-iframe
+		// показывает «страница заблокирована Microsoft Edge». Внешнее открытие
+		// работает и в webview, и в обычном браузере (лаунчер локальный).
+		if r.URL.Query().Get("open") == "1" {
+			fp := filepath.Join(os.TempDir(), "onebase-layout-preview.pdf")
+			if werr := os.WriteFile(fp, pdfBytes, 0o600); werr != nil {
+				// Старый файл занят просмотрщиком → уникальное имя.
+				tf, terr := os.CreateTemp("", "onebase-preview-*.pdf")
+				if terr != nil {
+					http.Error(w, "PDF temp error: "+werr.Error(), http.StatusInternalServerError)
+					return
+				}
+				tf.Write(pdfBytes)
+				fp = tf.Name()
+				tf.Close()
+			}
+			if oerr := OpenPath(fp); oerr != nil {
+				http.Error(w, "open error: "+oerr.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"ok":true}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/pdf")
