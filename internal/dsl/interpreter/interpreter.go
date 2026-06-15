@@ -188,6 +188,7 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 
 func (i *Interpreter) execBlock(stmts []ast.Stmt, e *env) {
 	for _, s := range stmts {
+		e.ec.checkDeadline()
 		if loc := getLocation(s); loc != nil {
 			e.ec.curFile = loc.File
 			e.ec.curLine = loc.Line
@@ -348,7 +349,11 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 		iter := 0
 		for counter := start; counter <= end; counter++ {
 			iter++
-			if iter > maxWhileIter {
+			e.ec.checkDeadline()
+			if iter > e.ec.loopLimit() {
+				if e.ec.maxLoopIters > 0 {
+					panic(dslStop{err: errSandboxIters})
+				}
 				RaiseUserError("Цикл «Для»: превышено максимальное число итераций — вероятно, ошибка в границах цикла")
 			}
 			e.set(v.Var.Literal, counter)
@@ -362,7 +367,11 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 		iter := 0
 		for truthy(i.evalExpr(v.Cond, e)) {
 			iter++
-			if iter > maxWhileIter {
+			e.ec.checkDeadline()
+			if iter > e.ec.loopLimit() {
+				if e.ec.maxLoopIters > 0 {
+					panic(dslStop{err: errSandboxIters})
+				}
 				RaiseUserError("Цикл «Пока»: превышено максимальное число итераций — вероятно, бесконечный цикл")
 			}
 			if !i.execLoopBody(v.Body, e) {

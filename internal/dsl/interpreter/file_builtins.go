@@ -214,20 +214,42 @@ func decodeFileBuiltin(args []any, file string, line int) (any, error) {
 
 // ─── NewFileFunctions ──────────────────────────────────────────────────────
 
-func NewFileFunctions() map[string]any {
+// FileGuard вызывается перед каждой файловой операцией. nil → без ограничений.
+type FileGuard func() error
+
+// checkFile паникует userError'ом, если guard запрещает файловые операции.
+// Сообщение человеческое и ловится Попыткой (как checkNet, план 62).
+func checkFile(guard FileGuard) {
+	if guard == nil {
+		return
+	}
+	if err := guard(); err != nil {
+		panic(userError{Msg: err.Error()})
+	}
+}
+
+// guardedFile оборачивает файловый builtin проверкой guard'а.
+func guardedFile(guard FileGuard, fn BuiltinFunc) BuiltinFunc {
+	return func(args []any, file string, line int) (any, error) {
+		checkFile(guard)
+		return fn(args, file, line)
+	}
+}
+
+func NewFileFunctions(guard FileGuard) map[string]any {
 	m := map[string]any{}
 
 	textReaderFactory := func(args []any) any {
-		path := strArg(args, 0)
-		return &dslTextReader{path: path}
+		checkFile(guard)
+		return &dslTextReader{path: strArg(args, 0)}
 	}
 	textWriterFactory := func(args []any) any {
-		path := strArg(args, 0)
-		return &dslTextWriter{path: path}
+		checkFile(guard)
+		return &dslTextWriter{path: strArg(args, 0)}
 	}
 	fileFactory := func(args []any) any {
-		path := strArg(args, 0)
-		return &dslFile{path: path}
+		checkFile(guard)
+		return &dslFile{path: strArg(args, 0)}
 	}
 
 	m["__factory_ЧтениеТекста"] = textReaderFactory
@@ -237,8 +259,22 @@ func NewFileFunctions() map[string]any {
 	m["__factory_Файл"] = fileFactory
 	m["__factory_File"] = fileFactory
 
-	m["ДекодироватьФайл"] = BuiltinFunc(decodeFileBuiltin)
-	m["DecodeFile"] = BuiltinFunc(decodeFileBuiltin)
+	m["декодироватьфайл"] = guardedFile(guard, decodeFileBuiltin)
+	m["decodefile"] = guardedFile(guard, decodeFileBuiltin)
+
+	// Процедурные файловые builtins (глобально зарегистрированы в
+	// builtins_files.go) перекрываются здесь обёрткой с guard'ом: extraVars
+	// разрешаются раньше глобальной карты builtins (interpreter.go:619).
+	m["копироватьфайл"] = guardedFile(guard, copyFileFn)
+	m["copyfile"] = guardedFile(guard, copyFileFn)
+	m["переместитьфайл"] = guardedFile(guard, moveFileFn)
+	m["movefile"] = guardedFile(guard, moveFileFn)
+	m["удалитьфайлы"] = guardedFile(guard, deleteFileFn)
+	m["deletefiles"] = guardedFile(guard, deleteFileFn)
+	m["создатькаталог"] = guardedFile(guard, makeDirFn)
+	m["createdirectory"] = guardedFile(guard, makeDirFn)
+	m["найтифайлы"] = guardedFile(guard, findFilesFn)
+	m["findfiles"] = guardedFile(guard, findFilesFn)
 
 	return m
 }
