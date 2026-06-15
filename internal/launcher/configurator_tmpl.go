@@ -1279,6 +1279,10 @@ function runCheckAll() {
   var btn = document.getElementById('btn-check-all');
   var panel = document.getElementById('check-all-panel');
   var body = document.getElementById('check-all-body');
+  var explainBtn = document.getElementById('check-all-explain-btn');
+  var explainOut = document.getElementById('check-all-explain-out');
+  if (explainBtn) explainBtn.style.display = 'none';
+  if (explainOut) { explainOut.style.display = 'none'; explainOut.textContent = ''; }
   btn.disabled = true;
   btn.textContent = 'Проверка...';
   body.innerHTML = '<div style="padding:10px;color:#888">⏳ Идёт проверка конфигурации...</div>';
@@ -1322,6 +1326,7 @@ function runCheckAll() {
       (d.issues || []).forEach(function(i){ html += renderIssueRow(i, false); });
       (d.warnings || []).forEach(function(i){ html += renderIssueRow(i, true); });
       body.innerHTML = html;
+      if (explainBtn) explainBtn.style.display = '';
     })
     .catch(function(e){
       btn.disabled = false;
@@ -4687,7 +4692,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <header>
     <span>{{t $.Lang "Проверка конфигурации"}}</span>
     <span style="flex:1"></span>
-    <button type="button" onclick="explainCheckErrors(this)" title="Объяснить ошибки с помощью ИИ">🤖 Объяснить</button>
+    <button type="button" id="check-all-explain-btn" onclick="explainCheckErrors(this)" title="Объяснить ошибки с помощью ИИ" style="display:none">🤖 Объяснить</button>
     <button type="button" onclick="closeCheckAll()" title="{{t $.Lang "Закрыть"}}">✕</button>
   </header>
   <div id="check-all-body"></div>
