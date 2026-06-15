@@ -52,7 +52,7 @@ func safeFileName(name string) (string, error) {
 	if n == "" {
 		return "", fmt.Errorf("пустое имя объекта")
 	}
-	if strings.ContainsAny(n, "/\\") || strings.Contains(n, "..") {
+	if n == "." || strings.ContainsAny(n, "/\\") || strings.Contains(n, "..") {
 		return "", fmt.Errorf("недопустимое имя объекта: %q", name)
 	}
 	return strings.ToLower(n) + ".yaml", nil
@@ -127,8 +127,12 @@ func copyTree(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		defer out.Close()
-		_, err = io.Copy(out, in)
-		return err
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			return err
+		}
+		// Возвращаем ошибку Close — она ловит сбой сброса буфера (напр. диск
+		// заполнен), иначе усечённая копия молча сошла бы за успех.
+		return out.Close()
 	})
 }
