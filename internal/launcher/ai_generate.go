@@ -297,9 +297,14 @@ func (h *handler) cfgAIGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer g.close()
 
+	// Срез конфигурации в промпт строим из уже материализованного dir (без
+	// повторного экспорта, который сделал бы h.configSchemaText).
 	system := aiGenerateSystem
-	if schema := h.configSchemaText(ctx, b); schema != "" {
-		system += "\n\nТекущая конфигурация базы:\n" + schema
+	if proj, perr := project.Load(dir); perr == nil {
+		if schema := projectSchemaText(proj); schema != "" {
+			system += "\n\nТекущая конфигурация базы:\n" + schema
+		}
+		proj.Close()
 	}
 
 	tools, exec := g.tools()
