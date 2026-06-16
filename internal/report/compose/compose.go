@@ -265,6 +265,9 @@ func aggMeasure(rows []Row, m report.Measure) any {
 	}
 }
 
+// ExportToDecimal — toDecimal для внешних пакетов (ui-рендер графика).
+func ExportToDecimal(v any) (decimal.Decimal, bool) { return toDecimal(v) }
+
 func toDecimal(v any) (decimal.Decimal, bool) {
 	switch x := v.(type) {
 	case decimal.Decimal:

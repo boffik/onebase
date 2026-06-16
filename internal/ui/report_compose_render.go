@@ -94,6 +94,64 @@ func measureTitle(m report.Measure) string {
 	return m.Field
 }
 
+// buildComposedChart строит ECharts-option из верхнего уровня группировки.
+// Формат совпадает с тем, что отдаёт ChartProc (слот ChartOption шаблона).
+func buildComposedChart(res *compose.Result, c *report.ChartSpec) map[string]any {
+	if c == nil || len(res.Groups) == 0 {
+		return nil
+	}
+	cats := make([]string, 0, len(res.Groups))
+	for _, g := range res.Groups {
+		cats = append(cats, fmtVal(g.Key))
+	}
+	var series []any
+	for _, sf := range c.Series {
+		data := make([]any, 0, len(res.Groups))
+		for _, g := range res.Groups {
+			data = append(data, numFor(g.Subtotals[sf]))
+		}
+		s := map[string]any{"name": sf, "type": chartType(c.Type), "data": data}
+		series = append(series, s)
+	}
+	opt := map[string]any{
+		"tooltip": map[string]any{},
+		"series":  series,
+	}
+	if c.Type == "pie" {
+		pie := make([]any, 0, len(res.Groups))
+		for _, g := range res.Groups {
+			pie = append(pie, map[string]any{"name": fmtVal(g.Key), "value": numFor(g.Subtotals[firstSeries(c)])})
+		}
+		opt["series"] = []any{map[string]any{"type": "pie", "data": pie}}
+		return opt
+	}
+	opt["xAxis"] = map[string]any{"type": "category", "data": cats}
+	opt["yAxis"] = map[string]any{"type": "value"}
+	return opt
+}
+
+func chartType(t string) string {
+	if t == "line" {
+		return "line"
+	}
+	return "bar"
+}
+
+func firstSeries(c *report.ChartSpec) string {
+	if len(c.Series) > 0 {
+		return c.Series[0]
+	}
+	return ""
+}
+
+func numFor(v any) any {
+	if d, ok := compose.ExportToDecimal(v); ok {
+		f, _ := d.Float64()
+		return f
+	}
+	return 0
+}
+
 func fmtVal(v any) string {
 	if v == nil {
 		return ""
