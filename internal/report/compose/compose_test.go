@@ -3,10 +3,12 @@ package compose
 import (
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/ivantit66/onebase/internal/report"
 )
 
-// fakeEval — всегда совпадение по подстроке "<0" при отрицательной Сумме (для поздних тестов).
+// noEval — заглушка Evaluator: оформление не применяется (для тестов без условий).
 type noEval struct{}
 
 func (noEval) EvalBool(string, Row) (bool, error) { return false, nil }
@@ -45,4 +47,23 @@ func TestSingleGrouping(t *testing.T) {
 	if res.RowCount != 3 || res.Capped {
 		t.Fatalf("rowcount=%d capped=%v", res.RowCount, res.Capped)
 	}
+}
+
+func TestGroupByDecimalKey(t *testing.T) {
+	// Две равные по значению decimal должны попасть в одну группу: ключ
+	// нормализуется в строку, а не сравнивается по указателю big.Int.
+	rows := []Row{
+		{"Год": decimal.NewFromInt(2026), "Сумма": "10"},
+		{"Год": decimal.NewFromInt(2026), "Сумма": "20"},
+		{"Год": decimal.NewFromInt(2025), "Сумма": "5"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"Год"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+	}
+	res, _ := Compose(rows, spec, noEval{})
+	if len(res.Groups) != 2 {
+		t.Fatalf("ожидали 2 группы по равным decimal, получили %d", len(res.Groups))
+	}
+	decEq(t, res.Groups[0].Subtotals["Сумма"], "30")
 }

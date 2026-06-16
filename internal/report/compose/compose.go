@@ -63,7 +63,7 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 	var order []any
 	buckets := map[any][]Row{}
 	for _, r := range rows {
-		k := r[field]
+		k := normalizeGroupKey(r[field])
 		if _, ok := buckets[k]; !ok {
 			order = append(order, k)
 		}
@@ -80,6 +80,16 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 		groups = append(groups, gr)
 	}
 	return groups
+}
+
+// normalizeGroupKey приводит значение группировки к надёжному ключу map.
+// decimal.Decimal внутри держит *big.Int — как ключ map он сравнивался бы по
+// указателю, а не по значению, поэтому числа группируем по каноничной строке.
+func normalizeGroupKey(v any) any {
+	if d, ok := v.(decimal.Decimal); ok {
+		return d.String()
+	}
+	return v
 }
 
 func aggregate(rows []Row, measures []report.Measure) map[string]any {
