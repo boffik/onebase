@@ -32,7 +32,30 @@ type PageBlock struct {
 	Columns []string  // table: заголовки колонок
 	Rows    []PageRow // table: строки
 
+	Items []PageListItem // list: пункты списка
+	Chart *PageChart     // chart: данные графика
+
 	HTML string // raw: санитизированный HTML (только ДобавитьСыройHTML)
+}
+
+// PageListItem — пункт списка: текст и необязательная ссылка.
+type PageListItem struct {
+	Text string
+	URL  string
+}
+
+// PageChart — данные графика (план 66). Сериализуется в опции ECharts тем же
+// EChartsOption, что и виджеты рабочего стола.
+type PageChart struct {
+	Kind   string // bar | line | pie
+	XAxis  []string
+	Series []PageSeries
+}
+
+// PageSeries — одна серия графика, выровненная по XAxis.
+type PageSeries struct {
+	Name string
+	Data []float64
 }
 
 // PageRow — строка таблицы. Ячейки адресуются по имени колонки.
@@ -100,8 +123,96 @@ func (b *DSLPageBuilder) CallMethod(name string, args []any) any {
 	case "таблица", "table":
 		b.blocks = append(b.blocks, PageBlock{Kind: "table", Title: argStr(args, 0)})
 		return &DSLPageTable{builder: b, idx: len(b.blocks) - 1}
+	case "список", "list":
+		b.blocks = append(b.blocks, PageBlock{Kind: "list", Title: argStr(args, 0)})
+		return &DSLPageList{builder: b, idx: len(b.blocks) - 1}
+	case "график", "chart":
+		kind := "bar"
+		if len(args) >= 2 {
+			kind = strings.ToLower(argStr(args, 1))
+		}
+		b.blocks = append(b.blocks, PageBlock{Kind: "chart", Title: argStr(args, 0), Chart: &PageChart{Kind: kind}})
+		return &DSLPageChart{builder: b, idx: len(b.blocks) - 1}
 	}
 	panic(userError{Msg: "Страница: неизвестный метод " + name})
+}
+
+// DSLPageList — дескриптор списка внутри построителя.
+type DSLPageList struct {
+	builder *DSLPageBuilder
+	idx     int
+}
+
+func (l *DSLPageList) Get(string) any  { return nil }
+func (l *DSLPageList) Set(string, any) {}
+
+func (l *DSLPageList) CallMethod(name string, args []any) any {
+	switch name {
+	case "пункт", "добавить", "item", "add":
+		it := PageListItem{Text: argStr(args, 0)}
+		if len(args) >= 2 {
+			it.URL = argStr(args, 1)
+		}
+		l.builder.blocks[l.idx].Items = append(l.builder.blocks[l.idx].Items, it)
+		return l
+	}
+	panic(userError{Msg: "Страница.Список: неизвестный метод " + name})
+}
+
+// DSLPageChart — дескриптор графика внутри построителя.
+type DSLPageChart struct {
+	builder *DSLPageBuilder
+	idx     int
+}
+
+func (c *DSLPageChart) Get(string) any  { return nil }
+func (c *DSLPageChart) Set(string, any) {}
+
+func (c *DSLPageChart) chart() *PageChart { return c.builder.blocks[c.idx].Chart }
+
+func (c *DSLPageChart) CallMethod(name string, args []any) any {
+	switch name {
+	case "категории", "categories":
+		var cols []string
+		if len(args) == 1 {
+			if a, ok := args[0].(*Array); ok {
+				for _, it := range a.items {
+					cols = append(cols, pageValueString(it))
+				}
+				c.chart().XAxis = cols
+				return c
+			}
+		}
+		for i := range args {
+			cols = append(cols, argStr(args, i))
+		}
+		c.chart().XAxis = cols
+		return c
+	case "серия", "series":
+		s := PageSeries{Name: argStr(args, 0)}
+		if len(args) >= 2 {
+			s.Data = toFloatSlice(args[1])
+		}
+		c.chart().Series = append(c.chart().Series, s)
+		return c
+	}
+	panic(userError{Msg: "Страница.График: неизвестный метод " + name})
+}
+
+// toFloatSlice превращает DSL-Массив (или одиночное число) в []float64.
+func toFloatSlice(v any) []float64 {
+	var out []float64
+	if a, ok := v.(*Array); ok {
+		for _, it := range a.items {
+			f, _ := toFloat(it)
+			out = append(out, f)
+		}
+		return out
+	}
+	if f, ok := toFloat(v); ok {
+		out = append(out, f)
+	}
+	return out
 }
 
 // DSLPageTable — дескриптор табличного блока внутри построителя. Мутирует блок

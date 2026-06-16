@@ -72,6 +72,48 @@ func TestPageBuilder_Blocks(t *testing.T) {
 	}
 }
 
+func TestPageBuilder_ChartAndList(t *testing.T) {
+	b := NewPageBuilder()
+	code := `Процедура Тест()
+  Гр = Страница.График("Продажи", "line");
+  Гр.Категории("Янв", "Фев");
+  М = Новый Массив;
+  М.Добавить(10);
+  М.Добавить(20);
+  Гр.Серия("Выручка", М);
+  Сп = Страница.Список("Ссылки");
+  Сп.Пункт("Главная", "/ui/");
+  Сп.Пункт("Без ссылки");
+КонецПроцедуры`
+	runPage(t, code, b)
+
+	blocks := b.Blocks()
+	if len(blocks) != 2 {
+		t.Fatalf("ожидалось 2 блока, получено %d", len(blocks))
+	}
+	ch := blocks[0]
+	if ch.Kind != "chart" || ch.Chart == nil {
+		t.Fatalf("chart: %+v", ch)
+	}
+	if ch.Chart.Kind != "line" || len(ch.Chart.XAxis) != 2 || len(ch.Chart.Series) != 1 {
+		t.Fatalf("данные графика: %+v", ch.Chart)
+	}
+	s := ch.Chart.Series[0]
+	if s.Name != "Выручка" || len(s.Data) != 2 || s.Data[1] != 20 {
+		t.Errorf("серия: %+v", s)
+	}
+	lst := blocks[1]
+	if lst.Kind != "list" || len(lst.Items) != 2 {
+		t.Fatalf("list: %+v", lst)
+	}
+	if lst.Items[0].Text != "Главная" || lst.Items[0].URL != "/ui/" {
+		t.Errorf("пункт 0: %+v", lst.Items[0])
+	}
+	if lst.Items[1].URL != "" {
+		t.Errorf("пункт 1 не должен иметь ссылку: %+v", lst.Items[1])
+	}
+}
+
 func TestSanitizePageHTML(t *testing.T) {
 	got := sanitizePageHTML(`<b>ok</b><script>alert(1)</script><a href="javascript:bad()" onclick="x()">t</a>`)
 	for _, bad := range []string{"<script", "onclick", "javascript:"} {

@@ -15,7 +15,22 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/page"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/widget"
 )
+
+// pageChartData конвертирует чарт-блок страницы (план 66) в widget.ChartData,
+// чтобы переиспользовать echartsJSON/EChartsOption (та же отрисовка, что у
+// виджетов рабочего стола). Подключается в FuncMap как "pageChart".
+func pageChartData(c *interpreter.PageChart) *widget.ChartData {
+	if c == nil {
+		return nil
+	}
+	cd := &widget.ChartData{Kind: c.Kind, XAxis: c.XAxis}
+	for _, s := range c.Series {
+		cd.Series = append(cd.Series, widget.ChartSeries{Name: s.Name, Data: s.Data})
+	}
+	return cd
+}
 
 // canSeePage сообщает, видна ли страница пользователю по ролям. Пустые roles —
 // видна всем; nil-пользователь (аутентификация не настроена) — видна; иначе
@@ -87,8 +102,17 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	blocks := builder.Blocks()
+	hasChart := false
+	for _, b := range blocks {
+		if b.Kind == "chart" {
+			hasChart = true
+			break
+		}
+	}
 	s.render(w, r, "page-custom", map[string]any{
-		"PageTitle":  title,
-		"PageBlocks": builder.Blocks(),
+		"PageTitle":    title,
+		"PageBlocks":   blocks,
+		"PageHasChart": hasChart,
 	})
 }
