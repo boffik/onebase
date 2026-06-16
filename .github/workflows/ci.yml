@@ -24,6 +24,13 @@ jobs:
           fi
           echo "BOM не найден — ок."
 
+      # Полнота переводов шаблонов: тот же tools/i18ncheck, что в pre-commit
+      # hook. В CI ловит непереведённые {{t}}-ключи до мержа — pre-commit
+      # срабатывает только локально и обходится --no-verify (план 64: 19 ключей
+      # редактора макетов просочились в main). Быстрый шаг — до тяжёлых тестов.
+      - name: i18n translations check
+        run: go run ./tools/i18ncheck
+
       - name: go vet
         run: go vet ./...
 
