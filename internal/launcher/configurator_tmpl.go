@@ -3072,6 +3072,23 @@ function repAddParam(tableId) {
   tr.querySelector('input[type=text]').focus();
 }
 
+// ── Конструктор компоновки: динамические строки вкладки «Структура» (план 59) ──
+function compAddRow(id,prefix){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="'+prefix+i+'" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindex(\''+id+'\',\''+prefix+'\')">✕</button></td>';}
+function compReindex(id,prefix){var t=document.getElementById(id);for(var i=0;i<t.rows.length;i++){var inp=t.rows[i].querySelector('input,select');if(inp)inp.name=prefix+i;}}
+function compAddMeasure(id){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.measure.'+i+'.field" style="width:100%"></td>'+
+  '<td><select name="comp.measure.'+i+'.agg"><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select></td>'+
+  '<td><input type="text" name="comp.measure.'+i+'.title" style="width:100%"></td>'+
+  '<td><button type="button" onclick="this.closest(\'tr\').remove();compReindexMeasure(\''+id+'\')">✕</button></td>';}
+function compReindexMeasure(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input,select');if(ins.length<2)continue;ins[0].name='comp.measure.'+k+'.field';ins[1].name='comp.measure.'+k+'.agg';if(ins[2])ins[2].name='comp.measure.'+k+'.title';k++;}}
+function compAddSort(id){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.sort.'+i+'.field" style="width:100%"></td>'+
+  '<td><select name="comp.sort.'+i+'.dir"><option>asc</option><option>desc</option></select></td>'+
+  '<td><button type="button" onclick="this.closest(\'tr\').remove();compReindexSort(\''+id+'\')">✕</button></td>';}
+function compReindexSort(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input,select');if(ins.length<2)continue;ins[0].name='comp.sort.'+k+'.field';ins[1].name='comp.sort.'+k+'.dir';k++;}}
+
 // ── Editor context menu — наше меню для textarea, pre и Monaco ──
 // Monaco создан с contextmenu:false, поэтому его внутренний обработчик не глотает событие.
 (function(){
@@ -5183,6 +5200,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           <div class="obj-tab active" onclick="cfgObjTab(this,'ot-rep-params-{{$rn}}')">{{t $.Lang "Параметры"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-query-{{$rn}}')">{{t $.Lang "Запрос"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-struct-{{$rn}}')">{{t $.Lang "Структура"}}</div>
         </div>
         <div class="obj-pane active" id="ot-rep-params-{{$rn}}">
           <div class="section-hd" style="margin-top:12px">
@@ -5233,6 +5251,49 @@ const cfgTabTree = `{{define "tab-tree"}}
                       style="display:none"
                       onblur="endEdit('repchart-{{.Name}}')">{{.ChartSource}}</textarea>
           </div>
+        </div>
+        <div class="obj-pane" id="ot-rep-struct-{{$rn}}">
+          <input type="hidden" name="comp.present" value="1">
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Группировки"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddRow('cg-{{$rn}}','comp.grouping.')">+</button></div>
+          <table class="fields-tbl" id="cg-{{$rn}}">
+            {{with .Composition}}{{range $i, $g := .Groupings}}
+            <tr><td><input type="text" name="comp.grouping.{{$i}}" value="{{$g}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindex('cg-{{$rn}}','comp.grouping.')">✕</button></td></tr>
+            {{end}}{{end}}
+          </table>
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Показатели"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddMeasure('cm-{{$rn}}')">+</button></div>
+          <table class="fields-tbl" id="cm-{{$rn}}">
+            <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Агрегат"}}</th><th>{{t $.Lang "Подпись"}}</th><th></th></tr>
+            {{with .Composition}}{{range $i, $m := .Measures}}
+            <tr>
+              <td><input type="text" name="comp.measure.{{$i}}.field" value="{{$m.Field}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><select name="comp.measure.{{$i}}.agg" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+                <option value="sum" {{if eq $m.Agg "sum"}}selected{{end}}>sum</option>
+                <option value="count" {{if eq $m.Agg "count"}}selected{{end}}>count</option>
+                <option value="avg" {{if eq $m.Agg "avg"}}selected{{end}}>avg</option>
+                <option value="min" {{if eq $m.Agg "min"}}selected{{end}}>min</option>
+                <option value="max" {{if eq $m.Agg "max"}}selected{{end}}>max</option></select></td>
+              <td><input type="text" name="comp.measure.{{$i}}.title" value="{{$m.Title}}" placeholder="{{$m.Field}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexMeasure('cm-{{$rn}}')">✕</button></td>
+            </tr>
+            {{end}}{{end}}
+          </table>
+          <div style="margin-top:10px">
+            <label><input type="checkbox" name="comp.totals.grand" {{if .Composition}}{{if .Composition.Totals.Grand}}checked{{end}}{{end}}> {{t $.Lang "Общий итог"}}</label>
+            <label style="margin-left:12px"><input type="checkbox" name="comp.totals.subtotals" {{if .Composition}}{{if .Composition.Totals.Subtotals}}checked{{end}}{{end}}> {{t $.Lang "Промежуточные итоги"}}</label>
+            <label style="margin-left:12px"><input type="checkbox" name="comp.detail" {{if .Composition}}{{if .Composition.Detail}}checked{{end}}{{end}}> {{t $.Lang "Детальные строки"}}</label>
+          </div>
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Сортировка"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddSort('cs-{{$rn}}')">+</button></div>
+          <table class="fields-tbl" id="cs-{{$rn}}">
+            {{with .Composition}}{{range $i, $s := .Sort}}
+            <tr><td><input type="text" name="comp.sort.{{$i}}.field" value="{{$s.Field}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><select name="comp.sort.{{$i}}.dir" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"><option value="asc" {{if eq $s.Dir "asc"}}selected{{end}}>asc</option><option value="desc" {{if eq $s.Dir "desc"}}selected{{end}}>desc</option></select></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexSort('cs-{{$rn}}')">✕</button></td></tr>
+            {{end}}{{end}}
+          </table>
         </div>
       </div>
       <div class="module-save-row">

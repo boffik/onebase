@@ -859,5 +859,13 @@
   "альбомная": "landscape",
   "книжная": "portrait",
   "мм": "mm",
-  "печатная ширина": "print width"
+  "печатная ширина": "print width",
+  "Структура": "Structure",
+  "Группировки": "Groupings",
+  "Показатели": "Measures",
+  "Агрегат": "Aggregate",
+  "Подпись": "Title",
+  "Общий итог": "Grand total",
+  "Промежуточные итоги": "Subtotals",
+  "Детальные строки": "Detail rows"
 }
