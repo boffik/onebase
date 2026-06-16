@@ -15,17 +15,70 @@ type Param struct {
 }
 
 type Report struct {
-	Name      string            `yaml:"name"`
-	Title     string            `yaml:"title"`
-	Titles    map[string]string `yaml:"titles"`
-	Params    []Param           `yaml:"params"`
-	Query     string            `yaml:"query"`
-	ChartProc string            `yaml:"chart_proc"`
+	Name        string            `yaml:"name"`
+	Title       string            `yaml:"title"`
+	Titles      map[string]string `yaml:"titles"`
+	Params      []Param           `yaml:"params"`
+	Query       string            `yaml:"query"`
+	ChartProc   string            `yaml:"chart_proc"`
+	Composition *Composition      `yaml:"composition"` // nil = плоская таблица (старое поведение)
 
 	// External помечает отчёт из внешнего контура (таблица _ext_reports),
 	// а не из конфигурации проекта. Заполняется программно при загрузке;
 	// в YAML не сериализуется.
 	External bool `yaml:"-"`
+}
+
+// Composition описывает настройки компоновки данных отчёта.
+type Composition struct {
+	Groupings   []string   `yaml:"groupings"`
+	Measures    []Measure  `yaml:"measures"`
+	Totals      Totals     `yaml:"totals"`
+	Detail      bool       `yaml:"detail"`
+	Sort        []SortKey  `yaml:"sort"`
+	Conditional []CondRule `yaml:"conditional"`
+	Chart       *ChartSpec `yaml:"chart"`
+}
+
+// Measure описывает измеримый показатель (поле + агрегат) в компоновке.
+type Measure struct {
+	Field string `yaml:"field"`
+	Agg   string `yaml:"agg"` // sum|count|avg|min|max ("" = sum)
+	Title string `yaml:"title"`
+}
+
+// Totals управляет выводом итогов в отчёте.
+type Totals struct {
+	Grand     bool `yaml:"grand"`
+	Subtotals bool `yaml:"subtotals"`
+}
+
+// SortKey задаёт поле и направление сортировки.
+type SortKey struct {
+	Field string `yaml:"field"`
+	Dir   string `yaml:"dir"` // asc|desc
+}
+
+// CondRule описывает правило условного оформления строки или ячейки.
+type CondRule struct {
+	When  string    `yaml:"when"`
+	Field string    `yaml:"field"` // "" = вся строка
+	Style CellStyle `yaml:"style"`
+}
+
+// CellStyle определяет стиль ячейки для условного оформления.
+type CellStyle struct {
+	Color      string `yaml:"color"`
+	Background string `yaml:"background"`
+	Bold       bool   `yaml:"bold"`
+	Italic     bool   `yaml:"italic"`
+}
+
+// ChartSpec задаёт параметры диаграммы, встроенной в отчёт.
+type ChartSpec struct {
+	Type     string   `yaml:"type"` // bar|line|pie
+	Category string   `yaml:"category"`
+	Series   []string `yaml:"series"`
 }
 
 // DisplayLabel возвращает подпись параметра с учётом языка.
