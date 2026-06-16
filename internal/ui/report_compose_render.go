@@ -61,11 +61,11 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 
 func writeDetail(b *strings.Builder, d compose.DetailRow, spec *report.Composition, level int, path string) {
 	rowStyle := cssOf(d.Styles[""])
-	fmt.Fprintf(b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), rowStyle)
+	fmt.Fprintf(b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), html.EscapeString(rowStyle))
 	fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
 	for _, m := range spec.Measures {
 		cell := cssOf(d.Styles[m.Field])
-		b.WriteString(`<td class="num" style="` + cell + `">` + html.EscapeString(fmtVal(d.Values[m.Field])) + `</td>`)
+		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(d.Values[m.Field])) + `</td>`)
 	}
 	b.WriteString(`</tr>`)
 }
