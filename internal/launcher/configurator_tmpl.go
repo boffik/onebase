@@ -3077,11 +3077,11 @@ function compAddRow(id,prefix){var t=document.getElementById(id);var i=t.rows.le
   tr.innerHTML='<td><input type="text" name="'+prefix+i+'" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
   '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindex(\''+id+'\',\''+prefix+'\')">✕</button></td>';}
 function compReindex(id,prefix){var t=document.getElementById(id);for(var i=0;i<t.rows.length;i++){var inp=t.rows[i].querySelector('input,select');if(inp)inp.name=prefix+i;}}
-function compAddMeasure(id){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
-  tr.innerHTML='<td><input type="text" name="comp.measure.'+i+'.field" style="width:100%"></td>'+
-  '<td><select name="comp.measure.'+i+'.agg"><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select></td>'+
-  '<td><input type="text" name="comp.measure.'+i+'.title" style="width:100%"></td>'+
-  '<td><button type="button" onclick="this.closest(\'tr\').remove();compReindexMeasure(\''+id+'\')">✕</button></td>';}
+function compAddMeasure(id){var t=document.getElementById(id);var i=0;for(var r=0;r<t.rows.length;r++){if(t.rows[r].querySelectorAll('input,select').length>=2)i++;}var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.measure.'+i+'.field" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><select name="comp.measure.'+i+'.agg" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select></td>'+
+  '<td><input type="text" name="comp.measure.'+i+'.title" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindexMeasure(\''+id+'\')">✕</button></td>';}
 function compReindexMeasure(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input,select');if(ins.length<2)continue;ins[0].name='comp.measure.'+k+'.field';ins[1].name='comp.measure.'+k+'.agg';if(ins[2])ins[2].name='comp.measure.'+k+'.title';k++;}}
 function compAddSort(id){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
   tr.innerHTML='<td><input type="text" name="comp.sort.'+i+'.field" style="width:100%"></td>'+
