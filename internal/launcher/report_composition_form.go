@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/report"
+	"gopkg.in/yaml.v3"
 )
 
 // parseCompositionForm собирает report.Composition из полей формы comp.*.
@@ -94,4 +95,25 @@ func parseCompositionForm(f url.Values) (*report.Composition, bool) {
 		return nil, true
 	}
 	return c, true
+}
+
+// applyReportComposition обновляет блок composition в сыром YAML отчёта по форме.
+// Существующий composition сохраняется, если в форме нет comp.present;
+// перезаписывается/очищается, если present. Остальные поля отчёта не трогаются.
+func applyReportComposition(raw []byte, f url.Values) ([]byte, error) {
+	var doc struct {
+		Name        string              `yaml:"name"`
+		Title       string              `yaml:"title,omitempty"`
+		Params      []map[string]any    `yaml:"params,omitempty"`
+		Query       string              `yaml:"query"`
+		ChartProc   string              `yaml:"chart_proc,omitempty"`
+		Composition *report.Composition `yaml:"composition,omitempty"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, err
+	}
+	if c, present := parseCompositionForm(f); present {
+		doc.Composition = c // c==nil очищает блок
+	}
+	return yaml.Marshal(&doc)
 }

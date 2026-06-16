@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -61,5 +62,37 @@ func TestParseCompositionFormAbsentAndEmpty(t *testing.T) {
 	c, present := parseCompositionForm(f)
 	if !present || c != nil {
 		t.Fatalf("empty: present=%v c=%v (ждали present=true, c=nil)", present, c)
+	}
+}
+
+func TestApplyReportComposition(t *testing.T) {
+	raw := []byte("name: R\nquery: \"ВЫБРАТЬ 1\"\ncomposition:\n  groupings: [Старое]\n  measures:\n    - {field: X, agg: sum}\n")
+
+	// форма без present → composition сохраняется как была
+	out, err := applyReportComposition(raw, url.Values{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "Старое") {
+		t.Fatalf("composition должна сохраниться без present:\n%s", out)
+	}
+
+	// present + новые поля → перезапись
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "Новое")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.measure.0.agg", "sum")
+	out, _ = applyReportComposition(raw, f)
+	if !strings.Contains(string(out), "Новое") || strings.Contains(string(out), "Старое") {
+		t.Fatalf("composition должна перезаписаться:\n%s", out)
+	}
+
+	// present, пусто → composition удаляется
+	f2 := url.Values{}
+	f2.Set("comp.present", "1")
+	out, _ = applyReportComposition(raw, f2)
+	if strings.Contains(string(out), "composition") {
+		t.Fatalf("composition должна очиститься:\n%s", out)
 	}
 }
