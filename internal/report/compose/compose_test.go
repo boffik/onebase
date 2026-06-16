@@ -16,7 +16,8 @@ func (noEval) EvalBool(string, Row) (bool, error) { return false, nil }
 func decEq(t *testing.T, got any, want string) {
 	t.Helper()
 	d, ok := toDecimal(got)
-	if !ok || d.String() != want {
+	w, werr := decimal.NewFromString(want)
+	if !ok || werr != nil || !d.Equal(w) {
 		t.Fatalf("got %v (%T), want %s", got, got, want)
 	}
 }
@@ -93,5 +94,24 @@ func TestNestedAndDetails(t *testing.T) {
 	}
 	if rom.Details[0].Values["Сумма"] != "600" {
 		t.Fatalf("detail val: %v", rom.Details[0].Values["Сумма"])
+	}
+}
+
+func TestAggregates(t *testing.T) {
+	rows := []Row{
+		{"Г": "A", "X": "10.50"},
+		{"Г": "A", "X": "4.50"},
+	}
+	mk := func(agg string) any {
+		spec := report.Composition{Groupings: []string{"Г"}, Measures: []report.Measure{{Field: "X", Agg: agg}}}
+		res, _ := Compose(rows, spec, noEval{})
+		return res.Groups[0].Subtotals["X"]
+	}
+	decEq(t, mk("sum"), "15")
+	decEq(t, mk("avg"), "7.5")
+	decEq(t, mk("min"), "4.5")
+	decEq(t, mk("max"), "10.5")
+	if c, _ := mk("count").(int64); c != 2 {
+		t.Fatalf("count=%v", mk("count"))
 	}
 }
