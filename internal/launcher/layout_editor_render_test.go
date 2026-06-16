@@ -134,3 +134,44 @@ func TestLayoutEditor_SplitAndImportJS(t *testing.T) {
 		t.Error("в JS нет функции cfgImportPdfLayout (диалог импорта из PDF)")
 	}
 }
+
+// UX-доводка редактора печатных форм: панель свойств не проматывает страницу
+// (закреплённый док + закрытие), сворачивание YAML-панели, фоновая сетка как в
+// 1С, кнопка импорта из PDF в тулбаре, PDF-предпросмотр во внешнем приложении,
+// подсказка про составной текст {{выражение}}.
+func TestLayoutEditor_UXImprovements(t *testing.T) {
+	js := renderCfgFootJS(t)
+	for _, sub := range []string{
+		"function ldAddCellAt",  // клик по фоновой сетке добавляет ячейку
+		"function ldDeselect",   // закрытие панели свойств
+		"function ldToggleYaml", // сворачивание YAML-панели
+		"function _ldGridCols",  // ширина фоновой сетки
+		`cfgToast('PDF открыт во внешнем приложении')`, // #5 тост вместо inline-iframe
+		"format=pdf&open=1",                            // #5 PDF открывается сервером
+		"function _ldPageInfo",                         // границы листа: печатная ширина
+		"function ldEnsurePage",                        // материализация page без смены вывода
+		"function ldSetPageMargin",                     // поля листа
+	} {
+		if !strings.Contains(js, sub) {
+			t.Errorf("в JS редактора нет фрагмента: %q", sub)
+		}
+	}
+
+	html := renderLayoutPanelTree(t)
+	for _, sub := range []string{
+		`id="yamlpane-Накладная"`,                                              // #2 сворачиваемая панель
+		`ldToggleYaml('Накладная')`,                                            // #2 кнопка сворачивания
+		`position:fixed;left:0;right:0;bottom:0;z-index:50`,                    // #1 закреплённый док
+		`ldDeselect('Накладная')`,                                              // #1 закрытие дока
+		`cfgImportPdfLayout('/bases/test-base/configurator/layout/import-pdf')`, // #6 кнопка «Из PDF» в тулбаре
+		`{{Номер}}`,                                                            // #3 подсказка про интерполяцию
+		"Откроется во внешнем приложении",                                       // #5 подсказка на кнопке PDF
+		`id="pg-fmt-Накладная"`,                                                // границы листа: выбор формата
+		`ldSetPageField('Накладная','orientation',this.value)`,                 // выбор ориентации
+		`ldSetPageMargin('Накладная','left',this.value)`,                       // поля листа
+	} {
+		if !strings.Contains(html, sub) {
+			t.Errorf("в HTML панели редактора нет фрагмента: %q", sub)
+		}
+	}
+}
