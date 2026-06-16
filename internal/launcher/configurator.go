@@ -191,6 +191,7 @@ type cfgReport struct {
 	ChartProc   string
 	ChartSource string
 	Params      []cfgParam
+	Composition *report.Composition // пред-заполнение конструктора компоновки (план 59)
 }
 
 // cfgWidget is the configurator-side projection of a dashboard widget. We keep
@@ -756,7 +757,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	repSources := readReportSources(proj.Dir)
 
 	for _, rep := range proj.Reports {
-		rv := cfgReport{Name: rep.Name, Title: rep.Title, Query: rep.Query, ChartProc: rep.ChartProc}
+		rv := cfgReport{Name: rep.Name, Title: rep.Title, Query: rep.Query, ChartProc: rep.ChartProc, Composition: rep.Composition}
 		if src, ok := repSources[strings.ToLower(rep.Name)]; ok {
 			rv.ChartSource = src
 		}
