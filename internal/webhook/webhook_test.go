@@ -238,3 +238,20 @@ func TestDispatcher_AllowedByNetGuard(t *testing.T) {
 		t.Fatalf("при разрешённой сети ожидался 1 запрос, получено %d", rec.count())
 	}
 }
+
+// Отрицательный retry (мисконфигурация app.yaml) не должен отключать веб-хук
+// целиком: кламп только сверху оставлял attempts = retry+1 = 0, и цикл отправки
+// не выполнялся ни разу. Должна выполниться хотя бы одна попытка.
+func TestDispatcher_NegativeRetryStillFiresOnce(t *testing.T) {
+	rec := &recorder{}
+	srv := httptest.NewServer(rec.handler())
+	defer srv.Close()
+
+	d := New([]Config{{Name: "n", On: "document.post", URL: srv.URL, Body: "x", Retry: -1}}, nil)
+	d.Dispatch(Event{Name: "document.post", Entity: "Реализация", ID: "id1"})
+	d.Wait()
+
+	if rec.count() != 1 {
+		t.Fatalf("при retry=-1 ожидалась 1 отправка, получено %d", rec.count())
+	}
+}
