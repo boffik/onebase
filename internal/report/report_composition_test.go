@@ -28,16 +28,19 @@ composition:
 	if len(c.Groupings) != 2 || c.Groupings[0] != "Менеджер" {
 		t.Fatalf("groupings: %v", c.Groupings)
 	}
-	if len(c.Measures) != 1 || c.Measures[0].Agg != "sum" || c.Measures[0].Title != "Сумма, ₽" {
+	if len(c.Measures) != 1 || c.Measures[0].Field != "Сумма" || c.Measures[0].Agg != "sum" || c.Measures[0].Title != "Сумма, ₽" {
 		t.Fatalf("measures: %+v", c.Measures)
 	}
 	if !c.Totals.Grand || !c.Totals.Subtotals || !c.Detail {
 		t.Fatalf("totals/detail: %+v %v", c.Totals, c.Detail)
 	}
-	if len(c.Conditional) != 1 || c.Conditional[0].Style.Color != "#c00" || !c.Conditional[0].Style.Bold {
+	if len(c.Conditional) != 1 || c.Conditional[0].Field != "" || c.Conditional[0].Style.Color != "#c00" || !c.Conditional[0].Style.Bold || c.Conditional[0].Style.Italic {
 		t.Fatalf("conditional: %+v", c.Conditional)
 	}
-	if c.Chart == nil || c.Chart.Type != "bar" || c.Chart.Category != "Менеджер" {
+	if len(c.Sort) != 1 || c.Sort[0].Field != "Сумма" || c.Sort[0].Dir != "desc" {
+		t.Fatalf("sort: %+v", c.Sort)
+	}
+	if c.Chart == nil || c.Chart.Type != "bar" || c.Chart.Category != "Менеджер" || len(c.Chart.Series) != 1 || c.Chart.Series[0] != "Сумма" {
 		t.Fatalf("chart: %+v", c.Chart)
 	}
 }
