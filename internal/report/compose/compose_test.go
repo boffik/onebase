@@ -115,3 +115,21 @@ func TestAggregates(t *testing.T) {
 		t.Fatalf("count=%v", mk("count"))
 	}
 }
+
+func TestSort(t *testing.T) {
+	rows := []Row{
+		{"М": "А", "Сумма": "100"},
+		{"М": "Б", "Сумма": "300"},
+		{"М": "В", "Сумма": "200"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Sort:      []report.SortKey{{Field: "Сумма", Dir: "desc"}},
+	}
+	res, _ := Compose(rows, spec, noEval{})
+	got := []any{res.Groups[0].Key, res.Groups[1].Key, res.Groups[2].Key}
+	if got[0] != "Б" || got[1] != "В" || got[2] != "А" {
+		t.Fatalf("order by subtotal desc: %v", got)
+	}
+}

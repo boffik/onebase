@@ -3,6 +3,9 @@
 package compose
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/shopspring/decimal"
 
 	"github.com/ivantit66/onebase/internal/report"
@@ -84,6 +87,7 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 		}
 		groups = append(groups, gr)
 	}
+	sortGroups(groups, spec)
 	return groups
 }
 
@@ -92,7 +96,88 @@ func buildDetails(rows []Row, spec report.Composition, ev Evaluator) []DetailRow
 	for _, r := range rows {
 		out = append(out, DetailRow{Values: r})
 	}
+	sortDetails(out, spec)
 	return out
+}
+
+func measureSet(spec report.Composition) map[string]bool {
+	m := map[string]bool{}
+	for _, x := range spec.Measures {
+		m[x.Field] = true
+	}
+	return m
+}
+
+func sortGroups(groups []*Group, spec report.Composition) {
+	if len(spec.Sort) == 0 {
+		return
+	}
+	meas := measureSet(spec)
+	sort.SliceStable(groups, func(i, j int) bool {
+		for _, sk := range spec.Sort {
+			var vi, vj any
+			switch {
+			case meas[sk.Field]:
+				vi, vj = groups[i].Subtotals[sk.Field], groups[j].Subtotals[sk.Field]
+			case sk.Field == groups[i].Field:
+				vi, vj = groups[i].Key, groups[j].Key
+			default:
+				continue
+			}
+			if c := compareVals(vi, vj); c != 0 {
+				if sk.Dir == "desc" {
+					return c > 0
+				}
+				return c < 0
+			}
+		}
+		return false
+	})
+}
+
+func sortDetails(rows []DetailRow, spec report.Composition) {
+	if len(spec.Sort) == 0 {
+		return
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		for _, sk := range spec.Sort {
+			if c := compareVals(rows[i].Values[sk.Field], rows[j].Values[sk.Field]); c != 0 {
+				if sk.Dir == "desc" {
+					return c > 0
+				}
+				return c < 0
+			}
+		}
+		return false
+	})
+}
+
+// compareVals: -1/0/1. Числа сравниваются как decimal, иначе как строки.
+func compareVals(a, b any) int {
+	da, oka := toDecimal(a)
+	db, okb := toDecimal(b)
+	if oka && okb {
+		return da.Cmp(db)
+	}
+	sa, sb := toStr(a), toStr(b)
+	switch {
+	case sa < sb:
+		return -1
+	case sa > sb:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func toStr(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 // normalizeGroupKey приводит значение группировки к надёжному ключу map.
