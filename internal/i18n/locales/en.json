@@ -867,5 +867,13 @@
   "Подпись": "Title",
   "Общий итог": "Grand total",
   "Промежуточные итоги": "Subtotals",
-  "Детальные строки": "Detail rows"
+  "Детальные строки": "Detail rows",
+  "Оформление": "Formatting",
+  "Условное оформление": "Conditional formatting",
+  "Когда": "When",
+  "Цвет": "Color",
+  "Ж": "B",
+  "К": "I",
+  "вся строка": "entire row",
+  "Чёрный текст / белый фон трактуются как «не задано».": "Black text / white background are treated as «not set»."
 }

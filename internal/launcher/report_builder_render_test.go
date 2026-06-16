@@ -34,3 +34,15 @@ func TestReportBuilderRender(t *testing.T) {
 	// nil composition не должен паниковать
 	_ = renderConfiguratorReport(t, nil)
 }
+
+func TestReportBuilderCondTab(t *testing.T) {
+	html := renderConfiguratorReport(t, &report.Composition{
+		Groupings:   []string{"М"},
+		Conditional: []report.CondRule{{When: "Сумма < 0", Style: report.CellStyle{Color: "#c00"}}},
+	})
+	for _, want := range []string{"Оформление", "comp.cond.0.when", "ot-rep-cond-"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("нет %q", want)
+		}
+	}
+}

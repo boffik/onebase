@@ -53,6 +53,27 @@ func TestParseCompositionForm(t *testing.T) {
 	}
 }
 
+func TestParseCompositionFormDefaultColors(t *testing.T) {
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "М")
+	f.Set("comp.cond.0.when", "X > 0")
+	f.Set("comp.cond.0.color", "#000000")      // дефолт → пусто
+	f.Set("comp.cond.0.background", "#ffffff") // дефолт → пусто
+	f.Set("comp.cond.0.bold", "on")
+	c, _ := parseCompositionForm(f)
+	if c == nil || len(c.Conditional) != 1 {
+		t.Fatalf("ожидали 1 правило: %+v", c)
+	}
+	s := c.Conditional[0].Style
+	if s.Color != "" || s.Background != "" {
+		t.Fatalf("дефолт-цвета должны стать пустыми: %+v", s)
+	}
+	if !s.Bold {
+		t.Fatal("bold потерян")
+	}
+}
+
 func TestParseCompositionFormAbsentAndEmpty(t *testing.T) {
 	if c, present := parseCompositionForm(url.Values{}); present || c != nil {
 		t.Fatalf("absent: present=%v c=%v", present, c)

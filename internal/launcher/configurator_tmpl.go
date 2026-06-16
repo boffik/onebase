@@ -3088,6 +3088,15 @@ function compAddSort(id){var t=document.getElementById(id);var i=t.rows.length;v
   '<td><select name="comp.sort.'+i+'.dir"><option>asc</option><option>desc</option></select></td>'+
   '<td><button type="button" onclick="this.closest(\'tr\').remove();compReindexSort(\''+id+'\')">✕</button></td>';}
 function compReindexSort(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input,select');if(ins.length<2)continue;ins[0].name='comp.sort.'+k+'.field';ins[1].name='comp.sort.'+k+'.dir';k++;}}
+function compAddCond(id){var t=document.getElementById(id);var i=0;for(var r=0;r<t.rows.length;r++){if(t.rows[r].querySelector('input'))i++;}var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.cond.'+i+'.when" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><input type="text" name="comp.cond.'+i+'.field" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><input type="color" name="comp.cond.'+i+'.color" value="#000000"></td>'+
+  '<td><input type="color" name="comp.cond.'+i+'.background" value="#ffffff"></td>'+
+  '<td><input type="checkbox" name="comp.cond.'+i+'.bold"></td>'+
+  '<td><input type="checkbox" name="comp.cond.'+i+'.italic"></td>'+
+  '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindexCond(\''+id+'\')">&#x2715;</button></td>';}
+function compReindexCond(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input');if(ins.length<2)continue;ins[0].name='comp.cond.'+k+'.when';ins[1].name='comp.cond.'+k+'.field';ins[2].name='comp.cond.'+k+'.color';ins[3].name='comp.cond.'+k+'.background';ins[4].name='comp.cond.'+k+'.bold';ins[5].name='comp.cond.'+k+'.italic';k++;}}
 
 // ── Editor context menu — наше меню для textarea, pre и Monaco ──
 // Monaco создан с contextmenu:false, поэтому его внутренний обработчик не глотает событие.
@@ -5201,6 +5210,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-query-{{$rn}}')">{{t $.Lang "Запрос"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-struct-{{$rn}}')">{{t $.Lang "Структура"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-cond-{{$rn}}')">{{t $.Lang "Оформление"}}</div>
         </div>
         <div class="obj-pane active" id="ot-rep-params-{{$rn}}">
           <div class="section-hd" style="margin-top:12px">
@@ -5294,6 +5304,25 @@ const cfgTabTree = `{{define "tab-tree"}}
               <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexSort('cs-{{$rn}}')">✕</button></td></tr>
             {{end}}{{end}}
           </table>
+        </div>
+        <div class="obj-pane" id="ot-rep-cond-{{$rn}}">
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Условное оформление"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddCond('cc-{{$rn}}')">+</button></div>
+          <table class="fields-tbl" id="cc-{{$rn}}">
+            <tr><th>{{t $.Lang "Когда"}} (DSL)</th><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Цвет"}}</th><th>{{t $.Lang "Фон"}}</th><th>{{t $.Lang "Ж"}}</th><th>{{t $.Lang "К"}}</th><th></th></tr>
+            {{with .Composition}}{{range $i, $r := .Conditional}}
+            <tr>
+              <td><input type="text" name="comp.cond.{{$i}}.when" value="{{$r.When}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><input type="text" name="comp.cond.{{$i}}.field" value="{{$r.Field}}" placeholder="{{t $.Lang "вся строка"}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><input type="color" name="comp.cond.{{$i}}.color" value="{{if $r.Style.Color}}{{$r.Style.Color}}{{else}}#000000{{end}}"></td>
+              <td><input type="color" name="comp.cond.{{$i}}.background" value="{{if $r.Style.Background}}{{$r.Style.Background}}{{else}}#ffffff{{end}}"></td>
+              <td><input type="checkbox" name="comp.cond.{{$i}}.bold" {{if $r.Style.Bold}}checked{{end}}></td>
+              <td><input type="checkbox" name="comp.cond.{{$i}}.italic" {{if $r.Style.Italic}}checked{{end}}></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexCond('cc-{{$rn}}')">&#x2715;</button></td>
+            </tr>
+            {{end}}{{end}}
+          </table>
+          <div class="edit-hint" style="margin-top:6px">{{t $.Lang "Чёрный текст / белый фон трактуются как «не задано»."}}</div>
         </div>
       </div>
       <div class="module-save-row">

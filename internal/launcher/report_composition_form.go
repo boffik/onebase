@@ -63,12 +63,20 @@ func parseCompositionForm(f url.Values) (*report.Composition, bool) {
 		if when == "" {
 			break
 		}
+		color := strings.TrimSpace(f.Get(p + ".color"))
+		if color == "#000000" {
+			color = ""
+		}
+		background := strings.TrimSpace(f.Get(p + ".background"))
+		if background == "#ffffff" {
+			background = ""
+		}
 		c.Conditional = append(c.Conditional, report.CondRule{
 			When:  when,
 			Field: strings.TrimSpace(f.Get(p + ".field")),
 			Style: report.CellStyle{
-				Color:      strings.TrimSpace(f.Get(p + ".color")),
-				Background: strings.TrimSpace(f.Get(p + ".background")),
+				Color:      color,
+				Background: background,
 				Bold:       f.Get(p+".bold") != "",
 				Italic:     f.Get(p+".italic") != "",
 			},
