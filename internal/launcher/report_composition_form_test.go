@@ -74,6 +74,36 @@ func TestParseCompositionFormDefaultColors(t *testing.T) {
 	}
 }
 
+func TestParseCompositionFormCondOnlyPreserved(t *testing.T) {
+	// Правило оформления без группировок/показателей не должно стираться.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.cond.0.when", "Сумма < 0")
+	f.Set("comp.cond.0.color", "#cc0000")
+	c, present := parseCompositionForm(f)
+	if !present {
+		t.Fatal("present=false")
+	}
+	if c == nil || len(c.Conditional) != 1 {
+		t.Fatalf("композиция с правилом должна сохраниться: %+v", c)
+	}
+}
+
+func TestParseCompositionFormPartialDefaultColor(t *testing.T) {
+	// Дефолт обнуляется независимо: color дефолтный, background — нет.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "М")
+	f.Set("comp.cond.0.when", "X > 0")
+	f.Set("comp.cond.0.color", "#000000")      // дефолт → пусто
+	f.Set("comp.cond.0.background", "#123456") // не дефолт → остаётся
+	c, _ := parseCompositionForm(f)
+	s := c.Conditional[0].Style
+	if s.Color != "" || s.Background != "#123456" {
+		t.Fatalf("частичный дефолт: %+v", s)
+	}
+}
+
 func TestParseCompositionFormAbsentAndEmpty(t *testing.T) {
 	if c, present := parseCompositionForm(url.Values{}); present || c != nil {
 		t.Fatalf("absent: present=%v c=%v", present, c)

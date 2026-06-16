@@ -98,8 +98,10 @@ func parseCompositionForm(f url.Values) (*report.Composition, bool) {
 		}
 	}
 
-	// Включён, но пуст → сигнал очистки (nil, true)
-	if len(c.Groupings) == 0 && len(c.Measures) == 0 {
+	// Включён, но пуст → сигнал очистки (nil, true). Очищаем только когда пусто
+	// ВСЁ — иначе правила оформления / сортировка / график без группировок молча
+	// терялись бы при сохранении (work-in-progress конструктора).
+	if len(c.Groupings) == 0 && len(c.Measures) == 0 && len(c.Conditional) == 0 && len(c.Sort) == 0 && c.Chart == nil {
 		return nil, true
 	}
 	return c, true
