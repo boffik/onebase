@@ -77,9 +77,22 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 			Count:     len(buckets[k]),
 			Subtotals: aggregate(buckets[k], spec.Measures),
 		}
+		if level+1 < len(spec.Groupings) {
+			gr.Children = buildGroups(buckets[k], spec, level+1, ev)
+		} else if spec.Detail {
+			gr.Details = buildDetails(buckets[k], spec, ev)
+		}
 		groups = append(groups, gr)
 	}
 	return groups
+}
+
+func buildDetails(rows []Row, spec report.Composition, ev Evaluator) []DetailRow {
+	out := make([]DetailRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, DetailRow{Values: r})
+	}
+	return out
 }
 
 // normalizeGroupKey приводит значение группировки к надёжному ключу map.

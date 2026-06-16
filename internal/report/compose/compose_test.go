@@ -67,3 +67,31 @@ func TestGroupByDecimalKey(t *testing.T) {
 	}
 	decEq(t, res.Groups[0].Subtotals["Сумма"], "30")
 }
+
+func TestNestedAndDetails(t *testing.T) {
+	rows := []Row{
+		{"М": "И", "К": "Р", "Сумма": "600"},
+		{"М": "И", "К": "Р", "Сумма": "380"},
+		{"М": "И", "К": "П", "Сумма": "270"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М", "К"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:    true,
+	}
+	res, err := Compose(rows, spec, noEval{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Groups) != 1 || len(res.Groups[0].Children) != 2 {
+		t.Fatalf("tree: %+v", res.Groups)
+	}
+	rom := res.Groups[0].Children[0]
+	decEq(t, rom.Subtotals["Сумма"], "980")
+	if len(rom.Details) != 2 {
+		t.Fatalf("details=%d", len(rom.Details))
+	}
+	if rom.Details[0].Values["Сумма"] != "600" {
+		t.Fatalf("detail val: %v", rom.Details[0].Values["Сумма"])
+	}
+}
