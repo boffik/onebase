@@ -96,7 +96,7 @@ func buildDetails(rows []Row, spec report.Composition, ev Evaluator) []DetailRow
 	for _, r := range rows {
 		dr := DetailRow{Values: r}
 		if len(spec.Conditional) > 0 && ev != nil {
-			styles := map[string]report.CellStyle{}
+			var styles map[string]report.CellStyle
 			for _, rule := range spec.Conditional {
 				if _, done := styles[rule.Field]; done {
 					continue // первое сработавшее правило на целевое поле
@@ -104,6 +104,9 @@ func buildDetails(rows []Row, spec report.Composition, ev Evaluator) []DetailRow
 				ok, err := ev.EvalBool(rule.When, r)
 				if err != nil || !ok {
 					continue
+				}
+				if styles == nil {
+					styles = map[string]report.CellStyle{}
 				}
 				styles[rule.Field] = rule.Style
 			}
