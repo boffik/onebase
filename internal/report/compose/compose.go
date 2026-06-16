@@ -94,7 +94,24 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 func buildDetails(rows []Row, spec report.Composition, ev Evaluator) []DetailRow {
 	out := make([]DetailRow, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, DetailRow{Values: r})
+		dr := DetailRow{Values: r}
+		if len(spec.Conditional) > 0 && ev != nil {
+			styles := map[string]report.CellStyle{}
+			for _, rule := range spec.Conditional {
+				if _, done := styles[rule.Field]; done {
+					continue // первое сработавшее правило на целевое поле
+				}
+				ok, err := ev.EvalBool(rule.When, r)
+				if err != nil || !ok {
+					continue
+				}
+				styles[rule.Field] = rule.Style
+			}
+			if len(styles) > 0 {
+				dr.Styles = styles
+			}
+		}
+		out = append(out, dr)
 	}
 	sortDetails(out, spec)
 	return out

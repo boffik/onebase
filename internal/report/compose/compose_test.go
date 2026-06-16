@@ -133,3 +133,40 @@ func TestSort(t *testing.T) {
 		t.Fatalf("order by subtotal desc: %v", got)
 	}
 }
+
+// negEval: совпадение, когда Сумма отрицательна (имитация выражения "Сумма < 0").
+type negEval struct{}
+
+func (negEval) EvalBool(expr string, row Row) (bool, error) {
+	d, ok := toDecimal(row["Сумма"])
+	return ok && d.Sign() < 0, nil
+}
+
+func TestConditionalAndCap(t *testing.T) {
+	rows := []Row{
+		{"М": "A", "Сумма": "-45"},
+		{"М": "A", "Сумма": "10"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:    true,
+		Conditional: []report.CondRule{
+			{When: "Сумма < 0", Field: "", Style: report.CellStyle{Color: "#c00", Bold: true}},
+		},
+	}
+	res, _ := Compose(rows, spec, negEval{})
+	d := res.Groups[0].Details
+	if d[0].Styles[""].Color != "#c00" || !d[0].Styles[""].Bold {
+		t.Fatalf("styles[0]: %+v", d[0].Styles)
+	}
+	if _, ok := d[1].Styles[""]; ok {
+		t.Fatalf("row 1 must be unstyled: %+v", d[1].Styles)
+	}
+
+	// потолок строк (логика уже в ComposeN)
+	res2, _ := ComposeN(rows, spec, negEval{}, 1)
+	if !res2.Capped || res2.RowCount != 1 {
+		t.Fatalf("cap: capped=%v rowcount=%d", res2.Capped, res2.RowCount)
+	}
+}
