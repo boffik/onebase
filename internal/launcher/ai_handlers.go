@@ -82,7 +82,7 @@ function aiSave(){
   try{cfg=JSON.parse(aiCfgText());}catch(e){m.textContent='Некорректный JSON: '+e.message;m.style.color='#c00';return;}
   fetch('/bases/%s/configurator/admin/ai/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})
     .then(function(r){return r.json()})
-    .then(function(d){if(d.ok){m.textContent='Сохранено';m.style.color='#16a34a';}else{m.textContent=(d.error||'Ошибка');m.style.color='#c00';}})
+    .then(function(d){if(d.ok){m.textContent='Сохранено';m.style.color='#16a34a';if(typeof window.cfgAiRefresh==='function')window.cfgAiRefresh();}else{m.textContent=(d.error||'Ошибка');m.style.color='#c00';}})
     .catch(function(){m.textContent='Ошибка сети';m.style.color='#c00';});
 }
 function aiTest(){

@@ -28,6 +28,7 @@ type AIAuditEntry struct {
 	Rows         int    // строк результата (для инструмента)
 	InputTokens  int
 	OutputTokens int
+	Response     string // ответ модели (для журнала конфигуратора)
 	At           time.Time
 }
 
@@ -50,6 +51,10 @@ func (db *DB) EnsureAIAuditSchema(ctx context.Context) error {
 	if _, err := db.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("ai_audit: create _ai_audit: %w", err)
 	}
+	// Ленивая миграция: добавляем столбец ответа для баз, созданных раньше.
+	if err := db.AddColumnIfMissing(ctx, "_ai_audit", "response", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("ai_audit: add response: %w", err)
+	}
 	return nil
 }
 
@@ -61,13 +66,13 @@ func (db *DB) LogAIQuery(ctx context.Context, e AIAuditEntry) {
 	}
 	d := db.dialect
 	q := fmt.Sprintf(`INSERT INTO _ai_audit
-		(id, user_id, user_login, task, model, query, rows_count, input_tokens, output_tokens)
-		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)`,
+		(id, user_id, user_login, task, model, query, rows_count, input_tokens, output_tokens, response)
+		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)`,
 		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5),
-		d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9))
+		d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9), d.Placeholder(10))
 	_, _ = db.Exec(ctx, q,
 		uuid.NewString(), e.UserID, e.UserLogin, e.Task, e.Model, e.Query,
-		e.Rows, e.InputTokens, e.OutputTokens)
+		e.Rows, e.InputTokens, e.OutputTokens, e.Response)
 }
 
 // ListAIAudit возвращает последние записи журнала ИИ (новые первыми).
@@ -79,7 +84,7 @@ func (db *DB) ListAIAudit(ctx context.Context, limit int) ([]AIAuditEntry, error
 		limit = 100
 	}
 	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT id, user_id, user_login, task, model, query,
-		rows_count, input_tokens, output_tokens, at
+		rows_count, input_tokens, output_tokens, response, at
 		FROM _ai_audit ORDER BY at DESC LIMIT %d`, limit))
 	if err != nil {
 		return nil, fmt.Errorf("ai_audit: list: %w", err)
@@ -90,7 +95,7 @@ func (db *DB) ListAIAudit(ctx context.Context, limit int) ([]AIAuditEntry, error
 		var e AIAuditEntry
 		var at any
 		if err := rows.Scan(&e.ID, &e.UserID, &e.UserLogin, &e.Task, &e.Model, &e.Query,
-			&e.Rows, &e.InputTokens, &e.OutputTokens, &at); err != nil {
+			&e.Rows, &e.InputTokens, &e.OutputTokens, &e.Response, &at); err != nil {
 			return nil, err
 		}
 		e.At = parseAuditTime(at)

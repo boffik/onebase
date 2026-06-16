@@ -54,6 +54,7 @@ type Config struct {
 	Models         []Model    `json:"models" yaml:"models"`
 	Profiles       []Profile  `json:"profiles" yaml:"profiles"`
 	DefaultProfile string     `json:"default_profile,omitempty" yaml:"default_profile,omitempty"` // для неуказанных задач
+	LogHistory     bool       `json:"log_history,omitempty" yaml:"log_history,omitempty"`         // вести журнал ИИ-обращений конфигуратора
 }
 
 // Дефолты, применяемые когда в конфиге не задано иное.

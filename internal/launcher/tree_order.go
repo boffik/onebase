@@ -114,6 +114,29 @@ func (h *handler) readConfigFileRaw(ctx context.Context, b *Base, relPath string
 	return raw, true
 }
 
+// writeConfigFileRaw записывает один файл конфигурации в обоих режимах хранения
+// (симметрично readConfigFileRaw). relPath считается уже проверенным
+// (см. safeConfigPath). В file-режиме недостающие подкаталоги создаются.
+func (h *handler) writeConfigFileRaw(ctx context.Context, b *Base, relPath string, content []byte) error {
+	if b.ConfigSource == "database" {
+		db, err := OpenDB(ctx, b)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		repo := configdb.New(db)
+		if err := repo.EnsureSchema(ctx); err != nil {
+			return err
+		}
+		return repo.SaveFile(ctx, relPath, content)
+	}
+	full := filepath.Join(b.Path, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(full, content, 0o644)
+}
+
 // orderLineRe находит верхнеуровневую строку «order: N» в YAML подсистемы.
 var orderLineRe = regexp.MustCompile(`(?m)^order:[ \t]*[0-9]+`)
 

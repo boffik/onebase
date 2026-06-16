@@ -4,6 +4,20 @@ import (
 	"testing"
 )
 
+func TestParseConfig_LogHistory(t *testing.T) {
+	c, err := ParseConfig(`{"enabled":true,"log_history":true}`)
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	if !c.LogHistory {
+		t.Error("log_history не распознан конфигом")
+	}
+	d, _ := ParseConfig(`{"enabled":true}`)
+	if d.LogHistory {
+		t.Error("LogHistory должен быть false по умолчанию")
+	}
+}
+
 func TestUnmaskKeys(t *testing.T) {
 	prev := Config{
 		Endpoints: []Endpoint{

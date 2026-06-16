@@ -24,6 +24,25 @@ func newAIAuditDB(t *testing.T) (*DB, context.Context) {
 	return db, ctx
 }
 
+func TestAIAudit_StoresAndReadsResponse(t *testing.T) {
+	db, ctx := newAIAuditDB(t)
+	db.LogAIQuery(ctx, AIAuditEntry{
+		Task: "конфигуратор-генерация", Model: "glm-4.6",
+		Query: "справочник Клиенты", Response: "создан catalogs/клиенты.yaml",
+		InputTokens: 12, OutputTokens: 34,
+	})
+	got, err := db.ListAIAudit(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListAIAudit: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("ожидалась 1 запись, получено %d", len(got))
+	}
+	if got[0].Response != "создан catalogs/клиенты.yaml" {
+		t.Errorf("Response не сохранён/прочитан: %q", got[0].Response)
+	}
+}
+
 func TestAIAudit_LogAndList(t *testing.T) {
 	db, ctx := newAIAuditDB(t)
 

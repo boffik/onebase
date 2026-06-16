@@ -147,5 +147,6 @@ func (h *handler) cfgAIAssist(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"error": llm.SafeErr(err)})
 		return
 	}
+	logCfgAI(r.Context(), db, cfg, cfgLogin(r.Context()), "конфигуратор-помощник", req.Prompt, resp.Text, resp)
 	writeJSON(w, 200, map[string]any{"ok": true, "text": resp.Text, "model": resp.Model})
 }

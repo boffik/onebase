@@ -128,3 +128,11 @@ func TestGenTools_Dispatch(t *testing.T) {
 		t.Errorf("проверить_конфигурацию не должен быть ошибкой: %s", chk.Content)
 	}
 }
+
+func TestGenerateSystemPrompt_HasMetadataFormat(t *testing.T) {
+	for _, want := range []string{"tableparts", "reference:", "type: number", "posting: true"} {
+		if !strings.Contains(aiGenerateSystem, want) {
+			t.Errorf("системный промпт генератора не содержит %q", want)
+		}
+	}
+}
