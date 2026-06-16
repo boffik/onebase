@@ -100,6 +100,18 @@ func buildComposedChart(res *compose.Result, c *report.ChartSpec) map[string]any
 	if c == nil || len(res.Groups) == 0 {
 		return nil
 	}
+	if c.Type == "pie" {
+		// Круговая: один ряд из пар {name,value} по первому показателю.
+		// Несколько series для pie в v1 не поддерживаются (берём firstSeries).
+		pie := make([]any, 0, len(res.Groups))
+		for _, g := range res.Groups {
+			pie = append(pie, map[string]any{"name": fmtVal(g.Key), "value": numFor(g.Subtotals[firstSeries(c)])})
+		}
+		return map[string]any{
+			"tooltip": map[string]any{"trigger": "item"},
+			"series":  []any{map[string]any{"type": "pie", "data": pie}},
+		}
+	}
 	cats := make([]string, 0, len(res.Groups))
 	for _, g := range res.Groups {
 		cats = append(cats, fmtVal(g.Key))
@@ -110,24 +122,14 @@ func buildComposedChart(res *compose.Result, c *report.ChartSpec) map[string]any
 		for _, g := range res.Groups {
 			data = append(data, numFor(g.Subtotals[sf]))
 		}
-		s := map[string]any{"name": sf, "type": chartType(c.Type), "data": data}
-		series = append(series, s)
+		series = append(series, map[string]any{"name": sf, "type": chartType(c.Type), "data": data})
 	}
-	opt := map[string]any{
-		"tooltip": map[string]any{},
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
 		"series":  series,
+		"xAxis":   map[string]any{"type": "category", "data": cats},
+		"yAxis":   map[string]any{"type": "value"},
 	}
-	if c.Type == "pie" {
-		pie := make([]any, 0, len(res.Groups))
-		for _, g := range res.Groups {
-			pie = append(pie, map[string]any{"name": fmtVal(g.Key), "value": numFor(g.Subtotals[firstSeries(c)])})
-		}
-		opt["series"] = []any{map[string]any{"type": "pie", "data": pie}}
-		return opt
-	}
-	opt["xAxis"] = map[string]any{"type": "category", "data": cats}
-	opt["yAxis"] = map[string]any{"type": "value"}
-	return opt
 }
 
 func chartType(t string) string {
@@ -149,7 +151,7 @@ func numFor(v any) any {
 		f, _ := d.Float64()
 		return f
 	}
-	return 0
+	return float64(0)
 }
 
 func fmtVal(v any) string {
