@@ -443,6 +443,63 @@ func unsupportedProcessorKeys(path string) []string {
 	return found
 }
 
+// CheckReportComposition валидирует структуру блока composition отчётов
+// (без выполнения запроса). Проверка полей против колонок запроса — Stage 3.
+func CheckReportComposition(proj *project.Project) []Issue {
+	var issues []Issue
+	aggs := map[string]bool{"": true, "sum": true, "count": true, "avg": true, "min": true, "max": true}
+	dirs := map[string]bool{"": true, "asc": true, "desc": true}
+	ctypes := map[string]bool{"bar": true, "line": true, "pie": true}
+	add := func(name, msg string) {
+		issues = append(issues, Issue{File: "reports/" + name + ".yaml", Object: name, Kind: "Отчёт (компоновка)", Message: msg})
+	}
+	for _, rep := range proj.Reports {
+		c := rep.Composition
+		if c == nil {
+			continue
+		}
+		groups := map[string]bool{}
+		for _, g := range c.Groupings {
+			groups[g] = true
+		}
+		measures := map[string]bool{}
+		for _, m := range c.Measures {
+			measures[m.Field] = true
+			if !aggs[m.Agg] {
+				add(rep.Name, "неизвестный агрегат: "+m.Agg)
+			}
+		}
+		for _, s := range c.Sort {
+			if !dirs[s.Dir] {
+				add(rep.Name, "неизвестное направление сортировки: "+s.Dir)
+			}
+			if !groups[s.Field] && !measures[s.Field] {
+				add(rep.Name, "поле сортировки не группировка и не показатель: "+s.Field)
+			}
+		}
+		if c.Chart != nil {
+			if !ctypes[c.Chart.Type] {
+				add(rep.Name, "неизвестный тип графика: "+c.Chart.Type)
+			}
+			if !groups[c.Chart.Category] {
+				add(rep.Name, "категория графика не входит в группировки: "+c.Chart.Category)
+			}
+			for _, sname := range c.Chart.Series {
+				if !measures[sname] {
+					add(rep.Name, "ряд графика не входит в показатели: "+sname)
+				}
+			}
+		}
+		for _, cr := range c.Conditional {
+			src := "Функция __cond()\nВозврат (" + cr.When + ");\nКонецФункции\n"
+			if _, err := parser.New(lexer.New(src, "cond.os")).ParseProgram(); err != nil {
+				add(rep.Name, "ошибка выражения условия \""+cr.When+"\": "+err.Error())
+			}
+		}
+	}
+	return issues
+}
+
 // AlreadyReported reports whether msg overlaps an existing issue message.
 func AlreadyReported(issues []Issue, msg string) bool {
 	for _, i := range issues {
