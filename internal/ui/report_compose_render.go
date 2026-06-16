@@ -35,7 +35,7 @@ func renderComposedTable(res *compose.Result, spec *report.Composition) template
 }
 
 func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, level int, path string) {
-	gp := path + "/" + fmtVal(g.Key)
+	gp := path + "/" + pathSeg(fmtVal(g.Key))
 	pad := fmt.Sprintf("padding-left:%dpx", 8+level*18)
 	fmt.Fprintf(b, `<tr class="grp" data-group="%s" data-level="%d"><td style="%s">▼ %s</td>`,
 		html.EscapeString(gp), level, pad, html.EscapeString(fmtVal(g.Key)))
@@ -162,4 +162,13 @@ func fmtVal(v any) string {
 		return s
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// pathSeg экранирует сегмент пути группы для data-group/data-parent. Без этого
+// «/» внутри значения группировки ломает префиксное сопоставление при
+// сворачивании: сиблинг «A/Б» (data-group "/A/Б") ложно прятался при
+// сворачивании «A» (селектор [data-group^="/A/"]). Видимая подпись — сырая.
+func pathSeg(s string) string {
+	s = strings.ReplaceAll(s, "%", "%25")
+	return strings.ReplaceAll(s, "/", "%2F")
 }

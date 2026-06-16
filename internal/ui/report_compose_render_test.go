@@ -45,3 +45,31 @@ func TestRenderComposedTable(t *testing.T) {
 		}
 	}
 }
+
+func TestComposedPathEscaping(t *testing.T) {
+	// Значение группировки с «/» не должно ломать префиксную схему путей:
+	// сиблинг «Иванов/Доп» обязан иметь экранированный data-group, иначе
+	// сворачивание «Иванов» ложно спрятало бы его.
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "10"},
+		{"М": "Иванов/Доп", "Сумма": "20"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+	if !strings.Contains(out, `data-group="/Иванов"`) {
+		t.Fatalf("нет группы Иванов:\n%s", out)
+	}
+	if !strings.Contains(out, `data-group="/Иванов%2FДоп"`) {
+		t.Fatalf("сегмент с / не экранирован:\n%s", out)
+	}
+	if strings.Contains(out, `data-group="/Иванов/Доп"`) {
+		t.Fatalf("неэкранированный путь ломает префикс-схему:\n%s", out)
+	}
+	if !strings.Contains(out, "Иванов/Доп") {
+		t.Fatalf("видимая подпись должна быть сырой:\n%s", out)
+	}
+}
