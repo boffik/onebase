@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/excel"
 	"github.com/ivantit66/onebase/internal/query"
 	reportpkg "github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/report/compose"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -126,6 +127,31 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		return
 	}
 	s.resolveUUIDsInReport(r.Context(), rows)
+
+	if rep.Composition != nil {
+		ev := newInterpEvaluator(s.interp)
+		res, cerr := compose.Compose(rows, *rep.Composition, ev)
+		if cerr != nil {
+			s.render(w, r, "page-report", map[string]any{
+				"Report": rep, "QueryError": cerr.Error(),
+				"ParamValues": paramValues, "ReportParams": reportParams,
+			})
+			return
+		}
+		var chartOption map[string]any
+		if rep.Composition.Chart != nil {
+			chartOption = buildComposedChart(res, rep.Composition.Chart)
+		}
+		s.render(w, r, "page-report", map[string]any{
+			"Report":       rep,
+			"ComposedHTML": renderComposedTable(res, rep.Composition),
+			"Capped":       res.Capped,
+			"ChartOption":  chartOption,
+			"ParamValues":  paramValues,
+			"ReportParams": reportParams,
+		})
+		return
+	}
 
 	var chartOption map[string]any
 	if rep.ChartProc != "" {

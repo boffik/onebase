@@ -2138,6 +2138,30 @@ const tplReport = `
 })();
 </script>
 {{end}}
+{{if .ComposedHTML}}
+{{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
+<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
+</div>
+<div class="card">
+{{.ComposedHTML}}
+</div>
+<script>
+(function(){
+  document.querySelectorAll('tr.grp').forEach(function(tr){
+    tr.style.cursor='pointer';
+    tr.addEventListener('click', function(){
+      var key=tr.getAttribute('data-group');
+      var cell=tr.querySelector('td');
+      var open=cell.textContent.trim().charAt(0)==='▼';
+      var sel='[data-parent="'+key+'"],[data-parent^="'+key+'/"],[data-group^="'+key+'/"]';
+      document.querySelectorAll(sel).forEach(function(el){ el.style.display = open ? 'none' : ''; });
+      if(cell){ cell.textContent=(open?'▶':'▼')+cell.textContent.slice(1); }
+    });
+  });
+})();
+</script>
+{{end}}
 {{if .Cols}}
 <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
   <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
