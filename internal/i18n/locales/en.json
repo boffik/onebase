@@ -418,6 +418,8 @@
   "Добавить поле": "Add field",
   "список": "list",
   "Свернуть дерево": "Collapse tree",
+  "Развернуть всё": "Expand all",
+  "Свернуть всё": "Collapse all",
   "Конфигурация на диске изменилась с момента запуска базы. Перезапустите базу, чтобы изменения применились.": "Configuration on disk changed since the base was started. Restart the base for changes to apply.",
   "Без названия": "Untitled",
   "Справочник": "Catalog",

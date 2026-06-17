@@ -2144,22 +2144,61 @@ const tplReport = `
 {{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
 <details class="card report-block" data-block="data" open>
 <summary>{{t $.Lang "Данные"}}</summary>
+<div class="rc-toolbar" style="margin-bottom:8px;display:flex;gap:8px"><button type="button" id="rc-expand" class="btn btn-sm">{{t $.Lang "Развернуть всё"}}</button><button type="button" id="rc-collapse" class="btn btn-sm">{{t $.Lang "Свернуть всё"}}</button></div>
 {{.ComposedHTML}}
 </details>
 <script>
 (function(){
+  function rcEscape(key){
+    return (window.CSS&&CSS.escape)?CSS.escape(key):key.replace(/["\\\]]/g,'\\$&');
+  }
+  function rcSetOpen(tr, open){
+    var key=tr.getAttribute('data-group');
+    var ek=rcEscape(key);
+    var cell=tr.querySelector('td');
+    var sel='[data-parent="'+ek+'"],[data-parent^="'+ek+'/"],[data-group^="'+ek+'/"]';
+    document.querySelectorAll(sel).forEach(function(el){ el.style.display = open ? '' : 'none'; });
+    if(cell){ cell.textContent=(open?'▼':'▶')+cell.textContent.slice(1); }
+  }
   document.querySelectorAll('tr.grp').forEach(function(tr){
     tr.style.cursor='pointer';
     tr.addEventListener('click', function(){
-      var key=tr.getAttribute('data-group');
-      var ek=(window.CSS&&CSS.escape)?CSS.escape(key):key.replace(/["\\\]]/g,'\\$&');
       var cell=tr.querySelector('td');
       var open=cell.textContent.trim().charAt(0)==='▼';
-      var sel='[data-parent="'+ek+'"],[data-parent^="'+ek+'/"],[data-group^="'+ek+'/"]';
-      document.querySelectorAll(sel).forEach(function(el){ el.style.display = open ? 'none' : ''; });
-      if(cell){ cell.textContent=(open?'▶':'▼')+cell.textContent.slice(1); }
+      rcSetOpen(tr, !open);
     });
   });
+  var expandBtn=document.getElementById('rc-expand');
+  var collapseBtn=document.getElementById('rc-collapse');
+  if(expandBtn){
+    expandBtn.addEventListener('click', function(){
+      var tbody=document.querySelector('table.report-composed tbody');
+      if(!tbody) return;
+      tbody.querySelectorAll('tr').forEach(function(tr){ tr.style.display=''; });
+      tbody.querySelectorAll('tr.grp').forEach(function(tr){
+        var cell=tr.querySelector('td');
+        if(cell&&cell.textContent.trim().charAt(0)==='▶'){
+          cell.textContent='▼'+cell.textContent.slice(1);
+        }
+      });
+    });
+  }
+  if(collapseBtn){
+    collapseBtn.addEventListener('click', function(){
+      var tbody=document.querySelector('table.report-composed tbody');
+      if(!tbody) return;
+      tbody.querySelectorAll('tr.det,tr.subtotal').forEach(function(tr){ tr.style.display='none'; });
+      tbody.querySelectorAll('tr.grp').forEach(function(tr){
+        var level=parseInt(tr.getAttribute('data-level')||'0',10);
+        if(level>0){ tr.style.display='none'; } else {
+          var cell=tr.querySelector('td');
+          if(cell&&cell.textContent.trim().charAt(0)==='▼'){
+            cell.textContent='▶'+cell.textContent.slice(1);
+          }
+        }
+      });
+    });
+  }
 })();
 </script>
 {{end}}
