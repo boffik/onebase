@@ -3690,6 +3690,23 @@ function _enterpriseURL() {
     .catch(function(){ return plain; });
 }
 
+// Открывает конкретный отчёт в запущенной базе (предпросмотр конструктора).
+// Требует запущенной базы (как и кнопка «Запустить предприятие»).
+function previewReport(name){
+  var rep = '/ui/report/' + encodeURIComponent(name);
+  var plain = 'http://localhost:' + _basePort + rep;
+  if (!_hasSession) { window.open(plain, '_blank'); return; }
+  fetch('/bases/' + _dbgBase + '/one-time-code', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var url = (d && d.code)
+        ? 'http://localhost:' + _basePort + '/auth/bootstrap?code=' + encodeURIComponent(d.code) + '&return=' + encodeURIComponent(rep)
+        : plain;
+      window.open(url, '_blank');
+    })
+    .catch(function(){ window.open(plain, '_blank'); });
+}
+
 // Запускает (restart=false) или перезапускает (restart=true) базу и открывает
 // пользовательский режим. Дожидается готовности сервера перед открытием окна.
 function _doLaunch(restart) {
@@ -5345,6 +5362,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       <div class="module-save-row">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
         <button type="button" class="btn-check" onclick="runCheck('dsl','repchart-{{.Name}}','{{.Name}}')">{{t $.Lang "Проверить"}}</button>
+        <button type="button" class="btn-check" onclick="previewReport('{{lower .Name}}')">{{t $.Lang "Предпросмотр"}}</button>
         <span class="check-result" id="check-repchart-{{.Name}}"></span>
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
