@@ -393,6 +393,7 @@
   "Консоль": "Console",
   "Включите отладку для просмотра переменных": "Enable debug to view variables",
   "Файл": "File",
+  "Файл базы": "Database file",
   "Стр": "Line",
   "Нет точек останова": "No breakpoints",
   "Стек вызовов пуст": "Call stack is empty",
