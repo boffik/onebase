@@ -26,7 +26,7 @@ func renderComposedTable(res *compose.Result, spec *report.Composition) template
 	if spec.Totals.Grand {
 		b.WriteString(`<tr class="grand"><td>ВСЕГО</td>`)
 		for _, m := range spec.Measures {
-			b.WriteString(`<td class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(fmtVal(res.Grand[m.Field])) + `</td>`)
+			b.WriteString(`<td class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(fmtMeasure(res.Grand[m.Field], m)) + `</td>`)
 		}
 		b.WriteString(`</tr>`)
 	}
@@ -42,7 +42,7 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 		html.EscapeString(gp), level, html.EscapeString(rowStyle), pad, html.EscapeString(fmtVal(g.Key)))
 	for _, m := range spec.Measures {
 		cell := joinStyles(measureAlign(m), cssOf(g.Styles[m.Field]))
-		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
+		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(g.Subtotals[m.Field], m)) + `</td>`)
 	}
 	b.WriteString(`</tr>`)
 	for _, ch := range g.Children {
@@ -56,7 +56,7 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 			html.EscapeString(gp), html.EscapeString(rowStyle), 8+(level+1)*18, html.EscapeString(fmtVal(g.Key)))
 		for _, m := range spec.Measures {
 			cell := joinStyles(measureAlign(m), cssOf(g.Styles[m.Field]))
-			b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
+			b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(g.Subtotals[m.Field], m)) + `</td>`)
 		}
 		b.WriteString(`</tr>`)
 	}
@@ -68,7 +68,7 @@ func writeDetail(b *strings.Builder, d compose.DetailRow, spec *report.Compositi
 	fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
 	for _, m := range spec.Measures {
 		cell := joinStyles(measureAlign(m), cssOf(d.Styles[m.Field]))
-		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(d.Values[m.Field])) + `</td>`)
+		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(d.Values[m.Field], m)) + `</td>`)
 	}
 	b.WriteString(`</tr>`)
 }
@@ -187,6 +187,17 @@ func fmtVal(v any) string {
 		return s
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// fmtMeasure форматирует значение показателя с учётом поля Format.
+// Если Format пустой или значение не числовое — возвращает fmtVal(v).
+func fmtMeasure(v any, m report.Measure) string {
+	if m.Format != "" {
+		if d, ok := compose.ExportToDecimal(v); ok {
+			return compose.FormatNumber(d, m.Format)
+		}
+	}
+	return fmtVal(v)
 }
 
 // pathSeg экранирует сегмент пути группы для data-group/data-parent. Без этого

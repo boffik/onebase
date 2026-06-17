@@ -93,6 +93,26 @@ func TestRenderMeasureAlign(t *testing.T) {
 	}
 }
 
+func TestRenderMeasureFormat(t *testing.T) {
+	// Показатель с Format:"#,##0.00" должен выводить значение в RU-формате с разрядкой.
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "12333.32"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Format: "#,##0.00"}},
+		Totals:    report.Totals{Grand: true, Subtotals: true},
+		Detail:    true,
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+	// Значение 12333.32 при формате "#,##0.00" → "12 333,32" (неразрывный пробел)
+	want := "12 333,32"
+	if !strings.Contains(out, want) {
+		t.Fatalf("HTML не содержит %q (форматированное число):\n%s", want, out)
+	}
+}
+
 func TestComposedPathEscaping(t *testing.T) {
 	// Значение группировки с «/» не должно ломать префиксную схему путей:
 	// сиблинг «Иванов/Доп» обязан иметь экранированный data-group, иначе
