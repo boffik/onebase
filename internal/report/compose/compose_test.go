@@ -260,6 +260,110 @@ func TestExprMeasure(t *testing.T) {
 	decEq(t, res.Grand["Рент"], "260")
 }
 
+// exprEvalMul — фейковый Evaluator для теста многоуровневой группировки с Expr.
+// Поддерживает выражение "Сумма*2": берёт row["Сумма"] и умножает на 2.
+// Отличается от exprEval только именем, чтобы тест был самодостаточен.
+type exprEvalMul struct{}
+
+func (exprEvalMul) EvalBool(string, Row) (bool, error) { return false, nil }
+func (exprEvalMul) EvalNum(expr string, row Row) (decimal.Decimal, bool, error) {
+	if expr == "Сумма*2" {
+		d, ok := toDecimal(row["Сумма"])
+		if !ok {
+			return decimal.Zero, false, nil
+		}
+		return d.Mul(decimal.NewFromInt(2)), true, nil
+	}
+	return decimal.Zero, false, nil
+}
+
+func TestExprMeasureNested(t *testing.T) {
+	// Два уровня группировки + вычисляемый показатель X=Сумма*2.
+	// Цель: убедиться, что Expr вычисляется на подытоге КАЖДОГО уровня
+	// (вложенная группа, верхняя группа и grand), а не только на верхнем.
+	// Тест упадёт, если buildGroups не передаёт ev на вложенный уровень
+	// (тогда вложенная группа получит nil вместо decimal).
+	rows := []Row{
+		{"Регион": "Север", "Менеджер": "Иванов", "Сумма": "60"},
+		{"Регион": "Север", "Менеджер": "Иванов", "Сумма": "40"},
+		{"Регион": "Север", "Менеджер": "Петров", "Сумма": "20"},
+		{"Регион": "Юг", "Менеджер": "Сидоров", "Сумма": "30"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"Регион", "Менеджер"},
+		Measures: []report.Measure{
+			{Field: "Сумма", Agg: "sum"},
+			{Field: "X", Expr: "Сумма*2"}, // вычисляемый: X = Сумма * 2
+		},
+		Totals: report.Totals{Grand: true, Subtotals: true},
+	}
+	res, err := Compose(rows, spec, exprEvalMul{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Groups) != 2 {
+		t.Fatalf("ожидали 2 верхние группы (Север/Юг), получили %d", len(res.Groups))
+	}
+
+	// Найдём группы Север и Юг
+	var sever, yug *Group
+	for _, g := range res.Groups {
+		switch g.Key {
+		case "Север":
+			sever = g
+		case "Юг":
+			yug = g
+		}
+	}
+	if sever == nil || yug == nil {
+		t.Fatalf("не найдены ожидаемые группы, получили: %v, %v", res.Groups[0].Key, res.Groups[1].Key)
+	}
+
+	// Верхний уровень (Север): Сумма=120, X=240
+	decEq(t, sever.Subtotals["Сумма"], "120")
+	decEq(t, sever.Subtotals["X"], "240")
+
+	// Верхний уровень (Юг): Сумма=30, X=60
+	decEq(t, yug.Subtotals["Сумма"], "30")
+	decEq(t, yug.Subtotals["X"], "60")
+
+	// Вложенный уровень (Север→Иванов): Сумма=100, X=200
+	// Именно здесь тест упадёт, если ev не передаётся на вложенный уровень.
+	if len(sever.Children) == 0 {
+		t.Fatal("ожидали вложенные группы у Север")
+	}
+	var ivanov *Group
+	for _, ch := range sever.Children {
+		if ch.Key == "Иванов" {
+			ivanov = ch
+			break
+		}
+	}
+	if ivanov == nil {
+		t.Fatal("не найдена вложенная группа Иванов")
+	}
+	decEq(t, ivanov.Subtotals["Сумма"], "100")
+	decEq(t, ivanov.Subtotals["X"], "200") // ← упадёт, если ev=nil на вложенном уровне
+
+	// Вложенный уровень (Север→Петров): Сумма=20, X=40
+	var petrov *Group
+	for _, ch := range sever.Children {
+		if ch.Key == "Петров" {
+			petrov = ch
+			break
+		}
+	}
+	if petrov == nil {
+		t.Fatal("не найдена вложенная группа Петров")
+	}
+	decEq(t, petrov.Subtotals["Сумма"], "20")
+	decEq(t, petrov.Subtotals["X"], "40")
+
+	// Grand: Сумма=150, X=300
+	decEq(t, res.Grand["Сумма"], "150")
+	decEq(t, res.Grand["X"], "300")
+}
+
 func TestComposeFieldsCaseInsensitive(t *testing.T) {
 	// Компилятор запросов отдаёт имена колонок в нижнем регистре
 	// (ВЫБРАТЬ Выручка КАК Выручка → колонка "выручка"), тогда как composition

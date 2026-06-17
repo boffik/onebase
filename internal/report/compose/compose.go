@@ -285,6 +285,9 @@ func aggregate(rows []Row, measures []report.Measure, ev Evaluator) map[string]a
 		out[m.Field] = aggMeasure(rows, m)
 	}
 	// Второй проход: вычисляемые показатели по уже агрегированным значениям.
+	// Контракт порядка: Expr-показатели вычисляются в порядке объявления в measures.
+	// Если один Expr ссылается на результат другого Expr, зависимый обязан быть
+	// объявлен ПОЗЖЕ — только тогда его зависимость уже присутствует в out.
 	for _, m := range measures {
 		if m.Expr == "" {
 			continue
@@ -293,6 +296,10 @@ func aggregate(rows []Row, measures []report.Measure, ev Evaluator) map[string]a
 			out[m.Field] = nil
 			continue
 		}
+		// ok=false означает неопределённое значение (например, деление на ноль) →
+		// пустая ячейка, как в 1С. Синтаксические ошибки выражения перехватываются
+		// заранее на этапе `onebase check`, поэтому ошибка здесь не является
+		// программной ошибкой и намеренно приводит к пустой ячейке (nil).
 		d, ok, _ := ev.EvalNum(m.Expr, out)
 		if ok {
 			out[m.Field] = d
