@@ -7,6 +7,7 @@ package ui
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -47,7 +48,11 @@ func (s *Server) canSeePage(r *http.Request, pg *page.Page) bool {
 }
 
 func (s *Server) page(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	// chi отдаёт сырой сегмент пути, когда Go выставил RawPath (percent-encoding
+	// в нижнем регистре hex — именно такие ссылки строит меню: /ui/page/%d0%9f…).
+	// Без декода GetPage не найдёт страницу → 404 из меню, хотя верхний регистр
+	// (%D0%9F…) проходит. См. decodePathParam.
+	name := decodePathParam(chi.URLParam(r, "name"))
 	pg := s.reg.GetPage(name)
 	if pg == nil {
 		http.NotFound(w, r)
@@ -115,4 +120,16 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 		"PageBlocks":   blocks,
 		"PageHasChart": hasChart,
 	})
+}
+
+// decodePathParam декодирует значение chi.URLParam. Go выставляет RawPath, когда
+// percent-encoding не каноничен (например, нижний регистр hex в ссылках меню), и
+// тогда chi возвращает сегмент пути сырым — его нужно раскодировать перед поиском
+// по имени. Уже декодированное значение (без «%») возвращается без изменений; при
+// битом encoding отдаём как есть. Тот же приём инлайном — в admin_*.go.
+func decodePathParam(v string) string {
+	if dec, err := url.PathUnescape(v); err == nil {
+		return dec
+	}
+	return v
 }
