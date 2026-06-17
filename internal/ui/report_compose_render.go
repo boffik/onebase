@@ -12,7 +12,8 @@ import (
 )
 
 // renderComposedTable строит единую <table> с раскрываемыми группами,
-// подитогами, общим итогом и условным оформлением деталей.
+// подитогами, общим итогом и условным оформлением деталей. Порядок строк задаёт
+// walkComposed (общий с Excel-выгрузкой); htmlComposeSink рисует каждую строку.
 func renderComposedTable(res *compose.Result, spec *report.Composition) template.HTML {
 	var b strings.Builder
 	b.WriteString(`<table class="report-composed">`)
@@ -21,70 +22,71 @@ func renderComposedTable(res *compose.Result, spec *report.Composition) template
 		b.WriteString(`<th class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(measureTitle(m)) + `</th>`)
 	}
 	b.WriteString(`</tr></thead><tbody>`)
-	for _, g := range res.Groups {
-		writeGroup(&b, g, spec, 0, "")
-	}
-	if spec.Totals.Grand {
-		b.WriteString(`<tr class="grand"><td>ВСЕГО</td>`)
-		for _, m := range spec.Measures {
-			b.WriteString(`<td class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(fmtMeasure(res.Grand[m.Field], m)) + `</td>`)
-		}
-		b.WriteString(`</tr>`)
-	}
+	walkComposed(res, spec, &htmlComposeSink{b: &b, spec: spec})
 	b.WriteString(`</tbody></table>`)
 	return template.HTML(b.String())
 }
 
-func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, level int, path string) {
-	gp := path + "/" + pathSeg(fmtVal(g.Key))
-	pad := fmt.Sprintf("padding-left:%dpx", 8+level*18)
-	rowStyle := cssOf(g.Styles[""])
-	fmt.Fprintf(b, `<tr class="grp" data-group="%s" data-level="%d" style="%s"><td style="%s">▼ %s</td>`,
-		html.EscapeString(gp), level, html.EscapeString(rowStyle), pad, html.EscapeString(fmtVal(g.Key)))
-	for _, m := range spec.Measures {
-		cell := joinStyles(measureAlign(m), cssOf(g.Styles[m.Field]))
-		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(g.Subtotals[m.Field], m)) + `</td>`)
-	}
-	b.WriteString(`</tr>`)
-	for _, ch := range g.Children {
-		writeGroup(b, ch, spec, level+1, gp)
-	}
-	for _, d := range g.Details {
-		writeDetail(b, d, spec, level+1, gp)
-	}
-	if spec.Totals.Subtotals {
-		fmt.Fprintf(b, `<tr class="subtotal" data-parent="%s" style="%s"><td style="padding-left:%dpx">··· Итого: %s ···</td>`,
-			html.EscapeString(gp), html.EscapeString(rowStyle), 8+(level+1)*18, html.EscapeString(fmtVal(g.Key)))
-		for _, m := range spec.Measures {
-			cell := joinStyles(measureAlign(m), cssOf(g.Styles[m.Field]))
-			b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(g.Subtotals[m.Field], m)) + `</td>`)
-		}
-		b.WriteString(`</tr>`)
+// htmlComposeSink рисует строки скомпонованного отчёта в HTML-таблицу.
+type htmlComposeSink struct {
+	b    *strings.Builder
+	spec *report.Composition
+}
+
+// measureCells выводит ячейки показателей строки: выравнивание + условное
+// оформление по styles[поле]. Общий код для строк группы, подытога и детали
+// (раньше один и тот же цикл был скопирован трижды).
+func (h *htmlComposeSink) measureCells(vals map[string]any, styles map[string]report.CellStyle) {
+	for _, m := range h.spec.Measures {
+		cell := joinStyles(measureAlign(m), cssOf(styles[m.Field]))
+		h.b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(vals[m.Field], m)) + `</td>`)
 	}
 }
 
-func writeDetail(b *strings.Builder, d compose.DetailRow, spec *report.Composition, level int, path string) {
+func (h *htmlComposeSink) group(g *compose.Group, level int, path string) {
+	pad := fmt.Sprintf("padding-left:%dpx", 8+level*18)
+	rowStyle := cssOf(g.Styles[""])
+	fmt.Fprintf(h.b, `<tr class="grp" data-group="%s" data-level="%d" style="%s"><td style="%s">▼ %s</td>`,
+		html.EscapeString(path), level, html.EscapeString(rowStyle), pad, html.EscapeString(fmtVal(g.Key)))
+	h.measureCells(g.Subtotals, g.Styles)
+	h.b.WriteString(`</tr>`)
+}
+
+func (h *htmlComposeSink) detail(d compose.DetailRow, level int, path string) {
 	rowStyle := cssOf(d.Styles[""])
-	fmt.Fprintf(b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), html.EscapeString(rowStyle))
+	fmt.Fprintf(h.b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), html.EscapeString(rowStyle))
 	// Первая ячейка: ссылка-расшифровка на исходный документ (если настроено).
-	// Ссылка строится только когда заданы и DetailLink, и DetailEntity, и значение поля непустое.
-	// Без DetailEntity переход бессмыслен — выводим пустую ячейку.
+	// Ссылка строится только когда заданы DetailLink, DetailEntity и значение поля
+	// непустое. Без DetailEntity переход бессмыслен — выводим пустую ячейку.
 	linked := false
-	if spec.DetailLink != "" && spec.DetailEntity != "" {
-		if v := fmtVal(d.Values[spec.DetailLink]); v != "" {
-			href := "/ui/document/" + url.PathEscape(spec.DetailEntity) + "/" + url.PathEscape(v)
-			fmt.Fprintf(b, `<td style="padding-left:%dpx"><a href="%s">→</a></td>`, 8+level*18, html.EscapeString(href))
+	if h.spec.DetailLink != "" && h.spec.DetailEntity != "" {
+		if v := fmtVal(d.Values[h.spec.DetailLink]); v != "" {
+			href := "/ui/document/" + url.PathEscape(h.spec.DetailEntity) + "/" + url.PathEscape(v)
+			fmt.Fprintf(h.b, `<td style="padding-left:%dpx"><a href="%s">→</a></td>`, 8+level*18, html.EscapeString(href))
 			linked = true
 		}
 	}
 	if !linked {
-		fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
+		fmt.Fprintf(h.b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
 	}
-	for _, m := range spec.Measures {
-		cell := joinStyles(measureAlign(m), cssOf(d.Styles[m.Field]))
-		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(d.Values[m.Field], m)) + `</td>`)
-	}
-	b.WriteString(`</tr>`)
+	h.measureCells(d.Values, d.Styles)
+	h.b.WriteString(`</tr>`)
+}
+
+func (h *htmlComposeSink) subtotal(g *compose.Group, level int, path string) {
+	rowStyle := cssOf(g.Styles[""])
+	fmt.Fprintf(h.b, `<tr class="subtotal" data-parent="%s" style="%s"><td style="padding-left:%dpx">··· Итого: %s ···</td>`,
+		html.EscapeString(path), html.EscapeString(rowStyle), 8+level*18, html.EscapeString(fmtVal(g.Key)))
+	h.measureCells(g.Subtotals, g.Styles)
+	h.b.WriteString(`</tr>`)
+}
+
+func (h *htmlComposeSink) grand(grand map[string]any) {
+	// У общего итога нет условного оформления — measureCells с nil-стилями даёт
+	// те же ячейки (только выравнивание), что и прежний отдельный код.
+	h.b.WriteString(`<tr class="grand"><td>ВСЕГО</td>`)
+	h.measureCells(grand, nil)
+	h.b.WriteString(`</tr>`)
 }
 
 func cssOf(s report.CellStyle) string {
