@@ -413,6 +413,12 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .tbl th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
 .tbl td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155;font-size:13px}
 .tbl tr:hover td{background:#f8fafc}
+.report-composed{width:100%;border-collapse:collapse;font-size:13px}
+.report-composed thead th{position:sticky;top:38px;background:#fff;z-index:5;text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px}
+.report-composed td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155}
+.report-composed td.num{font-variant-numeric:tabular-nums}
+.report-composed tr.grp:hover td{background:#f8fafc}
+.report-composed tr.grand td{font-weight:700;border-top:2px solid #e2e8f0}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
