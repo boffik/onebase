@@ -200,7 +200,10 @@ func (s *Server) pageProcEnv(r *http.Request, msgs *[]string) (*interpreter.DSLP
 	paramsObj := interpreter.NewStringMap(params)
 	builder := interpreter.NewPageBuilder()
 	mc := runtime.NewMovementsCollector("page", uuid.Nil)
-	dslVars := s.buildDSLVarsWithMessages(r.Context(), mc, msgs)
+	// Кладём язык запроса в контекст, чтобы НСтр(текст) в обработчике страницы
+	// (и в процедуре-действии) переводил на язык пользователя (план 66, п.3).
+	ctx := withLang(r.Context(), s.resolveLang(r))
+	dslVars := s.buildDSLVarsWithMessages(ctx, mc, msgs)
 	dslVars["Страница"] = builder
 	dslVars["Page"] = builder
 	dslVars["Параметры"] = paramsObj

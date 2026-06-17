@@ -279,6 +279,68 @@ func TestLocalizePageBlocks_Noop(t *testing.T) {
 	}
 }
 
+// TestPageNStr_DefaultsToRequestLanguage проверяет явный уровень i18n (план 66,
+// п.3): НСтр("ru='…'; en='…'") в обработчике страницы без явного кода языка берёт
+// язык запроса — в т.ч. для статической части склеенной строки
+// (НСтр(...) + Период), которую авто-перевод подписей целиком не покрывает.
+func TestPageNStr_DefaultsToRequestLanguage(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	src := `Процедура ПриФормировании(Страница, Параметры) Экспорт
+  Страница.Заголовок(НСтр("ru = 'Сводка'; en = 'Summary'"));
+  Страница.Абзац(НСтр("ru = 'Отчёт за '; en = 'Report for '") + Параметры.Получить("период"));
+КонецПроцедуры`
+	prog := mustParse(t, src)
+
+	registry := runtime.NewRegistry()
+	registry.LoadPages([]*page.Page{{Name: "Тест"}})
+	registry.Load(runtime.LoadOptions{PagePrograms: map[string]*ast.Program{"Тест": prog}})
+
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+
+	// Bundle нужен лишь чтобы resolveLang вернул язык; сам НСтр словарём не
+	// пользуется (inline-формат). Язык запроса задаём базовым (cfg.Lang).
+	bundle, err := i18n.Load(os.DirFS(t.TempDir()), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{
+		store:    db,
+		reg:      registry,
+		interp:   interp,
+		lockMgr:  runtime.NewLockManager(),
+		messages: NewMessageStore(),
+		cfg:      Config{Bundle: bundle, Lang: "en"},
+	}
+
+	req := httptest.NewRequest("GET", "/ui/page/Тест?период=Июнь", nil)
+
+	var msgs []string
+	builder, paramsObj, dslVars := s.pageProcEnv(req, &msgs)
+	proc := registry.GetPageProcedure("Тест", "ПриФормировании")
+	if proc == nil {
+		t.Fatal("процедура ПриФормировании не найдена")
+	}
+	if _, err := interp.Call(proc, builder, []any{builder, paramsObj}, dslVars); err != nil {
+		t.Fatalf("interp.Call: %v", err)
+	}
+
+	blocks := builder.Blocks()
+	if blocks[0].Text != "Summary" {
+		t.Errorf("НСтр(...en) без кода = %q, ожидалось Summary (язык запроса)", blocks[0].Text)
+	}
+	if blocks[1].Text != "Report for Июнь" {
+		t.Errorf("склеенная подпись = %q, ожидалось 'Report for Июнь'", blocks[1].Text)
+	}
+}
+
 // TestDecodePathParam фиксирует фикс маршрута /ui/page/{name}: имя из URL должно
 // декодироваться, иначе ссылка из меню (percent-encoding в нижнем регистре hex,
 // при котором chi отдаёт сырой сегмент) даёт 404, хотя верхний регистр проходит.
