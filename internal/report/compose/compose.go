@@ -96,6 +96,9 @@ func alignRowKeys(rows []Row, spec report.Composition) []Row {
 			add(s)
 		}
 	}
+	// DetailLink — колонка строки, из которой берётся UUID для ссылки на документ.
+	// DetailEntity — имя сущности (не поле строки), в alignRowKeys не добавляем.
+	add(spec.DetailLink)
 	if len(targets) == 0 {
 		return rows
 	}

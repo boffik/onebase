@@ -31,13 +31,15 @@ type Report struct {
 
 // Composition описывает настройки компоновки данных отчёта.
 type Composition struct {
-	Groupings   []string   `yaml:"groupings"`
-	Measures    []Measure  `yaml:"measures"`
-	Totals      Totals     `yaml:"totals"`
-	Detail      bool       `yaml:"detail"`
-	Sort        []SortKey  `yaml:"sort"`
-	Conditional []CondRule `yaml:"conditional"`
-	Chart       *ChartSpec `yaml:"chart"`
+	Groupings    []string   `yaml:"groupings"`
+	Measures     []Measure  `yaml:"measures"`
+	Totals       Totals     `yaml:"totals"`
+	Detail       bool       `yaml:"detail"`
+	Sort         []SortKey  `yaml:"sort"`
+	Conditional  []CondRule `yaml:"conditional"`
+	Chart        *ChartSpec `yaml:"chart"`
+	DetailLink   string     `yaml:"detail_link"`   // поле строки с UUID регистратора/ссылки
+	DetailEntity string     `yaml:"detail_entity"` // имя сущности для перехода по ссылке
 }
 
 // Measure описывает измеримый показатель (поле + агрегат) в компоновке.

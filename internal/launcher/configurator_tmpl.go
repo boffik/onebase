@@ -5324,6 +5324,12 @@ const cfgTabTree = `{{define "tab-tree"}}
             <label style="margin-left:12px"><input type="checkbox" name="comp.totals.subtotals" {{if .Composition}}{{if .Composition.Totals.Subtotals}}checked{{end}}{{end}}> {{t $.Lang "Промежуточные итоги"}}</label>
             <label style="margin-left:12px"><input type="checkbox" name="comp.detail" {{if .Composition}}{{if .Composition.Detail}}checked{{end}}{{end}}> {{t $.Lang "Детальные строки"}}</label>
           </div>
+          <div style="margin-top:8px;display:flex;gap:12px;align-items:center">
+            <div class="fg" style="flex:1"><label>{{t $.Lang "Поле-ссылка"}}</label>
+              <input type="text" name="comp.detail_link" value="{{if .Composition}}{{.Composition.DetailLink}}{{end}}" placeholder="{{t $.Lang "колонка запроса с UUID документа"}}" title="{{t $.Lang "колонка запроса с UUID документа"}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+            <div class="fg" style="flex:1"><label>{{t $.Lang "Сущность (расшифровка)"}}</label>
+              <input type="text" name="comp.detail_entity" value="{{if .Composition}}{{.Composition.DetailEntity}}{{end}}" placeholder="{{t $.Lang "имя документа для перехода"}}" title="{{t $.Lang "имя документа для перехода"}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+          </div>
           <div class="section-hd" style="margin-top:12px">{{t $.Lang "Сортировка"}}
             <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddSort('cs-{{$rn}}')">+</button></div>
           <table class="fields-tbl" id="cs-{{$rn}}">

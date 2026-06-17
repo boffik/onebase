@@ -48,6 +48,8 @@ func parseCompositionForm(f url.Values) (*report.Composition, bool) {
 	c.Totals.Grand = f.Get("comp.totals.grand") != ""
 	c.Totals.Subtotals = f.Get("comp.totals.subtotals") != ""
 	c.Detail = f.Get("comp.detail") != ""
+	c.DetailLink = strings.TrimSpace(f.Get("comp.detail_link"))
+	c.DetailEntity = strings.TrimSpace(f.Get("comp.detail_entity"))
 
 	// Сортировка
 	for i := 0; ; i++ {

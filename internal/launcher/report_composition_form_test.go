@@ -185,6 +185,51 @@ func TestParseCompositionFormMeasureExpr(t *testing.T) {
 	}
 }
 
+func TestParseCompositionFormDetailLink(t *testing.T) {
+	// DetailLink и DetailEntity читаются из формы и сохраняются в Composition.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "Контрагент")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.measure.0.agg", "sum")
+	f.Set("comp.detail", "on")
+	f.Set("comp.detail_link", "Регистратор")
+	f.Set("comp.detail_entity", "расходнаянакладная")
+
+	c, present := parseCompositionForm(f)
+	if !present {
+		t.Fatal("present=false")
+	}
+	if c == nil {
+		t.Fatal("composition nil")
+	}
+	if c.DetailLink != "Регистратор" {
+		t.Fatalf("DetailLink: хотели %q, получили %q", "Регистратор", c.DetailLink)
+	}
+	if c.DetailEntity != "расходнаянакладная" {
+		t.Fatalf("DetailEntity: хотели %q, получили %q", "расходнаянакладная", c.DetailEntity)
+	}
+}
+
+func TestParseCompositionFormDetailLinkEmpty(t *testing.T) {
+	// Пустые detail_link и detail_entity не ломают существующую логику
+	// и не попадают в условие очистки (composition с группировками сохраняется).
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "М")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.measure.0.agg", "sum")
+	// detail_link и detail_entity не заданы
+
+	c, present := parseCompositionForm(f)
+	if !present || c == nil {
+		t.Fatalf("без detail_link composition должна сохраниться: present=%v c=%v", present, c)
+	}
+	if c.DetailLink != "" || c.DetailEntity != "" {
+		t.Fatalf("пустые поля должны остаться пустыми: link=%q entity=%q", c.DetailLink, c.DetailEntity)
+	}
+}
+
 func TestApplyReportComposition(t *testing.T) {
 	raw := []byte("name: R\nquery: \"ВЫБРАТЬ 1\"\ncomposition:\n  groupings: [Старое]\n  measures:\n    - {field: X, agg: sum}\n")
 

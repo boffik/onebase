@@ -113,6 +113,81 @@ func TestRenderMeasureFormat(t *testing.T) {
 	}
 }
 
+// TestWriteDetailLink проверяет, что детальная строка с DetailLink и UUID-значением
+// содержит ссылку на документ вида <a href="/ui/document/<entity>/<uuid>">→</a>.
+// Если DetailLink пуст — первая ячейка остаётся пустой (обратная совместимость).
+func TestWriteDetailLink(t *testing.T) {
+	const uuid = "550e8400-e29b-41d4-a716-446655440000"
+	rows := []compose.Row{
+		{"Контрагент": "Иванов", "Сумма": "100", "Регистратор": uuid},
+	}
+	spec := report.Composition{
+		Groupings:    []string{"Контрагент"},
+		Measures:     []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:       true,
+		DetailLink:   "Регистратор",
+		DetailEntity: "расходнаянакладная",
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	// Ссылка должна присутствовать: href содержит UUID и маркер →.
+	// Имя сущности может быть URL-закодировано (кириллица → %XX), поэтому
+	// проверяем только UUID-сегмент, который не кодируется.
+	if !strings.Contains(out, uuid) {
+		t.Fatalf("HTML не содержит UUID %q в ссылке:\n%s", uuid, out)
+	}
+	if !strings.Contains(out, `href=`) {
+		t.Fatalf("HTML не содержит атрибут href:\n%s", out)
+	}
+	if !strings.Contains(out, `/ui/document/`) {
+		t.Fatalf("HTML не содержит путь /ui/document/:\n%s", out)
+	}
+	if !strings.Contains(out, `→`) {
+		t.Fatalf("HTML не содержит маркер → :\n%s", out)
+	}
+
+	// Без DetailLink — первая ячейка пустая (нет <a href=...>)
+	specNoLink := report.Composition{
+		Groupings: []string{"Контрагент"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:    true,
+	}
+	res2, _ := compose.Compose(rows, specNoLink, nil)
+	out2 := string(renderComposedTable(res2, &specNoLink))
+	if strings.Contains(out2, `<a href=`) {
+		t.Fatalf("без DetailLink не должно быть ссылки:\n%s", out2)
+	}
+}
+
+// TestWriteDetailLinkCaseInsensitive проверяет выравнивание ключей:
+// колонка запроса в нижнем регистре («регистратор») должна находиться
+// через DetailLink в исходном регистре («Регистратор»).
+func TestWriteDetailLinkCaseInsensitive(t *testing.T) {
+	const uuid = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+	// Колонка приходит в нижнем регистре (как от компилятора запросов)
+	rows := []compose.Row{
+		{"Контрагент": "Петров", "сумма": "50", "регистратор": uuid},
+	}
+	spec := report.Composition{
+		Groupings:    []string{"Контрагент"},
+		Measures:     []report.Measure{{Field: "сумма", Agg: "sum"}},
+		Detail:       true,
+		DetailLink:   "Регистратор", // исходный регистр из composition
+		DetailEntity: "поступление",
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	// UUID должен присутствовать в href — регистронезависимый поиск сработал
+	if !strings.Contains(out, uuid) {
+		t.Fatalf("UUID не найден через регистронезависимый ключ — нет %q в:\n%s", uuid, out)
+	}
+	if !strings.Contains(out, `/ui/document/`) {
+		t.Fatalf("нет пути /ui/document/ в:\n%s", out)
+	}
+}
+
 func TestComposedPathEscaping(t *testing.T) {
 	// Значение группировки с «/» не должно ломать префиксную схему путей:
 	// сиблинг «Иванов/Доп» обязан иметь экранированный data-group, иначе

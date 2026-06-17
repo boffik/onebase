@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"net/url"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/report"
@@ -65,7 +66,17 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 func writeDetail(b *strings.Builder, d compose.DetailRow, spec *report.Composition, level int, path string) {
 	rowStyle := cssOf(d.Styles[""])
 	fmt.Fprintf(b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), html.EscapeString(rowStyle))
-	fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
+	// Первая ячейка: ссылка-расшифровка на исходный документ (если настроено)
+	if spec.DetailLink != "" {
+		if v := fmtVal(d.Values[spec.DetailLink]); v != "" {
+			href := "/ui/document/" + url.PathEscape(spec.DetailEntity) + "/" + url.PathEscape(v)
+			fmt.Fprintf(b, `<td style="padding-left:%dpx"><a href="%s">→</a></td>`, 8+level*18, html.EscapeString(href))
+		} else {
+			fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
+		}
+	} else {
+		fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
+	}
 	for _, m := range spec.Measures {
 		cell := joinStyles(measureAlign(m), cssOf(d.Styles[m.Field]))
 		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtMeasure(d.Values[m.Field], m)) + `</td>`)
