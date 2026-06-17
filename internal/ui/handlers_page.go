@@ -81,23 +81,8 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Параметры строки запроса → Структура «Параметры».
-	params := map[string]string{}
-	for k, vs := range r.URL.Query() {
-		if len(vs) > 0 {
-			params[k] = vs[0]
-		}
-	}
-	paramsObj := interpreter.NewStringMap(params)
-	builder := interpreter.NewPageBuilder()
-
 	var msgs []string
-	mc := runtime.NewMovementsCollector("page", uuid.Nil)
-	dslVars := s.buildDSLVarsWithMessages(r.Context(), mc, &msgs)
-	dslVars["Страница"] = builder
-	dslVars["Page"] = builder
-	dslVars["Параметры"] = paramsObj
-	dslVars["Parameters"] = paramsObj
+	builder, paramsObj, dslVars := s.pageProcEnv(r, &msgs)
 
 	if _, err := s.interp.Call(proc, builder, []any{builder, paramsObj}, dslVars); err != nil {
 		s.render(w, r, "page-custom", map[string]any{
@@ -116,10 +101,81 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, r, "page-custom", map[string]any{
-		"PageTitle":    title,
-		"PageBlocks":   blocks,
-		"PageHasChart": hasChart,
+		"PageTitle":      title,
+		"PageBlocks":     blocks,
+		"PageHasChart":   hasChart,
+		"PageActionBase": "/ui/page/" + pg.Name + "/action/",
+		"PageQuery":      pageQuery(r),
 	})
+}
+
+// pageAction обрабатывает кнопку-действие (план 66): POST
+// /ui/page/{name}/action/{action} вызывает серверную процедуру-действие из
+// src/<имя>.page.os (любую процедуру по имени, как ПриФормировании), затем
+// PRG-редиректом возвращает на GET страницы с теми же Параметрами. Сообщить()
+// уже в сторе сообщений — его покажет глобальный бар. PRG исключает повторный
+// запуск действия при F5 (важно для проведения/пересчёта).
+func (s *Server) pageAction(w http.ResponseWriter, r *http.Request) {
+	name := decodePathParam(chi.URLParam(r, "name"))
+	action := decodePathParam(chi.URLParam(r, "action"))
+	pg := s.reg.GetPage(name)
+	if pg == nil {
+		http.NotFound(w, r)
+		return
+	}
+	// Роли — как в s.page: действие доступно только тем, кому видна страница.
+	if len(pg.Roles) > 0 {
+		if u := auth.UserFromContext(r.Context()); u != nil && !u.HasAnyRole(pg.Roles) {
+			s.renderForbidden(w, r)
+			return
+		}
+	}
+
+	proc := s.reg.GetPageProcedure(pg.Name, action)
+	if proc == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var msgs []string
+	builder, paramsObj, dslVars := s.pageProcEnv(r, &msgs)
+	if _, err := s.interp.Call(proc, builder, []any{builder, paramsObj}, dslVars); err != nil {
+		// Ошибку действия кладём в стор сообщений: после редиректа страница
+		// перерисуется штатно, а баннер не потеряется.
+		s.messages.Push(userKeyFromRequest(r), s.errText(r, err))
+	}
+
+	http.Redirect(w, r, "/ui/page/"+pg.Name+pageQuery(r), http.StatusSeeOther)
+}
+
+// pageProcEnv готовит окружение вызова обработчика страницы: построитель блоков,
+// Параметры из query string и dslVars со сбором Сообщить в msgs. Общий код для
+// GET (ПриФормировании) и POST (КнопкаДействие).
+func (s *Server) pageProcEnv(r *http.Request, msgs *[]string) (*interpreter.DSLPageBuilder, *interpreter.Map, map[string]any) {
+	params := map[string]string{}
+	for k, vs := range r.URL.Query() {
+		if len(vs) > 0 {
+			params[k] = vs[0]
+		}
+	}
+	paramsObj := interpreter.NewStringMap(params)
+	builder := interpreter.NewPageBuilder()
+	mc := runtime.NewMovementsCollector("page", uuid.Nil)
+	dslVars := s.buildDSLVarsWithMessages(r.Context(), mc, msgs)
+	dslVars["Страница"] = builder
+	dslVars["Page"] = builder
+	dslVars["Параметры"] = paramsObj
+	dslVars["Parameters"] = paramsObj
+	return builder, paramsObj, dslVars
+}
+
+// pageQuery возвращает query string запроса с ведущим «?» (или пустую строку) —
+// чтобы сохранять Параметры в action-URL кнопок и при PRG-редиректе действия.
+func pageQuery(r *http.Request) string {
+	if r.URL.RawQuery == "" {
+		return ""
+	}
+	return "?" + r.URL.RawQuery
 }
 
 // decodePathParam декодирует значение chi.URLParam. Go выставляет RawPath, когда

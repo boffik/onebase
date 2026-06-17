@@ -23,11 +23,12 @@ import (
 type PageBlock struct {
 	Kind string // heading | paragraph | kpi | table | button | divider | raw
 
-	Text  string // heading/paragraph/button: текст; kpi: подпись не здесь (см. Label)
-	URL   string // button: адрес перехода
-	Label string // kpi: подпись
-	Value string // kpi: уже отформатированное значение
-	Title string // table: заголовок таблицы
+	Text   string // heading/paragraph/button: текст; kpi: подпись не здесь (см. Label)
+	URL    string // button: адрес перехода
+	Action string // button: имя серверной процедуры-действия (КнопкаДействие); взаимоисключимо с URL
+	Label  string // kpi: подпись
+	Value  string // kpi: уже отформатированное значение
+	Title  string // table: заголовок таблицы
 
 	Columns []string  // table: заголовки колонок
 	Rows    []PageRow // table: строки
@@ -113,6 +114,11 @@ func (b *DSLPageBuilder) CallMethod(name string, args []any) any {
 		return b
 	case "кнопка", "ссылка", "button", "link":
 		b.blocks = append(b.blocks, PageBlock{Kind: "button", Text: argStr(args, 0), URL: argStr(args, 1)})
+		return b
+	case "кнопкадействие", "actionbutton":
+		// Кнопка вызывает серверную процедуру-действие из того же .page.os
+		// (POST /ui/page/{name}/action/{action}), а не переходит по URL.
+		b.blocks = append(b.blocks, PageBlock{Kind: "button", Text: argStr(args, 0), Action: argStr(args, 1)})
 		return b
 	case "разделитель", "divider":
 		b.blocks = append(b.blocks, PageBlock{Kind: "divider"})
