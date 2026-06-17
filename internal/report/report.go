@@ -47,6 +47,7 @@ type Measure struct {
 	Title  string `yaml:"title"`
 	Align  string `yaml:"align"`  // left|right|center ("" = right)
 	Format string `yaml:"format"` // "" | "#,##0.00" | "#,##0" | "0.0%" и т.п.
+	Expr   string `yaml:"expr"`   // непустое = вычисляемый показатель (DSL-выражение по другим полям)
 }
 
 // Totals управляет выводом итогов в отчёте.

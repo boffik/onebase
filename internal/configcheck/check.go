@@ -466,7 +466,13 @@ func CheckReportComposition(proj *project.Project) []Issue {
 		measures := map[string]bool{}
 		for _, m := range c.Measures {
 			measures[m.Field] = true
-			if !aggs[m.Agg] {
+			if m.Expr != "" {
+				// Вычисляемый показатель: агрегат необязателен, но выражение валидируем.
+				src := "Функция __cond()\nВозврат (" + m.Expr + ");\nКонецФункции\n"
+				if _, err := parser.New(lexer.New(src, "cond.os")).ParseProgram(); err != nil {
+					add(rep.Name, "ошибка выражения показателя \""+m.Field+"\": "+err.Error())
+				}
+			} else if !aggs[m.Agg] {
 				add(rep.Name, "неизвестный агрегат: "+m.Agg)
 			}
 			if !aligns[m.Align] {

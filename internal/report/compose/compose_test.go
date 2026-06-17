@@ -11,7 +11,8 @@ import (
 // noEval — заглушка Evaluator: оформление не применяется (для тестов без условий).
 type noEval struct{}
 
-func (noEval) EvalBool(string, Row) (bool, error) { return false, nil }
+func (noEval) EvalBool(string, Row) (bool, error)                        { return false, nil }
+func (noEval) EvalNum(string, Row) (decimal.Decimal, bool, error)        { return decimal.Zero, false, nil }
 
 func decEq(t *testing.T, got any, want string) {
 	t.Helper()
@@ -141,6 +142,23 @@ func (negEval) EvalBool(expr string, row Row) (bool, error) {
 	d, ok := toDecimal(row["Сумма"])
 	return ok && d.Sign() < 0, nil
 }
+func (negEval) EvalNum(string, Row) (decimal.Decimal, bool, error) { return decimal.Zero, false, nil }
+
+// exprEval — фейковый Evaluator для теста вычисляемых показателей.
+// Обрабатывает выражение "Сумма*2": берёт row["Сумма"] и умножает на 2.
+type exprEval struct{}
+
+func (exprEval) EvalBool(string, Row) (bool, error) { return false, nil }
+func (exprEval) EvalNum(expr string, row Row) (decimal.Decimal, bool, error) {
+	if expr == "Сумма*2" {
+		d, ok := toDecimal(row["Сумма"])
+		if !ok {
+			return decimal.Zero, false, nil
+		}
+		return d.Mul(decimal.NewFromInt(2)), true, nil
+	}
+	return decimal.Zero, false, nil
+}
 
 func TestConditionalAndCap(t *testing.T) {
 	rows := []Row{
@@ -202,6 +220,44 @@ func TestConditionalOnGroups(t *testing.T) {
 	if profit == nil || len(profit.Styles) != 0 {
 		t.Fatalf("прибыльная группа не должна иметь стиль: %+v", profit)
 	}
+}
+
+func TestExprMeasure(t *testing.T) {
+	// Вычисляемый показатель Рент = Сумма*2 вычисляется ПОСЛЕ агрегации обычных
+	// показателей (Сумма). Проверяем subtotal группы и grand-итог.
+	rows := []Row{
+		{"Менеджер": "Иванов", "Сумма": "60"},
+		{"Менеджер": "Иванов", "Сумма": "40"},
+		{"Менеджер": "Петров", "Сумма": "30"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"Менеджер"},
+		Measures: []report.Measure{
+			{Field: "Сумма", Agg: "sum"},
+			{Field: "Рент", Expr: "Сумма*2"}, // вычисляемый: = Сумма * 2
+		},
+		Totals: report.Totals{Grand: true, Subtotals: true},
+	}
+	res, err := Compose(rows, spec, exprEval{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Subtotal для Иванова: Сумма=100, Рент=200
+	ivanov := res.Groups[0]
+	if ivanov.Key != "Иванов" {
+		t.Fatalf("первая группа: %v", ivanov.Key)
+	}
+	decEq(t, ivanov.Subtotals["Сумма"], "100")
+	decEq(t, ivanov.Subtotals["Рент"], "200")
+
+	// Subtotal для Петрова: Сумма=30, Рент=60
+	petrov := res.Groups[1]
+	decEq(t, petrov.Subtotals["Сумма"], "30")
+	decEq(t, petrov.Subtotals["Рент"], "60")
+
+	// Grand: Сумма=130, Рент=260 (вычисляется по grand-агрегату Сумма=130, не суммируется)
+	decEq(t, res.Grand["Сумма"], "130")
+	decEq(t, res.Grand["Рент"], "260")
 }
 
 func TestComposeFieldsCaseInsensitive(t *testing.T) {

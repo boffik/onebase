@@ -40,6 +40,7 @@ func parseCompositionForm(f url.Values) (*report.Composition, bool) {
 			Title:  strings.TrimSpace(f.Get(p + ".title")),
 			Align:  f.Get(p + ".align"),
 			Format: strings.TrimSpace(f.Get(p + ".format")),
+			Expr:   strings.TrimSpace(f.Get(p + ".expr")),
 		})
 	}
 

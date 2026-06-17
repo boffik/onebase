@@ -159,6 +159,32 @@ func TestParseCompositionFormMeasureAlignFormatEmpty(t *testing.T) {
 	}
 }
 
+func TestParseCompositionFormMeasureExpr(t *testing.T) {
+	// Вычисляемый показатель: Expr задаётся через поле comp.measure.<i>.expr.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.measure.0.field", "Выручка")
+	f.Set("comp.measure.0.agg", "sum")
+	f.Set("comp.measure.1.field", "Рентабельность")
+	// Для вычисляемого показателя agg пуст, expr задан.
+	f.Set("comp.measure.1.expr", "ВаловаяПрибыль / Выручка * 100")
+	c, present := parseCompositionForm(f)
+	if !present {
+		t.Fatal("present=false")
+	}
+	if c == nil || len(c.Measures) != 2 {
+		t.Fatalf("measures: %+v", c)
+	}
+	m0 := c.Measures[0]
+	if m0.Field != "Выручка" || m0.Agg != "sum" || m0.Expr != "" {
+		t.Fatalf("measure[0]: %+v", m0)
+	}
+	m1 := c.Measures[1]
+	if m1.Field != "Рентабельность" || m1.Agg != "" || m1.Expr != "ВаловаяПрибыль / Выручка * 100" {
+		t.Fatalf("measure[1] (вычисляемый): %+v", m1)
+	}
+}
+
 func TestApplyReportComposition(t *testing.T) {
 	raw := []byte("name: R\nquery: \"ВЫБРАТЬ 1\"\ncomposition:\n  groupings: [Старое]\n  measures:\n    - {field: X, agg: sum}\n")
 

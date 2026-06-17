@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/dsl/lexer"
@@ -64,4 +66,19 @@ func (e *interpEvaluator) EvalBool(expr string, row compose.Row) (bool, error) {
 	}
 	b, _ := result.(bool)
 	return b, nil
+}
+
+// EvalNum исполняет DSL-выражение и приводит результат к decimal.
+// Используется для вычисляемых показателей компоновки (Task B2).
+func (e *interpEvaluator) EvalNum(expr string, row compose.Row) (decimal.Decimal, bool, error) {
+	proc, err := e.compile(expr)
+	if err != nil {
+		return decimal.Zero, false, err
+	}
+	var result any
+	if err := e.interp.RunWithResult(proc, &interpreter.MapThis{M: row}, &result, map[string]any(row)); err != nil {
+		return decimal.Zero, false, err
+	}
+	d, ok := compose.ExportToDecimal(result)
+	return d, ok, nil
 }

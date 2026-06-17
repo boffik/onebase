@@ -14,9 +14,12 @@ import (
 
 type Row = map[string]any
 
-// Evaluator вычисляет булево DSL-выражение при значениях полей строки.
+// Evaluator вычисляет DSL-выражения при значениях полей строки.
 type Evaluator interface {
 	EvalBool(expr string, row Row) (bool, error)
+	// EvalNum вычисляет числовое выражение (для вычисляемых показателей).
+	// Возвращает (значение, удалось, ошибка). При ok=false результат не используется.
+	EvalNum(expr string, row Row) (decimal.Decimal, bool, error)
 }
 
 const DefaultMaxRows = 50000
@@ -57,7 +60,7 @@ func ComposeN(rows []Row, spec report.Composition, ev Evaluator, maxRows int) (*
 		res.RowCount = maxRows
 	}
 	res.Groups = buildGroups(rows, spec, 0, ev)
-	res.Grand = aggregate(rows, spec.Measures)
+	res.Grand = aggregate(rows, spec.Measures, ev)
 	return res, nil
 }
 
@@ -134,7 +137,7 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 			Field:     field,
 			Key:       k,
 			Count:     len(buckets[k]),
-			Subtotals: aggregate(buckets[k], spec.Measures),
+			Subtotals: aggregate(buckets[k], spec.Measures, ev),
 		}
 		// Условное оформление группы/подытога вычисляется по её подытогам —
 		// так убыточная группа подсвечивается целиком, без detail-строк.
@@ -272,10 +275,30 @@ func normalizeGroupKey(v any) any {
 	return v
 }
 
-func aggregate(rows []Row, measures []report.Measure) map[string]any {
+func aggregate(rows []Row, measures []report.Measure, ev Evaluator) map[string]any {
 	out := map[string]any{}
+	// Первый проход: обычные показатели (не вычисляемые).
 	for _, m := range measures {
+		if m.Expr != "" {
+			continue // вычисляемые — во второй проход
+		}
 		out[m.Field] = aggMeasure(rows, m)
+	}
+	// Второй проход: вычисляемые показатели по уже агрегированным значениям.
+	for _, m := range measures {
+		if m.Expr == "" {
+			continue
+		}
+		if ev == nil {
+			out[m.Field] = nil
+			continue
+		}
+		d, ok, _ := ev.EvalNum(m.Expr, out)
+		if ok {
+			out[m.Field] = d
+		} else {
+			out[m.Field] = nil
+		}
 	}
 	return out
 }
