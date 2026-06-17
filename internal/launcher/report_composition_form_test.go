@@ -116,6 +116,49 @@ func TestParseCompositionFormAbsentAndEmpty(t *testing.T) {
 	}
 }
 
+func TestParseCompositionFormMeasureAlignFormat(t *testing.T) {
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.measure.0.agg", "sum")
+	f.Set("comp.measure.0.align", "center")
+	f.Set("comp.measure.0.format", "#,##0.00")
+	c, present := parseCompositionForm(f)
+	if !present {
+		t.Fatal("present=false")
+	}
+	if c == nil || len(c.Measures) != 1 {
+		t.Fatalf("measures: %+v", c)
+	}
+	m := c.Measures[0]
+	if m.Align != "center" {
+		t.Fatalf("align: хотели %q, получили %q", "center", m.Align)
+	}
+	if m.Format != "#,##0.00" {
+		t.Fatalf("format: хотели %q, получили %q", "#,##0.00", m.Format)
+	}
+}
+
+func TestParseCompositionFormMeasureAlignFormatEmpty(t *testing.T) {
+	// Пустые align и format не ломают существующую логику.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.measure.0.field", "Количество")
+	f.Set("comp.measure.0.agg", "count")
+	// align и format не заданы
+	c, present := parseCompositionForm(f)
+	if !present || c == nil || len(c.Measures) != 1 {
+		t.Fatalf("measures: %+v", c)
+	}
+	m := c.Measures[0]
+	if m.Align != "" {
+		t.Fatalf("align должен быть пустым: %q", m.Align)
+	}
+	if m.Format != "" {
+		t.Fatalf("format должен быть пустым: %q", m.Format)
+	}
+}
+
 func TestApplyReportComposition(t *testing.T) {
 	raw := []byte("name: R\nquery: \"ВЫБРАТЬ 1\"\ncomposition:\n  groupings: [Старое]\n  measures:\n    - {field: X, agg: sum}\n")
 

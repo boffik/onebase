@@ -35,9 +35,11 @@ func parseCompositionForm(f url.Values) (*report.Composition, bool) {
 			break
 		}
 		c.Measures = append(c.Measures, report.Measure{
-			Field: fld,
-			Agg:   f.Get(p + ".agg"),
-			Title: strings.TrimSpace(f.Get(p + ".title")),
+			Field:  fld,
+			Agg:    f.Get(p + ".agg"),
+			Title:  strings.TrimSpace(f.Get(p + ".title")),
+			Align:  f.Get(p + ".align"),
+			Format: strings.TrimSpace(f.Get(p + ".format")),
 		})
 	}
 
