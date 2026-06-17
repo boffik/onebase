@@ -19,7 +19,7 @@ func numForExcel(v any) any {
 	if v == nil {
 		return nil
 	}
-	return numFor(v)
+	return composeFloat(v)
 }
 
 // composedRows строит заголовки и строки данных для excel.ExportList из
