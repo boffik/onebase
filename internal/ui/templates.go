@@ -2079,7 +2079,8 @@ const tplReport = `
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
 {{if .ReportParams}}
-<div class="card" style="margin-bottom:16px">
+<details class="card report-block" data-block="params" open style="margin-bottom:16px">
+<summary>{{t $.Lang "Параметры"}}</summary>
 <form method="POST">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .ReportParams}}{{$p := .}}{{$pname := .Name}}{{$pval := str (index $.ParamValues .Name)}}
@@ -2121,13 +2122,14 @@ const tplReport = `
   </div>
   <button class="btn btn-primary" type="submit">{{t $.Lang "Сформировать"}}</button>
 </form>
-</div>
+</details>
 {{end}}
 {{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
 {{if .ChartOption}}
-<div class="card" style="margin-bottom:16px">
+<details class="card report-block" data-block="chart" open style="margin-bottom:16px">
+<summary>{{t $.Lang "Диаграмма"}}</summary>
   <div id="ob-chart" style="width:100%;min-height:400px"></div>
-</div>
+</details>
 <script src="/vendor/echarts/echarts.min.js"></script>
 <script>
 (function(){
@@ -2140,9 +2142,10 @@ const tplReport = `
 {{end}}
 {{if .ComposedHTML}}
 {{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
-<div class="card">
+<details class="card report-block" data-block="data" open>
+<summary>{{t $.Lang "Данные"}}</summary>
 {{.ComposedHTML}}
-</div>
+</details>
 <script>
 (function(){
   document.querySelectorAll('tr.grp').forEach(function(tr){
@@ -2176,6 +2179,18 @@ const tplReport = `
 </div>
 {{end}}
 {{template "form-shared-js" .}}
+<script>
+(function(){
+  try{
+    document.querySelectorAll('details.report-block').forEach(function(el){
+      var key='rb-'+location.pathname+'-'+el.dataset.block;
+      var saved=localStorage.getItem(key);
+      if(saved==='1')el.open=true; else if(saved==='0')el.open=false;
+      el.addEventListener('toggle',function(){localStorage.setItem(key,el.open?'1':'0');});
+    });
+  }catch(e){}
+})();
+</script>
 </main></div></body></html>
 {{end}}
 `
