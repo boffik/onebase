@@ -12,32 +12,38 @@ var (
 	errSandboxIters   = errors.New("превышен лимит итераций цикла (песочница)")
 )
 
-// SandboxProfile описывает, что разрешено одному запуску DSL. Нулевое значение =
-// «всё разрешено» = поведение по умолчанию (без регрессии).
+// SandboxProfile описывает ограничения одного запуска DSL. Deny-семантика:
+// нулевое значение = «ничего не запрещено» = поведение по умолчанию (без
+// регрессии). RunSandboxed применяет запреты профиля безусловно (см. Vars),
+// поэтому, чтобы запретить возможность, явно выставь соответствующий флаг.
 type SandboxProfile struct {
-	AllowNet     bool          // сеть: HTTP-клиент и email
-	AllowFile    bool          // файловые builtins
+	DenyNet      bool          // запретить сеть: HTTP-клиент, email, ИИ-запросы
+	DenyFile     bool          // запретить файловые builtins (и чтение в РаспознатьДокумент)
+	DenyExec     bool          // запретить команды ОС (ВыполнитьКоманду, план 67) недоверенному коду; secure-by-default обычного режима даёт флаг базы exec.enabled
 	MaxWallClock time.Duration // 0 = без лимита времени
 	MaxLoopIters int           // 0 = дефолт (maxWhileIter)
 }
 
-// RestrictedProfile — строгий профиль для недоверенного кода (ИИ/marketplace).
+// RestrictedProfile — строгий профиль для недоверенного кода (ИИ/marketplace):
+// запрещены сеть и файлы, заданы лимиты времени и итераций.
 func RestrictedProfile() SandboxProfile {
 	return SandboxProfile{
-		AllowNet:     false,
-		AllowFile:    false,
+		DenyNet:      true,
+		DenyFile:     true,
+		DenyExec:     true,
 		MaxWallClock: 10 * time.Second,
 		MaxLoopIters: 1_000_000,
 	}
 }
 
 // Vars возвращает extraVars, навязывающие запреты возможностей профиля
-// (сеть/email/файлы). Мержить ПОСЛЕ обычных переменных запуска, чтобы deny-
-// guard'ы перекрыли стандартные функции. Разрешённые возможности не внедряются —
-// остаются обычные функции (с глобальным предохранителем сети, план 62).
+// (сеть/email/файлы/ИИ). RunSandboxed мержит их ПОСЛЕ обычных переменных
+// запуска, чтобы deny-guard'ы перекрыли стандартные функции. Возможности без
+// выставленного запрета не трогаются — остаются обычные функции (с глобальным
+// предохранителем сети, план 62). Для нулевого профиля карта пуста.
 func (p SandboxProfile) Vars() map[string]any {
 	m := map[string]any{}
-	if !p.AllowNet {
+	if p.DenyNet {
 		deny := NetGuard(func() error {
 			return errors.New("сеть запрещена в этом режиме (песочница)")
 		})
@@ -50,7 +56,7 @@ func (p SandboxProfile) Vars() map[string]any {
 			m[k] = v
 		}
 	}
-	if !p.AllowFile {
+	if p.DenyFile {
 		deny := FileGuard(func() error {
 			return errors.New("файловые операции запрещены в этом режиме (песочница)")
 		})
@@ -58,19 +64,31 @@ func (p SandboxProfile) Vars() map[string]any {
 			m[k] = v
 		}
 	}
+	if p.DenyExec {
+		// Команды ОС — строго опаснее сети/файлов (RCE), поэтому явно
+		// запрещаются недоверенному коду (RestrictedProfile: DenyExec=true).
+		// Secure-by-default обычного режима обеспечивает флаг базы exec.enabled
+		// и nil-guard→deny в dslvars, а не нулевой профиль песочницы.
+		deny := ExecGuard(func() error {
+			return errors.New("выполнение команд ОС запрещено в этом режиме (песочница)")
+		})
+		for k, v := range NewExecFunctions(deny, nil) {
+			m[k] = v
+		}
+	}
 	// ИИ-builtin'ы (llm_builtins.go) ходят в сеть (ai.Ask), а РаспознатьДокумент
 	// ещё и читает файл с диска ДО сетевого вызова. Они внедряются через
 	// dslvars.Build(), но не входят в HTTP/Email/File-наборы выше — поэтому
 	// перекрываем их отдельно, иначе они стали бы дырой в границе песочницы.
-	if !p.AllowNet {
+	if p.DenyNet {
 		deny := llmDenyFn("ИИ-запросы запрещены в этом режиме (песочница)")
 		for k := range NewLLMFunctions(nil) {
 			m[k] = deny
 		}
 	}
-	if !p.AllowFile {
+	if p.DenyFile {
 		// РаспознатьДокумент/RecognizeDocument читают файл — закрываем и при
-		// запрете только файлов (профиль AllowNet=true, AllowFile=false).
+		// запрете только файлов (профиль DenyNet=false, DenyFile=true).
 		deny := llmDenyFn("файловые операции запрещены в этом режиме (песочница)")
 		m["РаспознатьДокумент"] = deny
 		m["RecognizeDocument"] = deny
@@ -88,9 +106,10 @@ func llmDenyFn(msg string) BuiltinFunc {
 }
 
 // RunSandboxed исполняет процедуру с ресурсными лимитами профиля (wall-clock и
-// итерации). Запреты возможностей (сеть/файлы/ИИ) подаются вызывающим через
-// extraVars: передайте p.Vars() ПОСЛЕ обычных переменных запуска, иначе
-// возможности не будут ограничены. Возвращаемое значение — в result.
+// итерации) и запретами возможностей (сеть/файлы/ИИ). Запреты навязываются
+// автоматически — p.Vars() мержится ПОСЛЕ extraVars вызывающего, поэтому
+// переоткрыть запрещённую возможность через extraVars нельзя. Возвращаемое
+// значение — в result.
 func (i *Interpreter) RunSandboxed(proc *ast.ProcedureDecl, this This, p SandboxProfile, result *any, extraVars ...map[string]any) (err error) {
 	e := i.startEnv(this)
 	if p.MaxWallClock > 0 {
@@ -117,6 +136,13 @@ func (i *Interpreter) RunSandboxed(proc *ast.ProcedureDecl, this This, p Sandbox
 		for k, v := range m {
 			e.set(k, v)
 		}
+	}
+	// Запреты профиля навязываем ПОСЛЕДНИМИ: они перекрывают любые extraVars,
+	// поэтому вызывающий не может (случайно или намеренно) переоткрыть
+	// запрещённую возможность. Раньше Vars() передавался вызывающим вручную —
+	// забытый или неверно упорядоченный вызов молча открывал песочницу.
+	for k, v := range p.Vars() {
+		e.set(k, v)
 	}
 	i.execBlock(proc.Body, e)
 	return nil

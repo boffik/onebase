@@ -75,20 +75,22 @@ type handler struct {
 	runner *Runner
 }
 
+// baseVM — view-модель информационной базы для списка лаунчера: встраивает
+// *Base и дополняет рантайм-полями (запущена ли база, URL, данные из app.yaml).
+type baseVM struct {
+	*Base
+	Running    bool
+	BaseURL    string
+	AppName    string
+	AppVersion string
+	LogoBase64 string
+}
+
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 	bases, err := h.store.List()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
-	}
-
-	type baseVM struct {
-		*Base
-		Running    bool
-		BaseURL    string
-		AppName    string
-		AppVersion string
-		LogoBase64 string
 	}
 
 	loadAppInfo := func(b *Base, vm *baseVM) {

@@ -49,6 +49,7 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	// project.Load даёт кросс-ссылочные ошибки и Project для компиляции запросов.
 	if proj, lerr := project.Load(bc.Dir); lerr == nil {
 		issues = append(issues, configcheck.CheckQueries(proj)...)
+		issues = append(issues, configcheck.CheckReportComposition(proj)...)
 		// Кросс-ссылки между объектами (документы в журналах/подсистемах/ролях,
 		// виджеты главной страницы, источник печатной формы). Роли грузятся
 		// отдельно — они не часть project.Project.

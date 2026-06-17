@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/excel"
 	"github.com/ivantit66/onebase/internal/query"
 	reportpkg "github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/report/compose"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -125,7 +126,36 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		})
 		return
 	}
-	s.resolveUUIDsInReport(r.Context(), rows)
+	detailLinkCol := ""
+	if rep.Composition != nil {
+		detailLinkCol = rep.Composition.DetailLink
+	}
+	s.resolveUUIDsInReport(r.Context(), rows, detailLinkCol)
+
+	if rep.Composition != nil {
+		ev := newInterpEvaluator(s.interp)
+		res, cerr := compose.Compose(rows, *rep.Composition, ev)
+		if cerr != nil {
+			s.render(w, r, "page-report", map[string]any{
+				"Report": rep, "QueryError": cerr.Error(),
+				"ParamValues": paramValues, "ReportParams": reportParams,
+			})
+			return
+		}
+		var chartOption map[string]any
+		if rep.Composition.Chart != nil {
+			chartOption = buildComposedChart(res, rep.Composition.Chart)
+		}
+		s.render(w, r, "page-report", map[string]any{
+			"Report":       rep,
+			"ComposedHTML": renderComposedTable(res, rep.Composition),
+			"Capped":       res.Capped,
+			"ChartOption":  chartOption,
+			"ParamValues":  paramValues,
+			"ReportParams": reportParams,
+		})
+		return
+	}
 
 	var chartOption map[string]any
 	if rep.ChartProc != "" {
@@ -175,8 +205,10 @@ func (s *Server) runChartProc(ctx context.Context, rep *reportpkg.Report, rows [
 	return chart.ToEChartsOption()
 }
 
-// resolveUUIDsInReport replaces UUID-looking strings in report rows with entity display names.
-func (s *Server) resolveUUIDsInReport(ctx context.Context, rows []map[string]any) {
+// resolveUUIDsInReport replaces UUID-looking strings in report rows with entity
+// display names. skipCol (если непустой) исключается из подстановки — нужен для
+// колонки detail_link, где UUID должен остаться для ссылки на документ (issue #87).
+func (s *Server) resolveUUIDsInReport(ctx context.Context, rows []map[string]any, skipCol string) {
 	uuidToLabel := make(map[string]string)
 	for _, row := range rows {
 		for _, v := range row {
@@ -201,8 +233,21 @@ func (s *Server) resolveUUIDsInReport(ctx context.Context, rows []map[string]any
 			}
 		}
 	}
+	applyResolvedLabels(rows, uuidToLabel, skipCol)
+}
+
+// applyResolvedLabels подставляет наименования вместо UUID в строках отчёта,
+// пропуская колонку skipCol. Колонка detail_link хранит UUID регистратора для
+// ссылки на документ — его нельзя превращать в имя, иначе drill-down строит
+// /ui/.../<имя> вместо /<uuid> и ломается (issue #87). Имя колонки сравнивается
+// регистронезависимо: колонки запроса приходят в нижнем регистре, а detail_link
+// в composition — в исходном.
+func applyResolvedLabels(rows []map[string]any, uuidToLabel map[string]string, skipCol string) {
 	for _, row := range rows {
 		for col, v := range row {
+			if skipCol != "" && strings.EqualFold(col, skipCol) {
+				continue
+			}
 			if str, ok := v.(string); ok {
 				if label, found := uuidToLabel[str]; found && label != "" {
 					row[col] = label
@@ -338,8 +383,33 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query error: "+s.errText(r, err), 500)
 		return
 	}
-	s.resolveUUIDsInReport(r.Context(), rows)
+	detailLinkCol := ""
+	if rep.Composition != nil {
+		detailLinkCol = rep.Composition.DetailLink
+	}
+	s.resolveUUIDsInReport(r.Context(), rows, detailLinkCol)
 
+	// Если отчёт использует компоновщик — строим дерево групп/итогов для Excel.
+	if rep.Composition != nil {
+		ev := newInterpEvaluator(s.interp)
+		res, cerr := compose.Compose(rows, *rep.Composition, ev)
+		if cerr != nil {
+			http.Error(w, "compose error: "+s.errText(r, cerr), 500)
+			return
+		}
+		headers, xlsRows := composedRows(res, rep.Composition)
+		data, err := excel.ExportList(headers, xlsRows)
+		if err != nil {
+			http.Error(w, "Excel error: "+s.errText(r, err), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", contentDisposition(rep.Name+".xlsx"))
+		w.Write(data)
+		return
+	}
+
+	// Плоский путь (без компоновки) — обратная совместимость.
 	xlsRows := make([][]any, len(rows))
 	for i, row := range rows {
 		cells := make([]any, len(cols))

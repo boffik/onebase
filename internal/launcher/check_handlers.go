@@ -78,6 +78,7 @@ func (h *handler) configuratorCheckAll(w http.ResponseWriter, r *http.Request) {
 	if proj, err := project.Load(dir); err == nil {
 		defer proj.Close()
 		issues = append(issues, configcheck.CheckQueries(proj)...)
+		issues = append(issues, configcheck.CheckReportComposition(proj)...)
 	} else if !configcheck.AlreadyReported(issues, err.Error()) {
 		issues = append(issues, configcheck.Issue{Message: "Project.Load: " + err.Error()})
 	}

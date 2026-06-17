@@ -23,6 +23,7 @@ import (
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/version"
 	"gopkg.in/yaml.v3"
@@ -190,6 +191,7 @@ type cfgReport struct {
 	ChartProc   string
 	ChartSource string
 	Params      []cfgParam
+	Composition *report.Composition // пред-заполнение конструктора компоновки (план 59)
 }
 
 // cfgWidget is the configurator-side projection of a dashboard widget. We keep
@@ -769,7 +771,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	repSources := readReportSources(proj.Dir)
 
 	for _, rep := range proj.Reports {
-		rv := cfgReport{Name: rep.Name, Title: rep.Title, Query: rep.Query, ChartProc: rep.ChartProc}
+		rv := cfgReport{Name: rep.Name, Title: rep.Title, Query: rep.Query, ChartProc: rep.ChartProc, Composition: rep.Composition}
 		if src, ok := repSources[strings.ToLower(rep.Name)]; ok {
 			rv.ChartSource = src
 		}
@@ -2526,11 +2528,12 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 		Label string `yaml:"label,omitempty"`
 	}
 	type saveReport struct {
-		Name      string      `yaml:"name"`
-		Title     string      `yaml:"title,omitempty"`
-		Params    []saveParam `yaml:"params,omitempty"`
-		Query     string      `yaml:"query"`
-		ChartProc string      `yaml:"chart_proc,omitempty"`
+		Name        string              `yaml:"name"`
+		Title       string              `yaml:"title,omitempty"`
+		Params      []saveParam         `yaml:"params,omitempty"`
+		Query       string              `yaml:"query"`
+		ChartProc   string              `yaml:"chart_proc,omitempty"`
+		Composition *report.Composition `yaml:"composition,omitempty"`
 	}
 
 	// Parse params from form: param.0.name, param.0.type, param.0.label, ...
@@ -2556,6 +2559,9 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 		}
 		rep.Params = newParams
 		rep.ChartProc = chartProc
+		if c, present := parseCompositionForm(r.Form); present {
+			rep.Composition = c
+		}
 		return yaml.Marshal(&rep)
 	}
 
