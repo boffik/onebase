@@ -858,5 +858,16 @@
   "альбомная": "landscape",
   "книжная": "portrait",
   "мм": "mm",
-  "печатная ширина": "print width"
+  "печатная ширина": "print width",
+  "Загружено:": "Uploaded:",
+  "Загрузить…": "Upload…",
+  "Лента": "Feed",
+  "Лента с догрузкой по скроллу": "Feed with infinite scroll",
+  "Можно загрузить только изображение": "Only an image can be uploaded",
+  "Ошибка загрузки картинки": "Image upload error",
+  "Плитка": "Tiles",
+  "Показать ещё": "Show more",
+  "Показывать постранично": "Show page by page",
+  "Список": "List",
+  "Страницы": "Pages"
 }
