@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/excel"
 	"github.com/ivantit66/onebase/internal/query"
 	reportpkg "github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/report/compose"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -126,6 +127,31 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		return
 	}
 	s.resolveUUIDsInReport(r.Context(), rows)
+
+	if rep.Composition != nil {
+		ev := newInterpEvaluator(s.interp)
+		res, cerr := compose.Compose(rows, *rep.Composition, ev)
+		if cerr != nil {
+			s.render(w, r, "page-report", map[string]any{
+				"Report": rep, "QueryError": cerr.Error(),
+				"ParamValues": paramValues, "ReportParams": reportParams,
+			})
+			return
+		}
+		var chartOption map[string]any
+		if rep.Composition.Chart != nil {
+			chartOption = buildComposedChart(res, rep.Composition.Chart)
+		}
+		s.render(w, r, "page-report", map[string]any{
+			"Report":       rep,
+			"ComposedHTML": renderComposedTable(res, rep.Composition),
+			"Capped":       res.Capped,
+			"ChartOption":  chartOption,
+			"ParamValues":  paramValues,
+			"ReportParams": reportParams,
+		})
+		return
+	}
 
 	var chartOption map[string]any
 	if rep.ChartProc != "" {
@@ -340,6 +366,27 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 	}
 	s.resolveUUIDsInReport(r.Context(), rows)
 
+	// Если отчёт использует компоновщик — строим дерево групп/итогов для Excel.
+	if rep.Composition != nil {
+		ev := newInterpEvaluator(s.interp)
+		res, cerr := compose.Compose(rows, *rep.Composition, ev)
+		if cerr != nil {
+			http.Error(w, "compose error: "+s.errText(r, cerr), 500)
+			return
+		}
+		headers, xlsRows := composedRows(res, rep.Composition)
+		data, err := excel.ExportList(headers, xlsRows)
+		if err != nil {
+			http.Error(w, "Excel error: "+s.errText(r, err), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", contentDisposition(rep.Name+".xlsx"))
+		w.Write(data)
+		return
+	}
+
+	// Плоский путь (без компоновки) — обратная совместимость.
 	xlsRows := make([][]any, len(rows))
 	for i, row := range rows {
 		cells := make([]any, len(cols))

@@ -156,6 +156,11 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/dev/gengen/generate", s.gengenGenerate)
 	r.Post("/ui/dev/gengen/merge", s.gengenMerge)
 
+	// Страницы (план 66) — ДО catch-all {kind}/{entity}: статический сегмент
+	// «page» имеет приоритет над параметром, но регистрируем рядом с gengen,
+	// чтобы намерение было явным.
+	r.Get("/ui/page/{name}", s.page)
+
 	r.Get("/ui/{kind}/{entity}", s.list)
 	r.Get("/ui/{kind}/{entity}/new", s.form)
 	r.Post("/ui/{kind}/{entity}/new", s.submit)
@@ -294,6 +299,11 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/{kind}/{entity}/{id}/attachments", s.attachmentUpload)
 	r.Get("/ui/attachments/{aid}/download", s.attachmentDownload)
 	r.Post("/ui/attachments/{aid}/delete", s.attachmentDelete)
+
+	// Поле типа image: загрузка картинки (в контексте сущности, право write) и
+	// отдача бинарника по UUID. Ссылка (UUID) хранится в самой колонке поля.
+	r.Post("/ui/{kind}/{entity}/_image", s.imageUpload)
+	r.Get("/ui/_image/{id}", s.imageServe)
 
 	// Excel exports
 	r.Get("/ui/{kind}/{entity}/excel", s.listExcel)
@@ -522,6 +532,22 @@ func (s *Server) buildNavFromContents(r *http.Request, contents *metadata.Subsys
 		}
 		if len(jItems) > 0 {
 			nav = append(nav, navGroup{Kind: s.tr(lang, "Журналы"), Items: jItems})
+		}
+	}
+
+	if len(contents.Pages) > 0 {
+		pageSet := strSet(contents.Pages)
+		pages := s.reg.Pages()
+		sort.Slice(pages, func(i, j int) bool { return pages[i].Name < pages[j].Name })
+		var pageItems []navItem
+		for _, pg := range pages {
+			if !pageSet[pg.Name] || !s.canSeePage(r, pg) {
+				continue
+			}
+			pageItems = append(pageItems, navItem{Label: pg.DisplayName(lang), URL: "/ui/page/" + pg.Name + q})
+		}
+		if len(pageItems) > 0 {
+			nav = append(nav, navGroup{Kind: s.tr(lang, "Страницы"), Items: pageItems, Open: true})
 		}
 	}
 

@@ -1,0 +1,244 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/report/compose"
+)
+
+func TestRenderGroupConditional(t *testing.T) {
+	// Условное оформление должно отрисовываться на строке группы и подытоге
+	// (при detail:false), а не только на детальных строках.
+	rows := []compose.Row{
+		{"М": "Убыток", "Сумма": "-100"},
+		{"М": "Прибыль", "Сумма": "50"},
+	}
+	spec := report.Composition{
+		Groupings:   []string{"М"},
+		Measures:    []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Totals:      report.Totals{Subtotals: true},
+		Conditional: []report.CondRule{{When: "Сумма < 0", Field: "", Style: report.CellStyle{Color: "#c00", Bold: true}}},
+	}
+	res, _ := compose.Compose(rows, spec, newInterpEvaluator(interpreter.New()))
+	out := string(renderComposedTable(res, &spec))
+	if !strings.Contains(out, "color:#c00") || !strings.Contains(out, "font-weight:bold") {
+		t.Fatalf("строка убыточной группы должна иметь стиль:\n%s", out)
+	}
+}
+
+func TestBuildComposedChart(t *testing.T) {
+	rows := []compose.Row{{"М": "Иванов", "Сумма": "150"}, {"М": "Петров", "Сумма": "30"}}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Chart:     &report.ChartSpec{Type: "bar", Category: "М", Series: []string{"Сумма"}},
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	opt := buildComposedChart(res, spec.Chart)
+	if opt == nil {
+		t.Fatal("nil chart option")
+	}
+	xAxis, _ := opt["xAxis"].(map[string]any)
+	cats, _ := xAxis["data"].([]string)
+	if len(cats) != 2 || cats[0] != "Иванов" {
+		t.Fatalf("categories: %v", cats)
+	}
+}
+
+func TestRenderComposedTable(t *testing.T) {
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "150"},
+		{"М": "Петров", "Сумма": "30"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Title: "Сумма, ₽"}},
+		Totals:    report.Totals{Grand: true, Subtotals: true},
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+	for _, want := range []string{"Иванов", "Петров", "150", "Сумма, ₽", "ВСЕГО", "data-group", "<table"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("HTML не содержит %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderMeasureAlign(t *testing.T) {
+	// Показатель с Align:"center" должен давать text-align:center,
+	// показатель без Align — text-align:right по умолчанию.
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "150", "Кол": "3"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures: []report.Measure{
+			{Field: "Сумма", Agg: "sum", Align: "center"},
+			{Field: "Кол", Agg: "sum"},
+		},
+		Totals: report.Totals{Grand: true, Subtotals: true},
+		Detail: true,
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	if !strings.Contains(out, "text-align:center") {
+		t.Fatalf("ожидали text-align:center для показателя Сумма:\n%s", out)
+	}
+	if !strings.Contains(out, "text-align:right") {
+		t.Fatalf("ожидали text-align:right для показателя Кол:\n%s", out)
+	}
+}
+
+func TestRenderMeasureFormat(t *testing.T) {
+	// Показатель с Format:"#,##0.00" должен выводить значение в RU-формате с разрядкой.
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "12333.32"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Format: "#,##0.00"}},
+		Totals:    report.Totals{Grand: true, Subtotals: true},
+		Detail:    true,
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+	// Значение 12333.32 при формате "#,##0.00" → "12 333,32" (неразрывный пробел)
+	want := "12 333,32"
+	if !strings.Contains(out, want) {
+		t.Fatalf("HTML не содержит %q (форматированное число):\n%s", want, out)
+	}
+}
+
+// TestWriteDetailLink проверяет, что детальная строка с DetailLink и UUID-значением
+// содержит ссылку на документ вида <a href="/ui/document/<entity>/<uuid>">→</a>.
+// Если DetailLink пуст — первая ячейка остаётся пустой (обратная совместимость).
+func TestWriteDetailLink(t *testing.T) {
+	const uuid = "550e8400-e29b-41d4-a716-446655440000"
+	rows := []compose.Row{
+		{"Контрагент": "Иванов", "Сумма": "100", "Регистратор": uuid},
+	}
+	spec := report.Composition{
+		Groupings:    []string{"Контрагент"},
+		Measures:     []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:       true,
+		DetailLink:   "Регистратор",
+		DetailEntity: "расходнаянакладная",
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	// Ссылка должна присутствовать: href содержит UUID и маркер →.
+	// Имя сущности может быть URL-закодировано (кириллица → %XX), поэтому
+	// проверяем только UUID-сегмент, который не кодируется.
+	if !strings.Contains(out, uuid) {
+		t.Fatalf("HTML не содержит UUID %q в ссылке:\n%s", uuid, out)
+	}
+	if !strings.Contains(out, `href=`) {
+		t.Fatalf("HTML не содержит атрибут href:\n%s", out)
+	}
+	if !strings.Contains(out, `/ui/document/`) {
+		t.Fatalf("HTML не содержит путь /ui/document/:\n%s", out)
+	}
+	if !strings.Contains(out, `→`) {
+		t.Fatalf("HTML не содержит маркер → :\n%s", out)
+	}
+
+	// Без DetailLink — первая ячейка пустая (нет <a href=...>)
+	specNoLink := report.Composition{
+		Groupings: []string{"Контрагент"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:    true,
+	}
+	res2, _ := compose.Compose(rows, specNoLink, nil)
+	out2 := string(renderComposedTable(res2, &specNoLink))
+	if strings.Contains(out2, `<a href=`) {
+		t.Fatalf("без DetailLink не должно быть ссылки:\n%s", out2)
+	}
+}
+
+// TestWriteDetailLinkNoEntity проверяет, что при заданном DetailLink, но пустом
+// DetailEntity, ссылка НЕ генерируется (иначе получается битый путь /ui/document//<uuid>).
+// Первая ячейка должна быть пустой — без <a href=...>.
+func TestWriteDetailLinkNoEntity(t *testing.T) {
+	const uuid = "11112222-3333-4444-5555-666677778888"
+	rows := []compose.Row{
+		{"Контрагент": "Сидоров", "Сумма": "200", "Регистратор": uuid},
+	}
+	// DetailLink задан, DetailEntity — нет (пустая строка)
+	spec := report.Composition{
+		Groupings:    []string{"Контрагент"},
+		Measures:     []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:       true,
+		DetailLink:   "Регистратор",
+		DetailEntity: "", // намеренно пусто
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	if strings.Contains(out, `<a href`) {
+		t.Fatalf("при пустом DetailEntity не должно быть ссылки <a href=...>:\n%s", out)
+	}
+	if strings.Contains(out, `/ui/document/`) {
+		t.Fatalf("при пустом DetailEntity не должно быть пути /ui/document/ в HTML:\n%s", out)
+	}
+}
+
+// TestWriteDetailLinkCaseInsensitive проверяет выравнивание ключей:
+// колонка запроса в нижнем регистре («регистратор») должна находиться
+// через DetailLink в исходном регистре («Регистратор»).
+func TestWriteDetailLinkCaseInsensitive(t *testing.T) {
+	const uuid = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+	// Колонка приходит в нижнем регистре (как от компилятора запросов)
+	rows := []compose.Row{
+		{"Контрагент": "Петров", "сумма": "50", "регистратор": uuid},
+	}
+	spec := report.Composition{
+		Groupings:    []string{"Контрагент"},
+		Measures:     []report.Measure{{Field: "сумма", Agg: "sum"}},
+		Detail:       true,
+		DetailLink:   "Регистратор", // исходный регистр из composition
+		DetailEntity: "поступление",
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	// UUID должен присутствовать в href — регистронезависимый поиск сработал
+	if !strings.Contains(out, uuid) {
+		t.Fatalf("UUID не найден через регистронезависимый ключ — нет %q в:\n%s", uuid, out)
+	}
+	if !strings.Contains(out, `/ui/document/`) {
+		t.Fatalf("нет пути /ui/document/ в:\n%s", out)
+	}
+}
+
+func TestComposedPathEscaping(t *testing.T) {
+	// Значение группировки с «/» не должно ломать префиксную схему путей:
+	// сиблинг «Иванов/Доп» обязан иметь экранированный data-group, иначе
+	// сворачивание «Иванов» ложно спрятало бы его.
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "10"},
+		{"М": "Иванов/Доп", "Сумма": "20"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+	if !strings.Contains(out, `data-group="/Иванов"`) {
+		t.Fatalf("нет группы Иванов:\n%s", out)
+	}
+	if !strings.Contains(out, `data-group="/Иванов%2FДоп"`) {
+		t.Fatalf("сегмент с / не экранирован:\n%s", out)
+	}
+	if strings.Contains(out, `data-group="/Иванов/Доп"`) {
+		t.Fatalf("неэкранированный путь ломает префикс-схему:\n%s", out)
+	}
+	if !strings.Contains(out, "Иванов/Доп") {
+		t.Fatalf("видимая подпись должна быть сырой:\n%s", out)
+	}
+}

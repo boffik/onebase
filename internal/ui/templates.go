@@ -49,6 +49,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"isRef":      func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum":     func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
 	"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
+	"isImage":    func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeImage) },
 	// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
 	// Quill (vendor-ассеты + init) грузятся на форме только при true, чтобы не
 	// тянуть редактор на формы без richtext-полей.
@@ -378,7 +379,12 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"echartsJSON": echartsJSON,
 	"splitCamel":  splitCamel,
 	"fmtCell":     fmtReportCell,
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden))
+	// pageRaw помечает уже санитизированный HTML страницы (план 66) как
+	// безопасный. Источник — только ДобавитьСыройHTML, прошедший sanitizePageHTML.
+	"pageRaw": func(s string) template.HTML { return template.HTML(s) },
+	// pageChart конвертирует чарт-блок страницы в widget.ChartData для echartsJSON.
+	"pageChart": pageChartData,
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -413,6 +419,12 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .tbl th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
 .tbl td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155;font-size:13px}
 .tbl tr:hover td{background:#f8fafc}
+.report-composed{width:100%;border-collapse:collapse;font-size:13px}
+.report-composed thead th{position:sticky;top:38px;background:#fff;z-index:5;text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px}
+.report-composed td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155}
+.report-composed td.num{font-variant-numeric:tabular-nums}
+.report-composed tr.grp:hover td{background:#f8fafc}
+.report-composed tr.grand td{font-weight:700;border-top:2px solid #e2e8f0}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
@@ -540,6 +552,30 @@ body{padding-bottom:32px}
      обработки) остаются обычными: текст переносится, ширина не схлопывается. */
   main table.tbl-plain{display:table;white-space:normal;overflow:visible}
 }
+/* ===== Плиточный режим списка (Фаза 1a) ===== */
+.view-switch{display:inline-flex;border:1px solid #e2e8f0;border-radius:7px;overflow:hidden;flex-shrink:0}
+.view-switch .view-btn{padding:6px 11px;color:#64748b;text-decoration:none;font-size:15px;line-height:1;background:#fff;border-right:1px solid #e2e8f0}
+.view-switch .view-btn:last-child{border-right:none}
+.view-switch .view-btn:hover{background:#f1f5f9}
+.view-switch .view-btn.active{background:#3b82f6;color:#fff}
+.tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.tile-card{position:relative;display:flex;flex-direction:column;border:1px solid #e2e8f0;border-radius:10px;padding:14px;background:#fff;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.tile-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);border-color:#cbd5e1}
+.tile-card.tile-selected{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.25)}
+.tile-card.tile-deleted{opacity:.5}
+.tile-card.tile-deleted .tile-title{text-decoration:line-through}
+.tile-img{width:100%;aspect-ratio:4/3;border-radius:8px;background:#f1f5f9 center/cover no-repeat;margin-bottom:10px;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px;flex-shrink:0}
+.tile-title{font-size:15px;font-weight:600;color:#1e293b;margin-bottom:8px;word-break:break-word}
+.tile-posted{color:#16a34a;font-weight:700}
+.tile-field{font-size:12.5px;color:#475569;margin-bottom:3px;display:flex;gap:5px;flex-wrap:wrap}
+.tile-label{color:#94a3b8;flex-shrink:0}
+.tile-val{color:#334155;word-break:break-word}
+.tile-foot{margin-top:auto;padding-top:10px}
+/* Поле-картинка на форме */
+.img-field{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.img-preview img{max-width:240px;max-height:240px;border-radius:8px;border:1px solid #e2e8f0;display:block;background:#f8fafc}
+.img-actions{display:flex;gap:8px;align-items:center}
+.img-field label.btn{cursor:pointer;margin:0}
 </style>
 <script>
 (function(){
@@ -884,13 +920,17 @@ const tplList = `
 <main class="main-list">
 <div class="row-top">
   <h2>{{.Entity.DisplayName $.Lang}}</h2>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="view-switch">
+      <a class="view-btn{{if and (not .TreeView) (not .TilesView)}} active{{end}}" href="?{{if .ParentStr}}parent={{.ParentStr}}&{{end}}{{if $.CurrentSubsystem}}subsystem={{$.CurrentSubsystem}}{{end}}" title="{{t $.Lang "Список"}}">☰</a>
+      <a class="view-btn{{if .TilesView}} active{{end}}" href="?view=tiles{{if .ParentStr}}&parent={{.ParentStr}}{{end}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}" title="{{t $.Lang "Плитка"}}">▦</a>
+      {{if .Entity.Hierarchical}}<a class="view-btn{{if .TreeView}} active{{end}}" href="?view=tree{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}" title="{{t $.Lang "Дерево"}}">📂</a>{{end}}
+    </div>
+    {{if not .TreeView}}
+      {{if .Feed}}<a class="btn btn-secondary btn-sm" href="?lm=pages{{if .TilesView}}&view=tiles{{end}}{{if .ParentStr}}&parent={{.ParentStr}}{{end}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}" title="{{t $.Lang "Показывать постранично"}}">▤ {{t $.Lang "Страницы"}}</a>
+      {{else}}<a class="btn btn-secondary btn-sm" href="?lm=feed{{if .TilesView}}&view=tiles{{end}}{{if .ParentStr}}&parent={{.ParentStr}}{{end}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}" title="{{t $.Lang "Лента с догрузкой по скроллу"}}">≣ {{t $.Lang "Лента"}}</a>{{end}}
+    {{end}}
     {{if .Entity.Hierarchical}}
-      {{if .TreeView}}
-        <a class="btn btn-secondary btn-sm" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "☰ Список"}}</a>
-      {{else}}
-        <a class="btn btn-secondary btn-sm" href="?view=tree{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "📂 Дерево"}}</a>
-      {{end}}
       {{if .UpURL}}<a class="btn btn-secondary btn-sm" href="{{.UpURL}}">{{t $.Lang "↑ Наверх"}}</a>{{end}}
       {{if .CanWrite}}
       <a class="btn btn-primary" href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new?{{if .ParentStr}}parent={{.ParentStr}}&{{end}}subsystem={{$.CurrentSubsystem}}">{{t $.Lang "+ Элемент"}}</a>
@@ -1011,6 +1051,47 @@ const tplList = `
 {{else}}
 <p class="empty">{{t $.Lang "Записей нет"}} — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">{{t $.Lang "создать первую"}}</a></p>
 {{end}}
+{{else if .TilesView}}
+{{/* ===== TILES VIEW (плитка) ===== */}}
+{{if .Rows}}
+<div class="tile-grid">
+{{range .Rows}}{{$row := .}}{{$isFolder := index $row "is_folder"}}
+<div class="tile-card{{if index $row "deletion_mark"}} tile-deleted{{end}}"
+  onclick="listRowClick(event,this)"
+  ondblclick="listRowDblClick(event,this)"
+  oncontextmenu="listCtxMenu(event,this)"
+  data-predefined="{{if index $row "_is_predefined"}}1{{end}}"
+  data-is-folder="{{if $isFolder}}1{{end}}"
+  data-folder-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}"
+  data-mark-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}/delete?mark=1"
+  data-del-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}/delete"
+  data-posted="{{if index $row "posted"}}1{{end}}"
+  data-marked="{{if index $row "deletion_mark"}}1{{end}}"
+  data-unpost-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}/unpost"
+  data-unmark-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}/delete?mark=0"
+  data-open-url="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">
+  {{range $f := $.Entity.Fields}}{{if isImage (str $f.Type)}}{{$iv := index $row $f.Name}}
+  <div class="tile-img"{{if $iv}} style="background-image:url('/ui/_image/{{$iv}}')"{{end}}>{{if not $iv}}🖼{{end}}</div>
+  {{end}}{{end}}
+  {{range $i, $f := $.Entity.Fields}}{{if not (isImage (str $f.Type))}}
+    {{if eq $i 0}}
+    <div class="tile-title">{{if $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row $f.Name)}}{{if index $row "_is_predefined"}} <span title="{{t $.Lang "Предопределённый элемент"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}{{if eq (str $.Entity.Kind) "document"}}{{if index $row "posted"}} <span class="tile-posted" title="{{t $.Lang "Проведён"}}">✓</span>{{end}}{{end}}</div>
+    {{else}}{{$v := index $row $f.Name}}{{if $v}}
+    <div class="tile-field"><span class="tile-label">{{$f.DisplayName $.Lang}}:</span> {{if eq (str $f.Type) "date"}}<span class="tile-val">{{fmtDate $v}}</span>{{else if isRichText (str $f.Type)}}<span class="tile-val">{{richPlain $v}}</span>{{else}}<span class="tile-val">{{fmtCell $v}}</span>{{end}}</div>
+    {{end}}{{end}}
+  {{end}}{{end}}
+  <div class="tile-foot">
+    {{if and $isFolder $.Entity.Hierarchical}}
+      <a class="btn btn-sm btn-secondary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}?parent={{index $row "id"}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "▶ Войти"}}</a>
+    {{else}}
+      <a class="btn btn-sm btn-primary" href="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/{{index $row "id"}}{{if $.CurrentSubsystem}}?subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Открыть"}}</a>
+    {{end}}
+  </div>
+</div>{{end}}
+</div>
+{{else}}
+<p class="empty">{{if .Params.Search}}{{t $.Lang "Ничего не найдено по запросу"}} «{{.Params.Search}}» — <a href="?">{{t $.Lang "сбросить поиск"}}</a>{{else}}{{t $.Lang "Записей нет"}} — <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/new">{{t $.Lang "создать первую"}}</a>{{end}}</p>
+{{end}}
 {{else}}
 {{/* ===== LIST VIEW (default) ===== */}}
 {{if .Rows}}
@@ -1025,7 +1106,7 @@ const tplList = `
   </th>
   {{end}}
   <th style="width:90px"></th>
-</tr></thead><tbody>
+</tr></thead><tbody id="list-body">
 {{range .Rows}}{{$row := .}}{{$isFolder := index $row "is_folder"}}
 <tr {{if index $row "deletion_mark"}}style="opacity:0.45;text-decoration:line-through;cursor:pointer"{{else}}style="cursor:pointer"{{end}}
   onclick="listRowClick(event,this)"
@@ -1048,6 +1129,7 @@ const tplList = `
   {{end}}
   {{range $.Entity.Fields}}
     {{if eq (str .Type) "date"}}<td style="white-space:nowrap">{{fmtDate (index $row .Name)}}</td>
+    {{else if isImage (str .Type)}}<td>{{$iv := index $row .Name}}{{if $iv}}<img src="/ui/_image/{{$iv}}" style="height:34px;width:34px;object-fit:cover;border-radius:5px;vertical-align:middle" alt="">{{else}}<span style="color:#cbd5e1">—</span>{{end}}</td>
     {{else if isRichText (str .Type)}}<td style="white-space:nowrap;color:#64748b">{{richPlain (index $row .Name)}}</td>
     {{else}}<td style="white-space:nowrap">{{if and (eq .Name "Наименование") $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row .Name)}}{{if and (eq .Name "Наименование") (index $row "_is_predefined")}} <span title="{{t $.Lang "Предопределённый элемент"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}</td>{{end}}
   {{end}}
@@ -1066,11 +1148,19 @@ const tplList = `
 {{end}}
 {{end}}
 </div>
-{{if gt .TotalPages 1}}
+{{if and .Feed (not .TreeView)}}
+{{/* Лента: догрузка по скроллу. Без JS «Показать ещё» = переход на след. страницу. */}}
+{{if .HasNext}}
+<div id="feed-more" data-next="{{.NextPage}}" data-pages="{{.TotalPages}}" data-container="{{if .TilesView}}.tile-grid{{else}}#list-body{{end}}" data-item="{{if .TilesView}}.tile-card{{else}}tr{{end}}" style="margin-top:14px;text-align:center">
+  <a class="btn btn-secondary btn-sm" href="?page={{.NextPage}}&lm=feed{{if .TilesView}}&view=tiles{{end}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Показать ещё"}}</a>
+</div>
+{{end}}
+{{if gt .Total 0}}<div style="color:#94a3b8;font-size:12px;margin-top:8px;text-align:center">{{t $.Lang "Загружено:"}} <span id="feed-loaded">{{len .Rows}}</span> {{t $.Lang "из"}} {{.Total}}</div>{{end}}
+{{else if gt .TotalPages 1}}
 <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
-  {{if .HasPrev}}<a class="btn btn-secondary btn-sm" href="?page={{.PrevPage}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "← Назад"}}</a>{{end}}
+  {{if .HasPrev}}<a class="btn btn-secondary btn-sm" href="?page={{.PrevPage}}{{if .TilesView}}&view=tiles{{end}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "← Назад"}}</a>{{end}}
   <span style="color:#64748b;font-size:13px">{{t $.Lang "Стр."}} {{.Page}} {{t $.Lang "из"}} {{.TotalPages}} ({{.Total}} {{t $.Lang "записей"}})</span>
-  {{if .HasNext}}<a class="btn btn-secondary btn-sm" href="?page={{.NextPage}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Вперёд →"}}</a>{{end}}
+  {{if .HasNext}}<a class="btn btn-secondary btn-sm" href="?page={{.NextPage}}{{if .TilesView}}&view=tiles{{end}}{{if .Params.Search}}&q={{.Params.Search}}{{end}}{{filterQuery .Params}}{{if $.CurrentSubsystem}}&subsystem={{$.CurrentSubsystem}}{{end}}">{{t $.Lang "Вперёд →"}}</a>{{end}}
 </div>
 {{else if gt .Total 0}}
 <div style="color:#94a3b8;font-size:12px;margin-top:8px">{{t $.Lang "Всего:"}} {{.Total}}</div>
@@ -1083,9 +1173,10 @@ var _canUnpost={{if .CanUnpost}}true{{else}}false{{end}};
 var _listSel=null;
 function listRowClick(e,tr){
   if(e.target.closest('a,button'))return;
-  if(_listSel)_listSel.querySelectorAll('td').forEach(function(td){td.style.background='';});
+  if(_listSel){_listSel.querySelectorAll('td').forEach(function(td){td.style.background='';});_listSel.classList.remove('tile-selected');}
   _listSel=tr;
   tr.querySelectorAll('td').forEach(function(td){td.style.background='#dbeafe';});
+  tr.classList.add('tile-selected');
 }
 function listRowDblClick(e,tr){
   if(e.target.closest('a,button'))return;
@@ -1178,6 +1269,46 @@ function listSubmit(url,msg){
 document.addEventListener('keydown',function(e){
   if(e.key==='Delete'&&_listSel&&_canDelete)listSubmit(_listSel.dataset.markUrl,'Пометить на удаление?');
 });
+// Лента (feed): догрузка следующих страниц по скроллу. Тянет обычную страницу
+// списка и переносит из неё строки/карточки в текущий контейнер. Деградация без
+// JS: «Показать ещё» — это обычная ссылка на следующую страницу.
+(function(){
+  var more=document.getElementById('feed-more');
+  if(!more)return;
+  var loading=false,done=false;
+  function stop(){done=true;if(more&&more.parentNode)more.parentNode.removeChild(more);}
+  function loadNext(){
+    if(loading||done)return;
+    var n=parseInt(more.getAttribute('data-next'),10);
+    var pages=parseInt(more.getAttribute('data-pages'),10);
+    if(!n||n>pages){stop();return;}
+    var sel=more.getAttribute('data-container');
+    var c=document.querySelector(sel);
+    if(!c){stop();return;}
+    loading=true;
+    var sp=new URLSearchParams(window.location.search);
+    sp.set('page',n);sp.set('lm','feed');
+    fetch(window.location.pathname+'?'+sp.toString(),{credentials:'same-origin'})
+      .then(function(r){return r.text();})
+      .then(function(html){
+        var doc=new DOMParser().parseFromString(html,'text/html');
+        var items=doc.querySelectorAll(sel+' > '+more.getAttribute('data-item'));
+        if(!items.length){stop();return;}
+        items.forEach(function(el){c.appendChild(document.importNode(el,true));});
+        var loaded=document.getElementById('feed-loaded');if(loaded)loaded.textContent=c.children.length;
+        n++;more.setAttribute('data-next',n);
+        loading=false;
+        if(n>pages){stop();return;}
+        var rect=more.getBoundingClientRect();
+        if(rect.top<(window.innerHeight||document.documentElement.clientHeight)+300)loadNext();
+      })
+      .catch(function(){loading=false;});
+  }
+  more.addEventListener('click',function(e){var a=e.target.closest('a');if(a){e.preventDefault();loadNext();}});
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(ents){ents.forEach(function(en){if(en.isIntersecting)loadNext();});},{rootMargin:'300px'}).observe(more);
+  }
+})();
 </script>
 </div></body></html>
 {{end}}
@@ -1351,6 +1482,18 @@ const tplForm = `
          обрабатывает результат. */}}
     <textarea name="{{$fn}}" class="richtext-field" rows="8" style="width:100%">{{index $.Values $fn}}</textarea>
     <div class="richtext-editor"></div>
+  {{else if isImage (str .Type)}}
+    {{/* Поле-картинка: скрытый input хранит ссылку (UUID), превью + загрузка/очистка.
+         Без JS остаётся скрытый input — значение не теряется при записи. */}}
+    {{$iv := index $.Values $fn}}
+    <div class="img-field">
+      <input type="hidden" name="{{$fn}}" value="{{$iv}}">
+      <div class="img-preview"{{if not $iv}} style="display:none"{{end}}><img src="{{if $iv}}/ui/_image/{{$iv}}{{end}}" alt=""></div>
+      <div class="img-actions">
+        <label class="btn btn-sm btn-secondary">{{t $.Lang "Загрузить…"}}<input type="file" accept="image/*" style="display:none" onchange="obImageUpload(this,'/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/_image')"></label>
+        <button type="button" class="btn btn-sm img-clear-btn" onclick="obImageClear(this)"{{if not $iv}} style="display:none"{{end}}>{{t $.Lang "Очистить"}}</button>
+      </div>
+    </div>
   {{else}}
     <input type="text" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$flabel}}">
   {{end}}
@@ -1580,6 +1723,33 @@ const tplForm = `
 </script>
 {{end}}
 <script>
+// Поле типа image: загрузка картинки и очистка. Работают по DOM от элемента
+// внутри .img-field; ссылка (UUID) кладётся в скрытый input поля и сохраняется
+// вместе с формой (как обычное строковое значение).
+function obImageUpload(input, url){
+  var file = input.files && input.files[0];
+  if(!file){ return; }
+  var wrap = input.closest('.img-field');
+  var fd = new FormData(); fd.append('file', file);
+  fetch(url, {method:'POST', body:fd, credentials:'same-origin'})
+    .then(function(resp){ if(!resp.ok){ return resp.text().then(function(t){ throw new Error(t||('HTTP '+resp.status)); }); } return resp.json(); })
+    .then(function(data){
+      if(!wrap || !data || !data.ref){ return; }
+      wrap.querySelector('input[type=hidden]').value = data.ref;
+      var prev = wrap.querySelector('.img-preview');
+      if(prev){ var img=prev.querySelector('img'); if(img){ img.src='/ui/_image/'+data.ref; } prev.style.display=''; }
+      var clr = wrap.querySelector('.img-clear-btn'); if(clr){ clr.style.display=''; }
+    })
+    .catch(function(e){ alert('{{t $.Lang "Ошибка загрузки картинки"}}: '+e.message); })
+    .finally(function(){ input.value=''; });
+}
+function obImageClear(btn){
+  var wrap = btn.closest('.img-field'); if(!wrap){ return; }
+  var hidden = wrap.querySelector('input[type=hidden]'); if(hidden){ hidden.value=''; }
+  var prev = wrap.querySelector('.img-preview');
+  if(prev){ prev.style.display='none'; var img=prev.querySelector('img'); if(img){ img.removeAttribute('src'); } }
+  btn.style.display='none';
+}
 window._tpRefOpts = {{jsJSON .TPRefOptions}};
 window._tpRefMeta = {{jsJSON .TPRefMeta}};
 function addTpRow(tpName, fields, numFields, idx) {
@@ -2079,7 +2249,8 @@ const tplReport = `
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
 {{if .ReportParams}}
-<div class="card" style="margin-bottom:16px">
+<details class="card report-block" data-block="params" open style="margin-bottom:16px">
+<summary>{{t $.Lang "Параметры"}}</summary>
 <form method="POST">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .ReportParams}}{{$p := .}}{{$pname := .Name}}{{$pval := str (index $.ParamValues .Name)}}
@@ -2121,13 +2292,14 @@ const tplReport = `
   </div>
   <button class="btn btn-primary" type="submit">{{t $.Lang "Сформировать"}}</button>
 </form>
-</div>
+</details>
 {{end}}
 {{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
 {{if .ChartOption}}
-<div class="card" style="margin-bottom:16px">
+<details class="card report-block" data-block="chart" open style="margin-bottom:16px">
+<summary>{{t $.Lang "Диаграмма"}}</summary>
   <div id="ob-chart" style="width:100%;min-height:400px"></div>
-</div>
+</details>
 <script src="/vendor/echarts/echarts.min.js"></script>
 <script>
 (function(){
@@ -2135,6 +2307,68 @@ const tplReport = `
   var _o={{jsJSON .ChartOption}};_o.animation=false;if(_o.yAxis&&_o.yAxis.type==="value"){_o.yAxis.axisLabel={formatter:function(v){if(Math.abs(v)>=1e6)return(v/1e6).toFixed(1)+"M";if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+"k";return v%1===0?v:v.toFixed(2)}};}
   c.setOption(_o);
   window.addEventListener('resize',function(){c.resize()});
+})();
+</script>
+{{end}}
+{{if .ComposedHTML}}
+{{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
+<details class="card report-block" data-block="data" open>
+<summary>{{t $.Lang "Данные"}}</summary>
+<div class="rc-toolbar" style="margin-bottom:8px;display:flex;gap:8px"><button type="button" id="rc-expand" class="btn btn-sm">{{t $.Lang "Развернуть всё"}}</button><button type="button" id="rc-collapse" class="btn btn-sm">{{t $.Lang "Свернуть всё"}}</button></div>
+{{.ComposedHTML}}
+</details>
+<script>
+(function(){
+  function rcEscape(key){
+    return (window.CSS&&CSS.escape)?CSS.escape(key):key.replace(/["\\\]]/g,'\\$&');
+  }
+  function rcSetOpen(tr, open){
+    var key=tr.getAttribute('data-group');
+    var ek=rcEscape(key);
+    var cell=tr.querySelector('td');
+    var sel='[data-parent="'+ek+'"],[data-parent^="'+ek+'/"],[data-group^="'+ek+'/"]';
+    document.querySelectorAll(sel).forEach(function(el){ el.style.display = open ? '' : 'none'; });
+    if(cell){ cell.textContent=(open?'▼':'▶')+cell.textContent.slice(1); }
+  }
+  document.querySelectorAll('tr.grp').forEach(function(tr){
+    tr.style.cursor='pointer';
+    tr.addEventListener('click', function(){
+      var cell=tr.querySelector('td');
+      var open=cell.textContent.trim().charAt(0)==='▼';
+      rcSetOpen(tr, !open);
+    });
+  });
+  var expandBtn=document.getElementById('rc-expand');
+  var collapseBtn=document.getElementById('rc-collapse');
+  if(expandBtn){
+    expandBtn.addEventListener('click', function(){
+      var tbody=document.querySelector('table.report-composed tbody');
+      if(!tbody) return;
+      tbody.querySelectorAll('tr').forEach(function(tr){ tr.style.display=''; });
+      tbody.querySelectorAll('tr.grp').forEach(function(tr){
+        var cell=tr.querySelector('td');
+        if(cell&&cell.textContent.trim().charAt(0)==='▶'){
+          cell.textContent='▼'+cell.textContent.slice(1);
+        }
+      });
+    });
+  }
+  if(collapseBtn){
+    collapseBtn.addEventListener('click', function(){
+      var tbody=document.querySelector('table.report-composed tbody');
+      if(!tbody) return;
+      tbody.querySelectorAll('tr.det,tr.subtotal').forEach(function(tr){ tr.style.display='none'; });
+      tbody.querySelectorAll('tr.grp').forEach(function(tr){
+        var level=parseInt(tr.getAttribute('data-level')||'0',10);
+        if(level>0){ tr.style.display='none'; } else {
+          var cell=tr.querySelector('td');
+          if(cell&&cell.textContent.trim().charAt(0)==='▼'){
+            cell.textContent='▶'+cell.textContent.slice(1);
+          }
+        }
+      });
+    });
+  }
 })();
 </script>
 {{end}}
@@ -2154,6 +2388,18 @@ const tplReport = `
 </div>
 {{end}}
 {{template "form-shared-js" .}}
+<script>
+(function(){
+  try{
+    document.querySelectorAll('details.report-block').forEach(function(el){
+      var key='rb-'+location.pathname+'-'+el.dataset.block;
+      var saved=localStorage.getItem(key);
+      if(saved==='1')el.open=true; else if(saved==='0')el.open=false;
+      el.addEventListener('toggle',function(){localStorage.setItem(key,el.open?'1':'0');});
+    });
+  }catch(e){}
+})();
+</script>
 </main></div></body></html>
 {{end}}
 `
@@ -2897,5 +3143,78 @@ const tplAccountReg = `
 {{end}}
 </div>
 </main></div></body></html>
+{{end}}
+`
+
+// tplPageCustom — оболочка произвольной страницы на DSL (план 66). Блоки
+// собирает обработчик через построитель «Страница»; здесь они рендерятся в
+// общий шейл (head+nav) с автоэкранированием. Сырой HTML (pageRaw) допускается
+// только из ДобавитьСыройHTML после санитизации.
+const tplPageCustom = `
+{{define "page-custom"}}
+{{template "head" .}}{{template "nav" .}}
+<main class="main-list">
+  <h2>{{.PageTitle}}</h2>
+  {{if .PageError}}<div class="error">{{.PageError}}</div>{{end}}
+  {{range $i, $b := .PageBlocks}}
+    {{if eq $b.Kind "heading"}}<h3>{{$b.Text}}</h3>
+    {{else if eq $b.Kind "paragraph"}}<p style="margin-bottom:14px;color:#334155;font-size:14px;line-height:1.55;max-width:900px">{{$b.Text}}</p>
+    {{else if eq $b.Kind "kpi"}}<div class="card" style="display:inline-block;min-width:200px;margin:0 12px 14px 0;padding:16px 20px;vertical-align:top">{{if $b.Label}}<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:600;margin-bottom:6px">{{$b.Label}}</div>{{end}}<div style="font-size:28px;font-weight:700;color:#0f172a;line-height:1.1">{{$b.Value}}</div></div>
+    {{else if eq $b.Kind "button"}}<a href="{{$b.URL}}" class="btn btn-primary" style="margin:0 8px 14px 0">{{$b.Text}}</a>
+    {{else if eq $b.Kind "divider"}}<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0;max-width:1400px">
+    {{else if eq $b.Kind "raw"}}<div class="card" style="margin-bottom:14px">{{pageRaw $b.HTML}}</div>
+    {{else if eq $b.Kind "list"}}
+    <div class="card" style="margin-bottom:14px;max-width:900px">
+      {{if $b.Title}}<h3 style="margin-top:0">{{$b.Title}}</h3>{{end}}
+      <ul style="margin:0;padding-left:20px;color:#334155;font-size:14px;line-height:1.7">
+        {{range $b.Items}}<li>{{if .URL}}<a href="{{.URL}}" style="color:#3b82f6;text-decoration:none">{{.Text}}</a>{{else}}{{.Text}}{{end}}</li>{{end}}
+      </ul>
+    </div>
+    {{else if eq $b.Kind "chart"}}
+    <div class="card" style="margin-bottom:14px;max-width:900px">
+      {{if $b.Title}}<h3 style="margin-top:0">{{$b.Title}}</h3>{{end}}
+      <div class="w-chart-canvas" data-pagechart="{{$i}}" style="width:100%;height:260px"></div>
+    </div>
+    {{else if eq $b.Kind "table"}}
+    <div class="card" style="margin-bottom:14px;overflow-x:auto">
+      {{if $b.Title}}<h3 style="margin-top:0">{{$b.Title}}</h3>{{end}}
+      {{$cols := $b.Columns}}
+      <table>
+        <thead><tr>{{range $cols}}<th>{{.}}</th>{{end}}</tr></thead>
+        <tbody>
+        {{range $b.Rows}}{{$row := .}}<tr>{{range $cols}}{{$c := index $row.Cells .}}<td>{{if $c.URL}}<a href="{{$c.URL}}" style="color:#3b82f6;text-decoration:none">{{$c.Text}}</a>{{else}}{{$c.Text}}{{end}}</td>{{end}}</tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+  {{end}}
+</main></div>
+{{if .PageHasChart}}
+<script>
+window.__obPageCharts = window.__obPageCharts || {};
+{{range $i, $b := .PageBlocks}}{{if eq $b.Kind "chart"}}window.__obPageCharts["{{$i}}"] = {{echartsJSON (pageChart $b.Chart)}};
+{{end}}{{end}}
+</script>
+<script src="/vendor/echarts/echarts.min.js"></script>
+<script>
+(function(){
+  function init(){
+    if(!window.echarts)return;
+    var nodes=document.querySelectorAll('.w-chart-canvas[data-pagechart]');
+    for(var i=0;i<nodes.length;i++){
+      var node=nodes[i];
+      if(node.getAttribute('data-ob-init'))continue;
+      var opt=window.__obPageCharts[node.getAttribute('data-pagechart')];
+      if(!opt)continue;
+      node.setAttribute('data-ob-init','1');
+      try{var c=echarts.init(node);opt.animation=false;c.setOption(opt);(function(c){window.addEventListener('resize',function(){c.resize();});})(c);}catch(e){console.error('page chart init failed',e);}
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+{{end}}
+</body></html>
 {{end}}
 `

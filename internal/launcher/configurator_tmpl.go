@@ -28,6 +28,7 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		return m
 	},
 	"lower": strings.ToLower,
+	"join":  strings.Join,
 	"js": func(v any) string {
 		// json.Marshal по умолчанию экранирует <, >, & в \uXXXX — безопасно
 		// для вставки в <script> (text/template не экранирует сам).
@@ -3072,6 +3073,35 @@ function repAddParam(tableId) {
   tr.querySelector('input[type=text]').focus();
 }
 
+// ── Конструктор компоновки: динамические строки вкладки «Структура» (план 59) ──
+function compAddRow(id,prefix){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="'+prefix+i+'" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindex(\''+id+'\',\''+prefix+'\')">✕</button></td>';}
+function compReindex(id,prefix){var t=document.getElementById(id);for(var i=0;i<t.rows.length;i++){var inp=t.rows[i].querySelector('input,select');if(inp)inp.name=prefix+i;}}
+function compAddMeasure(id){var t=document.getElementById(id);var i=0;for(var r=0;r<t.rows.length;r++){if(t.rows[r].querySelectorAll('input,select').length>=2)i++;}var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.measure.'+i+'.field" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><select name="comp.measure.'+i+'.agg" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select></td>'+
+  '<td><input type="text" name="comp.measure.'+i+'.title" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><select name="comp.measure.'+i+'.align" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"><option value="">—</option><option value="left">влево</option><option value="right">вправо</option><option value="center">по центру</option></select></td>'+
+  '<td><input type="text" name="comp.measure.'+i+'.format" placeholder="#,##0.00" style="width:80px;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><input type="text" name="comp.measure.'+i+'.expr" placeholder="ВаловаяПрибыль / Выручка * 100" title="выражение по другим показателям, напр. ВаловаяПрибыль / Выручка * 100" style="width:160px;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindexMeasure(\''+id+'\')">✕</button></td>';}
+function compReindexMeasure(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input,select');if(ins.length<2)continue;ins[0].name='comp.measure.'+k+'.field';ins[1].name='comp.measure.'+k+'.agg';if(ins[2])ins[2].name='comp.measure.'+k+'.title';if(ins[3])ins[3].name='comp.measure.'+k+'.align';if(ins[4])ins[4].name='comp.measure.'+k+'.format';if(ins[5])ins[5].name='comp.measure.'+k+'.expr';k++;}}
+function compAddSort(id){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.sort.'+i+'.field" style="width:100%"></td>'+
+  '<td><select name="comp.sort.'+i+'.dir"><option>asc</option><option>desc</option></select></td>'+
+  '<td><button type="button" onclick="this.closest(\'tr\').remove();compReindexSort(\''+id+'\')">✕</button></td>';}
+function compReindexSort(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input,select');if(ins.length<2)continue;ins[0].name='comp.sort.'+k+'.field';ins[1].name='comp.sort.'+k+'.dir';k++;}}
+function compAddCond(id){var t=document.getElementById(id);var i=0;for(var r=0;r<t.rows.length;r++){if(t.rows[r].querySelector('input'))i++;}var tr=t.insertRow();
+  tr.innerHTML='<td><input type="text" name="comp.cond.'+i+'.when" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><input type="text" name="comp.cond.'+i+'.field" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
+  '<td><input type="color" name="comp.cond.'+i+'.color" value="#000000"></td>'+
+  '<td><input type="color" name="comp.cond.'+i+'.background" value="#ffffff"></td>'+
+  '<td><input type="checkbox" name="comp.cond.'+i+'.bold"></td>'+
+  '<td><input type="checkbox" name="comp.cond.'+i+'.italic"></td>'+
+  '<td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest(\'tr\').remove();compReindexCond(\''+id+'\')">&#x2715;</button></td>';}
+function compReindexCond(id){var t=document.getElementById(id);var k=0;for(var r=0;r<t.rows.length;r++){var ins=t.rows[r].querySelectorAll('input');if(ins.length<2)continue;ins[0].name='comp.cond.'+k+'.when';ins[1].name='comp.cond.'+k+'.field';ins[2].name='comp.cond.'+k+'.color';ins[3].name='comp.cond.'+k+'.background';ins[4].name='comp.cond.'+k+'.bold';ins[5].name='comp.cond.'+k+'.italic';k++;}}
+
 // ── Editor context menu — наше меню для textarea, pre и Monaco ──
 // Monaco создан с contextmenu:false, поэтому его внутренний обработчик не глотает событие.
 (function(){
@@ -3661,6 +3691,23 @@ function _enterpriseURL() {
         : plain;
     })
     .catch(function(){ return plain; });
+}
+
+// Открывает конкретный отчёт в запущенной базе (предпросмотр конструктора).
+// Требует запущенной базы (как и кнопка «Запустить предприятие»).
+function previewReport(name){
+  var rep = '/ui/report/' + encodeURIComponent(name);
+  var plain = 'http://localhost:' + _basePort + rep;
+  if (!_hasSession) { window.open(plain, '_blank'); return; }
+  fetch('/bases/' + _dbgBase + '/one-time-code', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var url = (d && d.code)
+        ? 'http://localhost:' + _basePort + '/auth/bootstrap?code=' + encodeURIComponent(d.code) + '&return=' + encodeURIComponent(rep)
+        : plain;
+      window.open(url, '_blank');
+    })
+    .catch(function(){ window.open(plain, '_blank'); });
 }
 
 // Запускает (restart=false) или перезапускает (restart=true) базу и открывает
@@ -5183,6 +5230,9 @@ const cfgTabTree = `{{define "tab-tree"}}
           <div class="obj-tab active" onclick="cfgObjTab(this,'ot-rep-params-{{$rn}}')">{{t $.Lang "Параметры"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-query-{{$rn}}')">{{t $.Lang "Запрос"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-struct-{{$rn}}')">{{t $.Lang "Структура"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-cond-{{$rn}}')">{{t $.Lang "Оформление"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-cchart-{{$rn}}')">{{t $.Lang "График"}}</div>
         </div>
         <div class="obj-pane active" id="ot-rep-params-{{$rn}}">
           <div class="section-hd" style="margin-top:12px">
@@ -5234,10 +5284,101 @@ const cfgTabTree = `{{define "tab-tree"}}
                       onblur="endEdit('repchart-{{.Name}}')">{{.ChartSource}}</textarea>
           </div>
         </div>
+        <div class="obj-pane" id="ot-rep-struct-{{$rn}}">
+          <input type="hidden" name="comp.present" value="1">
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Группировки"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddRow('cg-{{$rn}}','comp.grouping.')">+</button></div>
+          <table class="fields-tbl" id="cg-{{$rn}}">
+            {{with .Composition}}{{range $i, $g := .Groupings}}
+            <tr><td><input type="text" name="comp.grouping.{{$i}}" value="{{$g}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindex('cg-{{$rn}}','comp.grouping.')">✕</button></td></tr>
+            {{end}}{{end}}
+          </table>
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Показатели"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddMeasure('cm-{{$rn}}')">+</button></div>
+          <table class="fields-tbl" id="cm-{{$rn}}">
+            <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Агрегат"}}</th><th>{{t $.Lang "Подпись"}}</th><th>{{t $.Lang "Выравн."}}</th><th>{{t $.Lang "Формат"}}</th><th>{{t $.Lang "Выражение"}}</th><th></th></tr>
+            {{with .Composition}}{{range $i, $m := .Measures}}
+            <tr>
+              <td><input type="text" name="comp.measure.{{$i}}.field" value="{{$m.Field}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><select name="comp.measure.{{$i}}.agg" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+                <option value="sum" {{if eq $m.Agg "sum"}}selected{{end}}>sum</option>
+                <option value="count" {{if eq $m.Agg "count"}}selected{{end}}>count</option>
+                <option value="avg" {{if eq $m.Agg "avg"}}selected{{end}}>avg</option>
+                <option value="min" {{if eq $m.Agg "min"}}selected{{end}}>min</option>
+                <option value="max" {{if eq $m.Agg "max"}}selected{{end}}>max</option></select></td>
+              <td><input type="text" name="comp.measure.{{$i}}.title" value="{{$m.Title}}" placeholder="{{$m.Field}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><select name="comp.measure.{{$i}}.align" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+                <option value="" {{if eq $m.Align ""}}selected{{end}}>—</option>
+                <option value="left" {{if eq $m.Align "left"}}selected{{end}}>влево</option>
+                <option value="right" {{if eq $m.Align "right"}}selected{{end}}>вправо</option>
+                <option value="center" {{if eq $m.Align "center"}}selected{{end}}>по центру</option></select></td>
+              <td><input type="text" name="comp.measure.{{$i}}.format" value="{{$m.Format}}" placeholder="#,##0.00" style="width:80px;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><input type="text" name="comp.measure.{{$i}}.expr" value="{{$m.Expr}}" placeholder="ВаловаяПрибыль / Выручка * 100" title="выражение по другим показателям, напр. ВаловаяПрибыль / Выручка * 100" style="width:160px;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexMeasure('cm-{{$rn}}')">✕</button></td>
+            </tr>
+            {{end}}{{end}}
+          </table>
+          <div style="margin-top:10px">
+            <label><input type="checkbox" name="comp.totals.grand" {{if .Composition}}{{if .Composition.Totals.Grand}}checked{{end}}{{end}}> {{t $.Lang "Общий итог"}}</label>
+            <label style="margin-left:12px"><input type="checkbox" name="comp.totals.subtotals" {{if .Composition}}{{if .Composition.Totals.Subtotals}}checked{{end}}{{end}}> {{t $.Lang "Промежуточные итоги"}}</label>
+            <label style="margin-left:12px"><input type="checkbox" name="comp.detail" {{if .Composition}}{{if .Composition.Detail}}checked{{end}}{{end}}> {{t $.Lang "Детальные строки"}}</label>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:12px;align-items:center">
+            <div class="fg" style="flex:1"><label>{{t $.Lang "Поле-ссылка"}}</label>
+              <input type="text" name="comp.detail_link" value="{{if .Composition}}{{.Composition.DetailLink}}{{end}}" placeholder="{{t $.Lang "колонка запроса с UUID документа"}}" title="{{t $.Lang "колонка запроса с UUID документа"}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+            <div class="fg" style="flex:1"><label>{{t $.Lang "Сущность (расшифровка)"}}</label>
+              <input type="text" name="comp.detail_entity" value="{{if .Composition}}{{.Composition.DetailEntity}}{{end}}" placeholder="{{t $.Lang "имя документа для перехода"}}" title="{{t $.Lang "имя документа для перехода"}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+          </div>
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Сортировка"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddSort('cs-{{$rn}}')">+</button></div>
+          <table class="fields-tbl" id="cs-{{$rn}}">
+            {{with .Composition}}{{range $i, $s := .Sort}}
+            <tr><td><input type="text" name="comp.sort.{{$i}}.field" value="{{$s.Field}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><select name="comp.sort.{{$i}}.dir" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"><option value="asc" {{if eq $s.Dir "asc"}}selected{{end}}>asc</option><option value="desc" {{if eq $s.Dir "desc"}}selected{{end}}>desc</option></select></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexSort('cs-{{$rn}}')">✕</button></td></tr>
+            {{end}}{{end}}
+          </table>
+        </div>
+        <div class="obj-pane" id="ot-rep-cond-{{$rn}}">
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Условное оформление"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddCond('cc-{{$rn}}')">+</button></div>
+          <table class="fields-tbl" id="cc-{{$rn}}">
+            <tr><th>{{t $.Lang "Когда"}} (DSL)</th><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Цвет"}}</th><th>{{t $.Lang "Фон"}}</th><th>{{t $.Lang "Ж"}}</th><th>{{t $.Lang "К"}}</th><th></th></tr>
+            {{with .Composition}}{{range $i, $r := .Conditional}}
+            <tr>
+              <td><input type="text" name="comp.cond.{{$i}}.when" value="{{$r.When}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><input type="text" name="comp.cond.{{$i}}.field" value="{{$r.Field}}" placeholder="{{t $.Lang "вся строка"}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><input type="color" name="comp.cond.{{$i}}.color" value="{{if $r.Style.Color}}{{$r.Style.Color}}{{else}}#000000{{end}}"></td>
+              <td><input type="color" name="comp.cond.{{$i}}.background" value="{{if $r.Style.Background}}{{$r.Style.Background}}{{else}}#ffffff{{end}}"></td>
+              <td><input type="checkbox" name="comp.cond.{{$i}}.bold" {{if $r.Style.Bold}}checked{{end}}></td>
+              <td><input type="checkbox" name="comp.cond.{{$i}}.italic" {{if $r.Style.Italic}}checked{{end}}></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindexCond('cc-{{$rn}}')">&#x2715;</button></td>
+            </tr>
+            {{end}}{{end}}
+          </table>
+          <div class="edit-hint" style="margin-top:6px">{{t $.Lang "Чёрный текст / белый фон трактуются как «не задано»."}}</div>
+        </div>
+        <div class="obj-pane" id="ot-rep-cchart-{{$rn}}">
+          {{$ch := ""}}{{$cc := ""}}
+          {{with .Composition}}{{with .Chart}}{{$ch = .Type}}{{$cc = .Category}}{{end}}{{end}}
+          <div class="fg" style="margin-top:12px"><label>{{t $.Lang "Тип графика"}}</label>
+            <select name="comp.chart.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+              <option value="" {{if eq $ch ""}}selected{{end}}>{{t $.Lang "нет"}}</option>
+              <option value="bar" {{if eq $ch "bar"}}selected{{end}}>{{t $.Lang "столбцы"}}</option>
+              <option value="line" {{if eq $ch "line"}}selected{{end}}>{{t $.Lang "линия"}}</option>
+              <option value="pie" {{if eq $ch "pie"}}selected{{end}}>{{t $.Lang "круг"}}</option>
+            </select></div>
+          <div class="fg" style="margin-top:8px"><label>{{t $.Lang "Категория (поле группировки)"}}</label>
+            <input type="text" name="comp.chart.category" value="{{$cc}}" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+          <div class="fg" style="margin-top:8px"><label>{{t $.Lang "Ряды (показатели через запятую)"}}</label>
+            <input type="text" name="comp.chart.series" value="{{with .Composition}}{{with .Chart}}{{join .Series ","}}{{end}}{{end}}" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+        </div>
       </div>
       <div class="module-save-row">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
         <button type="button" class="btn-check" onclick="runCheck('dsl','repchart-{{.Name}}','{{.Name}}')">{{t $.Lang "Проверить"}}</button>
+        <button type="button" class="btn-check" onclick="previewReport('{{lower .Name}}')">{{t $.Lang "Предпросмотр"}}</button>
         <span class="check-result" id="check-repchart-{{.Name}}"></span>
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
       </div>
