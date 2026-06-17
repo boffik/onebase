@@ -90,7 +90,7 @@ func TestSandbox_FileDeniedCatchable(t *testing.T) {
 КонецПроцедуры`
 	p := interpreter.RestrictedProfile()
 	var result any
-	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result, p.Vars())
+	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result)
 	require.NoError(t, err)
 	assert.Contains(t, result.(string), "файловые операции запрещены")
 }
@@ -107,7 +107,7 @@ func TestSandbox_NetDeniedCatchable(t *testing.T) {
 КонецПроцедуры`
 	p := interpreter.RestrictedProfile()
 	var result any
-	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result, p.Vars())
+	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result)
 	require.NoError(t, err)
 	assert.Contains(t, result.(string), "сеть запрещена")
 }
@@ -124,19 +124,37 @@ func TestSandbox_LLMDeniedCatchable(t *testing.T) {
 КонецПроцедуры`
 	p := interpreter.RestrictedProfile()
 	var result any
-	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result, p.Vars())
+	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result)
 	require.NoError(t, err)
 	assert.Contains(t, result.(string), "запрещены")
 }
 
-// При AllowNet/AllowFile профиль не внедряет запретов — нет регрессии.
-func TestSandbox_AllowedNoVars(t *testing.T) {
-	p := interpreter.SandboxProfile{AllowNet: true, AllowFile: true}
-	v := p.Vars()
-	_, hasFile := v["копироватьфайл"]
-	_, hasMail := v["ОтправитьПисьмо"] // ключ NewEmailFunctions — смешанный регистр
-	_, hasAI := v["ЗапросИИ"]
-	assert.False(t, hasFile, "при AllowFile не должно быть файловых запретов")
-	assert.False(t, hasMail, "при AllowNet не должно быть сетевых запретов")
-	assert.False(t, hasAI, "при AllowNet не должно быть запретов ИИ")
+// RunSandboxed навязывает запреты профиля сам — вызывающему НЕ нужно вручную
+// передавать p.Vars(). Иначе забытый (или неверно упорядоченный) Vars() молча
+// открыл бы песочницу: сеть/файлы/ИИ остались бы доступны недоверенному коду.
+func TestSandbox_RestrictionsAppliedWithoutManualVars(t *testing.T) {
+	src := `Процедура Тест()
+  Попытка
+    ЗапросИИ("привет");
+    Возврат "без ошибки";
+  Исключение
+    Возврат ОписаниеОшибки();
+  КонецПопытки;
+КонецПроцедуры`
+	p := interpreter.RestrictedProfile()
+	var result any
+	// БЕЗ p.Vars() в extraVars — запрет должен навязать сам RunSandboxed.
+	err := interpreter.New().RunSandboxed(parseProc(t, src), nil, p, &result)
+	require.NoError(t, err)
+	assert.Contains(t, result.(string), "запрещены")
+}
+
+// Нулевой профиль = «всё разрешено» (см. docstring SandboxProfile): Vars() не
+// должен внедрять никаких deny-guard'ов. Иначе RunSandboxed (применяет Vars()
+// безусловно) запретил бы сеть/файлы/ИИ коду, для которого ограничения не заданы.
+func TestSandbox_ZeroProfileRestrictsNothing(t *testing.T) {
+	v := interpreter.SandboxProfile{}.Vars()
+	if len(v) != 0 {
+		t.Fatalf("нулевой профиль не должен ничего запрещать, получено %d guard'ов: %v", len(v), v)
+	}
 }

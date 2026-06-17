@@ -1,0 +1,69 @@
+package configcheck
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/report"
+)
+
+func projWith(c *report.Composition) *project.Project {
+	return &project.Project{Reports: []*report.Report{{Name: "R", Query: "ВЫБРАТЬ 1", Composition: c}}}
+}
+
+func TestCompositionOK(t *testing.T) {
+	c := &report.Composition{
+		Groupings:   []string{"М"},
+		Measures:    []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Sort:        []report.SortKey{{Field: "Сумма", Dir: "desc"}},
+		Chart:       &report.ChartSpec{Type: "bar", Category: "М", Series: []string{"Сумма"}},
+		Conditional: []report.CondRule{{When: "Сумма < 0"}},
+	}
+	if iss := CheckReportComposition(projWith(c)); len(iss) != 0 {
+		t.Fatalf("ожидали 0 проблем: %+v", iss)
+	}
+}
+
+func TestMeasureAlignValidation(t *testing.T) {
+	// Недопустимое значение align — должна быть проблема.
+	cBad := &report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Align: "diagonal"}},
+	}
+	iss := CheckReportComposition(projWith(cBad))
+	found := false
+	for _, i := range iss {
+		if strings.Contains(i.Message, "выравнивание") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("ожидали проблему про выравнивание, получили: %+v", iss)
+	}
+
+	// Допустимые значения — проблем нет.
+	for _, align := range []string{"", "left", "right", "center"} {
+		cOK := &report.Composition{
+			Groupings: []string{"М"},
+			Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Align: align}},
+		}
+		if iss2 := CheckReportComposition(projWith(cOK)); len(iss2) != 0 {
+			t.Fatalf("align=%q: ожидали 0 проблем, получили: %+v", align, iss2)
+		}
+	}
+}
+
+func TestCompositionBad(t *testing.T) {
+	c := &report.Composition{
+		Groupings:   []string{"М"},
+		Measures:    []report.Measure{{Field: "Сумма", Agg: "wat"}},
+		Chart:       &report.ChartSpec{Type: "donut", Category: "Нет", Series: []string{"Икс"}},
+		Conditional: []report.CondRule{{When: "Сумма < "}}, // битое выражение
+	}
+	iss := CheckReportComposition(projWith(c))
+	if len(iss) < 3 {
+		t.Fatalf("ожидали несколько проблем, получили %d: %+v", len(iss), iss)
+	}
+}
