@@ -22,85 +22,57 @@ func numForExcel(v any) any {
 	return numFor(v)
 }
 
-// composedRows строит заголовки и строки данных для excel.ExportList
-// из скомпонованного результата. Порядок строк совпадает с renderComposedTable:
+// composedRows строит заголовки и строки данных для excel.ExportList из
+// скомпонованного результата. Порядок строк задаёт walkComposed — общий с
+// HTML-рендером (renderComposedTable), поэтому выгрузка и экран не расходятся:
 //
 //	группа → [дети/детали] → подытог … → ВСЕГО
 //
 // Первая колонка — имена/ключи групп с текстовым отступом (2 пробела × уровень).
 // Значения показателей передаются как float64, чтобы Excel видел числа, а не текст.
 func composedRows(res *compose.Result, spec *report.Composition) (headers []string, rows [][]any) {
-	// Формируем заголовок: группировки через " / ", затем показатели.
 	headers = make([]string, 0, 1+len(spec.Measures))
 	headers = append(headers, strings.Join(spec.Groupings, " / "))
 	for _, m := range spec.Measures {
 		headers = append(headers, measureTitle(m))
 	}
-
-	// Обходим дерево групп.
-	for _, g := range res.Groups {
-		rows = appendGroup(rows, g, spec, 0)
-	}
-
-	// Строка общего итога «ВСЕГО».
-	if spec.Totals.Grand {
-		row := make([]any, 1+len(spec.Measures))
-		row[0] = "ВСЕГО"
-		for i, m := range spec.Measures {
-			row[i+1] = numForExcel(res.Grand[m.Field])
-		}
-		rows = append(rows, row)
-	}
-	return headers, rows
+	sink := &excelComposeSink{spec: spec, colCount: 1 + len(spec.Measures)}
+	walkComposed(res, spec, sink)
+	return headers, sink.rows
 }
 
-// appendGroup рекурсивно добавляет строки группы: строку группы, дочерние группы
-// (или детали), и при Totals.Subtotals — строку подытога.
-func appendGroup(rows [][]any, g *compose.Group, spec *report.Composition, level int) [][]any {
-	indent := strings.Repeat("  ", level)
-	colCount := 1 + len(spec.Measures)
+// excelComposeSink собирает строки [][]any для excel.ExportList.
+type excelComposeSink struct {
+	spec     *report.Composition
+	colCount int
+	rows     [][]any
+}
 
-	// Строка группы: ключ с отступом + значения показателей.
-	grpRow := make([]any, colCount)
-	grpRow[0] = indent + fmtVal(g.Key)
-	for i, m := range spec.Measures {
-		grpRow[i+1] = numForExcel(g.Subtotals[m.Field])
+// row добавляет строку: подпись в первой колонке + значения показателей
+// (numForExcel: nil → пустая ячейка, иначе float64).
+func (e *excelComposeSink) row(label string, vals map[string]any) {
+	r := make([]any, e.colCount)
+	r[0] = label
+	for i, m := range e.spec.Measures {
+		r[i+1] = numForExcel(vals[m.Field])
 	}
-	rows = append(rows, grpRow)
+	e.rows = append(e.rows, r)
+}
 
-	// Дочерние группы (рекурсия).
-	for _, ch := range g.Children {
-		rows = appendGroup(rows, ch, spec, level+1)
-	}
+func (e *excelComposeSink) group(g *compose.Group, level int, _ string) {
+	e.row(strings.Repeat("  ", level)+fmtVal(g.Key), g.Subtotals)
+}
 
-	// Детальные строки (если Detail=true). По дизайну compose, g.Details заполняется
-	// только у листовых групп (level == последний уровень группировки); у внутренних
-	// групп g.Details всегда пуст, поэтому явная проверка Children не нужна.
-	if spec.Detail {
-		childIndent := strings.Repeat("  ", level+1)
-		for _, d := range g.Details {
-			detRow := make([]any, colCount)
-			// Первая ячейка детали намеренно содержит только отступ — зеркалит
-			// HTML-рендер (writeDetail). Осмысленный идентификатор строки (ссылка на
-			// документ) появится в задаче B3 (detail_link).
-			detRow[0] = childIndent
-			for i, m := range spec.Measures {
-				detRow[i+1] = numForExcel(d.Values[m.Field])
-			}
-			rows = append(rows, detRow)
-		}
-	}
+func (e *excelComposeSink) detail(d compose.DetailRow, level int, _ string) {
+	// Первая ячейка детали — только отступ (зеркалит HTML-рендер). Осмысленный
+	// идентификатор строки (ссылка на документ) — задача B3 (detail_link).
+	e.row(strings.Repeat("  ", level), d.Values)
+}
 
-	// Строка подытога.
-	if spec.Totals.Subtotals {
-		subIndent := strings.Repeat("  ", level+1)
-		subRow := make([]any, colCount)
-		subRow[0] = fmt.Sprintf("%s··· Итого: %s ···", subIndent, fmtVal(g.Key))
-		for i, m := range spec.Measures {
-			subRow[i+1] = numForExcel(g.Subtotals[m.Field])
-		}
-		rows = append(rows, subRow)
-	}
+func (e *excelComposeSink) subtotal(g *compose.Group, level int, _ string) {
+	e.row(fmt.Sprintf("%s··· Итого: %s ···", strings.Repeat("  ", level), fmtVal(g.Key)), g.Subtotals)
+}
 
-	return rows
+func (e *excelComposeSink) grand(grand map[string]any) {
+	e.row("ВСЕГО", grand)
 }
