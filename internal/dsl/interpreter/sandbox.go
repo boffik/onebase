@@ -19,6 +19,7 @@ var (
 type SandboxProfile struct {
 	DenyNet      bool          // запретить сеть: HTTP-клиент, email, ИИ-запросы
 	DenyFile     bool          // запретить файловые builtins (и чтение в РаспознатьДокумент)
+	DenyExec     bool          // запретить команды ОС (ВыполнитьКоманду, план 67) недоверенному коду; secure-by-default обычного режима даёт флаг базы exec.enabled
 	MaxWallClock time.Duration // 0 = без лимита времени
 	MaxLoopIters int           // 0 = дефолт (maxWhileIter)
 }
@@ -29,6 +30,7 @@ func RestrictedProfile() SandboxProfile {
 	return SandboxProfile{
 		DenyNet:      true,
 		DenyFile:     true,
+		DenyExec:     true,
 		MaxWallClock: 10 * time.Second,
 		MaxLoopIters: 1_000_000,
 	}
@@ -59,6 +61,18 @@ func (p SandboxProfile) Vars() map[string]any {
 			return errors.New("файловые операции запрещены в этом режиме (песочница)")
 		})
 		for k, v := range NewFileFunctions(deny) {
+			m[k] = v
+		}
+	}
+	if p.DenyExec {
+		// Команды ОС — строго опаснее сети/файлов (RCE), поэтому явно
+		// запрещаются недоверенному коду (RestrictedProfile: DenyExec=true).
+		// Secure-by-default обычного режима обеспечивает флаг базы exec.enabled
+		// и nil-guard→deny в dslvars, а не нулевой профиль песочницы.
+		deny := ExecGuard(func() error {
+			return errors.New("выполнение команд ОС запрещено в этом режиме (песочница)")
+		})
+		for k, v := range NewExecFunctions(deny, nil) {
 			m[k] = v
 		}
 	}
