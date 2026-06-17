@@ -142,7 +142,7 @@ const tplIndex = `
     <div class="base-sub">
       {{if eq .ConfigSource "file"}}📁 {{.Path}}{{else}}🗄 {{t $.Lang "В базе данных"}}{{end}}
     </div>
-    <div class="base-sub">{{maskDSN .DB}} · :{{.Port}}</div>
+    <div class="base-sub">{{if eq .DBType "sqlite"}}💾 {{.DBPath}}{{else}}{{maskDSN .DB}}{{end}} · :{{.Port}}</div>
   </div>
 </div>
 {{end}}
@@ -165,6 +165,9 @@ const tplIndex = `
   <tr><td style="color:#888;padding:2px 0;width:90px">{{t $.Lang "Режим"}}</td><td>{{if eq .Selected.ConfigSource "database"}}{{t $.Lang "База данных"}}{{else}}{{t $.Lang "Файлы"}}{{end}}</td></tr>
   {{if eq .Selected.ConfigSource "file"}}
   <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Путь"}}</td><td style="word-break:break-all">{{.Selected.Path}}</td></tr>
+  {{end}}
+  {{if eq .Selected.DBType "sqlite"}}
+  <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Файл базы"}}</td><td style="word-break:break-all">{{.Selected.DBPath}}</td></tr>
   {{end}}
   <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Порт"}}</td><td>:{{.Selected.Port}}</td></tr>
   <tr><td style="color:#888;padding:2px 0">{{t $.Lang "Состояние"}}</td><td>{{if .Selected.Running}}<span style="color:#16a34a;font-weight:600">{{t $.Lang "Работает"}}</span>{{else}}<span style="color:#888">{{t $.Lang "Остановлена"}}</span>{{end}}</td></tr>
