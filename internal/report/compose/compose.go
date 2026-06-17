@@ -5,6 +5,7 @@ package compose
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/shopspring/decimal"
 
@@ -35,6 +36,7 @@ type Group struct {
 	Count     int
 	Children  []*Group
 	Details   []DetailRow
+	Styles    map[string]report.CellStyle // условное оформление по подытогам; ключ "" = вся строка
 }
 
 type DetailRow struct {
@@ -47,6 +49,7 @@ func Compose(rows []Row, spec report.Composition, ev Evaluator) (*Result, error)
 }
 
 func ComposeN(rows []Row, spec report.Composition, ev Evaluator, maxRows int) (*Result, error) {
+	rows = alignRowKeys(rows, spec)
 	res := &Result{RowCount: len(rows)}
 	if maxRows > 0 && len(rows) > maxRows {
 		rows = rows[:maxRows]
@@ -56,6 +59,59 @@ func ComposeN(rows []Row, spec report.Composition, ev Evaluator, maxRows int) (*
 	res.Groups = buildGroups(rows, spec, 0, ev)
 	res.Grand = aggregate(rows, spec.Measures)
 	return res, nil
+}
+
+// alignRowKeys добавляет каждой строке ключи под именами полей из spec, находя
+// соответствующие колонки регистронезависимо. Компилятор запросов отдаёт имена
+// колонок в нижнем регистре (ВЫБРАТЬ Выручка КАК Выручка → колонка "выручка"),
+// тогда как composition ссылается на поля в исходном регистре; без выравнивания
+// доступ row[field] не находил бы данные и все строки схлопывались бы в одну
+// пустую группу с нулевыми итогами. Исходные ключи сохраняются. Согласуется с
+// тем, что DSL OneBase регистронезависим.
+func alignRowKeys(rows []Row, spec report.Composition) []Row {
+	targets := map[string]bool{}
+	add := func(s string) {
+		if s != "" {
+			targets[s] = true
+		}
+	}
+	for _, g := range spec.Groupings {
+		add(g)
+	}
+	for _, m := range spec.Measures {
+		add(m.Field)
+	}
+	for _, s := range spec.Sort {
+		add(s.Field)
+	}
+	for _, c := range spec.Conditional {
+		add(c.Field)
+	}
+	if spec.Chart != nil {
+		add(spec.Chart.Category)
+		for _, s := range spec.Chart.Series {
+			add(s)
+		}
+	}
+	if len(targets) == 0 {
+		return rows
+	}
+	byLower := make(map[string]string, len(targets))
+	for t := range targets {
+		byLower[strings.ToLower(t)] = t
+	}
+	out := make([]Row, len(rows))
+	for i, r := range rows {
+		nr := make(Row, len(r)+len(targets))
+		for k, v := range r {
+			nr[k] = v
+			if t, ok := byLower[strings.ToLower(k)]; ok && t != k {
+				nr[t] = v
+			}
+		}
+		out[i] = nr
+	}
+	return out
 }
 
 func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) []*Group {
@@ -80,6 +136,9 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 			Count:     len(buckets[k]),
 			Subtotals: aggregate(buckets[k], spec.Measures),
 		}
+		// Условное оформление группы/подытога вычисляется по её подытогам —
+		// так убыточная группа подсвечивается целиком, без detail-строк.
+		gr.Styles = evalStyles(gr.Subtotals, spec, ev)
 		if level+1 < len(spec.Groupings) {
 			gr.Children = buildGroups(buckets[k], spec, level+1, ev)
 		} else if spec.Detail {
@@ -91,30 +150,33 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 	return groups
 }
 
+// evalStyles вычисляет условное оформление для строки значений (детальной или
+// подытога группы): первое сработавшее правило на целевое поле задаёт стиль.
+func evalStyles(row Row, spec report.Composition, ev Evaluator) map[string]report.CellStyle {
+	if len(spec.Conditional) == 0 || ev == nil {
+		return nil
+	}
+	var styles map[string]report.CellStyle
+	for _, rule := range spec.Conditional {
+		if _, done := styles[rule.Field]; done {
+			continue // первое сработавшее правило на целевое поле
+		}
+		ok, err := ev.EvalBool(rule.When, row)
+		if err != nil || !ok {
+			continue
+		}
+		if styles == nil {
+			styles = map[string]report.CellStyle{}
+		}
+		styles[rule.Field] = rule.Style
+	}
+	return styles
+}
+
 func buildDetails(rows []Row, spec report.Composition, ev Evaluator) []DetailRow {
 	out := make([]DetailRow, 0, len(rows))
 	for _, r := range rows {
-		dr := DetailRow{Values: r}
-		if len(spec.Conditional) > 0 && ev != nil {
-			var styles map[string]report.CellStyle
-			for _, rule := range spec.Conditional {
-				if _, done := styles[rule.Field]; done {
-					continue // первое сработавшее правило на целевое поле
-				}
-				ok, err := ev.EvalBool(rule.When, r)
-				if err != nil || !ok {
-					continue
-				}
-				if styles == nil {
-					styles = map[string]report.CellStyle{}
-				}
-				styles[rule.Field] = rule.Style
-			}
-			if len(styles) > 0 {
-				dr.Styles = styles
-			}
-		}
-		out = append(out, dr)
+		out = append(out, DetailRow{Values: r, Styles: evalStyles(r, spec, ev)})
 	}
 	sortDetails(out, spec)
 	return out

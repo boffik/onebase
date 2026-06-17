@@ -37,10 +37,12 @@ func renderComposedTable(res *compose.Result, spec *report.Composition) template
 func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, level int, path string) {
 	gp := path + "/" + pathSeg(fmtVal(g.Key))
 	pad := fmt.Sprintf("padding-left:%dpx", 8+level*18)
-	fmt.Fprintf(b, `<tr class="grp" data-group="%s" data-level="%d"><td style="%s">▼ %s</td>`,
-		html.EscapeString(gp), level, pad, html.EscapeString(fmtVal(g.Key)))
+	rowStyle := cssOf(g.Styles[""])
+	fmt.Fprintf(b, `<tr class="grp" data-group="%s" data-level="%d" style="%s"><td style="%s">▼ %s</td>`,
+		html.EscapeString(gp), level, html.EscapeString(rowStyle), pad, html.EscapeString(fmtVal(g.Key)))
 	for _, m := range spec.Measures {
-		b.WriteString(`<td class="num">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
+		cell := cssOf(g.Styles[m.Field])
+		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
 	}
 	b.WriteString(`</tr>`)
 	for _, ch := range g.Children {
@@ -50,10 +52,11 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 		writeDetail(b, d, spec, level+1, gp)
 	}
 	if spec.Totals.Subtotals {
-		fmt.Fprintf(b, `<tr class="subtotal" data-parent="%s"><td style="padding-left:%dpx">··· Итого: %s ···</td>`,
-			html.EscapeString(gp), 8+(level+1)*18, html.EscapeString(fmtVal(g.Key)))
+		fmt.Fprintf(b, `<tr class="subtotal" data-parent="%s" style="%s"><td style="padding-left:%dpx">··· Итого: %s ···</td>`,
+			html.EscapeString(gp), html.EscapeString(rowStyle), 8+(level+1)*18, html.EscapeString(fmtVal(g.Key)))
 		for _, m := range spec.Measures {
-			b.WriteString(`<td class="num">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
+			cell := cssOf(g.Styles[m.Field])
+			b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
 		}
 		b.WriteString(`</tr>`)
 	}

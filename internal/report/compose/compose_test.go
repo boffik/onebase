@@ -170,3 +170,69 @@ func TestConditionalAndCap(t *testing.T) {
 		t.Fatalf("cap: capped=%v rowcount=%d", res2.Capped, res2.RowCount)
 	}
 }
+
+func TestConditionalOnGroups(t *testing.T) {
+	// Условное оформление должно срабатывать и на строках групп/подытогов
+	// (по их подытогам), а не только на детальных строках — чтобы убыточную
+	// группу можно было подсветить при detail:false (дизайн плана 59).
+	rows := []Row{
+		{"М": "Убыток", "Сумма": "-100"},
+		{"М": "Прибыль", "Сумма": "50"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Conditional: []report.CondRule{
+			{When: "Сумма < 0", Field: "", Style: report.CellStyle{Color: "#c00", Bold: true}},
+		},
+	}
+	res, _ := Compose(rows, spec, negEval{})
+	var loss, profit *Group
+	for _, g := range res.Groups {
+		switch g.Key {
+		case "Убыток":
+			loss = g
+		case "Прибыль":
+			profit = g
+		}
+	}
+	if loss == nil || loss.Styles[""].Color != "#c00" || !loss.Styles[""].Bold {
+		t.Fatalf("убыточная группа должна быть стилизована: %+v", loss)
+	}
+	if profit == nil || len(profit.Styles) != 0 {
+		t.Fatalf("прибыльная группа не должна иметь стиль: %+v", profit)
+	}
+}
+
+func TestComposeFieldsCaseInsensitive(t *testing.T) {
+	// Компилятор запросов отдаёт имена колонок в нижнем регистре
+	// (ВЫБРАТЬ Выручка КАК Выручка → колонка "выручка"), тогда как composition
+	// ссылается на поля с заглавной. Сопоставление обязано быть
+	// регистронезависимым — иначе все строки схлопываются в одну пустую группу,
+	// а агрегаты выходят нулевыми.
+	rows := []Row{
+		{"организация": "Альфа", "выручка": "100", "валоваяприбыль": "40"},
+		{"организация": "Альфа", "выручка": "50", "валоваяприбыль": "-10"},
+		{"организация": "Бета", "выручка": "30", "валоваяприбыль": "30"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"Организация"},
+		Measures: []report.Measure{
+			{Field: "Выручка", Agg: "sum"},
+			{Field: "ВаловаяПрибыль", Agg: "sum"},
+		},
+		Totals: report.Totals{Grand: true},
+	}
+	res, err := Compose(rows, spec, noEval{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Groups) != 2 {
+		t.Fatalf("ожидали 2 группы (Альфа, Бета), получили %d", len(res.Groups))
+	}
+	if res.Groups[0].Key != "Альфа" {
+		t.Fatalf("ключ группы должен быть наименованием «Альфа», получили %q", res.Groups[0].Key)
+	}
+	decEq(t, res.Groups[0].Subtotals["Выручка"], "150")
+	decEq(t, res.Grand["ВаловаяПрибыль"], "60")
+}

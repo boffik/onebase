@@ -4,9 +4,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/report/compose"
 )
+
+func TestRenderGroupConditional(t *testing.T) {
+	// Условное оформление должно отрисовываться на строке группы и подытоге
+	// (при detail:false), а не только на детальных строках.
+	rows := []compose.Row{
+		{"М": "Убыток", "Сумма": "-100"},
+		{"М": "Прибыль", "Сумма": "50"},
+	}
+	spec := report.Composition{
+		Groupings:   []string{"М"},
+		Measures:    []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Totals:      report.Totals{Subtotals: true},
+		Conditional: []report.CondRule{{When: "Сумма < 0", Field: "", Style: report.CellStyle{Color: "#c00", Bold: true}}},
+	}
+	res, _ := compose.Compose(rows, spec, newInterpEvaluator(interpreter.New()))
+	out := string(renderComposedTable(res, &spec))
+	if !strings.Contains(out, "color:#c00") || !strings.Contains(out, "font-weight:bold") {
+		t.Fatalf("строка убыточной группы должна иметь стиль:\n%s", out)
+	}
+}
 
 func TestBuildComposedChart(t *testing.T) {
 	rows := []compose.Row{{"М": "Иванов", "Сумма": "150"}, {"М": "Петров", "Сумма": "30"}}
