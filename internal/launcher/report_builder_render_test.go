@@ -35,6 +35,20 @@ func TestReportBuilderRender(t *testing.T) {
 	_ = renderConfiguratorReport(t, nil)
 }
 
+func TestReportBuilderChartTab(t *testing.T) {
+	html := renderConfiguratorReport(t, &report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Chart:     &report.ChartSpec{Type: "bar", Category: "М", Series: []string{"Сумма"}},
+	})
+	for _, want := range []string{"График", "comp.chart.type", "comp.chart.category", "ot-rep-cchart-", `value="Сумма"`} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("нет %q", want)
+		}
+	}
+	_ = renderConfiguratorReport(t, nil) // nil не должен паниковать
+}
+
 func TestReportBuilderCondTab(t *testing.T) {
 	html := renderConfiguratorReport(t, &report.Composition{
 		Groupings:   []string{"М"},

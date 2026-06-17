@@ -28,6 +28,7 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		return m
 	},
 	"lower": strings.ToLower,
+	"join":  strings.Join,
 	"js": func(v any) string {
 		// json.Marshal по умолчанию экранирует <, >, & в \uXXXX — безопасно
 		// для вставки в <script> (text/template не экранирует сам).
@@ -5211,6 +5212,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-chart-{{$rn}}')">{{t $.Lang "Диаграмма"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-struct-{{$rn}}')">{{t $.Lang "Структура"}}</div>
           <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-cond-{{$rn}}')">{{t $.Lang "Оформление"}}</div>
+          <div class="obj-tab" onclick="cfgObjTab(this,'ot-rep-cchart-{{$rn}}')">{{t $.Lang "График"}}</div>
         </div>
         <div class="obj-pane active" id="ot-rep-params-{{$rn}}">
           <div class="section-hd" style="margin-top:12px">
@@ -5323,6 +5325,21 @@ const cfgTabTree = `{{define "tab-tree"}}
             {{end}}{{end}}
           </table>
           <div class="edit-hint" style="margin-top:6px">{{t $.Lang "Чёрный текст / белый фон трактуются как «не задано»."}}</div>
+        </div>
+        <div class="obj-pane" id="ot-rep-cchart-{{$rn}}">
+          {{$ch := ""}}{{$cc := ""}}
+          {{with .Composition}}{{with .Chart}}{{$ch = .Type}}{{$cc = .Category}}{{end}}{{end}}
+          <div class="fg" style="margin-top:12px"><label>{{t $.Lang "Тип графика"}}</label>
+            <select name="comp.chart.type" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+              <option value="" {{if eq $ch ""}}selected{{end}}>{{t $.Lang "нет"}}</option>
+              <option value="bar" {{if eq $ch "bar"}}selected{{end}}>{{t $.Lang "столбцы"}}</option>
+              <option value="line" {{if eq $ch "line"}}selected{{end}}>{{t $.Lang "линия"}}</option>
+              <option value="pie" {{if eq $ch "pie"}}selected{{end}}>{{t $.Lang "круг"}}</option>
+            </select></div>
+          <div class="fg" style="margin-top:8px"><label>{{t $.Lang "Категория (поле группировки)"}}</label>
+            <input type="text" name="comp.chart.category" value="{{$cc}}" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
+          <div class="fg" style="margin-top:8px"><label>{{t $.Lang "Ряды (показатели через запятую)"}}</label>
+            <input type="text" name="comp.chart.series" value="{{with .Composition}}{{with .Chart}}{{join .Series ","}}{{end}}{{end}}" style="padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></div>
         </div>
       </div>
       <div class="module-save-row">

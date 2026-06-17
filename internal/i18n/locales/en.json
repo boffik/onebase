@@ -875,5 +875,11 @@
   "Ж": "B",
   "К": "I",
   "вся строка": "entire row",
-  "Чёрный текст / белый фон трактуются как «не задано».": "Black text / white background are treated as «not set»."
+  "Чёрный текст / белый фон трактуются как «не задано».": "Black text / white background are treated as «not set».",
+  "График": "Chart",
+  "столбцы": "bar",
+  "линия": "line",
+  "круг": "pie",
+  "Категория (поле группировки)": "Category (grouping field)",
+  "Ряды (показатели через запятую)": "Series (measures, comma-separated)"
 }
