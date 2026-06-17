@@ -160,6 +160,33 @@ func TestWriteDetailLink(t *testing.T) {
 	}
 }
 
+// TestWriteDetailLinkNoEntity проверяет, что при заданном DetailLink, но пустом
+// DetailEntity, ссылка НЕ генерируется (иначе получается битый путь /ui/document//<uuid>).
+// Первая ячейка должна быть пустой — без <a href=...>.
+func TestWriteDetailLinkNoEntity(t *testing.T) {
+	const uuid = "11112222-3333-4444-5555-666677778888"
+	rows := []compose.Row{
+		{"Контрагент": "Сидоров", "Сумма": "200", "Регистратор": uuid},
+	}
+	// DetailLink задан, DetailEntity — нет (пустая строка)
+	spec := report.Composition{
+		Groupings:    []string{"Контрагент"},
+		Measures:     []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Detail:       true,
+		DetailLink:   "Регистратор",
+		DetailEntity: "", // намеренно пусто
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	if strings.Contains(out, `<a href`) {
+		t.Fatalf("при пустом DetailEntity не должно быть ссылки <a href=...>:\n%s", out)
+	}
+	if strings.Contains(out, `/ui/document/`) {
+		t.Fatalf("при пустом DetailEntity не должно быть пути /ui/document/ в HTML:\n%s", out)
+	}
+}
+
 // TestWriteDetailLinkCaseInsensitive проверяет выравнивание ключей:
 // колонка запроса в нижнем регистре («регистратор») должна находиться
 // через DetailLink в исходном регистре («Регистратор»).

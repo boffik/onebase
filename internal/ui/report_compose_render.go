@@ -66,15 +66,18 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 func writeDetail(b *strings.Builder, d compose.DetailRow, spec *report.Composition, level int, path string) {
 	rowStyle := cssOf(d.Styles[""])
 	fmt.Fprintf(b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), html.EscapeString(rowStyle))
-	// Первая ячейка: ссылка-расшифровка на исходный документ (если настроено)
-	if spec.DetailLink != "" {
+	// Первая ячейка: ссылка-расшифровка на исходный документ (если настроено).
+	// Ссылка строится только когда заданы и DetailLink, и DetailEntity, и значение поля непустое.
+	// Без DetailEntity переход бессмыслен — выводим пустую ячейку.
+	linked := false
+	if spec.DetailLink != "" && spec.DetailEntity != "" {
 		if v := fmtVal(d.Values[spec.DetailLink]); v != "" {
 			href := "/ui/document/" + url.PathEscape(spec.DetailEntity) + "/" + url.PathEscape(v)
 			fmt.Fprintf(b, `<td style="padding-left:%dpx"><a href="%s">→</a></td>`, 8+level*18, html.EscapeString(href))
-		} else {
-			fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
+			linked = true
 		}
-	} else {
+	}
+	if !linked {
 		fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
 	}
 	for _, m := range spec.Measures {
