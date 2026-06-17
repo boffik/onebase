@@ -414,6 +414,12 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .tbl th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
 .tbl td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155;font-size:13px}
 .tbl tr:hover td{background:#f8fafc}
+.report-composed{width:100%;border-collapse:collapse;font-size:13px}
+.report-composed thead th{position:sticky;top:38px;background:#fff;z-index:5;text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px}
+.report-composed td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155}
+.report-composed td.num{font-variant-numeric:tabular-nums}
+.report-composed tr.grp:hover td{background:#f8fafc}
+.report-composed tr.grand td{font-weight:700;border-top:2px solid #e2e8f0}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
@@ -2238,7 +2244,8 @@ const tplReport = `
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
 {{if .ReportParams}}
-<div class="card" style="margin-bottom:16px">
+<details class="card report-block" data-block="params" open style="margin-bottom:16px">
+<summary>{{t $.Lang "Параметры"}}</summary>
 <form method="POST">
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .ReportParams}}{{$p := .}}{{$pname := .Name}}{{$pval := str (index $.ParamValues .Name)}}
@@ -2280,13 +2287,14 @@ const tplReport = `
   </div>
   <button class="btn btn-primary" type="submit">{{t $.Lang "Сформировать"}}</button>
 </form>
-</div>
+</details>
 {{end}}
 {{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
 {{if .ChartOption}}
-<div class="card" style="margin-bottom:16px">
+<details class="card report-block" data-block="chart" open style="margin-bottom:16px">
+<summary>{{t $.Lang "Диаграмма"}}</summary>
   <div id="ob-chart" style="width:100%;min-height:400px"></div>
-</div>
+</details>
 <script src="/vendor/echarts/echarts.min.js"></script>
 <script>
 (function(){
@@ -2294,6 +2302,68 @@ const tplReport = `
   var _o={{jsJSON .ChartOption}};_o.animation=false;if(_o.yAxis&&_o.yAxis.type==="value"){_o.yAxis.axisLabel={formatter:function(v){if(Math.abs(v)>=1e6)return(v/1e6).toFixed(1)+"M";if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+"k";return v%1===0?v:v.toFixed(2)}};}
   c.setOption(_o);
   window.addEventListener('resize',function(){c.resize()});
+})();
+</script>
+{{end}}
+{{if .ComposedHTML}}
+{{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
+<details class="card report-block" data-block="data" open>
+<summary>{{t $.Lang "Данные"}}</summary>
+<div class="rc-toolbar" style="margin-bottom:8px;display:flex;gap:8px"><button type="button" id="rc-expand" class="btn btn-sm">{{t $.Lang "Развернуть всё"}}</button><button type="button" id="rc-collapse" class="btn btn-sm">{{t $.Lang "Свернуть всё"}}</button></div>
+{{.ComposedHTML}}
+</details>
+<script>
+(function(){
+  function rcEscape(key){
+    return (window.CSS&&CSS.escape)?CSS.escape(key):key.replace(/["\\\]]/g,'\\$&');
+  }
+  function rcSetOpen(tr, open){
+    var key=tr.getAttribute('data-group');
+    var ek=rcEscape(key);
+    var cell=tr.querySelector('td');
+    var sel='[data-parent="'+ek+'"],[data-parent^="'+ek+'/"],[data-group^="'+ek+'/"]';
+    document.querySelectorAll(sel).forEach(function(el){ el.style.display = open ? '' : 'none'; });
+    if(cell){ cell.textContent=(open?'▼':'▶')+cell.textContent.slice(1); }
+  }
+  document.querySelectorAll('tr.grp').forEach(function(tr){
+    tr.style.cursor='pointer';
+    tr.addEventListener('click', function(){
+      var cell=tr.querySelector('td');
+      var open=cell.textContent.trim().charAt(0)==='▼';
+      rcSetOpen(tr, !open);
+    });
+  });
+  var expandBtn=document.getElementById('rc-expand');
+  var collapseBtn=document.getElementById('rc-collapse');
+  if(expandBtn){
+    expandBtn.addEventListener('click', function(){
+      var tbody=document.querySelector('table.report-composed tbody');
+      if(!tbody) return;
+      tbody.querySelectorAll('tr').forEach(function(tr){ tr.style.display=''; });
+      tbody.querySelectorAll('tr.grp').forEach(function(tr){
+        var cell=tr.querySelector('td');
+        if(cell&&cell.textContent.trim().charAt(0)==='▶'){
+          cell.textContent='▼'+cell.textContent.slice(1);
+        }
+      });
+    });
+  }
+  if(collapseBtn){
+    collapseBtn.addEventListener('click', function(){
+      var tbody=document.querySelector('table.report-composed tbody');
+      if(!tbody) return;
+      tbody.querySelectorAll('tr.det,tr.subtotal').forEach(function(tr){ tr.style.display='none'; });
+      tbody.querySelectorAll('tr.grp').forEach(function(tr){
+        var level=parseInt(tr.getAttribute('data-level')||'0',10);
+        if(level>0){ tr.style.display='none'; } else {
+          var cell=tr.querySelector('td');
+          if(cell&&cell.textContent.trim().charAt(0)==='▼'){
+            cell.textContent='▶'+cell.textContent.slice(1);
+          }
+        }
+      });
+    });
+  }
 })();
 </script>
 {{end}}
@@ -2313,6 +2383,18 @@ const tplReport = `
 </div>
 {{end}}
 {{template "form-shared-js" .}}
+<script>
+(function(){
+  try{
+    document.querySelectorAll('details.report-block').forEach(function(el){
+      var key='rb-'+location.pathname+'-'+el.dataset.block;
+      var saved=localStorage.getItem(key);
+      if(saved==='1')el.open=true; else if(saved==='0')el.open=false;
+      el.addEventListener('toggle',function(){localStorage.setItem(key,el.open?'1':'0');});
+    });
+  }catch(e){}
+})();
+</script>
 </main></div></body></html>
 {{end}}
 `

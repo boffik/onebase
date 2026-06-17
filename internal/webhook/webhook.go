@@ -136,12 +136,17 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 		timeout = 10 * time.Second
 	}
 
-	// Число повторов ограничено сверху: без клампа большое retry из app.yaml
-	// при сдвиге d.retryBase << (try-1) переполняло бы Duration в отрицательную
-	// (Sleep=0, долбёж чужого сервера), а средние значения давали сон на сутки.
+	// Число повторов ограничено сверху и снизу: без верхнего клампа большое retry
+	// из app.yaml при сдвиге d.retryBase << (try-1) переполняло бы Duration в
+	// отрицательную (Sleep=0, долбёж чужого сервера), а средние значения давали
+	// сон на сутки. Без нижнего клампа отрицательный retry давал attempts=0 —
+	// веб-хук не отправлялся бы ни разу.
 	const maxRetry = 10
 	const maxBackoff = 5 * time.Minute
 	retry := h.Retry
+	if retry < 0 {
+		retry = 0
+	}
 	if retry > maxRetry {
 		retry = maxRetry
 	}
