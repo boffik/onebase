@@ -45,6 +45,30 @@ composition:
 	}
 }
 
+func TestParseMeasureAlign(t *testing.T) {
+	src := []byte(`
+name: Тест
+query: "ВЫБРАТЬ 1"
+composition:
+  groupings: [Менеджер]
+  measures:
+    - { field: Сумма, agg: sum, align: center }
+`)
+	r, err := ParseBytes(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Composition == nil {
+		t.Fatal("Composition is nil")
+	}
+	if len(r.Composition.Measures) != 1 {
+		t.Fatalf("ожидали 1 показатель, получили %d", len(r.Composition.Measures))
+	}
+	if r.Composition.Measures[0].Align != "center" {
+		t.Fatalf("Align = %q, ожидали \"center\"", r.Composition.Measures[0].Align)
+	}
+}
+
 func TestParseNoComposition(t *testing.T) {
 	r, err := ParseBytes([]byte("name: X\nquery: \"ВЫБРАТЬ 1\"\n"))
 	if err != nil {

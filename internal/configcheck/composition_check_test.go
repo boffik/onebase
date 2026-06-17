@@ -1,6 +1,7 @@
 package configcheck
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/project"
@@ -21,6 +22,36 @@ func TestCompositionOK(t *testing.T) {
 	}
 	if iss := CheckReportComposition(projWith(c)); len(iss) != 0 {
 		t.Fatalf("ожидали 0 проблем: %+v", iss)
+	}
+}
+
+func TestMeasureAlignValidation(t *testing.T) {
+	// Недопустимое значение align — должна быть проблема.
+	cBad := &report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Align: "diagonal"}},
+	}
+	iss := CheckReportComposition(projWith(cBad))
+	found := false
+	for _, i := range iss {
+		if strings.Contains(i.Message, "выравнивание") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("ожидали проблему про выравнивание, получили: %+v", iss)
+	}
+
+	// Допустимые значения — проблем нет.
+	for _, align := range []string{"", "left", "right", "center"} {
+		cOK := &report.Composition{
+			Groupings: []string{"М"},
+			Measures:  []report.Measure{{Field: "Сумма", Agg: "sum", Align: align}},
+		}
+		if iss2 := CheckReportComposition(projWith(cOK)); len(iss2) != 0 {
+			t.Fatalf("align=%q: ожидали 0 проблем, получили: %+v", align, iss2)
+		}
 	}
 }
 

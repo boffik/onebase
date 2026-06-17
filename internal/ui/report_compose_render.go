@@ -17,7 +17,7 @@ func renderComposedTable(res *compose.Result, spec *report.Composition) template
 	b.WriteString(`<table class="report-composed">`)
 	b.WriteString(`<thead><tr><th>` + html.EscapeString(strings.Join(spec.Groupings, " / ")) + `</th>`)
 	for _, m := range spec.Measures {
-		b.WriteString(`<th class="num">` + html.EscapeString(measureTitle(m)) + `</th>`)
+		b.WriteString(`<th class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(measureTitle(m)) + `</th>`)
 	}
 	b.WriteString(`</tr></thead><tbody>`)
 	for _, g := range res.Groups {
@@ -26,7 +26,7 @@ func renderComposedTable(res *compose.Result, spec *report.Composition) template
 	if spec.Totals.Grand {
 		b.WriteString(`<tr class="grand"><td>ВСЕГО</td>`)
 		for _, m := range spec.Measures {
-			b.WriteString(`<td class="num">` + html.EscapeString(fmtVal(res.Grand[m.Field])) + `</td>`)
+			b.WriteString(`<td class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(fmtVal(res.Grand[m.Field])) + `</td>`)
 		}
 		b.WriteString(`</tr>`)
 	}
@@ -41,7 +41,7 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 	fmt.Fprintf(b, `<tr class="grp" data-group="%s" data-level="%d" style="%s"><td style="%s">▼ %s</td>`,
 		html.EscapeString(gp), level, html.EscapeString(rowStyle), pad, html.EscapeString(fmtVal(g.Key)))
 	for _, m := range spec.Measures {
-		cell := cssOf(g.Styles[m.Field])
+		cell := joinStyles(measureAlign(m), cssOf(g.Styles[m.Field]))
 		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
 	}
 	b.WriteString(`</tr>`)
@@ -55,7 +55,7 @@ func writeGroup(b *strings.Builder, g *compose.Group, spec *report.Composition, 
 		fmt.Fprintf(b, `<tr class="subtotal" data-parent="%s" style="%s"><td style="padding-left:%dpx">··· Итого: %s ···</td>`,
 			html.EscapeString(gp), html.EscapeString(rowStyle), 8+(level+1)*18, html.EscapeString(fmtVal(g.Key)))
 		for _, m := range spec.Measures {
-			cell := cssOf(g.Styles[m.Field])
+			cell := joinStyles(measureAlign(m), cssOf(g.Styles[m.Field]))
 			b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(g.Subtotals[m.Field])) + `</td>`)
 		}
 		b.WriteString(`</tr>`)
@@ -67,7 +67,7 @@ func writeDetail(b *strings.Builder, d compose.DetailRow, spec *report.Compositi
 	fmt.Fprintf(b, `<tr class="det" data-parent="%s" style="%s">`, html.EscapeString(path), html.EscapeString(rowStyle))
 	fmt.Fprintf(b, `<td style="padding-left:%dpx"></td>`, 8+level*18)
 	for _, m := range spec.Measures {
-		cell := cssOf(d.Styles[m.Field])
+		cell := joinStyles(measureAlign(m), cssOf(d.Styles[m.Field]))
 		b.WriteString(`<td class="num" style="` + html.EscapeString(cell) + `">` + html.EscapeString(fmtVal(d.Values[m.Field])) + `</td>`)
 	}
 	b.WriteString(`</tr>`)
@@ -95,6 +95,28 @@ func measureTitle(m report.Measure) string {
 		return m.Title
 	}
 	return m.Field
+}
+
+// measureAlign возвращает CSS-свойство выравнивания для ячейки показателя.
+// По умолчанию (пустое Align) — вправо, как было исторически.
+func measureAlign(m report.Measure) string {
+	switch m.Align {
+	case "left", "center":
+		return "text-align:" + m.Align
+	default:
+		return "text-align:right"
+	}
+}
+
+// joinStyles объединяет два CSS-стиля через ";", пропуская пустые части.
+func joinStyles(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + ";" + b
 }
 
 // buildComposedChart строит ECharts-option из верхнего уровня группировки.

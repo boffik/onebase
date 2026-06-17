@@ -450,6 +450,7 @@ func CheckReportComposition(proj *project.Project) []Issue {
 	aggs := map[string]bool{"": true, "sum": true, "count": true, "avg": true, "min": true, "max": true}
 	dirs := map[string]bool{"": true, "asc": true, "desc": true}
 	ctypes := map[string]bool{"bar": true, "line": true, "pie": true}
+	aligns := map[string]bool{"": true, "left": true, "right": true, "center": true}
 	add := func(name, msg string) {
 		issues = append(issues, Issue{File: "reports/" + name + ".yaml", Object: name, Kind: "Отчёт (компоновка)", Message: msg})
 	}
@@ -467,6 +468,9 @@ func CheckReportComposition(proj *project.Project) []Issue {
 			measures[m.Field] = true
 			if !aggs[m.Agg] {
 				add(rep.Name, "неизвестный агрегат: "+m.Agg)
+			}
+			if !aligns[m.Align] {
+				add(rep.Name, "неизвестное выравнивание: "+m.Align)
 			}
 		}
 		for _, s := range c.Sort {

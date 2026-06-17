@@ -67,6 +67,32 @@ func TestRenderComposedTable(t *testing.T) {
 	}
 }
 
+func TestRenderMeasureAlign(t *testing.T) {
+	// Показатель с Align:"center" должен давать text-align:center,
+	// показатель без Align — text-align:right по умолчанию.
+	rows := []compose.Row{
+		{"М": "Иванов", "Сумма": "150", "Кол": "3"},
+	}
+	spec := report.Composition{
+		Groupings: []string{"М"},
+		Measures: []report.Measure{
+			{Field: "Сумма", Agg: "sum", Align: "center"},
+			{Field: "Кол", Agg: "sum"},
+		},
+		Totals: report.Totals{Grand: true, Subtotals: true},
+		Detail: true,
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+
+	if !strings.Contains(out, "text-align:center") {
+		t.Fatalf("ожидали text-align:center для показателя Сумма:\n%s", out)
+	}
+	if !strings.Contains(out, "text-align:right") {
+		t.Fatalf("ожидали text-align:right для показателя Кол:\n%s", out)
+	}
+}
+
 func TestComposedPathEscaping(t *testing.T) {
 	// Значение группировки с «/» не должно ломать префиксную схему путей:
 	// сиблинг «Иванов/Доп» обязан иметь экранированный data-group, иначе
