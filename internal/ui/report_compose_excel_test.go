@@ -169,6 +169,50 @@ func TestComposedRowsDetail(t *testing.T) {
 	}
 }
 
+// TestComposedRowsNilMeasure проверяет, что nil-значение показателя (например,
+// min/max/avg на пустой группе) попадает в ячейку как nil, а не float64(0).
+// Это обеспечивает соответствие Excel-выгрузки HTML-рендеру, где nil → пустая ячейка.
+func TestComposedRowsNilMeasure(t *testing.T) {
+	// Собираем Result вручную: одна группа с nil-подытогом (имитирует avg на пустой группе)
+	// и nil в Grand.
+	res := &compose.Result{
+		Groups: []*compose.Group{
+			{
+				Key:      "Группа1",
+				Subtotals: map[string]any{"Кол": nil},
+			},
+		},
+		Grand: map[string]any{"Кол": nil},
+	}
+	spec := &report.Composition{
+		Groupings: []string{"М"},
+		Measures:  []report.Measure{{Field: "Кол", Agg: "avg", Title: "Кол-во"}},
+		Totals:    report.Totals{Grand: true, Subtotals: true},
+	}
+
+	_, xlsRows := composedRows(res, spec)
+
+	// Ожидаем 3 строки: строка группы + подытог + ВСЕГО.
+	if len(xlsRows) != 3 {
+		t.Fatalf("ожидали 3 строки, получили %d: %v", len(xlsRows), xlsRows)
+	}
+
+	// Строка группы [0][1] должна быть nil, а не float64(0).
+	if xlsRows[0][1] != nil {
+		t.Errorf("строка группы [1]: ожидали nil (пустая ячейка), получили %T(%v)", xlsRows[0][1], xlsRows[0][1])
+	}
+
+	// Строка подытога [1][1] должна быть nil.
+	if xlsRows[1][1] != nil {
+		t.Errorf("строка подытога [1]: ожидали nil (пустая ячейка), получили %T(%v)", xlsRows[1][1], xlsRows[1][1])
+	}
+
+	// Строка ВСЕГО [2][1] должна быть nil.
+	if xlsRows[2][1] != nil {
+		t.Errorf("строка ВСЕГО [1]: ожидали nil (пустая ячейка), получили %T(%v)", xlsRows[2][1], xlsRows[2][1])
+	}
+}
+
 // TestComposedRowsFlat проверяет однуровневую группировку без деталей.
 func TestComposedRowsFlat(t *testing.T) {
 	rows := []compose.Row{

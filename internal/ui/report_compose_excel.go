@@ -12,6 +12,16 @@ import (
 	"github.com/ivantit66/onebase/internal/report/compose"
 )
 
+// numForExcel: nil-значение показателя → пустая ячейка Excel (excel.ExportList
+// рендерит nil как ""), иначе число через numFor. Расхождение с HTML
+// (где nil → пустая ячейка) иначе приводило бы к ложному 0 в выгрузке.
+func numForExcel(v any) any {
+	if v == nil {
+		return nil
+	}
+	return numFor(v)
+}
+
 // composedRows строит заголовки и строки данных для excel.ExportList
 // из скомпонованного результата. Порядок строк совпадает с renderComposedTable:
 //
@@ -37,7 +47,7 @@ func composedRows(res *compose.Result, spec *report.Composition) (headers []stri
 		row := make([]any, 1+len(spec.Measures))
 		row[0] = "ВСЕГО"
 		for i, m := range spec.Measures {
-			row[i+1] = numFor(res.Grand[m.Field])
+			row[i+1] = numForExcel(res.Grand[m.Field])
 		}
 		rows = append(rows, row)
 	}
@@ -54,7 +64,7 @@ func appendGroup(rows [][]any, g *compose.Group, spec *report.Composition, level
 	grpRow := make([]any, colCount)
 	grpRow[0] = indent + fmtVal(g.Key)
 	for i, m := range spec.Measures {
-		grpRow[i+1] = numFor(g.Subtotals[m.Field])
+		grpRow[i+1] = numForExcel(g.Subtotals[m.Field])
 	}
 	rows = append(rows, grpRow)
 
@@ -75,7 +85,7 @@ func appendGroup(rows [][]any, g *compose.Group, spec *report.Composition, level
 			// документ) появится в задаче B3 (detail_link).
 			detRow[0] = childIndent
 			for i, m := range spec.Measures {
-				detRow[i+1] = numFor(d.Values[m.Field])
+				detRow[i+1] = numForExcel(d.Values[m.Field])
 			}
 			rows = append(rows, detRow)
 		}
@@ -87,7 +97,7 @@ func appendGroup(rows [][]any, g *compose.Group, spec *report.Composition, level
 		subRow := make([]any, colCount)
 		subRow[0] = fmt.Sprintf("%s··· Итого: %s ···", subIndent, fmtVal(g.Key))
 		for i, m := range spec.Measures {
-			subRow[i+1] = numFor(g.Subtotals[m.Field])
+			subRow[i+1] = numForExcel(g.Subtotals[m.Field])
 		}
 		rows = append(rows, subRow)
 	}
