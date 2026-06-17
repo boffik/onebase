@@ -9,6 +9,7 @@ import (
 
 	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/ivantit66/onebase/internal/widget"
 )
 
 // renderComposedTable строит единую <table> с раскрываемыми группами,
@@ -135,49 +136,34 @@ func joinStyles(a, b string) string {
 	return a + ";" + b
 }
 
-// buildComposedChart строит ECharts-option из верхнего уровня группировки.
-// Формат совпадает с тем, что отдаёт ChartProc (слот ChartOption шаблона).
+// buildComposedChart строит ECharts-option из верхнего уровня группировки через
+// общий widget.EChartsOption — единый вид с виджетами дашборда и предпросмотром
+// (grid, сглаживание линий, radius круговой). Раньше option-map собирался здесь
+// вручную и расходился с остальными графиками платформы.
 func buildComposedChart(res *compose.Result, c *report.ChartSpec) map[string]any {
 	if c == nil || len(res.Groups) == 0 {
 		return nil
 	}
-	if c.Type == "pie" {
-		// Круговая: один ряд из пар {name,value} по первому показателю.
-		// Несколько series для pie в v1 не поддерживаются (берём firstSeries).
-		pie := make([]any, 0, len(res.Groups))
-		for _, g := range res.Groups {
-			pie = append(pie, map[string]any{"name": fmtVal(g.Key), "value": numFor(g.Subtotals[firstSeries(c)])})
-		}
-		return map[string]any{
-			"tooltip": map[string]any{"trigger": "item"},
-			"series":  []any{map[string]any{"type": "pie", "data": pie}},
-		}
-	}
-	cats := make([]string, 0, len(res.Groups))
+	cd := &widget.ChartData{Kind: c.Type}
 	for _, g := range res.Groups {
-		cats = append(cats, fmtVal(g.Key))
+		cd.XAxis = append(cd.XAxis, fmtVal(g.Key))
 	}
-	var series []any
-	for _, sf := range c.Series {
-		data := make([]any, 0, len(res.Groups))
-		for _, g := range res.Groups {
-			data = append(data, numFor(g.Subtotals[sf]))
+	// Круговая берёт один ряд по первому показателю; столбцы/линия — все ряды.
+	fields := c.Series
+	if c.Type == "pie" {
+		fields = nil
+		if sf := firstSeries(c); sf != "" {
+			fields = []string{sf}
 		}
-		series = append(series, map[string]any{"name": sf, "type": chartType(c.Type), "data": data})
 	}
-	return map[string]any{
-		"tooltip": map[string]any{"trigger": "axis"},
-		"series":  series,
-		"xAxis":   map[string]any{"type": "category", "data": cats},
-		"yAxis":   map[string]any{"type": "value"},
+	for _, sf := range fields {
+		s := widget.ChartSeries{Name: sf}
+		for _, g := range res.Groups {
+			s.Data = append(s.Data, composeFloat(g.Subtotals[sf]))
+		}
+		cd.Series = append(cd.Series, s)
 	}
-}
-
-func chartType(t string) string {
-	if t == "line" {
-		return "line"
-	}
-	return "bar"
+	return widget.EChartsOption(cd)
 }
 
 func firstSeries(c *report.ChartSpec) string {
@@ -187,12 +173,13 @@ func firstSeries(c *report.ChartSpec) string {
 	return ""
 }
 
-func numFor(v any) any {
+// composeFloat приводит значение показателя к float64 для графика и Excel.
+func composeFloat(v any) float64 {
 	if d, ok := compose.ExportToDecimal(v); ok {
 		f, _ := d.Float64()
 		return f
 	}
-	return float64(0)
+	return 0
 }
 
 func fmtVal(v any) string {
