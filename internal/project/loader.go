@@ -88,8 +88,14 @@ type DemoConfig struct {
 
 // AppConfig holds the optional config/app.yaml metadata.
 type AppConfig struct {
-	Name        string             `yaml:"name"`
-	Version     string             `yaml:"version"`
+	Name    string `yaml:"name"`
+	Version string `yaml:"version"`
+	// Авторство и лицензия конфигурации (план 69). Необязательны. Едут вместе
+	// с конфигурацией (app.yaml попадает в файл / в _onebase_config / в .obz) —
+	// чтобы форк или поставка клиенту имели определённого правообладателя.
+	Author      string             `yaml:"author,omitempty"`
+	Copyright   string             `yaml:"copyright,omitempty"`
+	License     string             `yaml:"license,omitempty"`
 	Lang        string             `yaml:"lang,omitempty"`
 	Logo        string             `yaml:"logo,omitempty"`
 	Email       *EmailConfig       `yaml:"email,omitempty"`
