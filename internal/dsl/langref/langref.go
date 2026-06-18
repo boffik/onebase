@@ -40,6 +40,7 @@ type Descriptor struct {
 	Returns   string   `json:"returns,omitempty"` // тип возврата ("" если нет)
 	Doc       string   `json:"doc"`               // 1–3 предложения
 	Example   string   `json:"example,omitempty"`
+	Snippet   string   `json:"snippet,omitempty"` // шаблон вставки для автодополнения (Monaco snippet: ${1:…} табстопы, $0 — курсор)
 	Group     string   `json:"group,omitempty"` // для дерева функций: "Строки", "Даты"…
 }
 

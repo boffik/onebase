@@ -1089,6 +1089,18 @@ function endEdit(name) {
   }
 }
 // ── Syntax check ──────────────────────────────────────────────────
+// jumpToError ставит курсор Monaco-редактора в координаты ошибки синтаксического
+// контроля и прокручивает к ней (issue #103). key — тот же, что и у runCheck.
+function jumpToError(key, line, col) {
+  var ed = (typeof monacoEditors !== 'undefined') ? monacoEditors[key] : null;
+  if (ed) {
+    ed.revealLineInCenter(line);
+    ed.setPosition({lineNumber: line, column: col || 1});
+    ed.focus();
+  }
+  return false;
+}
+
 // runCheck reads code from a textarea (id "ta-<key>") and posts it to the
 // configurator check endpoint, then renders the result in the sibling
 // .check-result element with id "check-<key>". The kind argument selects the
@@ -1128,8 +1140,12 @@ function runCheck(kind, key, name) {
       } else {
         result.className = 'check-result check-err';
         var lines = (d.issues || []).map(function(i){
-          var pos = (i.line ? ' (стр. ' + i.line + ')' : '');
-          return '• ' + i.message + pos;
+          var txt = escapeHtml('• ' + i.message);
+          if (i.line) {
+            var pos = ' (стр. ' + i.line + (i.column ? ', поз. ' + i.column : '') + ')';
+            return '<a href="#" onclick="return jumpToError(\'' + key + '\',' + i.line + ',' + (i.column || 1) + ')" style="color:inherit;text-decoration:underline;cursor:pointer">' + txt + escapeHtml(pos) + '</a>';
+          }
+          return txt;
         });
         result.innerHTML = '<b>Найдено ошибок: ' + d.total + '</b><br>' + lines.join('<br>');
       }
@@ -2804,6 +2820,10 @@ var KW=['Процедура','КонецПроцедуры','Функция','К
   'And','Or','Not','Var'];
 var FN=['Error','Ошибка','Сообщить','Формат','ФорматСтроки','СтрЗаменить'];
 var SP=['this','Движения','Параметры'];
+// DSL регистронезависим — подсветку ключевых слов сравниваем по нижнему регистру (issue #104).
+var KWl=KW.map(function(s){return s.toLowerCase();});
+var FNl=FN.map(function(s){return s.toLowerCase();});
+var SPl=SP.map(function(s){return s.toLowerCase();});
 
 function hl(code){
   var r='',i=0,n=code.length;
@@ -2822,10 +2842,10 @@ function hl(code){
     }
     if(/[а-яёА-ЯЁa-zA-Z_]/.test(code[i])){
       var j=i;while(j<n && /[а-яёА-ЯЁa-zA-Z0-9_]/.test(code[j]))j++;
-      var w=code.slice(i,j);
-      if(KW.indexOf(w)>=0)r+='<span class="hl-kw">'+esc(w)+'</span>';
-      else if(FN.indexOf(w)>=0)r+='<span class="hl-fn">'+esc(w)+'</span>';
-      else if(SP.indexOf(w)>=0)r+='<span class="hl-sp">'+esc(w)+'</span>';
+      var w=code.slice(i,j),wl=w.toLowerCase();
+      if(KWl.indexOf(wl)>=0)r+='<span class="hl-kw">'+esc(w)+'</span>';
+      else if(FNl.indexOf(wl)>=0)r+='<span class="hl-fn">'+esc(w)+'</span>';
+      else if(SPl.indexOf(wl)>=0)r+='<span class="hl-sp">'+esc(w)+'</span>';
       else r+=esc(w);
       i=j;continue;
     }
@@ -2865,6 +2885,8 @@ require(['vs/editor/editor.main'], function() {
       'ЛЕВОЕ','ПРАВОЕ','ВНУТРЕННЕЕ','ПОЛНОЕ','СОЕДИНЕНИЕ',
       'КАК','ВОЗР','УБЫВ','СУММА','КОЛИЧЕСТВО','МИНИМУМ','МАКСИМУМ','СРЕДНЕЕ'].concat(extraBuiltins||[]);
     return {
+      // DSL регистронезависим — подсветка ключевых слов тоже (issue #104).
+      ignoreCase: true,
       keywords: [
         'Процедура','КонецПроцедуры','Функция','КонецФункции',
         'Если','Тогда','ИначеЕсли','Иначе','КонецЕсли',
@@ -2910,6 +2932,7 @@ require(['vs/editor/editor.main'], function() {
   }
   // Сниппет вставки: Имя(${1:П1}, ${2:П2})
   function _lrSnippet(d){
+    if (d.snippet) return d.snippet; // готовый шаблон конструкции (Процедура…, Если… и т.п.) — issue #105
     if (!d.params || !d.params.length) return d.display;
     var parts = d.params.map(function(p,i){ return '${'+(i+1)+':'+p.name+'}'; });
     return d.display + '(' + parts.join(', ') + ')';
@@ -2935,7 +2958,7 @@ require(['vs/editor/editor.main'], function() {
           detail: d.signature || '',
           documentation: { value: (d.doc||'') + (d.example ? _lrFence(d.example) : '') },
           insertText: _lrSnippet(d),
-          insertTextRules: (d.params && d.params.length) ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
+          insertTextRules: (d.snippet || (d.params && d.params.length)) ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
           range: range
         });
       });
