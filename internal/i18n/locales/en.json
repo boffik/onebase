@@ -872,6 +872,8 @@
   "печатная ширина": "print width",
   "Структура": "Structure",
   "Группировки": "Groupings",
+  "Колонки (кросс-таблица)": "Columns (pivot table)",
+  "если заполнено — отчёт строится кросс-таблицей": "if filled, the report is built as a pivot table",
   "Показатели": "Measures",
   "Агрегат": "Aggregate",
   "Выравн.": "Align",

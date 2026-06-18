@@ -134,6 +134,26 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 
 	if rep.Composition != nil {
 		ev := newInterpEvaluator(s.interp)
+		// Режим кросс-таблицы (pivot): измерения уходят в колонки. График в этом
+		// режиме не строится (категории — это столбцы таблицы).
+		if len(rep.Composition.Columns) > 0 {
+			cr, cerr := compose.ComposeCross(rows, *rep.Composition, ev)
+			if cerr != nil {
+				s.render(w, r, "page-report", map[string]any{
+					"Report": rep, "QueryError": cerr.Error(),
+					"ParamValues": paramValues, "ReportParams": reportParams,
+				})
+				return
+			}
+			s.render(w, r, "page-report", map[string]any{
+				"Report":       rep,
+				"ComposedHTML": renderCrossTable(cr, rep.Composition),
+				"Capped":       cr.Capped,
+				"ParamValues":  paramValues,
+				"ReportParams": reportParams,
+			})
+			return
+		}
 		res, cerr := compose.Compose(rows, *rep.Composition, ev)
 		if cerr != nil {
 			s.render(w, r, "page-report", map[string]any{
@@ -392,6 +412,24 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 	// Если отчёт использует компоновщик — строим дерево групп/итогов для Excel.
 	if rep.Composition != nil {
 		ev := newInterpEvaluator(s.interp)
+		// Кросс-таблица (pivot): выгружаем измерения-колонки в столбцы листа.
+		if len(rep.Composition.Columns) > 0 {
+			cr, cerr := compose.ComposeCross(rows, *rep.Composition, ev)
+			if cerr != nil {
+				http.Error(w, "compose error: "+s.errText(r, cerr), 500)
+				return
+			}
+			headers, xlsRows := crossSheetRows(cr, rep.Composition)
+			data, err := excel.ExportList(headers, xlsRows)
+			if err != nil {
+				http.Error(w, "Excel error: "+s.errText(r, err), 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+			w.Header().Set("Content-Disposition", contentDisposition(rep.Name+".xlsx"))
+			w.Write(data)
+			return
+		}
 		res, cerr := compose.Compose(rows, *rep.Composition, ev)
 		if cerr != nil {
 			http.Error(w, "compose error: "+s.errText(r, cerr), 500)

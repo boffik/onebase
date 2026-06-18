@@ -522,6 +522,22 @@ func CheckReportComposition(proj *project.Project) []Issue {
 				add(rep.Name, "ошибка выражения условия \""+cr.When+"\": "+err.Error())
 			}
 		}
+		// Кросс-таблица (columns): измерения уходят в колонки. Детализация в этом
+		// режиме не выводится; поле-колонка не должно дублировать строковое
+		// измерение или показатель.
+		if len(c.Columns) > 0 {
+			if c.Detail {
+				add(rep.Name, "детализация (detail) несовместима с кросс-таблицей (columns) и будет проигнорирована")
+			}
+			for _, col := range c.Columns {
+				if groups[col] {
+					add(rep.Name, "поле \""+col+"\" указано и в группировках, и в колонках кросс-таблицы")
+				}
+				if measures[col] {
+					add(rep.Name, "поле \""+col+"\" указано и в показателях, и в колонках кросс-таблицы")
+				}
+			}
+		}
 	}
 	return issues
 }
