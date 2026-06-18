@@ -2,9 +2,10 @@ package interpreter
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/microcosm-cc/bluemonday"
 )
 
 // Объект-построитель «Страница» (план 66). Передаётся в обработчик страницы
@@ -292,27 +293,24 @@ func (r *DSLPageRow) CallMethod(name string, args []any) any {
 
 // ─── вспомогательные ──────────────────────────────────────────────────────────
 
-// sanitizePageHTML — консервативная очистка произвольного HTML из
-// ДобавитьСыройHTML: вырезает блоки <script>/<style>, обработчики on*= и
-// javascript:-URI. Не полноценный санитайзер DOM; задаёт нижнюю планку
-// безопасности для escape-hatch'а, который по умолчанию не используется.
-// RE2 (пакет regexp) не поддерживает обратные ссылки, поэтому script/style
-// закрываем отдельными выражениями, плюс выметаем любые «осиротевшие» теги.
-var (
-	reScriptBlock = regexp.MustCompile(`(?is)<\s*script\b[^>]*>.*?<\s*/\s*script\s*>`)
-	reStyleBlock  = regexp.MustCompile(`(?is)<\s*style\b[^>]*>.*?<\s*/\s*style\s*>`)
-	reStrayTag    = regexp.MustCompile(`(?is)<\s*/?\s*(script|style)\b[^>]*>`)
-	reEventAttr   = regexp.MustCompile(`(?is)\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
-	reJSURI       = regexp.MustCompile(`(?is)(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)`)
-)
+// pageHTMLPolicy — bluemonday-санитайзер для блока ДобавитьСыройHTML (план 66).
+// Allowlist на базе UGCPolicy (форматирование, списки, таблицы, ссылки и
+// картинки только безопасных схем, заголовки) надёжно вырезает
+// script/iframe/object, on*-обработчики и javascript:/data:-URI. Это замена
+// прежнему блоклисту на регулярках, который обходился разделителем «/» перед
+// обработчиком (<img src=x/onerror=…>), табом в схеме (java&#9;script:) и
+// data:-iframe. class/style разрешаем, чтобы автор страницы сохранял вёрстку —
+// исполняемых векторов style в современных браузерах не несёт.
+var pageHTMLPolicy = func() *bluemonday.Policy {
+	p := bluemonday.UGCPolicy()
+	p.AllowAttrs("class", "style").Globally()
+	return p
+}()
 
+// sanitizePageHTML очищает произвольный HTML из ДобавитьСыройHTML по allowlist.
+// Результат безопасно отдавать через template.HTML (pageRaw).
 func sanitizePageHTML(s string) string {
-	s = reScriptBlock.ReplaceAllString(s, "")
-	s = reStyleBlock.ReplaceAllString(s, "")
-	s = reStrayTag.ReplaceAllString(s, "")
-	s = reEventAttr.ReplaceAllString(s, "")
-	s = reJSURI.ReplaceAllString(s, `$1="#"`)
-	return s
+	return pageHTMLPolicy.Sanitize(s)
 }
 
 func argStr(args []any, i int) string {
