@@ -1,5 +1,8 @@
 name: Бухгалтерия
 version: "1.0.0"
+author: Иван Титов
+copyright: © 2026 Иван Титов
+license: MIT
 
 # Путь к логотипу относительно папки конфигурации (PNG, SVG, JPG)
 # logo: config/logo.png
