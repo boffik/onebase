@@ -4985,6 +4985,19 @@ const cfgTabTree = `{{define "tab-tree"}}
         <input type="text" name="app_version" value="{{.AppVersion}}" placeholder="1.0">
       </div>
       <div class="fg" style="margin-top:10px">
+        <label>{{t $.Lang "Автор"}}</label>
+        <input type="text" name="app_author" value="{{.AppAuthor}}" placeholder="{{t $.Lang "ФИО или организация"}}">
+        <div class="hint">{{t $.Lang "Указывается на экране «О программе» в пользовательском режиме"}}</div>
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <label>{{t $.Lang "Правообладатель"}}</label>
+        <input type="text" name="app_copyright" value="{{.AppCopyright}}" placeholder="© 2026 ...">
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <label>{{t $.Lang "Лицензия конфигурации"}}</label>
+        <input type="text" name="app_license" value="{{.AppLicense}}" placeholder="MIT / проприетарная / ...">
+      </div>
+      <div class="fg" style="margin-top:10px">
         <label>{{t $.Lang "Язык интерфейса"}}</label>
         <select name="app_lang" style="padding:6px 8px;border:1px solid #d0d7e3;border-radius:4px;font-size:13px">
           <option value="">{{t $.Lang "По умолчанию (русский)"}}</option>

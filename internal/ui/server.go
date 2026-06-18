@@ -27,6 +27,11 @@ import (
 type Config struct {
 	AppName       string
 	AppVersion    string
+	AppAuthor     string // автор конфигурации (app.yaml: author)
+	AppCopyright  string // правообладатель конфигурации (app.yaml: copyright)
+	AppLicense    string // лицензия конфигурации (app.yaml: license)
+	PlatAuthor    string // правообладатель платформы (version.Author)
+	PlatLicense   string // лицензия платформы (version.License)
 	DSN           string
 	PlatVersion   string
 	Logo          string // path to logo file (png/svg/jpg)
