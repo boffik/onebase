@@ -309,6 +309,9 @@ type configuratorData struct {
 	AppVersion       string
 	AppLogo          string
 	AppLang          string
+	AppAuthor        string
+	AppCopyright     string
+	AppLicense       string
 	AvailableLangs   []i18n.Lang
 	DSNMasked        string
 	Tab              string // "tree" | "convert" | "files"
@@ -573,6 +576,9 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		data.AppVersion = appCfg.Version
 		data.AppLogo = appCfg.Logo
 		data.AppLang = appCfg.Lang
+		data.AppAuthor = appCfg.Author
+		data.AppCopyright = appCfg.Copyright
+		data.AppLicense = appCfg.License
 	}
 	if launcherBundle != nil {
 		data.AvailableLangs = launcherBundle.Available()
@@ -3179,6 +3185,9 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	newName := strings.TrimSpace(r.FormValue("app_name"))
 	newVersion := strings.TrimSpace(r.FormValue("app_version"))
 	newLang := strings.TrimSpace(r.FormValue("app_lang"))
+	newAuthor := strings.TrimSpace(r.FormValue("app_author"))
+	newCopyright := strings.TrimSpace(r.FormValue("app_copyright"))
+	newLicense := strings.TrimSpace(r.FormValue("app_license"))
 	existingLogo := strings.TrimSpace(r.FormValue("app_logo_existing"))
 	removeLogo := r.FormValue("app_logo_remove") == "1"
 
@@ -3251,12 +3260,18 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type saveAppConfig struct {
-		Name    string `yaml:"name"`
-		Version string `yaml:"version,omitempty"`
-		Lang    string `yaml:"lang,omitempty"`
-		Logo    string `yaml:"logo,omitempty"`
+		Name      string `yaml:"name"`
+		Version   string `yaml:"version,omitempty"`
+		Lang      string `yaml:"lang,omitempty"`
+		Logo      string `yaml:"logo,omitempty"`
+		Author    string `yaml:"author,omitempty"`
+		Copyright string `yaml:"copyright,omitempty"`
+		License   string `yaml:"license,omitempty"`
 	}
-	out, _ := yaml.Marshal(saveAppConfig{Name: newName, Version: newVersion, Lang: newLang, Logo: logoPath})
+	out, _ := yaml.Marshal(saveAppConfig{
+		Name: newName, Version: newVersion, Lang: newLang, Logo: logoPath,
+		Author: newAuthor, Copyright: newCopyright, License: newLicense,
+	})
 
 	var saveErr error
 	if b.ConfigSource == "database" {
