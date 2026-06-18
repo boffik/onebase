@@ -198,10 +198,13 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	}
 
 	appCfg, _ := project.LoadConfig(dir)
-	uiCfg := ui.Config{DSN: dsn, PlatVersion: version.String()}
+	uiCfg := ui.Config{DSN: dsn, PlatVersion: version.String(), PlatAuthor: version.Author, PlatLicense: version.License}
 	if appCfg != nil {
 		uiCfg.AppName = appCfg.Name
 		uiCfg.AppVersion = appCfg.Version
+		uiCfg.AppAuthor = appCfg.Author
+		uiCfg.AppCopyright = appCfg.Copyright
+		uiCfg.AppLicense = appCfg.License
 		uiCfg.Lang = appCfg.Lang
 		if appCfg.Attachments != nil && appCfg.Attachments.MaxFileSizeMB > 0 {
 			uiCfg.MaxFileSizeMB = appCfg.Attachments.MaxFileSizeMB

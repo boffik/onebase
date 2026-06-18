@@ -231,10 +231,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	uiCfg := ui.Config{
 		DSN:         dsn,
 		PlatVersion: version.String(),
+		PlatAuthor:  version.Author,
+		PlatLicense: version.License,
 	}
 	if appCfg != nil {
 		uiCfg.AppName = appCfg.Name
 		uiCfg.AppVersion = appCfg.Version
+		uiCfg.AppAuthor = appCfg.Author
+		uiCfg.AppCopyright = appCfg.Copyright
+		uiCfg.AppLicense = appCfg.License
 		uiCfg.Lang = appCfg.Lang
 		if appCfg.Logo != "" {
 			uiCfg.Logo = filepath.Join(proj.Dir, appCfg.Logo)
