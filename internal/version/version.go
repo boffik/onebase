@@ -5,6 +5,14 @@ import "runtime/debug"
 // Build is set via -ldflags="-X github.com/ivantit66/onebase/internal/version.Build=v1.2.3"
 var Build = ""
 
+// Правообладатель и лицензия платформы (план 69). Единый источник для экрана
+// «О программе». Совпадают с файлом LICENSE в корне репозитория.
+const (
+	Author  = "Иван Титов"
+	License = "MIT"
+	Year    = "2026"
+)
+
 // String returns the platform version string.
 func String() string {
 	if Build != "" {
