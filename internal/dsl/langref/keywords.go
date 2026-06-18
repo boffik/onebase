@@ -7,6 +7,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "процедура",
 		Display: "Процедура … КонецПроцедуры",
 		Aliases: []string{"Procedure", "EndProcedure"},
+		Snippet: "Процедура ${1:Имя}()\n\t$0\nКонецПроцедуры",
 		Kind:    KindKeyword,
 		Group:   "Объявления",
 		Signature: "Процедура <Имя>([Знач] <параметр>, ...) [Экспорт]\n" +
@@ -21,6 +22,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "функция",
 		Display: "Функция … КонецФункции",
 		Aliases: []string{"Function", "EndFunction"},
+		Snippet: "Функция ${1:Имя}()\n\t$0\nКонецФункции",
 		Kind:    KindKeyword,
 		Group:   "Объявления",
 		Signature: "Функция <Имя>([Знач] <параметр>, ...) [Экспорт]\n" +
@@ -46,6 +48,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "если",
 		Display: "Если … Тогда … КонецЕсли",
 		Aliases: []string{"If", "Then", "ElseIf", "Else", "EndIf"},
+		Snippet: "Если ${1:условие} Тогда\n\t$0\nКонецЕсли",
 		Kind:    KindKeyword,
 		Group:   "Ветвление",
 		Signature: "Если <условие> Тогда\n" +
@@ -65,6 +68,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "для каждого",
 		Display: "Для Каждого … Из … Цикл … КонецЦикла",
 		Aliases: []string{"For", "Each", "In", "Do", "EndDo"},
+		Snippet: "Для Каждого ${1:Элемент} Из ${2:Коллекция} Цикл\n\t$0\nКонецЦикла",
 		Kind:    KindKeyword,
 		Group:   "Циклы",
 		Signature: "Для Каждого <Элемент> Из <Коллекция> Цикл\n" +
@@ -77,6 +81,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "для",
 		Display: "Для … По … Цикл … КонецЦикла",
 		Aliases: []string{"For", "To", "Do", "EndDo"},
+		Snippet: "Для ${1:сч} = ${2:1} По ${3:10} Цикл\n\t$0\nКонецЦикла",
 		Kind:    KindKeyword,
 		Group:   "Циклы",
 		Signature: "Для <Счётчик> = <Начало> По <Конец> Цикл\n" +
@@ -90,6 +95,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "пока",
 		Display: "Пока … Цикл … КонецЦикла",
 		Aliases: []string{"While"},
+		Snippet: "Пока ${1:условие} Цикл\n\t$0\nКонецЦикла",
 		Kind:    KindKeyword,
 		Group:   "Циклы",
 		Signature: "Пока <условие> Цикл\n" +
@@ -104,6 +110,7 @@ var keywordDescriptors = []Descriptor{
 		Name:    "попытка",
 		Display: "Попытка … Исключение … КонецПопытки",
 		Aliases: []string{"Try", "Except", "EndTry"},
+		Snippet: "Попытка\n\t$1\nИсключение\n\t$0\nКонецПопытки",
 		Kind:    KindKeyword,
 		Group:   "Обработка ошибок",
 		Signature: "Попытка\n" +

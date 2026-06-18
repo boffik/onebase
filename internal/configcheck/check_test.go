@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func TestParseDSL_SyntaxErrorHasPosition(t *testing.T) {
+	// Синтаксическая ошибка должна нести координаты (Line/Column), чтобы в
+	// конфигураторе можно было кликнуть по ней и перейти к месту (issue #103).
+	src := `Процедура Тест()
+  х = ;
+КонецПроцедуры`
+	issues := ParseDSL(src, "Тест")
+	if len(issues) != 1 {
+		t.Fatalf("ожидалась 1 проблема, получено %d: %+v", len(issues), issues)
+	}
+	is := issues[0]
+	if is.Line != 2 {
+		t.Errorf("ожидалась строка 2, получено %d (%+v)", is.Line, is)
+	}
+	if is.Column == 0 {
+		t.Errorf("ожидалась ненулевая колонка (%+v)", is)
+	}
+	// Координаты вычищены из текста — UI покажет их отдельно, без дубля.
+	if strings.Contains(is.Message, "Тест:") {
+		t.Errorf("координаты не вычищены из сообщения: %q", is.Message)
+	}
+}
+
 func TestParseDSL_Clean(t *testing.T) {
 	src := `Процедура Тест()
   Сообщить("привет");

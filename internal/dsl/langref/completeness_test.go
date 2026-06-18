@@ -108,3 +108,24 @@ func TestCoverage_Report(t *testing.T) {
 	t.Logf("охват langref: функций=%d, методов=%d по %d объектам, конструкций=%d, слов запросов=%d",
 		fn, method, len(objs), kw, q)
 }
+
+// TestKeywords_HaveSnippets — составные конструкции вставляются автодополнением
+// готовым шаблоном с позицией курсора $0 внутри тела (issue #105), а не строкой
+// Display с многоточием.
+func TestKeywords_HaveSnippets(t *testing.T) {
+	want := []string{"процедура", "функция", "если", "для каждого", "для", "пока", "попытка"}
+	for _, name := range want {
+		d, ok := ByName(name)
+		if !ok {
+			t.Errorf("нет дескриптора %q", name)
+			continue
+		}
+		if d.Snippet == "" {
+			t.Errorf("%q: пустой Snippet", name)
+			continue
+		}
+		if !strings.Contains(d.Snippet, "$0") {
+			t.Errorf("%q: в Snippet нет позиции курсора $0: %q", name, d.Snippet)
+		}
+	}
+}

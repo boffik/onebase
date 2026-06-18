@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/auth"
@@ -320,12 +322,26 @@ func CheckQueriesExecutable(proj *project.Project, validate func(sqlText string)
 
 // ParseDSL runs the lexer and parser on a snippet, then validates function
 // calls against known builtins + procedures defined in the same module.
+// parseErrLocRe вытаскивает "<…>:<line>:<col>: <сообщение>" из ошибки
+// лексера/парсера. Координаты кладём в поля Issue (а не только в текст), чтобы
+// в конфигураторе по ошибке можно было кликнуть и перейти к месту (issue #103).
+var parseErrLocRe = regexp.MustCompile(`:(\d+):(\d+): (.*)$`)
+
+func parseErrIssue(label, msg string) Issue {
+	if m := parseErrLocRe.FindStringSubmatch(msg); m != nil {
+		line, _ := strconv.Atoi(m[1])
+		col, _ := strconv.Atoi(m[2])
+		return Issue{File: label, Line: line, Column: col, Message: m[3]}
+	}
+	return Issue{File: label, Message: msg}
+}
+
 func ParseDSL(source, label string) []Issue {
 	l := lexer.New(source, label)
 	p := parser.New(l)
 	prog, err := p.ParseProgram()
 	if err != nil {
-		return []Issue{{File: label, Message: err.Error()}}
+		return []Issue{parseErrIssue(label, err.Error())}
 	}
 	return CheckDSLCalls(prog, label)
 }
