@@ -146,6 +146,27 @@ fields:
 	}
 }
 
+func TestSaveConstant_PersistsLabels(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	p := writeCfgFileRv(t, cfgDir, "constants", "общие.yaml", `constants:
+  - name: СтавкаНДС
+    type: number
+    label: Ставка НДС
+`)
+	form := url.Values{}
+	form.Set("const_name", "СтавкаНДС")
+	form.Set("type", "number")
+	form.Set("label", "Ставка НДС")
+	form.Set("labels.en", "VAT rate")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/constant", form, h.configuratorSaveConstant)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, p, "labels:", "en: VAT rate")
+}
+
 func TestSaveProcessor_PersistsTitlesAndParamLabels(t *testing.T) {
 	h, cfgDir := newFileBaseHandler(t)
 	h.runner = NewRunner()

@@ -5266,6 +5266,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="label" value="{{.Label}}" placeholder="{{t $.Lang "Отображаемое имя"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "labels" "Values" .Labels)}}{{end}}
       <div class="fg" style="margin-top:8px">
         <label>{{t $.Lang "Тип"}}</label>
         <select name="type" onchange="cfgToggleRef(this,'cnref-{{.Name}}');cfgToggleNum(this,'cnnum-{{.Name}}')">

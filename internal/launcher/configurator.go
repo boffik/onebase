@@ -189,8 +189,9 @@ type cfgConstant struct {
 	RefEntity string
 	Default   string
 	Label     string
-	Length    int // разрядность number(L,P): всего знаков (Длина)
-	Scale     int // знаков после запятой (Точность)
+	Labels    map[string]string // переводы подписи по языкам
+	Length    int               // разрядность number(L,P): всего знаков (Длина)
+	Scale     int               // знаков после запятой (Точность)
 }
 
 type cfgTablePart struct {
@@ -819,6 +820,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 			RefEntity: c.RefEntity,
 			Default:   c.Default,
 			Label:     c.Label,
+			Labels:    c.Labels,
 			Length:    c.Length,
 			Scale:     c.Scale,
 		})
@@ -1824,6 +1826,20 @@ func anyOrNil(m map[string]string) any {
 	return m
 }
 
+// formHasMapField сообщает, содержала ли форма блок ключей "<prefix>.*"
+// (хотя бы один, пусть и с пустым значением). Отличает «блок переводов был
+// отрендерен и отправлен» (применяем, включая очистку) от «блока не было»
+// (не трогаем существующее). Используется для round-trip/точечных сохранений.
+func formHasMapField(r *http.Request, prefix string) bool {
+	pfx := prefix + "."
+	for key := range r.Form {
+		if strings.HasPrefix(key, pfx) {
+			return true
+		}
+	}
+	return false
+}
+
 // parseMapForm читает значения формы вида "<prefix>.<lang>" в map[lang]value.
 // Скан по ключам формы (а не по списку языков) — чтобы не зависеть от бандла
 // локализации. Пропускает: базовый язык ru (он в title/label), пустые значения
@@ -2608,6 +2624,9 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 				cf.Constants[i].Label = label
 				cf.Constants[i].Type = typ
 				cf.Constants[i].Default = def
+				if formHasMapField(r, "labels") {
+					cf.Constants[i].Labels = parseMapForm(r, "labels")
+				}
 				break
 			}
 		}
