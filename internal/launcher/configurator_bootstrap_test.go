@@ -42,3 +42,20 @@ func TestConfigurator_BootstrapWired(t *testing.T) {
 		t.Error("_cfgEntityNames не читает window.__cfg.entityNames")
 	}
 }
+
+// TestConfigurator_BootstrapEmptySlices: пустые срезы в bootstrap кодируются как
+// [] (а не null) — фронт делает .map()/.length без guard'ов (фикс ревью I1,
+// регресс относительно старого {{range}}, который отдавал []).
+func TestConfigurator_BootstrapEmptySlices(t *testing.T) {
+	data := &configuratorData{Base: &Base{ID: "b", Name: "T", ConfigSource: "file"}, Lang: "ru"}
+	populateBootstrap(data, "ru")
+	boot := string(data.Bootstrap)
+	for _, k := range []string{`"entityNames":[]`, `"enumNames":[]`, `"groupOrder":[]`} {
+		if !strings.Contains(boot, k) {
+			t.Errorf("ожидался %s в bootstrap, получено: %s", k, boot)
+		}
+	}
+	if strings.Contains(boot, "null") {
+		t.Errorf("в bootstrap есть null (срез не сведён к []): %s", boot)
+	}
+}

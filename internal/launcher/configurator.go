@@ -968,16 +968,18 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 // из уже заполненных полей configuratorData. Вынесено отдельно, чтобы тест мог
 // эмулировать продакшен-заполнение. lang — язык рендера (как в renderCfg).
 func populateBootstrap(data *configuratorData, lang string) {
+	// nil-срезы кодируем как [] (а не null): фронт делает .map()/.length по этим
+	// массивам без guard'ов — старый {{range}} тоже отдавал [] для пустого среза.
 	boot := map[string]any{
-		"entityNames":    data.AllEntityNames,
-		"enumNames":      data.AllEnumNames,
+		"entityNames":    orEmpty(data.AllEntityNames),
+		"enumNames":      orEmpty(data.AllEnumNames),
 		"selectedTreeId": data.SelectedTreeID,
 		"fieldsSaved":    data.FieldsSavedEntity,
 		"moduleSaved":    data.ModuleSavedEntity,
 		"baseId":         baseIDOf(data.Base),
 		"basePort":       basePortOf(data.Base),
 		"hasSession":     data.SessionToken != "",
-		"groupOrder":     data.GroupOrder,
+		"groupOrder":     orEmpty(data.GroupOrder),
 	}
 	if bb, err := json.Marshal(boot); err == nil {
 		data.Bootstrap = template.JS(bb)
@@ -989,6 +991,14 @@ func populateBootstrap(data *configuratorData, lang string) {
 	if ib, err := json.Marshal(dict); err == nil {
 		data.I18n = template.JS(ib) // nil-словарь → "null"; в шаблоне `|| {}`
 	}
+}
+
+// orEmpty гарантирует non-nil срез, чтобы json.Marshal дал [] вместо null.
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // baseIDOf/basePortOf — безопасные геттеры (data.Base может быть nil в тестах
