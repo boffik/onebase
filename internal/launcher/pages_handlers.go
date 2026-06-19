@@ -41,6 +41,12 @@ func (h *handler) configuratorSavePage(w http.ResponseWriter, r *http.Request) {
 		renderCfg(w, r, data)
 		return
 	}
+	if !validObjectName(name) {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя страницы")
+		renderCfg(w, r, data)
+		return
+	}
 
 	pg := &page.Page{
 		Name:   name,
@@ -102,6 +108,12 @@ func (h *handler) configuratorDeletePage(w http.ResponseWriter, r *http.Request)
 		renderCfg(w, r, data)
 		return
 	}
+	if !validObjectName(name) {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя страницы")
+		renderCfg(w, r, data)
+		return
+	}
 
 	delErr := deleteConfigFile(r, h, b, pageYAMLRelPath(name))
 	if delErr == nil {
@@ -119,6 +131,26 @@ func (h *handler) configuratorDeletePage(w http.ResponseWriter, r *http.Request)
 // Регистр имени сохраняется намеренно (см. комментарий к файлу).
 func pageYAMLRelPath(name string) string { return "pages/" + name + ".yaml" }
 func pageSrcRelPath(name string) string  { return "src/" + name + ".page.os" }
+
+// validObjectName проверяет, что имя объекта пригодно для построения пути файла
+// без обхода каталога. Запрещает разделители путей, "..", NUL и управляющие
+// символы. Имена объектов конфигурации — идентификаторы (буквы/цифры/_),
+// поэтому проверка не сужает легальные имена, но закрывает path traversal в
+// обработчиках, строящих путь как «<подкаталог>/<имя>.<ext>».
+func validObjectName(name string) bool {
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+		return false
+	}
+	for _, c := range name {
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
 
 // splitConfigList разбирает список значений из текстового поля редактора:
 // разделители — запятая, точка с запятой или перевод строки; пустые элементы

@@ -142,9 +142,16 @@ func buildGroups(rows []Row, spec report.Composition, level int, ev Evaluator) [
 			Count:     len(buckets[k]),
 			Subtotals: aggregate(buckets[k], spec.Measures, ev),
 		}
-		// Условное оформление группы/подытога вычисляется по её подытогам —
-		// так убыточная группа подсвечивается целиком, без detail-строк.
-		gr.Styles = evalStyles(gr.Subtotals, spec, ev)
+		// Условное оформление группы/подытога вычисляется по её подытогам плюс
+		// собственному полю группировки (field→Key) — чтобы правило вида
+		// «Регион = "Юг"» подсвечивало и итоговую строку группы, а не только
+		// detail-строки (раньше итогу было доступно только множество мер).
+		styleRow := make(Row, len(gr.Subtotals)+1)
+		for k, v := range gr.Subtotals {
+			styleRow[k] = v
+		}
+		styleRow[field] = gr.Key
+		gr.Styles = evalStyles(styleRow, spec, ev)
 		if level+1 < len(spec.Groupings) {
 			gr.Children = buildGroups(buckets[k], spec, level+1, ev)
 		} else if spec.Detail {
@@ -399,6 +406,15 @@ func toDecimal(v any) (decimal.Decimal, bool) {
 		return decimal.NewFromFloat(x), true
 	case string:
 		d, err := decimal.NewFromString(x)
+		if err != nil {
+			return decimal.Zero, false
+		}
+		return d, true
+	case []byte:
+		// SQLite-драйвер может вернуть числовую колонку как []byte (как и для
+		// ключей группировки в normalizeGroupKey) — иначе значение молча
+		// выпало бы из сумм/средних/сортировки.
+		d, err := decimal.NewFromString(string(x))
 		if err != nil {
 			return decimal.Zero, false
 		}

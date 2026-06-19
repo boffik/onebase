@@ -48,8 +48,12 @@ func (s *Server) imageUpload(w http.ResponseWriter, r *http.Request) {
 
 	// Тип определяем по СОДЕРЖИМОМУ файла, а не по Content-Type формы (он
 	// подделывается): читаем первые 512 байт для http.DetectContentType и
-	// «возвращаем» их в поток через MultiReader. Так image/svg+xml со скриптом и
-	// прочий не-растровый контент отсекаются ещё на загрузке.
+	// «возвращаем» их в поток через MultiReader. Это отсекает обычный SVG/HTML
+	// (он распознаётся как text/*), но НЕ является единственным барьером:
+	// GIF-полиглот (правильная сигнатура GIF89a + произвольный «хвост») всё ещё
+	// классифицируется как image/gif. Фактическую защиту от XSS даёт сторона
+	// отдачи imageServe — nosniff + честный Content-Type + sandbox-CSP, поэтому
+	// эти заголовки трогать нельзя.
 	head := make([]byte, 512)
 	n, _ := io.ReadFull(file, head)
 	head = head[:n]
@@ -85,8 +89,14 @@ func (s *Server) imageServe(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 
-	if b.Mime != "" {
+	// Content-Type отдаём как есть только для растровых типов; всё прочее
+	// (например text/html, сохранённый через СохранитьКартинку с произвольным
+	// mime) выдаём как application/octet-stream — вместе с nosniff и sandbox это
+	// исключает интерпретацию как HTML при прямом открытии /image/{id}.
+	if strings.HasPrefix(b.Mime, "image/") {
 		w.Header().Set("Content-Type", b.Mime)
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 	if b.Size > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(b.Size, 10))
@@ -101,9 +111,11 @@ func (s *Server) imageServe(w http.ResponseWriter, r *http.Request) {
 }
 
 // allowedImageMime определяет тип картинки по её первым байтам (server-side, без
-// доверия заголовку формы) и сообщает, разрешена ли она к загрузке. Только
-// настоящие растровые изображения: http.DetectContentType классифицирует SVG
-// как text/xml, поэтому image/svg+xml со скриптом сюда не проходит.
+// доверия заголовку формы) — первая линия фильтра загрузки. Отсекает обычный SVG
+// (распознаётся как text/xml) и HTML, но это НЕ гарантия безопасности: контент с
+// валидной растровой сигнатурой и произвольным «хвостом» (GIF-полиглот) пройдёт.
+// Защиту от XSS обеспечивает отдача imageServe (nosniff + sandbox-CSP), а не этот
+// фильтр — см. TestImageServe_SecurityHeaders.
 func allowedImageMime(head []byte) (string, bool) {
 	mime := http.DetectContentType(head)
 	if i := strings.IndexByte(mime, ';'); i >= 0 {

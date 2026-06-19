@@ -128,6 +128,17 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 		if mime == "" {
 			mime = "image/png"
 		}
+		if !strings.HasPrefix(mime, "image/") {
+			// блокируем нерастровые типы (например text/html), которые иначе
+			// сохранились бы в blob с произвольным Content-Type.
+			return nil, fmt.Errorf("СохранитьКартинку: тип %q не является изображением", mime)
+		}
+		// Размер проверяем ДО декодирования: декодированный размер ≈ len*3/4.
+		// Иначе гигантский base64 материализуется в память целиком ещё до
+		// отсечения лимитом в PutBlob (риск исчерпания памяти).
+		if max := s.maxFileSizeBytes; max > 0 && int64(len(dataB64))/4*3 > max {
+			return nil, fmt.Errorf("СохранитьКартинку: картинка превышает максимальный размер")
+		}
 		data, err := base64.StdEncoding.DecodeString(dataB64)
 		if err != nil {
 			return nil, fmt.Errorf("СохранитьКартинку: некорректный Base64: %w", err)
