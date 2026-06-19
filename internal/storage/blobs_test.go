@@ -99,9 +99,12 @@ func TestBlobOwnerRoundtrip(t *testing.T) {
 		t.Fatalf("PutBlob не вернул владельца: kind=%q entity=%q", b.OwnerKind, b.OwnerEntity)
 	}
 
-	got, _, err := db.OpenBlob(ctx, b.ID)
+	got, rc, err := db.OpenBlob(ctx, b.ID)
 	if err != nil {
 		t.Fatalf("OpenBlob: %v", err)
+	}
+	if rc != nil {
+		rc.Close()
 	}
 	if got.OwnerKind != "catalog" || got.OwnerEntity != "Контрагенты" {
 		t.Fatalf("OpenBlob потерял владельца: kind=%q entity=%q", got.OwnerKind, got.OwnerEntity)
@@ -112,9 +115,12 @@ func TestBlobOwnerRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PutBlob(без владельца): %v", err)
 	}
-	got2, _, err := db.OpenBlob(ctx, b2.ID)
+	got2, rc2, err := db.OpenBlob(ctx, b2.ID)
 	if err != nil {
 		t.Fatalf("OpenBlob(без владельца): %v", err)
+	}
+	if rc2 != nil {
+		rc2.Close()
 	}
 	if got2.OwnerKind != "" || got2.OwnerEntity != "" {
 		t.Fatalf("ожидался пустой владелец, получено kind=%q entity=%q", got2.OwnerKind, got2.OwnerEntity)

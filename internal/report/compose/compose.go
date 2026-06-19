@@ -111,6 +111,9 @@ func alignRowKeys(rows []Row, spec report.Composition) []Row {
 	for _, g := range spec.Groupings {
 		add(g)
 	}
+	for _, c := range spec.Columns {
+		add(c)
+	}
 	for _, m := range spec.Measures {
 		add(m.Field)
 	}

@@ -20,6 +20,19 @@ func mustUUID(t *testing.T, s string) uuid.UUID {
 	return id
 }
 
+// openClosed открывает блоб и сразу закрывает его содержимое, возвращая только
+// ошибку. Тесты проверяют лишь факт наличия/отсутствия блоба, но ОБЯЗАНЫ закрыть
+// rc (контракт OpenBlob): иначе в дисковом режиме на Windows открытый *os.File
+// не даёт удалить каталог при очистке t.TempDir.
+func openClosed(t *testing.T, db *DB, id uuid.UUID) error {
+	t.Helper()
+	_, rc, err := db.OpenBlob(context.Background(), id)
+	if rc != nil {
+		rc.Close()
+	}
+	return err
+}
+
 // putRef создаёт блоб и возвращает его UUID-строку (ссылку поля image).
 func putRef(t *testing.T, db *DB, owner BlobOwner) string {
 	t.Helper()
@@ -86,7 +99,7 @@ func TestSweepOrphanBlobs(t *testing.T) {
 	if st.Deleted != 0 || st.Protected != 1 {
 		t.Fatalf("grace-окно: deleted=%d protected=%d (ожидалось 0/1)", st.Deleted, st.Protected)
 	}
-	if _, _, err := db.OpenBlob(ctx, mustUUID(t, orphan)); err != nil {
+	if err := openClosed(t, db, mustUUID(t, orphan)); err != nil {
 		t.Fatalf("orphan в пределах grace не должен удаляться: %v", err)
 	}
 
@@ -98,13 +111,13 @@ func TestSweepOrphanBlobs(t *testing.T) {
 	if st.Deleted != 1 {
 		t.Fatalf("удалено %d, ожидался 1 (orphan)", st.Deleted)
 	}
-	if _, _, err := db.OpenBlob(ctx, mustUUID(t, orphan)); err == nil {
+	if err := openClosed(t, db, mustUUID(t, orphan)); err == nil {
 		t.Fatal("orphan должен быть удалён")
 	}
-	if _, _, err := db.OpenBlob(ctx, mustUUID(t, referenced)); err != nil {
+	if err := openClosed(t, db, mustUUID(t, referenced)); err != nil {
 		t.Fatalf("referenced не должен удаляться: %v", err)
 	}
-	if _, _, err := db.OpenBlob(ctx, mustUUID(t, shared)); err != nil {
+	if err := openClosed(t, db, mustUUID(t, shared)); err != nil {
 		t.Fatalf("shared (две ссылки) не должен удаляться: %v", err)
 	}
 }
@@ -131,7 +144,7 @@ func TestSweepOrphanBlobs_DryRun(t *testing.T) {
 	if len(st.Orphans) != 1 || st.Deleted != 0 {
 		t.Fatalf("dry-run: orphans=%d deleted=%d (ожидалось 1/0)", len(st.Orphans), st.Deleted)
 	}
-	if _, _, err := db.OpenBlob(ctx, mustUUID(t, orphan)); err != nil {
+	if err := openClosed(t, db, mustUUID(t, orphan)); err != nil {
 		t.Fatalf("dry-run не должен удалять: %v", err)
 	}
 }
