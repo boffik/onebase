@@ -932,5 +932,6 @@
   "Процедура ПриФормировании": "OnCompose procedure",
   "Роли": "Roles",
   "имена через запятую (?имя=…)": "comma-separated names (?name=…)",
-  "через запятую; пусто — всем": "comma-separated; empty — everyone"
+  "через запятую; пусто — всем": "comma-separated; empty — everyone",
+  "Переводы": "Translations"
 }

@@ -1806,6 +1806,33 @@ func formRowIndices(r *http.Request, base string) []int {
 	return idxs
 }
 
+// parseMapForm читает значения формы вида "<prefix>.<lang>" в map[lang]value.
+// Скан по ключам формы (а не по списку языков) — чтобы не зависеть от бандла
+// локализации. Пропускает: базовый язык ru (он в title/label), пустые значения
+// и остатки с точкой (защита от пересечения с вложенными префиксами, напр.
+// "titles." не должен ловить "field.0.titles.en"). nil при пустом результате —
+// тогда omitempty / setYAMLMapField(nil) убирают ключ из YAML.
+func parseMapForm(r *http.Request, prefix string) map[string]string {
+	pfx := prefix + "."
+	out := map[string]string{}
+	for key, vals := range r.Form {
+		if !strings.HasPrefix(key, pfx) || len(vals) == 0 {
+			continue
+		}
+		lang := strings.TrimPrefix(key, pfx)
+		if lang == "" || lang == "ru" || strings.Contains(lang, ".") {
+			continue
+		}
+		if v := strings.TrimSpace(vals[0]); v != "" {
+			out[lang] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // parseRegSection читает секцию полей регистра/плана счетов из формы. Существующие
 // строки приходят как <prefix>.<i>.{name,type,length,scale,ref} (обрыв на первом
 // пустом), добавленные кнопкой «+ Добавить» — как new_<prefix>.<idx>.* (пропуск

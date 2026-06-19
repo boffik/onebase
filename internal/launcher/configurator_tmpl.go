@@ -102,7 +102,25 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 				return name
 			}
 		},
-}).Parse(cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgSyntaxRef + cfgFoot))
+}).Parse(cfgTitlesBlock + cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgSyntaxRef + cfgFoot))
+
+// ── Partial: переводы (titles-block) ─────────────────────────────────────────
+
+const cfgTitlesBlock = `{{define "titles-block"}}
+<details class="titles-block" style="margin:4px 0 10px">
+  <summary style="cursor:pointer;font-size:12px;color:#666">🌐 {{t .Lang "Переводы"}}{{if .Values}} ({{len .Values}}){{end}}</summary>
+  <div style="margin-top:6px">
+    {{range .Langs}}{{if ne .Code "ru"}}
+    <div style="display:flex;gap:6px;margin-bottom:3px;align-items:center">
+      <span style="width:78px;color:#888;font-size:12px">{{.Native}}</span>
+      <input type="text" name="{{$.Prefix}}.{{.Code}}" value="{{index $.Values .Code}}"
+             style="flex:1;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+    </div>
+    {{end}}{{end}}
+  </div>
+</details>
+{{end}}
+`
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
