@@ -162,6 +162,66 @@ EndProcedure`
 	}
 }
 
+func TestParser_KeywordAsMemberName(t *testing.T) {
+	// issue #117: имя свойства/метода после точки может совпадать с
+	// зарезервированным словом (XDTO-объект с полями «To»/«По»). В позиции члена
+	// это обычные идентификаторы, и синтаксис-контроль не должен на них падать.
+	src := `Процедура Тест()
+  Запрос.To = КонецПериода;
+  Рез = Запрос.По;
+  Объект.Если("x");
+КонецПроцедуры`
+
+	prog := parse(t, src)
+	body := prog.Procedures[0].Body
+	if len(body) != 3 {
+		t.Fatalf("want 3 stmts, got %d", len(body))
+	}
+
+	// Запрос.To = … — присваивание в свойство-ключевое-слово (англ.)
+	assign, ok := body[0].(*ast.AssignStmt)
+	if !ok {
+		t.Fatalf("stmt 0: want *ast.AssignStmt, got %T", body[0])
+	}
+	tgt, ok := assign.Target.(*ast.MemberExpr)
+	if !ok {
+		t.Fatalf("stmt 0 target: want *ast.MemberExpr, got %T", assign.Target)
+	}
+	if tgt.Field.Literal != "To" {
+		t.Fatalf("stmt 0 field: want %q, got %q", "To", tgt.Field.Literal)
+	}
+
+	// Рез = Запрос.По — чтение свойства с русским ключевым словом
+	read, ok := body[1].(*ast.AssignStmt)
+	if !ok {
+		t.Fatalf("stmt 1: want *ast.AssignStmt, got %T", body[1])
+	}
+	m, ok := read.Value.(*ast.MemberExpr)
+	if !ok {
+		t.Fatalf("stmt 1 value: want *ast.MemberExpr, got %T", read.Value)
+	}
+	if m.Field.Literal != "По" {
+		t.Fatalf("stmt 1 field: want %q, got %q", "По", m.Field.Literal)
+	}
+
+	// Объект.Если("x") — вызов метода с именем-ключевым-словом
+	es, ok := body[2].(*ast.ExprStmt)
+	if !ok {
+		t.Fatalf("stmt 2: want *ast.ExprStmt, got %T", body[2])
+	}
+	call, ok := es.X.(*ast.CallExpr)
+	if !ok {
+		t.Fatalf("stmt 2: want *ast.CallExpr, got %T", es.X)
+	}
+	callee, ok := call.Callee.(*ast.MemberExpr)
+	if !ok {
+		t.Fatalf("stmt 2 callee: want *ast.MemberExpr, got %T", call.Callee)
+	}
+	if callee.Field.Literal != "Если" {
+		t.Fatalf("stmt 2 field: want %q, got %q", "Если", callee.Field.Literal)
+	}
+}
+
 func TestParser_AssignStmt(t *testing.T) {
 	src := `Procedure SetNum()
   Var x;

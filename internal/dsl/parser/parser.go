@@ -681,10 +681,14 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 			expr = &ast.CallExpr{Callee: expr, Args: args}
 		case token.DOT:
 			p.advance()
-			field, err := p.expect(token.IDENT)
-			if err != nil {
+			// Имя свойства/метода после точки может совпадать с ключевым словом
+			// (например, XDTO-объект с полем «To»/«По»): в позиции члена они —
+			// обычные идентификаторы, а не синтаксис языка (issue #117).
+			if p.cur.Type != token.IDENT && !token.IsKeyword(p.cur.Type) {
 				return expr
 			}
+			field := p.cur
+			p.advance()
 			expr = &ast.MemberExpr{Object: expr, Field: field}
 		case token.LBRACKET:
 			p.advance()
