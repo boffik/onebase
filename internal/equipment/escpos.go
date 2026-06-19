@@ -20,8 +20,18 @@ func init() {
 // Поле conn — io.WriteCloser, поэтому serial/USB добавляется отдельным Connect
 // без изменения логики формирования чека.
 type escposDevice struct {
-	conn  io.WriteCloser
-	width int // ширина ленты в символах (42 для 80мм, 32 для 58мм)
+	conn   io.WriteCloser
+	width  int                 // ширина ленты в символах (42 для 80мм, 32 для 58мм)
+	encode func(string) []byte // кодировка текста (по умолчанию UTF-8, опц. CP866)
+}
+
+// text кодирует текстовую часть чека выбранной кодировкой; управляющие
+// ESC/POS-байты пишутся отдельно через Write и кодированию не подлежат.
+func (d *escposDevice) text(s string) []byte {
+	if d.encode == nil {
+		return []byte(s)
+	}
+	return d.encode(s)
 }
 
 // ESC/POS управляющие последовательности.
@@ -43,6 +53,7 @@ func (d *escposDevice) Connect(params map[string]string) error {
 			d.width = n
 		}
 	}
+	d.encode = deviceEncoder(firstNonEmpty(params["кодировка"], params["encoding"]))
 	conn, err := openWriteTransport(params)
 	if err != nil {
 		return err
@@ -71,7 +82,7 @@ func (d *escposDevice) PrintReceipt(r Receipt) error {
 		buf.Write(escAlignCtr)
 		buf.Write(escBoldOn)
 		for _, line := range r.Header {
-			buf.WriteString(line)
+			buf.Write(d.text(line))
 			buf.WriteByte('\n')
 		}
 		buf.Write(escBoldOff)
@@ -80,10 +91,10 @@ func (d *escposDevice) PrintReceipt(r Receipt) error {
 
 	buf.Write(escAlignLeft)
 	for _, it := range r.Items {
-		buf.WriteString(it.Name)
+		buf.Write(d.text(it.Name))
 		buf.WriteByte('\n')
 		qtyPrice := fmt.Sprintf("  %s x %s", num(it.Qty), num(it.Price))
-		buf.WriteString(d.row(qtyPrice, num(it.Sum)))
+		buf.Write(d.text(d.row(qtyPrice, num(it.Sum))))
 		buf.WriteByte('\n')
 	}
 	if len(r.Items) > 0 {
@@ -92,11 +103,11 @@ func (d *escposDevice) PrintReceipt(r Receipt) error {
 	}
 
 	buf.Write(escBoldOn)
-	buf.WriteString(d.row("ИТОГО:", num(r.Total)))
+	buf.Write(d.text(d.row("ИТОГО:", num(r.Total))))
 	buf.WriteByte('\n')
 	buf.Write(escBoldOff)
 	if r.Payment != "" {
-		buf.WriteString(d.row("Оплата:", r.Payment))
+		buf.Write(d.text(d.row("Оплата:", r.Payment)))
 		buf.WriteByte('\n')
 	}
 
@@ -104,7 +115,7 @@ func (d *escposDevice) PrintReceipt(r Receipt) error {
 		buf.WriteByte('\n')
 		buf.Write(escAlignCtr)
 		for _, line := range r.Footer {
-			buf.WriteString(line)
+			buf.Write(d.text(line))
 			buf.WriteByte('\n')
 		}
 		buf.Write(escAlignLeft)

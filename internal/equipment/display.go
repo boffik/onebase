@@ -18,8 +18,9 @@ func init() {
 // Типовой дисплей — 20 символов × 2 строки. Транспорт — io.WriteCloser, как у
 // escpos: serial добавится отдельным Connect без правки вывода.
 type displayDevice struct {
-	conn  io.WriteCloser
-	width int
+	conn   io.WriteCloser
+	width  int
+	encode func(string) []byte // кодировка текста (по умолчанию UTF-8, опц. CP866)
 }
 
 // Команды CD5220.
@@ -39,6 +40,9 @@ func (d *displayDevice) Connect(params map[string]string) error {
 			d.width = n
 		}
 	}
+	// Кодировка текста: по умолчанию UTF-8 (как было), опционально CP866 для
+	// реальных VFD, где UTF-8 даёт кракозябры.
+	d.encode = deviceEncoder(firstNonEmpty(params["кодировка"], params["encoding"]))
 	conn, err := openWriteTransport(params)
 	if err != nil {
 		return err
@@ -69,7 +73,7 @@ func (d *displayDevice) ShowLines(lines []string) error {
 			text = lines[i]
 		}
 		buf.Write(cmd)
-		buf.WriteString(d.fit(text))
+		buf.Write(d.encode(d.fit(text)))
 		buf.Write(dispCR)
 	}
 	return d.write(buf.Bytes())
