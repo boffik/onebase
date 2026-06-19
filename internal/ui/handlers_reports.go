@@ -169,6 +169,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 				"ReportParams":  reportParams,
 				"ActiveVariant": variant,
 				"UserSettings":  settings,
+				"ReportCols":    cols,
 			})
 			return
 		}
@@ -194,6 +195,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 			"ReportParams":  reportParams,
 			"ActiveVariant": variant,
 			"UserSettings":  settings,
+			"ReportCols":    cols,
 		})
 		return
 	}
@@ -212,6 +214,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		"ReportParams":  reportParams,
 		"ActiveVariant": variant,
 		"UserSettings":  settings,
+		"ReportCols":    cols,
 	})
 }
 

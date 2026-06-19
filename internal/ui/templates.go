@@ -2319,6 +2319,56 @@ const tplReport = `
 </form>
 </details>
 {{end}}
+{{if .ReportCols}}
+<details class="card report-block" data-block="settings" style="margin-bottom:16px">
+<summary>{{t $.Lang "Настройка отчёта"}}</summary>
+<form method="POST" onsubmit="rsCollect()">
+  {{range .ReportParams}}<input type="hidden" name="{{.Name}}" value="{{str (index $.ParamValues .Name)}}">{{end}}
+  <input type="hidden" name="__variant" value="{{.ActiveVariant}}">
+  <input type="hidden" name="__settings" id="rs-json"{{if .UserSettings}} value="{{.UserSettings.JSON}}"{{end}}>
+  <table style="width:auto;margin-bottom:12px">
+    <thead><tr>
+      <th style="text-align:left">{{t $.Lang "Поле"}}</th>
+      <th style="padding:0 10px">{{t $.Lang "Группировка"}}</th>
+      <th style="padding:0 10px">{{t $.Lang "Показатель"}}</th>
+    </tr></thead>
+    <tbody>
+    {{range .ReportCols}}<tr>
+      <td>{{.}}</td>
+      <td style="text-align:center"><input type="checkbox" class="rs-group" value="{{.}}"></td>
+      <td style="text-align:center"><input type="checkbox" class="rs-measure" value="{{.}}"></td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  <button class="btn btn-primary" type="submit">{{t $.Lang "Применить"}}</button>
+</form>
+<script>
+(function(){
+  var hidden=document.getElementById('rs-json');
+  function preset(){
+    if(!hidden||!hidden.value) return;
+    try{
+      var s=JSON.parse(hidden.value);
+      var comp=(s&&s.composition)||{};
+      var groups=comp.Groupings||comp.groupings||[];
+      var meas=comp.Measures||comp.measures||[];
+      var mf=meas.map(function(m){return m.Field||m.field;});
+      document.querySelectorAll('.rs-group').forEach(function(el){ if(groups.indexOf(el.value)>=0) el.checked=true; });
+      document.querySelectorAll('.rs-measure').forEach(function(el){ if(mf.indexOf(el.value)>=0) el.checked=true; });
+    }catch(e){}
+  }
+  window.rsCollect=function(){
+    var groupings=[];document.querySelectorAll('.rs-group:checked').forEach(function(c){groupings.push(c.value);});
+    var measures=[];document.querySelectorAll('.rs-measure:checked').forEach(function(c){measures.push({Field:c.value,Agg:"sum"});});
+    var variantEl=document.querySelector('input[name="__variant"]');
+    var s={variant:variantEl?variantEl.value:"",composition:{Groupings:groupings,Measures:measures}};
+    if(hidden)hidden.value=JSON.stringify(s);
+  };
+  preset();
+})();
+</script>
+</details>
+{{end}}
 {{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
 {{if .ChartOption}}
 <details class="card report-block" data-block="chart" open style="margin-bottom:16px">
