@@ -471,10 +471,6 @@ window.MonacoEnvironment = { getWorkerUrl: function () {
 <div id="dbg-wrapper" style="display:flex;flex:1;overflow:hidden">
 {{end}}`
 
-const cfgAdminOverlay = `
-<div id="admin-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'"></div>
-`
-
 const cfgFoot = `{{define "cfg-foot"}}
 <!-- debug panel (right sidebar) -->
 <div class="dbg-panel" id="dbg-panel" style="display:none">
