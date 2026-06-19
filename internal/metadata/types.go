@@ -73,8 +73,20 @@ func (f Field) DisplayName(lang string) string {
 }
 
 type Enum struct {
-	Name   string
-	Values []string
+	Name        string
+	Values      []string                     // имена значений (идентификаторы)
+	ValueTitles map[string]map[string]string // value → lang → перевод
+}
+
+// ValueTitle — перевод значения для интерфейса: Titles[lang] → само имя.
+// Name остаётся идентификатором (БД/форма).
+func (e *Enum) ValueTitle(value, lang string) string {
+	if lang != "" {
+		if v, ok := e.ValueTitles[value][lang]; ok && v != "" {
+			return v
+		}
+	}
+	return value
 }
 
 type Constant struct {

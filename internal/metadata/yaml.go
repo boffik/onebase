@@ -179,9 +179,32 @@ func LoadInfoRegisterFile(path string) (*InfoRegister, error) {
 	return ir, nil
 }
 
+// rawEnumValue принимает значение перечисления как скаляр (старый формат
+// "values: [A, B]") ИЛИ как маппинг {name, titles} (новый, с переводами).
+type rawEnumValue struct {
+	Name   string
+	Titles map[string]string
+}
+
+func (v *rawEnumValue) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		v.Name = node.Value
+		return nil
+	}
+	var s struct {
+		Name   string            `yaml:"name"`
+		Titles map[string]string `yaml:"titles"`
+	}
+	if err := node.Decode(&s); err != nil {
+		return err
+	}
+	v.Name, v.Titles = s.Name, s.Titles
+	return nil
+}
+
 type rawEnum struct {
-	Name   string   `yaml:"name"`
-	Values []string `yaml:"values"`
+	Name   string         `yaml:"name"`
+	Values []rawEnumValue `yaml:"values"`
 }
 
 func LoadEnumFile(path string) (*Enum, error) {
@@ -196,7 +219,17 @@ func LoadEnumFile(path string) (*Enum, error) {
 	if raw.Name == "" {
 		return nil, fmt.Errorf("%s: missing name", path)
 	}
-	return &Enum{Name: raw.Name, Values: raw.Values}, nil
+	e := &Enum{Name: raw.Name}
+	for _, rv := range raw.Values {
+		e.Values = append(e.Values, rv.Name)
+		if len(rv.Titles) > 0 {
+			if e.ValueTitles == nil {
+				e.ValueTitles = map[string]map[string]string{}
+			}
+			e.ValueTitles[rv.Name] = rv.Titles
+		}
+	}
+	return e, nil
 }
 
 type rawConstant struct {
