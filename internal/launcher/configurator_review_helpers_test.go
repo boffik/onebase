@@ -13,9 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// postCfg POST-ит форму в произвольный обработчик конфигуратора с заголовком
+// postCfgRv POST-ит форму в произвольный обработчик конфигуратора с заголовком
 // X-Onebase-Ajax (renderCfg отвечает JSON, без полного рендера страницы).
-func postCfg(t *testing.T, id, path string, form url.Values, fn http.HandlerFunc) *httptest.ResponseRecorder {
+func postCfgRv(t *testing.T, id, path string, form url.Values, fn http.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -28,7 +28,7 @@ func postCfg(t *testing.T, id, path string, form url.Values, fn http.HandlerFunc
 	return rec
 }
 
-func writeCfgFile(t *testing.T, dir, sub, name, content string) string {
+func writeCfgFileRv(t *testing.T, dir, sub, name, content string) string {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func writeCfgFile(t *testing.T, dir, sub, name, content string) string {
 	return p
 }
 
-func assertFileContains(t *testing.T, path string, fragments ...string) {
+func assertFileContainsRv(t *testing.T, path string, fragments ...string) {
 	t.Helper()
 	out, err := os.ReadFile(path)
 	if err != nil {

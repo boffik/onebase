@@ -17,7 +17,7 @@ func TestConfiguratorSavePage_RejectsPathTraversal(t *testing.T) {
 	form := url.Values{}
 	form.Set("page_name", "../../evil")
 	form.Set("source", "ПлохойКод")
-	rec := postCfg(t, "test", "/bases/test/configurator/page", form, h.configuratorSavePage)
+	rec := postCfgRv(t, "test", "/bases/test/configurator/page", form, h.configuratorSavePage)
 
 	// Файлы вне проекта (parent(cfgDir)/evil.*) не должны появиться.
 	for _, outside := range []string{

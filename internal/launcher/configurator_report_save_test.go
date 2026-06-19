@@ -13,7 +13,7 @@ import (
 func TestConfiguratorSaveReport_PreservesTitles(t *testing.T) {
 	h, cfgDir := newFileBaseHandler(t)
 	h.runner = NewRunner()
-	p := writeCfgFile(t, cfgDir, "reports", "продажи.yaml", `name: Продажи
+	p := writeCfgFileRv(t, cfgDir, "reports", "продажи.yaml", `name: Продажи
 title: Продажи
 titles:
   en: Sales
@@ -25,9 +25,9 @@ query: ВЫБРАТЬ 1 КАК Один
 	form.Set("title", "Продажи")
 	form.Set("query", "ВЫБРАТЬ 2 КАК Два")
 
-	rec := postCfg(t, "test", "/bases/test/configurator/report", form, h.configuratorSaveReport)
+	rec := postCfgRv(t, "test", "/bases/test/configurator/report", form, h.configuratorSaveReport)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
 	}
-	assertFileContains(t, p, "titles:", "en: Sales", "de: Verkäufe", "ВЫБРАТЬ 2 КАК Два")
+	assertFileContainsRv(t, p, "titles:", "en: Sales", "de: Verkäufe", "ВЫБРАТЬ 2 КАК Два")
 }

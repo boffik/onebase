@@ -12,7 +12,7 @@ import (
 func TestConfiguratorSaveAccountRegister_PreservesSubcontoTitles(t *testing.T) {
 	h, cfgDir := newFileBaseHandler(t)
 	h.runner = NewRunner()
-	p := writeCfgFile(t, cfgDir, "accountregs", "бухучёт.yaml", `name: Бухучёт
+	p := writeCfgFileRv(t, cfgDir, "accountregs", "бухучёт.yaml", `name: Бухучёт
 title: Бухучёт
 titles:
   en: Accounting
@@ -33,11 +33,11 @@ resources:
 	form.Set("res.0.name", "Сумма")
 	form.Set("res.0.type", "number")
 
-	rec := postCfg(t, "test", "/bases/test/configurator/account-register", form, h.configuratorSaveAccountRegister)
+	rec := postCfgRv(t, "test", "/bases/test/configurator/account-register", form, h.configuratorSaveAccountRegister)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
 	}
-	assertFileContains(t, p,
+	assertFileContainsRv(t, p,
 		"subconto:", "name: Контрагенты", "name: Договоры",
 		"titles:", "en: Accounting",
 		"name: Сумма")
