@@ -202,3 +202,32 @@ func TestSaveSubsystem_PersistsTitles(t *testing.T) {
 	}
 	assertFileContainsRv(t, cfgDir+"/subsystems/"+nameToFilename("Продажи")+".yaml", "titles:", "en: Sales")
 }
+
+func TestSaveRegisterFields_PersistsTitles(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	p := writeCfgFileRv(t, cfgDir, "registers", "Остатки.yaml", `name: Остатки
+title: Остатки
+dimensions:
+  - name: Товар
+    type: string
+resources:
+  - name: Кол
+    type: number
+`)
+	form := url.Values{}
+	form.Set("register", "Остатки")
+	form.Set("title", "Остатки")
+	form.Set("titles.en", "Stock")
+	form.Set("dim.0.name", "Товар")
+	form.Set("dim.0.type", "string")
+	form.Set("dim.0.titles.en", "Product")
+	form.Set("res.0.name", "Кол")
+	form.Set("res.0.type", "number")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/register-fields", form, h.configuratorSaveRegisterFields)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, p, "titles:", "en: Stock", "en: Product")
+}

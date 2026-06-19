@@ -6542,6 +6542,7 @@ const cfgRegDetail = `{{define "register-detail"}}
 
 <form method="POST" action="/bases/{{$baseID}}/configurator/register-fields">
 <input type="hidden" name="register" value="{{$rg.Name}}">
+{{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" $rg.Titles)}}{{end}}
 
 <div class="section-hd">{{t $.Lang "Измерения"}}</div>
 <table class="fields-tbl" id="rg-dim-{{$rg.Name}}">
@@ -6570,6 +6571,7 @@ const cfgRegDetail = `{{define "register-detail"}}
     </select>
   </td>
 </tr>
+{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-dim-{{$rg.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
@@ -6601,6 +6603,7 @@ const cfgRegDetail = `{{define "register-detail"}}
     </select>
   </td>
 </tr>
+{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-res-{{$rg.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
@@ -6632,6 +6635,7 @@ const cfgRegDetail = `{{define "register-detail"}}
     </select>
   </td>
 </tr>
+{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "attr.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-attr-{{$rg.Name}}','new_attr','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить реквизит"}}</button>

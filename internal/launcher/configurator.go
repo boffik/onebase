@@ -218,6 +218,8 @@ type cfgEntity struct {
 
 type cfgRegister struct {
 	Name       string
+	Title      string
+	Titles     map[string]string
 	Dimensions []cfgField
 	Resources  []cfgField
 	Attributes []cfgField
@@ -773,7 +775,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, reg := range proj.Registers {
-		rv := cfgRegister{Name: reg.Name}
+		rv := cfgRegister{Name: reg.Name, Title: reg.Title, Titles: reg.Titles}
 		for _, f := range reg.Dimensions {
 			rv.Dimensions = append(rv.Dimensions, toCfgField(f))
 		}
@@ -1888,7 +1890,9 @@ func parseRegSection(r *http.Request, prefix string) []saveField {
 			typ = typ + ":" + ref
 		}
 		typ = numberTypeWithSpec(typ, r.FormValue(keyBase+".length"), r.FormValue(keyBase+".scale"))
-		fields = append(fields, saveField{Name: name, Type: typ})
+		sf := saveField{Name: name, Type: typ}
+		sf.Titles = parseMapForm(r, keyBase+".titles")
+		fields = append(fields, sf)
 	}
 	for i := 0; i < 500; i++ {
 		if strings.TrimSpace(r.FormValue(fmt.Sprintf("%s.%d.name", prefix, i))) == "" {
@@ -2264,7 +2268,7 @@ func findRegisterFilePath(dir, regName string) (string, error) {
 	return "", fmt.Errorf("register %q not found", regName)
 }
 
-func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField) error {
+func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField, objTitles *map[string]string) error {
 	filePath, err := findRegisterFilePath(dir, regName)
 	if err != nil {
 		return err
@@ -2280,6 +2284,9 @@ func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField)
 	reg.Dimensions = dims
 	reg.Resources = res
 	reg.Attributes = attrs
+	if objTitles != nil {
+		reg.Titles = *objTitles
+	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
 		return err
@@ -2287,7 +2294,7 @@ func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField)
 	return os.WriteFile(filePath, out, 0o644)
 }
 
-func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName string, dims, res, attrs []saveField) error {
+func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName string, dims, res, attrs []saveField, objTitles *map[string]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -2324,6 +2331,9 @@ func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName s
 	reg.Dimensions = dims
 	reg.Resources = res
 	reg.Attributes = attrs
+	if objTitles != nil {
+		reg.Titles = *objTitles
+	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
 		return err
@@ -2353,11 +2363,17 @@ func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.
 	res := parseRegSection(r, "res")
 	attrs := parseRegSection(r, "attr")
 
+	var regTitles *map[string]string
+	if formHasMapField(r, "titles") {
+		t := parseMapForm(r, "titles")
+		regTitles = &t
+	}
+
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveRegisterFieldsToDB(r.Context(), b, regName, dims, res, attrs)
+		saveErr = h.saveRegisterFieldsToDB(r.Context(), b, regName, dims, res, attrs, regTitles)
 	} else {
-		saveErr = saveRegisterFieldsToFile(b.Path, regName, dims, res, attrs)
+		saveErr = saveRegisterFieldsToFile(b.Path, regName, dims, res, attrs, regTitles)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
