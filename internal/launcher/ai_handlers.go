@@ -39,9 +39,10 @@ func starterLLMConfig() llm.Config {
 }
 
 // cfgAdminAI — страница «ИИ-помощник» в админ-меню конфигуратора. Конфиг
-// (провайдеры, модели, профили задач) редактируется как JSON и хранится в
-// _settings одним значением. Ключи показываются как есть — это экран
-// администратора базы.
+// (провайдеры, модели, профили задач) отображается формой с полями для
+// провайдеров, моделей и задач (профилей маршрутизации). Ключи API
+// отдаются замаскированными (****); маска сохраняется — реальный ключ
+// объединяется на сервере при сохранении.
 func (h *handler) cfgAdminAI(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -61,46 +62,13 @@ func (h *handler) cfgAdminAI(w http.ResponseWriter, r *http.Request) {
 	if len(cfg.Endpoints) == 0 && len(cfg.Models) == 0 {
 		cfg = starterLLMConfig() // пустую базу заполняем заготовкой
 	}
-	pretty, _ := json.MarshalIndent(cfg.Redacted(), "", "  ")
+	initCfg, _ := json.Marshal(cfg.Redacted())
 
 	page := fmt.Sprintf(`<div style="padding:16px">
   <h3 style="margin:0 0 6px;font-size:15px">ИИ-помощник</h3>
-  <div style="font-size:11px;color:#666;margin-bottom:10px">Провайдеры, модели и маршрутизация по задачам. Распознавание документов идёт на vision-моделях (Gemini) с фолбэком; текстовые задачи — на GLM через z.ai. Задачи: <code>анализ</code>, <code>чат</code>, <code>конфигуратор</code>, <code>документы</code>. Ключи хранятся в служебной таблице базы и не попадают в экспорт конфигурации. API-ключи отображаются замаскированными (<code>****</code>); оставьте маску без изменений — ключ сохранится прежним.</div>
-  <textarea id="ai-cfg" spellcheck="false" style="width:100%%;height:340px;font-family:monospace;font-size:12px;padding:8px;border:1px solid #cbd5e1;border-radius:4px;resize:vertical">%s</textarea>
-  <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button onclick="aiSave()" style="background:#16a34a;color:#fff;border:none;padding:5px 14px;border-radius:3px;cursor:pointer;font-size:12px">Сохранить</button>
-    <span style="font-size:11px;color:#666">Проверить задачу:</span>
-    <input id="ai-task" value="анализ" style="width:120px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px">
-    <button onclick="aiTest()" style="background:#2563eb;color:#fff;border:none;padding:5px 14px;border-radius:3px;cursor:pointer;font-size:12px">Проверить</button>
-    <span id="ai-msg" style="font-size:11px"></span>
-  </div>
-  <pre id="ai-test-out" style="margin-top:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px;font-size:12px;white-space:pre-wrap;display:none"></pre>
-</div>
-<script>
-function aiCfgText(){return document.getElementById('ai-cfg').value;}
-function aiSave(){
-  var m=document.getElementById('ai-msg');
-  var cfg;
-  try{cfg=JSON.parse(aiCfgText());}catch(e){m.textContent='Некорректный JSON: '+e.message;m.style.color='#c00';return;}
-  fetch('/bases/%s/configurator/admin/ai/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})
-    .then(function(r){return r.json()})
-    .then(function(d){if(d.ok){m.textContent='Сохранено';m.style.color='#16a34a';if(typeof window.cfgAiRefresh==='function')window.cfgAiRefresh();}else{m.textContent=(d.error||'Ошибка');m.style.color='#c00';}})
-    .catch(function(){m.textContent='Ошибка сети';m.style.color='#c00';});
-}
-function aiTest(){
-  var m=document.getElementById('ai-msg');var out=document.getElementById('ai-test-out');
-  var cfg;
-  try{cfg=JSON.parse(aiCfgText());}catch(e){m.textContent='Некорректный JSON: '+e.message;m.style.color='#c00';return;}
-  m.textContent='Запрос...';m.style.color='#666';out.style.display='none';
-  fetch('/bases/%s/configurator/admin/ai/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config:cfg,task:document.getElementById('ai-task').value})})
-    .then(function(r){return r.json()})
-    .then(function(d){
-      if(d.ok){m.textContent='Ответила модель: '+d.model;m.style.color='#16a34a';out.textContent=d.text;out.style.display='block';}
-      else{m.textContent='Ошибка';m.style.color='#c00';out.textContent=d.error||'';out.style.display='block';}
-    })
-    .catch(function(){m.textContent='Ошибка сети';m.style.color='#c00';});
-}
-</script>`, html.EscapeString(string(pretty)), b.ID, b.ID)
+  <div style="font-size:11px;color:#666;margin-bottom:10px">Провайдеры, модели и маршрутизация по задачам. Распознавание документов идёт на vision-моделях (Gemini) с фолбэком; текстовые задачи — на GLM через z.ai. Ключи хранятся в служебной таблице базы и не попадают в экспорт конфигурации. API-ключи отображаются замаскированными (<code>****</code>); оставьте маску без изменений — ключ сохранится прежним.</div>
+  <div id="ai-settings-root" data-base="%s" data-cfg="%s">Загрузка…</div>
+</div>`, b.ID, html.EscapeString(string(initCfg)))
 
 	// Режим доступа ИИ-чата к данным (план 54). Управляет тем, кто и как
 	// обращается к данным базы через инструмент «выполнить_запрос».
@@ -122,7 +90,7 @@ function aiScopeSave(){
 </script>`, aiScopeOptions(db.GetAIDataScope(r.Context())), b.ID)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(page + scopeSection))
+	w.Write([]byte(page + "\n<script>\n" + aiSettingsJS + "\n</script>\n" + scopeSection))
 }
 
 // aiScopeOptions строит <option> режима доступа ИИ к данным с выбранным текущим.
