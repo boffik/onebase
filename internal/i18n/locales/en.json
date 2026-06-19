@@ -312,6 +312,8 @@
   "Ошибка": "Error",
   "Ошибка запроса:": "Query error:",
   "Параметры": "Parameters",
+  "Вариант": "Variant",
+  "Основной": "Default",
   "Параметры виртуальной таблицы": "Virtual table parameters",
   "Параметры запроса": "Query parameters",
   "Остатки": "Balances",

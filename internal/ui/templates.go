@@ -334,6 +334,20 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		}
 		return "?" + strings.Join(parts, "&")
 	},
+	// variantQuery дописывает выбранный вариант компоновки (__variant) к уже
+	// собранной query-строке параметров отчёта — чтобы выгрузка в Excel
+	// соответствовала выбранному на форме варианту.
+	"variantQuery": func(existing string, variant any) string {
+		vs, _ := variant.(string)
+		if vs == "" {
+			return existing
+		}
+		sep := "?"
+		if existing != "" {
+			sep = "&"
+		}
+		return existing + sep + "__variant=" + url.QueryEscape(vs)
+	},
 	"mul": func(a, b int) int { return a * b },
 	"int": func(v any) int {
 		switch t := v.(type) {
@@ -2248,10 +2262,20 @@ const tplReport = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
-{{if .ReportParams}}
+{{if or .ReportParams .Report.Variants}}
 <details class="card report-block" data-block="params" open style="margin-bottom:16px">
 <summary>{{t $.Lang "Параметры"}}</summary>
 <form method="POST">
+  {{if .Report.Variants}}
+  <div class="form-group" style="margin-bottom:16px;max-width:320px">
+    <label>{{t $.Lang "Вариант"}}</label>
+    <select name="__variant" onchange="this.form.submit()">
+      <option value="" {{if not $.ActiveVariant}}selected{{end}}>{{t $.Lang "Основной"}}</option>
+      {{range .Report.Variants}}<option value="{{.Name}}" {{if eq .Name $.ActiveVariant}}selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+  </div>
+  {{end}}
+  {{if .ReportParams}}
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px">
   {{range .ReportParams}}{{$p := .}}{{$pname := .Name}}{{$pval := str (index $.ParamValues .Name)}}
     {{if $p.IsBool}}
@@ -2290,6 +2314,7 @@ const tplReport = `
     {{end}}
   {{end}}
   </div>
+  {{end}}
   <button class="btn btn-primary" type="submit">{{t $.Lang "Сформировать"}}</button>
 </form>
 </details>
@@ -2313,7 +2338,7 @@ const tplReport = `
 {{if .ComposedHTML}}
 {{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
 <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
+  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
 </div>
 <details class="card report-block" data-block="data" open>
 <summary>{{t $.Lang "Данные"}}</summary>
@@ -2377,7 +2402,7 @@ const tplReport = `
 {{end}}
 {{if .Cols}}
 <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
+  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
 </div>
 <div class="card">
 {{if .Rows}}

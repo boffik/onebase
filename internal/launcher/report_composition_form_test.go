@@ -293,6 +293,31 @@ func TestApplyReportCompositionPreservesOtherFields(t *testing.T) {
 	}
 }
 
+func TestApplyReportCompositionPreservesVariants(t *testing.T) {
+	// Блок variants (варианты компоновки, C2) не должен теряться при сохранении
+	// основного composition через конструктор конфигуратора — иначе сохранение
+	// затирало бы пользовательские варианты.
+	raw := []byte("name: R\nquery: \"ВЫБРАТЬ 1\"\ncomposition:\n  groupings: [Старое]\n  measures:\n    - {field: X, agg: sum}\nvariants:\n  - name: По складам\n    composition:\n      groupings: [Склад]\n      measures:\n        - {field: X, agg: sum}\n")
+
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "Новое")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.measure.0.agg", "sum")
+
+	out, err := applyReportComposition(raw, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "variants:") || !strings.Contains(s, "По складам") || !strings.Contains(s, "Склад") {
+		t.Fatalf("variants потеряны при сохранении composition:\n%s", s)
+	}
+	if !strings.Contains(s, "Новое") {
+		t.Fatalf("новая composition не записана:\n%s", s)
+	}
+}
+
 func TestApplyReportComposition(t *testing.T) {
 	raw := []byte("name: R\nquery: \"ВЫБРАТЬ 1\"\ncomposition:\n  groupings: [Старое]\n  measures:\n    - {field: X, agg: sum}\n")
 

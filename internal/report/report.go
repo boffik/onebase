@@ -22,11 +22,20 @@ type Report struct {
 	Query       string            `yaml:"query"`
 	ChartProc   string            `yaml:"chart_proc"`
 	Composition *Composition      `yaml:"composition"` // nil = плоская таблица (старое поведение)
+	Variants    []ReportVariant   `yaml:"variants"`    // доп. именованные компоновки по тому же запросу
 
 	// External помечает отчёт из внешнего контура (таблица _ext_reports),
 	// а не из конфигурации проекта. Заполняется программно при загрузке;
 	// в YAML не сериализуется.
 	External bool `yaml:"-"`
+}
+
+// ReportVariant — именованная компоновка по тому же запросу отчёта («вариант
+// отчёта», как в 1С). На форме отчёта пользователь выбирает вариант; пустой
+// выбор соответствует основному блоку composition.
+type ReportVariant struct {
+	Name        string       `yaml:"name"`
+	Composition *Composition `yaml:"composition"`
 }
 
 // Composition описывает настройки компоновки данных отчёта.
@@ -111,6 +120,19 @@ func (r *Report) DisplayName(lang string) string {
 		return r.Title
 	}
 	return r.Name
+}
+
+// ActiveComposition возвращает компоновку выбранного варианта по его имени.
+// Пустое имя или несовпадение → основной composition (вариант по умолчанию).
+func (r *Report) ActiveComposition(name string) *Composition {
+	if name != "" {
+		for i := range r.Variants {
+			if r.Variants[i].Name == name {
+				return r.Variants[i].Composition
+			}
+		}
+	}
+	return r.Composition
 }
 
 func LoadFile(path string) (*Report, error) {

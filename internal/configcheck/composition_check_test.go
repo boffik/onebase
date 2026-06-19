@@ -88,6 +88,45 @@ func TestCompositionCrossValidation(t *testing.T) {
 	}
 }
 
+func TestVariantValidation(t *testing.T) {
+	// Вариант с неизвестным агрегатом — должна быть проблема с упоминанием варианта.
+	rep := &report.Report{
+		Name:        "R",
+		Query:       "ВЫБРАТЬ 1",
+		Composition: &report.Composition{Groupings: []string{"М"}, Measures: []report.Measure{{Field: "Сумма", Agg: "sum"}}},
+		Variants: []report.ReportVariant{
+			{Name: "Плохой", Composition: &report.Composition{
+				Groupings: []string{"М"},
+				Measures:  []report.Measure{{Field: "Сумма", Agg: "wat"}},
+			}},
+		},
+	}
+	proj := &project.Project{Reports: []*report.Report{rep}}
+	iss := CheckReportComposition(proj)
+	if !issuesContain(iss, "агрегат") {
+		t.Fatalf("ожидали проблему про агрегат в варианте: %+v", iss)
+	}
+	if !issuesContain(iss, "Плохой") {
+		t.Fatalf("ожидали упоминание имени варианта в сообщении: %+v", iss)
+	}
+
+	// Корректный вариант — без проблем.
+	repOK := &report.Report{
+		Name:        "R",
+		Query:       "ВЫБРАТЬ 1",
+		Composition: &report.Composition{Groupings: []string{"М"}, Measures: []report.Measure{{Field: "Сумма", Agg: "sum"}}},
+		Variants: []report.ReportVariant{
+			{Name: "По складам", Composition: &report.Composition{
+				Groupings: []string{"Склад"},
+				Measures:  []report.Measure{{Field: "Сумма", Agg: "sum"}},
+			}},
+		},
+	}
+	if iss := CheckReportComposition(&project.Project{Reports: []*report.Report{repOK}}); len(iss) != 0 {
+		t.Fatalf("корректный вариант: ожидали 0 проблем, получили: %+v", iss)
+	}
+}
+
 func issuesContain(iss []Issue, sub string) bool {
 	for _, i := range iss {
 		if strings.Contains(i.Message, sub) {
