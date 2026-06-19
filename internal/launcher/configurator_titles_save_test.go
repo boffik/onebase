@@ -261,3 +261,29 @@ resources:
 	}
 	assertFileContainsRv(t, p, "titles:", "en: Stock", "en: Product", "en: Quantity")
 }
+
+func TestSaveAccountRegister_PersistsTitles(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	p := writeCfgFileRv(t, cfgDir, "accountregs", "Хозрасчетный.yaml", `name: Хозрасчетный
+title: Хозрасчетный
+accounts: ПланСчетов
+resources:
+  - name: Сумма
+    type: number
+`)
+	form := url.Values{}
+	form.Set("accountreg", "Хозрасчетный")
+	form.Set("title", "Хозрасчетный")
+	form.Set("accounts", "ПланСчетов")
+	form.Set("titles.en", "Self-supporting")
+	form.Set("res.0.name", "Сумма")
+	form.Set("res.0.type", "number")
+	form.Set("res.0.titles.en", "Amount")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/account-register", form, h.configuratorSaveAccountRegister)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, p, "titles:", "en: Self-supporting", "en: Amount")
+}

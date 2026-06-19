@@ -111,16 +111,19 @@ type saveInfoReg struct {
 }
 
 type saveAccountReg struct {
-	Name      string      `yaml:"name"`
-	Title     string      `yaml:"title,omitempty"`
-	Accounts  string      `yaml:"accounts,omitempty"`
-	Resources []saveField `yaml:"resources,omitempty"`
+	Name      string            `yaml:"name"`
+	Title     string            `yaml:"title,omitempty"`
+	Titles    map[string]string `yaml:"titles,omitempty"`
+	Accounts  string            `yaml:"accounts,omitempty"`
+	Resources []saveField       `yaml:"resources,omitempty"`
 }
 
 // applyAccountRegFields точечно правит редактируемые в форме ключи плана счетов
 // прямо в дереве YAML, сохраняя блок subconto, многоязычные titles и любые
 // прочие поля (раньше свежий marshal saveAccountReg стирал subconto и titles).
-func applyAccountRegFields(raw []byte, reg saveAccountReg) ([]byte, error) {
+// setTitles=true означает, что форма содержала блок titles и его нужно записать
+// (включая удаление ключа при пустом значении); false — не трогать.
+func applyAccountRegFields(raw []byte, reg saveAccountReg, setTitles bool) ([]byte, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(raw, &root); err != nil {
 		return nil, err
@@ -147,6 +150,11 @@ func applyAccountRegFields(raw []byte, reg saveAccountReg) ([]byte, error) {
 		v any
 	}{{"title", t}, {"accounts", a}, {"resources", rv}} {
 		if err := setYAMLMapField(doc, kv.k, kv.v); err != nil {
+			return nil, err
+		}
+	}
+	if setTitles {
+		if err := setYAMLMapField(doc, "titles", anyOrNil(reg.Titles)); err != nil {
 			return nil, err
 		}
 	}
@@ -317,6 +325,7 @@ type cfgInfoRegister struct {
 type cfgAccountRegister struct {
 	Name      string
 	Title     string
+	Titles    map[string]string
 	Accounts  string
 	Resources []cfgField
 }
@@ -802,7 +811,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, ar := range proj.AccountRegisters {
-		rv := cfgAccountRegister{Name: ar.Name, Title: ar.Title, Accounts: ar.Accounts}
+		rv := cfgAccountRegister{Name: ar.Name, Title: ar.Title, Titles: ar.Titles, Accounts: ar.Accounts}
 		for _, f := range ar.Resources {
 			rv.Resources = append(rv.Resources, toCfgField(f))
 		}
@@ -3754,7 +3763,7 @@ func findAccountRegFilePath(dir, name string) (string, error) {
 	return "", fmt.Errorf("accountreg %q not found", name)
 }
 
-func saveAccountRegToFile(dir string, reg saveAccountReg) error {
+func saveAccountRegToFile(dir string, reg saveAccountReg, setTitles bool) error {
 	p, err := findAccountRegFilePath(dir, reg.Name)
 	if err != nil {
 		// новый файл — subconto/titles сохранять неоткуда, marshal свежего reg
@@ -3770,14 +3779,14 @@ func saveAccountRegToFile(dir string, reg saveAccountReg) error {
 	if rerr != nil {
 		return rerr
 	}
-	out, merr := applyAccountRegFields(raw, reg)
+	out, merr := applyAccountRegFields(raw, reg, setTitles)
 	if merr != nil {
 		return merr
 	}
 	return os.WriteFile(p, out, 0o644)
 }
 
-func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccountReg) error {
+func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccountReg, setTitles bool) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -3810,7 +3819,7 @@ func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccou
 	// для новой записи marshal свежего reg.
 	var out []byte
 	if len(existingContent) > 0 {
-		out, err = applyAccountRegFields(existingContent, reg)
+		out, err = applyAccountRegFields(existingContent, reg, setTitles)
 	} else {
 		out, err = yaml.Marshal(&reg)
 	}
@@ -3842,11 +3851,15 @@ func (h *handler) configuratorSaveAccountRegister(w http.ResponseWriter, r *http
 		Accounts:  strings.TrimSpace(r.FormValue("accounts")),
 		Resources: parseRegSection(r, "res"),
 	}
+	setTitles := formHasMapField(r, "titles")
+	if setTitles {
+		reg.Titles = parseMapForm(r, "titles")
+	}
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveAccountRegToDB(r.Context(), b, reg)
+		saveErr = h.saveAccountRegToDB(r.Context(), b, reg, setTitles)
 	} else {
-		saveErr = saveAccountRegToFile(b.Path, reg)
+		saveErr = saveAccountRegToFile(b.Path, reg, setTitles)
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {

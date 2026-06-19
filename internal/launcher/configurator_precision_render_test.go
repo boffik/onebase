@@ -131,6 +131,31 @@ func TestInfoRegDetail_TitlesBlockRendered(t *testing.T) {
 	}
 }
 
+// Регистр бухгалтерии с AvailableLangs: titles-блоки объекта и ресурсов
+// должны рендериться в inline-форме (доступ к $.AvailableLangs из корня).
+func TestAccountRegDetail_TitlesBlockRendered(t *testing.T) {
+	data := &configuratorData{
+		Base:           &Base{ID: "b", Name: "X", ConfigSource: "file"},
+		Lang:           "ru",
+		Tab:            "tree",
+		AvailableLangs: []i18n.Lang{{Code: "en", Native: "English"}},
+		AccountRegisters: []cfgAccountRegister{{
+			Name:      "Хозрасчетный",
+			Accounts:  "ПланСчетов",
+			Resources: []cfgField{{Name: "Сумма", Type: "number"}},
+		}},
+	}
+	html := renderCfgTree(t, data)
+	for _, want := range []string{
+		`name="titles.en"`,
+		`name="res.0.titles.en"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("accountreg-detail: titles-блок не найден: %q", want)
+		}
+	}
+}
+
 // Константа: у типа «число» — инпуты Длина/Точность (имена length/scale).
 func TestConstantDetail_Precision(t *testing.T) {
 	data := &configuratorData{

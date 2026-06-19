@@ -5202,6 +5202,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       <label>{{t $.Lang "Заголовок"}}</label>
       <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Отображаемое имя"}}">
     </div>
+    {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
     <div class="fg" style="margin-bottom:12px">
       <label>{{t $.Lang "План счетов (имя объекта)"}}</label>
       <input type="text" name="accounts" value="{{.Accounts}}" placeholder="{{t $.Lang "ПланСчетов"}}">
@@ -5227,6 +5228,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </span>
       </td>
     </tr>
+    {{if $.AvailableLangs}}<tr><td colspan="2" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
