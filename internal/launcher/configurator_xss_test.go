@@ -24,6 +24,9 @@ func TestConfigurator_XSS_Escaped(t *testing.T) {
 		Widgets:    []cfgWidget{{Name: "w", Type: "kpi"}},
 		GlobalHome: cfgHomePage{Rows: [][]string{{jsBreakout}}},
 	}
+	// Bootstrap заполняет window.__cfg (как в renderCfg) — иначе payload из
+	// AllEntityNames не попадёт в вывод, и JS-гард станет вакуумным.
+	populateBootstrap(data, "ru")
 	var buf bytes.Buffer
 	if err := cfgTmpl.ExecuteTemplate(&buf, "cfg-main", data); err != nil {
 		t.Fatalf("ExecuteTemplate cfg-main: %v", err)
@@ -37,11 +40,19 @@ func TestConfigurator_XSS_Escaped(t *testing.T) {
 	if !strings.Contains(out, "&lt;img") {
 		t.Error("HTML-контекст: ожидалась esc-форма &lt;img — её нет")
 	}
-	// JS-контекст (_cfgEntityNames внутри <script>): < должно стать <.
-	// Проверяем именно escape-форму, а не сырой `<img` (он есть в статичном
-	// <img id="logo-preview"> страницы — такой ассерт был бы всегда истинным).
+	// JS-контекст: payload из AllEntityNames теперь уходит в window.__cfg
+	// (bootstrap-JSON), где json.Marshal экранирует '<' как <. Проверяем и
+	// весь вывод, и сам блоб — чтобы гард был неваккуумным (а не проходил через
+	// несвязанный HTML дерева).
 	if !strings.Contains(out, "\\u003cimg") {
-		t.Error("JS-контекст: ожидалась esc-форма \\u003cimg — её нет")
+		t.Error("JS-контекст: ожидалась esc-форма \\u003cimg в выводе — её нет")
+	}
+	boot := string(data.Bootstrap)
+	if !strings.Contains(boot, "\\u003cimg") {
+		t.Error("bootstrap: payload в window.__cfg не экранирован (\\u003cimg)")
+	}
+	if strings.Contains(boot, "<img") {
+		t.Error("bootstrap: сырой <img в window.__cfg")
 	}
 	// M2: funcmap "js" (json.Marshal) экранирует < как < — брейкаут из
 	// <script> закрыт, и нет двойного экранирования (\\u003c).
