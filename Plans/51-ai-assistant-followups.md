@@ -96,14 +96,12 @@ DSL текст, а не base64/бинарь).
 - Меняется **только**: рендер `cfgAdminAI` (textarea → каркас формы) + новый JS. Эндпоинты
   `save`/`test`/`datascope`, `Redacted`/`UnmaskKeys`, формат `Config` — **без изменений**.
 
-**Где живёт JS:** новый файл **`internal/launcher/static/ai-settings.js`**, отдаётся через
-существующий static-embed (`internal/launcher/static.go`). Внимание: в `main` директива
-embed'ит **по конкретным файлам** (`//go:embed static/js-yaml.min.js`), а не всю папку —
-значит `ai-settings.js` нужно **явно добавить в `//go:embed`** и убедиться, что роут
-`/static/*` его отдаёт. Фрагмент подключает его `<script src>` и вызывает идемпотентный
-`aiSettingsInit(baseId)` (cfgAdmin пересоздаёт скрипты при каждом открытии — init не должен
-дублировать обработчики/глобали; обернуть в IIFE). Альтернатива (если станет проще) — inline
-`<script>` в фрагменте по образцу остальных админ-страниц; выбор зафиксировать в `-impl`.
+**Где живёт JS:** новый файл **`internal/launcher/static/ai-settings.js`**, отдаётся
+существующим роутом `/static/*` (`server.go:17` `//go:embed static` встраивает **всю** папку
+`static/`, `server.go:86` `FileServer`) — новый файл подхватывается автоматически, правка
+`static.go` не нужна. Фрагмент `cfgAdminAI` подключает его `<script src="/static/ai-settings.js">`
+и вызывает идемпотентный `aiSettingsInit(baseId, cfgJSON)` (cfgAdmin пересоздаёт `<script>` при
+каждом открытии — обернуть в IIFE, не дублировать глобали).
 
 **Клиентская валидация-предупреждения** (не блокирует сохранение, показывается inline):
 - модель ссылается на несуществующий провайдер (`Model.Endpoint` ∉ `Endpoints`);
@@ -189,9 +187,8 @@ tools, фолбэк по цепочке смешанных протоколов.
   (подключение `ai-settings.js`, контейнеры секций, начальные данные конфига в JSON для JS).
   `cfgAdminAISave`/`cfgAdminAITest`/`cfgAdminAIDataScope` — **без изменений**.
 - **NEW** `internal/launcher/static/ai-settings.js` — рендер форм, inline-правка, редактор
-  цепочки, тоггл JSON, валидация, save/test через существующие эндпоинты.
-- **MOD** `internal/launcher/static.go` — добавить `ai-settings.js` в `//go:embed` (в `main`
-  embed по конкретным файлам).
+  цепочки, тоггл JSON, валидация, save/test через существующие эндпоинты (отдаётся
+  существующим `/static/*`, правка `static.go` не нужна).
 - **Reuse:** `llm.Config`/`Redacted`/`UnmaskKeys` (`internal/llm/config.go`),
   `storage.Get/SaveLLMConfig` (`internal/storage/settings.go:224`), паттерны таблиц/форм
   админки (`internal/launcher/admin_handlers.go`).
