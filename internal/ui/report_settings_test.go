@@ -191,3 +191,44 @@ func TestLoadUserSettings(t *testing.T) {
 		t.Fatalf("bob: ожидали nil, получили %+v", s)
 	}
 }
+
+// TestReportSettingsIndicator: при активных настройках панель показывает
+// пометку «изменено», а кнопка сброса активна; без настроек — кнопка disabled.
+func TestReportSettingsIndicator(t *testing.T) {
+	rep := &reportpkg.Report{Name: "sales", Title: "Продажи"}
+	base := map[string]any{
+		"Report":       rep,
+		"ParamValues":  map[string]any{},
+		"ReportParams": []reportParamUI{},
+		"ReportCols":   []string{"Товар", "Сумма"},
+		"Cfg":          Config{},
+		"Lang":         "ru",
+	}
+
+	// С активными настройками.
+	withSettings := map[string]any{}
+	for k, v := range base {
+		withSettings[k] = v
+	}
+	withSettings["UserSettings"] = &reportpkg.UserReportSettings{Variant: "X"}
+	var b1 bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&b1, "page-report", withSettings); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(b1.String(), "изменено") {
+		t.Errorf("нет пометки «изменено» при активных настройках")
+	}
+
+	// Без настроек — кнопка сброса disabled.
+	var b2 bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&b2, "page-report", base); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := b2.String()
+	if strings.Contains(out, "изменено") {
+		t.Errorf("пометка «изменено» не должна показываться без настроек")
+	}
+	if !strings.Contains(out, "disabled") {
+		t.Errorf("кнопка сброса должна быть disabled без настроек")
+	}
+}

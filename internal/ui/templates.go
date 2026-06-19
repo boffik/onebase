@@ -2321,7 +2321,7 @@ const tplReport = `
 {{end}}
 {{if .ReportCols}}
 <details class="card report-block" data-block="settings" style="margin-bottom:16px">
-<summary>{{t $.Lang "Настройка отчёта"}}</summary>
+<summary>{{t $.Lang "Настройка отчёта"}}{{if .UserSettings}} <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600">{{t $.Lang "изменено"}}</span>{{end}}</summary>
 <form method="POST" onsubmit="rsCollect()">
   {{range .ReportParams}}<input type="hidden" name="{{.Name}}" value="{{str (index $.ParamValues .Name)}}">{{end}}
   <input type="hidden" name="__variant" value="{{.ActiveVariant}}">
@@ -2381,7 +2381,7 @@ const tplReport = `
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn btn-primary" type="submit">{{t $.Lang "Применить"}}</button>
     <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/save">{{t $.Lang "Сохранить"}}</button>
-    <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/reset">{{t $.Lang "Стандартные настройки"}}</button>
+    <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/reset"{{if not .UserSettings}} disabled{{end}}>{{t $.Lang "Стандартные настройки"}}</button>
   </div>
 </form>
 <script>
