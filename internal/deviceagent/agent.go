@@ -43,6 +43,7 @@ func (a *Agent) Handler() http.Handler {
 		r.Post("/display", a.display)
 		r.Post("/weight", a.weight)
 		r.Post("/pay", a.pay)
+		r.Post("/fiscal", a.fiscal)
 	})
 	return r
 }
@@ -67,6 +68,58 @@ type displayRequest struct {
 type payRequest struct {
 	deviceRef
 	Amount float64 `json:"amount"`
+}
+
+type fiscalRequest struct {
+	deviceRef
+	Receipt fiscalReceiptDTO `json:"receipt"`
+}
+
+type fiscalReceiptDTO struct {
+	Type     string             `json:"type"`
+	Taxation string             `json:"taxation"`
+	Email    string             `json:"email"`
+	Phone    string             `json:"phone"`
+	Items    []fiscalItemDTO    `json:"items"`
+	Payments []fiscalPaymentDTO `json:"payments"`
+}
+
+type fiscalItemDTO struct {
+	Name        string  `json:"name"`
+	Qty         float64 `json:"qty"`
+	Price       float64 `json:"price"`
+	Sum         float64 `json:"sum"`
+	VAT         string  `json:"vat"`
+	ItemType    string  `json:"itemType"`
+	PaymentType string  `json:"paymentType"`
+}
+
+type fiscalPaymentDTO struct {
+	Type string  `json:"type"`
+	Sum  float64 `json:"sum"`
+}
+
+func (r fiscalReceiptDTO) toFiscalReceipt() equipment.FiscalReceipt {
+	rec := equipment.FiscalReceipt{
+		Type:     r.Type,
+		Taxation: r.Taxation,
+		Email:    r.Email,
+		Phone:    r.Phone,
+	}
+	for _, it := range r.Items {
+		sum := it.Sum
+		if sum == 0 {
+			sum = it.Qty * it.Price
+		}
+		rec.Items = append(rec.Items, equipment.FiscalItem{
+			Name: it.Name, Qty: it.Qty, Price: it.Price, Sum: sum,
+			VAT: it.VAT, ItemType: it.ItemType, PaymentType: it.PaymentType,
+		})
+	}
+	for _, p := range r.Payments {
+		rec.Payments = append(rec.Payments, equipment.FiscalPayment{Type: p.Type, Sum: p.Sum})
+	}
+	return rec
 }
 
 type receiptDTO struct {
@@ -233,6 +286,33 @@ func (a *Agent) pay(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "approved": res.Approved, "rrn": res.RRN, "card": res.Card, "message": res.Message,
+	})
+}
+
+func (a *Agent) fiscal(w http.ResponseWriter, r *http.Request) {
+	var req fiscalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "некорректный JSON: "+err.Error())
+		return
+	}
+	dev, err := equipment.Open(req.Driver, req.Params)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	defer dev.Disconnect()
+	kkt, ok := dev.(equipment.FiscalRegistrar)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "устройство «"+dev.Kind()+"» не является фискальным регистратором")
+		return
+	}
+	res, err := kkt.RegisterReceipt(req.Receipt.toFiscalReceipt())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "fn": res.FN, "fd": res.FD, "fp": res.FP, "qr": res.QR,
 	})
 }
 

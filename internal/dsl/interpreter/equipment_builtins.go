@@ -68,6 +68,17 @@ func (d *dslDevice) CallMethod(name string, args []any) any {
 			"сообщение": res.Message,
 			"message":   res.Message,
 		}}
+	case "зарегистрироватьчек", "registerreceipt":
+		res, err := d.asFiscal("ЗарегистрироватьЧек").RegisterReceipt(fiscalReceiptFromArg(args, 0))
+		if err != nil {
+			panic(userError{Msg: "Оборудование.ЗарегистрироватьЧек: " + err.Error()})
+		}
+		return &MapThis{M: map[string]any{
+			"фн": res.FN, "fn": res.FN,
+			"фд": res.FD, "fd": res.FD,
+			"фп": res.FP, "fp": res.FP,
+			"qr": res.QR, "штрихкод": res.QR,
+		}}
 	case "отключить", "disconnect":
 		if err := d.dev.Disconnect(); err != nil {
 			panic(userError{Msg: "Оборудование.Отключить: " + err.Error()})
@@ -119,6 +130,16 @@ func (d *dslDevice) asTerminal(method string) equipment.PaymentTerminal {
 	return term
 }
 
+// asFiscal приводит устройство к FiscalRegistrar или останавливает выполнение,
+// если драйвер не является фискальным регистратором (ККТ).
+func (d *dslDevice) asFiscal(method string) equipment.FiscalRegistrar {
+	kkt, ok := d.dev.(equipment.FiscalRegistrar)
+	if !ok {
+		panic(userError{Msg: "Оборудование." + method + ": устройство «" + d.dev.Kind() + "» не является фискальным регистратором"})
+	}
+	return kkt
+}
+
 // receiptFromArg преобразует DSL-Структуру в equipment.Receipt.
 // Ожидаемые поля: Заголовок (строка/Массив), Позиции (Массив структур
 // Наименование/Количество/Цена/Сумма), Итого, Оплата, Подвал (строка/Массив).
@@ -150,6 +171,62 @@ func receiptFromArg(args []any, i int) equipment.Receipt {
 		r.Items = append(r.Items, it)
 	}
 	return r
+}
+
+// fiscalReceiptFromArg преобразует DSL-Структуру в equipment.FiscalReceipt.
+// Поля: Тип, Налогообложение/СНО, Email, Телефон; Позиции (Наименование,
+// Количество, Цена, Сумма, НДС/СтавкаНДС, ПризнакПредмета/Предмет,
+// СпособРасчёта/ПризнакСпособаРасчёта); Оплаты (Тип/ВидОплаты, Сумма).
+func fiscalReceiptFromArg(args []any, i int) equipment.FiscalReceipt {
+	var r equipment.FiscalReceipt
+	if i >= len(args) {
+		return r
+	}
+	src, ok := args[i].(This)
+	if !ok {
+		panic(userError{Msg: "ЗарегистрироватьЧек: ожидается Структура с данными чека"})
+	}
+	r.Type = equipStr(src.Get("тип"))
+	r.Taxation = pickStr(src, "налогообложение", "сно")
+	r.Email = pickStr(src, "email", "почта")
+	r.Phone = pickStr(src, "телефон", "phone")
+	for _, raw := range equipItems(src.Get("позиции")) {
+		row, ok := raw.(This)
+		if !ok {
+			continue
+		}
+		it := equipment.FiscalItem{Name: equipStr(row.Get("наименование"))}
+		it.Qty, _ = toFloat(row.Get("количество"))
+		it.Price, _ = toFloat(row.Get("цена"))
+		it.Sum, _ = toFloat(row.Get("сумма"))
+		if it.Sum == 0 {
+			it.Sum = it.Qty * it.Price
+		}
+		it.VAT = pickStr(row, "ндс", "ставкандс")
+		it.ItemType = pickStr(row, "признакпредмета", "предмет")
+		it.PaymentType = pickStr(row, "способрасчёта", "признакспособарасчёта", "способрасчета", "признакспособарасчета")
+		r.Items = append(r.Items, it)
+	}
+	for _, raw := range equipItems(src.Get("оплаты")) {
+		row, ok := raw.(This)
+		if !ok {
+			continue
+		}
+		p := equipment.FiscalPayment{Type: pickStr(row, "тип", "видоплаты")}
+		p.Sum, _ = toFloat(row.Get("сумма"))
+		r.Payments = append(r.Payments, p)
+	}
+	return r
+}
+
+// pickStr возвращает первое непустое значение перечисленных полей Структуры.
+func pickStr(s This, keys ...string) string {
+	for _, k := range keys {
+		if v := equipStr(s.Get(k)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // NewEquipmentFunctions возвращает функции и фабрики подключаемого оборудования

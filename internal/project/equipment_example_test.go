@@ -121,3 +121,69 @@ func TestLoad_ScriptedScaleConfig(t *testing.T) {
 		t.Error("процедура Выполнить() не найдена в ВзвеситьТовар")
 	}
 }
+
+// TestLoad_FiscalConfig проверяет метаданные фискального чека (54-ФЗ): появились
+// перечисления ставок НДС/СНО/признака предмета, у номенклатуры — поля тегов
+// ФФД, константа СНО, а РМК-обработка ПробитьЧек загрузилась и привязалась.
+func TestLoad_FiscalConfig(t *testing.T) {
+	p, err := project.Load("../../examples/trade")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	defer p.Close()
+
+	has := func(name string, names []string) bool {
+		for _, n := range names {
+			if n == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	var enums []string
+	for _, e := range p.Enums {
+		enums = append(enums, e.Name)
+	}
+	for _, want := range []string{"СтавкаНДС", "СистемаНалогообложения", "ПризнакПредмета"} {
+		if !has(want, enums) {
+			t.Errorf("перечисление %q не загружено; есть: %v", want, enums)
+		}
+	}
+
+	var nomFields []string
+	for _, e := range p.Entities {
+		if e.Name == "Номенклатура" {
+			for _, f := range e.Fields {
+				nomFields = append(nomFields, f.Name)
+			}
+		}
+	}
+	for _, want := range []string{"СтавкаНДС", "ПризнакПредмета"} {
+		if !has(want, nomFields) {
+			t.Errorf("в номенклатуре нет поля %q; есть: %v", want, nomFields)
+		}
+	}
+
+	var procs []string
+	for _, pr := range p.Processors {
+		procs = append(procs, pr.Name)
+	}
+	if !has("ПробитьЧек", procs) {
+		t.Errorf("обработка ПробитьЧек не загружена; есть: %v", procs)
+	}
+
+	prog, ok := p.Programs["ПробитьЧек"]
+	if !ok || prog == nil {
+		t.Fatal("DSL-модуль ПробитьЧек не привязан")
+	}
+	execFound := false
+	for _, proc := range prog.Procedures {
+		if strings.EqualFold(proc.Name.Literal, "Выполнить") {
+			execFound = true
+		}
+	}
+	if !execFound {
+		t.Error("процедура Выполнить() не найдена в ПробитьЧек")
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -220,4 +222,43 @@ func TestEquipment_ScriptedPay_DSL(t *testing.T) {
 
 	result := runEqSrc(t, src, interpreter.NewEquipmentFunctions())
 	assert.Equal(t, "111222333", result)
+}
+
+// atolEmulatorHTTP — эмулятор сервиса АТОЛ v10: принимает задание и отдаёт
+// готовый фискальный результат на опрос статуса.
+func atolEmulatorHTTP(t *testing.T) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"isError":false}`))
+	})
+	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
+			`{"fnNumber":"9999078900012345","fiscalDocumentNumber":40,"fiscalDocumentSign":"2143256432"}}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// Шестой тип устройства — фискальный регистратор (ККТ): метод возвращает
+// структуру с фискальными реквизитами пробитого чека (ФН/ФД/ФП).
+func TestEquipment_Fiscal_DSL(t *testing.T) {
+	url := atolEmulatorHTTP(t)
+
+	src := fmt.Sprintf(`Функция Тест()
+  ККТ = ПодключитьОборудование("atol_kkt", Новый Структура("Порт", "%s"));
+  Чек = Новый Структура;
+  Чек.Тип = "приход";
+  Чек.Налогообложение = "уснДоход";
+  Позиции = Новый Массив;
+  Позиции.Добавить(Новый Структура("Наименование,Количество,Цена,Сумма,НДС,Предмет", "Хлеб", 2, 30, 60, "ндс10", "товар"));
+  Чек.Позиции = Позиции;
+  Результат = ККТ.ЗарегистрироватьЧек(Чек);
+  ККТ.Отключить();
+  Возврат Результат.ФД;
+КонецФункции`, url)
+
+	result := runEqSrc(t, src, interpreter.NewEquipmentFunctions())
+	assert.Equal(t, "40", result)
 }

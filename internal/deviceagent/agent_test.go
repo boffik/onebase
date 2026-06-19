@@ -198,6 +198,46 @@ func TestAgent_Pay(t *testing.T) {
 	}
 }
 
+// atolEmulator — эмулятор сервиса АТОЛ v10 для агентского теста /fiscal.
+func atolEmulator(t *testing.T) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"isError":false}`))
+	})
+	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
+			`{"fnNumber":"9999078900012345","fiscalDocumentNumber":40,"fiscalDocumentSign":"2143256432"}}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// Сквозь весь стек: HTTP-команда → агент → драйвер atol_kkt → эмулятор АТОЛ.
+func TestAgent_Fiscal(t *testing.T) {
+	atolURL := atolEmulator(t)
+	srv := httptest.NewServer(New("secret").Handler())
+	defer srv.Close()
+
+	body := `{"driver":"atol_kkt","params":{"порт":"` + atolURL + `"},` +
+		`"receipt":{"type":"приход","taxation":"уснДоход",` +
+		`"items":[{"name":"Хлеб","qty":2,"price":30,"sum":60,"vat":"ндс10","itemType":"товар"}],` +
+		`"payments":[{"type":"наличные","sum":60}]}}`
+	resp := post(t, srv.URL+"/fiscal", "secret", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("статус %d: %s", resp.StatusCode, b)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	for _, want := range []string{`"fn":"9999078900012345"`, `"fd":"40"`, `"fp":"2143256432"`} {
+		if !bytes.Contains(b, []byte(want)) {
+			t.Errorf("ответ не содержит %s: %s", want, b)
+		}
+	}
+}
+
 // SSE: события сканера долетают до клиента через text/event-stream (push-канал).
 func TestAgent_Events_SSE(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
