@@ -83,11 +83,12 @@ func TestRunWithToolsEmptyDelegates(t *testing.T) {
 	}
 }
 
-func TestRunWithToolsNonAnthropicDegrades(t *testing.T) {
-	// Профиль с openai-моделью + непустые tools → деградация до Run без инструментов.
+func TestRunWithToolsOpenAIPlainAnswer(t *testing.T) {
+	// openai-модель с непустыми tools, но модель не зовёт инструмент → финальный
+	// текст возвращается сразу (через completeOpenAITools, без деградации).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ответ openai"}}],"usage":{}}`))
+		_, _ = w.Write([]byte(`{"choices":[{"finish_reason":"stop","message":{"content":"ответ openai"}}],"usage":{}}`))
 	}))
 	defer srv.Close()
 	cfg := Config{
@@ -104,6 +105,6 @@ func TestRunWithToolsNonAnthropicDegrades(t *testing.T) {
 		t.Fatalf("RunWithTools: %v", err)
 	}
 	if resp.Text != "ответ openai" {
-		t.Fatalf("ожидалась деградация до Run, получено %q", resp.Text)
+		t.Fatalf("ожидался прямой ответ openai, получено %q", resp.Text)
 	}
 }
