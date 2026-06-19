@@ -127,3 +127,20 @@ func TestConfigurator_PagesRender(t *testing.T) {
 		})
 	}
 }
+
+// TestConfigurator_CSSExternalized: CSS вынесен в /static/configurator.css —
+// в HTML присутствует <link>, а инлайн-правила (напр. .cfg-modal-body{) ушли
+// из рендера в файл (план 55 фаза 2a).
+func TestConfigurator_CSSExternalized(t *testing.T) {
+	var buf bytes.Buffer
+	if err := cfgTmpl.ExecuteTemplate(&buf, "cfg-main", richCfgData("tree")); err != nil {
+		t.Fatalf("ExecuteTemplate cfg-main: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `href="/static/configurator.css"`) {
+		t.Error("нет <link> на /static/configurator.css")
+	}
+	if strings.Contains(out, ".cfg-modal-body{") {
+		t.Error("инлайн-CSS всё ещё в рендере — должен быть в файле")
+	}
+}
