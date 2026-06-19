@@ -2312,6 +2312,7 @@ const tplReport = `
 {{end}}
 {{if .ComposedHTML}}
 {{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
+{{if .ComposeWarnings}}<div class="card" style="background:#fef2f2;border-color:#fecaca;margin-bottom:8px;padding:8px 12px"><strong>{{t $.Lang "Предупреждения компоновки:"}}</strong><ul style="margin:4px 0 0;padding-left:20px">{{range .ComposeWarnings}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
   <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{reportParamQuery .Report.Params .ParamValues}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
 </div>

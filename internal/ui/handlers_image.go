@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // imageUpload принимает картинку (multipart-поле "file") в контексте сущности,
@@ -64,7 +65,10 @@ func (s *Server) imageUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	body := io.MultiReader(bytes.NewReader(head), file)
 
-	b, err := s.store.PutBlob(r.Context(), mimeType, body, maxSize)
+	// Владелец бинарника = сущность, в контексте которой идёт загрузка. imageServe
+	// по нему проверяет право чтения при отдаче (защита от IDOR).
+	owner := storage.BlobOwner{Kind: string(entity.Kind), Entity: entity.Name}
+	b, err := s.store.PutBlob(r.Context(), mimeType, body, maxSize, owner)
 	if err != nil {
 		http.Error(w, s.errText(r, err), 500)
 		return
@@ -88,6 +92,19 @@ func (s *Server) imageServe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rc.Close()
+
+	// Авторизация (защита от IDOR): если у блоба есть владелец-сущность, отдаём
+	// только тем, у кого есть право чтения (или записи — чтобы превью сразу после
+	// загрузки работало у загрузчика). can() возвращает true для nil-пользователя,
+	// поэтому в открытом деплое без пользователей доступ остаётся свободным.
+	// Легаси-блобы без владельца уже защищены auth-middleware (аноним до сюда
+	// не доходит, если пользователи заведены) — отдельная проверка не нужна.
+	if b.OwnerEntity != "" {
+		if !s.can(r, b.OwnerKind, b.OwnerEntity, "read") && !s.can(r, b.OwnerKind, b.OwnerEntity, "write") {
+			http.Error(w, s.tr(s.resolveLang(r), "Нет доступа"), http.StatusForbidden)
+			return
+		}
+	}
 
 	// Content-Type отдаём как есть только для растровых типов; всё прочее
 	// (например text/html, сохранённый через СохранитьКартинку с произвольным

@@ -74,10 +74,13 @@ func (h *handler) configuratorSavePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	saveErr := saveConfigFile(r, h, b, pageYAMLRelPath(name), yamlBody)
-	if saveErr == nil {
-		saveErr = saveConfigFile(r, h, b, pageSrcRelPath(name), []byte(r.FormValue("source")))
-	}
+	// Атомарно: исходник ПЕРВЫМ, метаданные ПОСЛЕДНИМИ — чтобы hot-reload,
+	// сработавший по записи pages/<имя>.yaml, уже видел готовый src/<имя>.page.os
+	// (а не страницу с новыми метаданными и старым/отсутствующим обработчиком).
+	saveErr := saveConfigFiles(r, h, b, []configFileEntry{
+		{relPath: pageSrcRelPath(name), content: []byte(r.FormValue("source"))},
+		{relPath: pageYAMLRelPath(name), content: yamlBody},
+	})
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
@@ -115,10 +118,12 @@ func (h *handler) configuratorDeletePage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	delErr := deleteConfigFile(r, h, b, pageYAMLRelPath(name))
-	if delErr == nil {
-		delErr = deleteConfigFile(r, h, b, pageSrcRelPath(name))
-	}
+	// Метаданные ПЕРВЫМИ — чтобы reload, сработавший по удалению pages/<имя>.yaml,
+	// перестал видеть страницу до исчезновения её обработчика (а не наоборот).
+	delErr := deleteConfigFiles(r, h, b, []string{
+		pageYAMLRelPath(name),
+		pageSrcRelPath(name),
+	})
 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if delErr != nil {

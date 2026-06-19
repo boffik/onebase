@@ -144,15 +144,16 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		}
 		var chartOption map[string]any
 		if rep.Composition.Chart != nil {
-			chartOption = buildComposedChart(res, rep.Composition.Chart)
+			chartOption = buildComposedChart(res, rep.Composition.Chart, rows, *rep.Composition, ev)
 		}
 		s.render(w, r, "page-report", map[string]any{
-			"Report":       rep,
-			"ComposedHTML": renderComposedTable(res, rep.Composition),
-			"Capped":       res.Capped,
-			"ChartOption":  chartOption,
-			"ParamValues":  paramValues,
-			"ReportParams": reportParams,
+			"Report":          rep,
+			"ComposedHTML":    renderComposedTable(res, rep.Composition),
+			"Capped":          res.Capped,
+			"ComposeWarnings": res.Warnings,
+			"ChartOption":     chartOption,
+			"ParamValues":     paramValues,
+			"ReportParams":    reportParams,
 		})
 		return
 	}

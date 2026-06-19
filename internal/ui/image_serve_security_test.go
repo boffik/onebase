@@ -28,7 +28,7 @@ func TestImageServe_SecurityHeaders(t *testing.T) {
 		t.Fatalf("EnsureBlobTable: %v", err)
 	}
 
-	b, err := db.PutBlob(ctx, "text/html", bytes.NewReader([]byte("<script>alert(1)</script>")), 1<<20)
+	b, err := db.PutBlob(ctx, "text/html", bytes.NewReader([]byte("<script>alert(1)</script>")), 1<<20, storage.BlobOwner{})
 	if err != nil {
 		t.Fatalf("PutBlob: %v", err)
 	}

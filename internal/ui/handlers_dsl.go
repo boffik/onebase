@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/dslvars"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // langCtxKeyT — ключ контекста, несущий разрешённый язык интерфейса для
@@ -143,7 +144,9 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 		if err != nil {
 			return nil, fmt.Errorf("СохранитьКартинку: некорректный Base64: %w", err)
 		}
-		blob, err := s.store.PutBlob(txState.Ctx(), mime, bytes.NewReader(data), s.maxFileSizeBytes)
+		// Без владельца: builtin вызывается из произвольного модуля и не знает
+		// целевую сущность. Отдача таких блобов требует лишь аутентификации.
+		blob, err := s.store.PutBlob(txState.Ctx(), mime, bytes.NewReader(data), s.maxFileSizeBytes, storage.BlobOwner{})
 		if err != nil {
 			return nil, fmt.Errorf("СохранитьКартинку: %w", err)
 		}
