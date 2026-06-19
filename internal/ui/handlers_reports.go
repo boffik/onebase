@@ -388,8 +388,10 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
-	// Выбранный вариант компоновки (GET-параметр __variant); пусто → основной.
-	comp := rep.ActiveComposition(r.URL.Query().Get("__variant"))
+	// Эффективная компоновка с учётом рантайм-настроек пользователя (план 70).
+	// readReportSettings читает __settings через FormValue (для GET — из query).
+	settings := readReportSettings(r)
+	comp := effectiveComposition(rep, settings)
 	paramValues := make(map[string]any, len(rep.Params))
 	for _, p := range rep.Params {
 		val := r.URL.Query().Get(p.Name)
@@ -433,6 +435,11 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		detailLinkCol = comp.DetailLink
 	}
 	s.resolveUUIDsInReport(r.Context(), rows, detailLinkCol)
+
+	// Пользовательские отборы (план 70) — до компоновки, как в runReport.
+	if settings != nil && len(settings.Filters) > 0 {
+		rows = compose.ApplyFilters(rows, settings.Filters)
+	}
 
 	// Если отчёт использует компоновщик — строим дерево групп/итогов для Excel.
 	if comp != nil {
