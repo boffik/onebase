@@ -118,12 +118,16 @@ func (h *handler) configuratorSaveHomePage(w http.ResponseWriter, r *http.Reques
 		Nav     *metadata.SubsystemContents `yaml:"nav,omitempty"`
 	}
 	hp := yamlHomePage{Title: strings.TrimSpace(r.FormValue("home_title"))}
+	// Titles: если форма содержит блок titles.* — берём из формы, иначе переносим
+	// из существующего файла (визуальный редактор раскладки их не должен терять).
+	hp.Titles = parseMapForm(r, "titles")
 
-	// Сохраняем переводы заголовка (titles) и блок nav из существующего файла,
-	// чтобы визуальное редактирование раскладки виджетов их не теряло.
+	// Сохраняем Nav и fallback-Title из существующего файла.
 	if proj, lerr := h.loadProjectFor(r.Context(), b); lerr == nil && proj != nil {
 		if proj.HomePage != nil {
-			hp.Titles = proj.HomePage.Titles
+			if !formHasMapField(r, "titles") {
+				hp.Titles = proj.HomePage.Titles
+			}
 			hp.Nav = proj.HomePage.Nav
 			if hp.Title == "" {
 				hp.Title = proj.HomePage.Title

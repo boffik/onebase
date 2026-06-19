@@ -55,8 +55,11 @@ func (h *handler) configuratorSavePage(w http.ResponseWriter, r *http.Request) {
 		Roles:  splitConfigList(r.FormValue("roles")),
 		Params: splitConfigList(r.FormValue("params")),
 	}
-	// Переносим titles из текущей конфигурации (визуальный редактор их не правит).
-	if proj, lerr := h.loadProjectFor(r.Context(), b); lerr == nil && proj != nil {
+	// Titles: если форма содержит блок titles.* — берём из формы (редактирование
+	// переводов), иначе переносим из существующей конфигурации (не трогаем).
+	if formHasMapField(r, "titles") {
+		pg.Titles = parseMapForm(r, "titles")
+	} else if proj, lerr := h.loadProjectFor(r.Context(), b); lerr == nil && proj != nil {
 		for _, ex := range proj.Pages {
 			if strings.EqualFold(ex.Name, name) {
 				pg.Titles = ex.Titles

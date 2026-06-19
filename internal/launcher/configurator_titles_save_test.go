@@ -287,3 +287,33 @@ resources:
 	}
 	assertFileContainsRv(t, p, "titles:", "en: Self-supporting", "en: Amount")
 }
+
+func TestSavePage_PersistsTitles(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	form := url.Values{}
+	form.Set("page_name", "Панель")
+	form.Set("title", "Панель")
+	form.Set("source", "Процедура ПриФормировании() КонецПроцедуры")
+	form.Set("titles.en", "Dashboard")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/page", form, h.configuratorSavePage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, cfgDir+"/pages/Панель.yaml", "titles:", "en: Dashboard")
+}
+
+func TestSaveHomePage_PersistsTitles(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	form := url.Values{}
+	form.Set("home_title", "Главная")
+	form.Set("titles.en", "Home")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/home-page", form, h.configuratorSaveHomePage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, cfgDir+"/config/home_page.yaml", "titles:", "en: Home")
+}

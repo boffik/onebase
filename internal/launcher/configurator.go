@@ -360,9 +360,10 @@ type widgetOption struct {
 // для визуального редактора конфигуратора (галочки виджетов + раскладка).
 type cfgHomePage struct {
 	Title   string
-	Widgets []string   // отмеченные виджеты (режим «Авто»)
-	Rows    [][]string // раскладка по рядам (режим «По рядам»)
-	Layout  string     // "auto" | "rows"
+	Titles  map[string]string // переводы заголовка (titles в YAML)
+	Widgets []string          // отмеченные виджеты (режим «Авто»)
+	Rows    [][]string        // раскладка по рядам (режим «По рядам»)
+	Layout  string            // "auto" | "rows"
 }
 
 type configuratorData struct {
@@ -937,14 +938,17 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	// Глобальная главная для визуального редактора (галочки / drag-конструктор).
 	ghTitle := ""
 	var ghRows [][]string
+	var ghTitles map[string]string
 	if proj.HomePage != nil {
 		ghRows = proj.HomePage.RowGroups()
 		if proj.HomePage.Title != "" && proj.HomePage.Title != "Главная" {
 			ghTitle = proj.HomePage.Title
 		}
+		ghTitles = proj.HomePage.Titles
 	}
 	data.GlobalHome = cfgHomePage{
 		Title:   ghTitle,
+		Titles:  ghTitles,
 		Widgets: homeWidgetsNames(proj.HomePage),
 		Rows:    ghRows,
 		Layout:  homeLayoutMode(proj.HomePage),

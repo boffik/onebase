@@ -5997,6 +5997,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{.Title}}" placeholder="{{.Name}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
       <div class="fg">
         <label>{{t $.Lang "Иконка"}}</label>
         <input type="text" name="icon" value="{{.Icon}}" placeholder="layout-dashboard">
@@ -6040,6 +6041,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="home_title" value="{{.GlobalHome.Title}}" placeholder="{{t $.Lang "Главная"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .GlobalHome.Titles)}}{{end}}
       {{if .Widgets}}
       <div class="fg" style="margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <label style="font-size:12px;color:#555">{{t $.Lang "Раскладка"}}</label>
