@@ -11,6 +11,7 @@ import (
 	"github.com/ivantit66/onebase/internal/aicontext"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -70,7 +71,7 @@ func (s *Server) aiTools(r *http.Request) ([]llm.Tool, llm.ToolExecutor) {
 	exec := func(ctx context.Context, call llm.ToolCall) llm.ToolResult {
 		switch call.Name {
 		case "описание_данных":
-			return llm.ToolResult{ID: call.ID, Content: s.aiSchemaText()}
+			return llm.ToolResult{ID: call.ID, Content: s.aiSchemaText(ctx)}
 		case "выполнить_запрос":
 			return s.aiRunQuery(ctx, call)
 		default:
@@ -80,8 +81,39 @@ func (s *Server) aiTools(r *http.Request) ([]llm.Tool, llm.ToolExecutor) {
 	return tools, exec
 }
 
-// aiSchemaText кратко описывает доступные объекты конфигурации для модели.
-func (s *Server) aiSchemaText() string {
+// aiSchemaText кратко описывает доступные объекты конфигурации для модели. В
+// режиме rbac (план 54) у не-администратора из схемы исключаются объекты-данные
+// (справочники/документы/регистры/инфо-регистры/регбухи) без права read —
+// согласованно с фильтрацией источников в выполнить_запрос.
+func (s *Server) aiSchemaText(ctx context.Context) string {
+	filter := s.store != nil && s.store.GetAIDataScope(ctx) == storage.AIDataScopeRBAC
+	allow := func(kind, name string) bool { return !filter || s.canCtx(ctx, kind, name, "read") }
+
+	ents := make([]*metadata.Entity, 0)
+	for _, e := range s.reg.Entities() {
+		if allow(string(e.Kind), e.Name) {
+			ents = append(ents, e)
+		}
+	}
+	regs := make([]*metadata.Register, 0)
+	for _, rg := range s.reg.Registers() {
+		if allow("register", rg.Name) {
+			regs = append(regs, rg)
+		}
+	}
+	iregs := make([]*metadata.InfoRegister, 0)
+	for _, ir := range s.reg.InfoRegisters() {
+		if allow("inforeg", ir.Name) {
+			iregs = append(iregs, ir)
+		}
+	}
+	aregs := make([]*metadata.AccountRegister, 0)
+	for _, ar := range s.reg.AccountRegisters() {
+		if allow("register", ar.Name) {
+			aregs = append(aregs, ar)
+		}
+	}
+
 	reports := make([]aicontext.NamedTitle, 0)
 	for _, rp := range s.reg.Reports() {
 		reports = append(reports, aicontext.NamedTitle{Name: rp.Name, Title: rp.Title})
@@ -91,10 +123,10 @@ func (s *Server) aiSchemaText() string {
 		procs = append(procs, aicontext.NamedTitle{Name: p.Name, Title: p.Title})
 	}
 	return aicontext.SchemaText(aicontext.Input{
-		Entities:         s.reg.Entities(),
-		Registers:        s.reg.Registers(),
-		InfoRegisters:    s.reg.InfoRegisters(),
-		AccountRegisters: s.reg.AccountRegisters(),
+		Entities:         ents,
+		Registers:        regs,
+		InfoRegisters:    iregs,
+		AccountRegisters: aregs,
 		ChartsOfAccounts: s.reg.ChartsOfAccounts(),
 		Enums:            s.reg.Enums(),
 		Constants:        s.reg.Constants(),

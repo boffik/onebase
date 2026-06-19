@@ -38,7 +38,7 @@ type Result struct {
 	Args []any
 	// Sources перечисляет объекты-источники запроса (для объектного RBAC, план 54).
 	// Имя — исходное имя сущности/регистра; Kind — секция прав ("catalog"|
-	// "document"|"register"|"inforeg"; пусто для бухрегистра — секции прав нет).
+	// "document"|"register"|"inforeg"; "" — для неизвестных типов).
 	Sources []SourceRef
 }
 
@@ -49,8 +49,10 @@ type SourceRef struct {
 }
 
 // sourcePermKind переводит ключевое слово типа источника в секцию прав User.Has.
-// Для бухрегистра (РегистрБухгалтерии) и неизвестных типов возвращает "" —
-// проверяемой секции прав нет.
+// Регистр бухгалтерии (РегистрБухгалтерии) проверяется по секции "register" — той
+// же, что и регистры накопления; одноимённые регистр накопления и регбух делят
+// одно право (на практике безопасно: обе — read-only регистры).
+// Неизвестные типы → "" (проверяемой секции прав нет).
 func sourcePermKind(typeUpper string) string {
 	switch {
 	case typeUpper == "СПРАВОЧНИК" || typeUpper == "CATALOG":
@@ -61,6 +63,8 @@ func sourcePermKind(typeUpper string) string {
 		return "register"
 	case isInfoRegType(typeUpper):
 		return "inforeg"
+	case isAccountRegType(typeUpper):
+		return "register" // регбух проверяется как регистр (план 54, фикс зазора)
 	}
 	return ""
 }
