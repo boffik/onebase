@@ -1575,9 +1575,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 		return err
 	}
 	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn)
-	if objTitles != nil {
-		ent.Titles = objTitles
-	}
+	ent.Titles = objTitles
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -1623,9 +1621,7 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 	}
 
 	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn)
-	if objTitles != nil {
-		ent.Titles = objTitles
-	}
+	ent.Titles = objTitles
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err

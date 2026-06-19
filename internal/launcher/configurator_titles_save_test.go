@@ -3,6 +3,8 @@ package launcher
 import (
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -54,4 +56,32 @@ fields:
 		t.Fatalf("код %d", rec.Code)
 	}
 	assertFileContainsRv(t, p, "en: SKU")
+}
+
+func TestSaveFields_ClearingAllObjectTitlesRemovesKey(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	p := writeCfgFileRv(t, cfgDir, "catalogs", "Склад.yaml", `name: Склад
+title: Склад
+titles:
+  en: Warehouse
+fields:
+  - name: Код
+    type: string
+`)
+	form := url.Values{}
+	form.Set("entity", "Склад")
+	form.Set("entity_kind", "Справочник")
+	form.Set("field.0.name", "Код")
+	form.Set("field.0.type", "string")
+	// titles.* НЕ отправляем — пользователь очистил все переводы объекта
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/fields", form, h.configuratorSaveFields)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d", rec.Code)
+	}
+	out, _ := os.ReadFile(p)
+	if strings.Contains(string(out), "Warehouse") {
+		t.Errorf("перевод объекта должен был удалиться, но остался:\n%s", out)
+	}
 }

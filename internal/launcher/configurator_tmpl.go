@@ -6114,7 +6114,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 <input type="hidden" name="entity" value="{{$e.Name}}">
 <input type="hidden" name="entity_kind" value="{{$e.Kind}}">
 {{range $e.TableParts}}<input type="hidden" name="tp_names" value="{{.Name}}">{{end}}
-{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" "titles" "Values" $e.Titles)}}
+{{if $availLangs}}{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" "titles" "Values" $e.Titles)}}{{end}}
 
 {{if eq $e.Kind "Документ"}}
 <div class="section-hd">{{t $.Lang "Свойства"}}</div>
