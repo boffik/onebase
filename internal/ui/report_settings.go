@@ -7,7 +7,10 @@ package ui
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 
+	"github.com/ivantit66/onebase/internal/auth"
 	reportpkg "github.com/ivantit66/onebase/internal/report"
 )
 
@@ -37,4 +40,46 @@ func effectiveComposition(rep *reportpkg.Report, s *reportpkg.UserReportSettings
 		return rep.ActiveComposition(s.Variant)
 	}
 	return rep.ActiveComposition("")
+}
+
+// currentUserLogin возвращает логин текущего пользователя или "" для анонимной/
+// однопользовательской сессии (настройки хранятся под пустым пользователем).
+func currentUserLogin(r *http.Request) string {
+	if u := auth.UserFromContext(r.Context()); u != nil {
+		return u.Login
+	}
+	return ""
+}
+
+// reportFormURL — путь формы отчёта для редиректа после save/reset.
+func reportFormURL(name string) string {
+	return "/ui/report/" + url.PathEscape(strings.ToLower(name))
+}
+
+// reportSettingsSave сохраняет рантайм-настройки текущего пользователя (POST
+// поля __settings) и возвращает на форму отчёта.
+func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
+	rep := s.getReport(w, r)
+	if rep == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
+		return
+	}
+	_ = s.store.SaveReportUserSettings(r.Context(), rep.Name, currentUserLogin(r), r.FormValue("__settings"))
+	http.Redirect(w, r, reportFormURL(rep.Name), http.StatusSeeOther)
+}
+
+// reportSettingsReset удаляет рантайм-настройки текущего пользователя — возврат
+// к стандартному виду из конфигурации — и возвращает на форму отчёта.
+func (s *Server) reportSettingsReset(w http.ResponseWriter, r *http.Request) {
+	rep := s.getReport(w, r)
+	if rep == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
+		return
+	}
+	_ = s.store.DeleteReportUserSettings(r.Context(), rep.Name, currentUserLogin(r))
+	http.Redirect(w, r, reportFormURL(rep.Name), http.StatusSeeOther)
 }

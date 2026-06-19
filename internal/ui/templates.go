@@ -2378,7 +2378,11 @@ const tplReport = `
       <button type="button" class="btn btn-sm" onclick="this.parentNode.remove()">×</button>
     </div>
   </template>
-  <button class="btn btn-primary" type="submit">{{t $.Lang "Применить"}}</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-primary" type="submit">{{t $.Lang "Применить"}}</button>
+    <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/save">{{t $.Lang "Сохранить"}}</button>
+    <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/reset">{{t $.Lang "Стандартные настройки"}}</button>
+  </div>
 </form>
 <script>
 (function(){

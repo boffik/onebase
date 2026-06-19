@@ -2,10 +2,17 @@ package ui
 
 import (
 	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	reportpkg "github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func TestEffectiveComposition(t *testing.T) {
@@ -118,5 +125,46 @@ func TestReportSettingsFilters(t *testing.T) {
 	}
 	if !strings.Contains(out, `value="100"`) {
 		t.Errorf("значение отбора 100 не предзаполнено")
+	}
+}
+
+// TestReportSettingsSaveReset: обработчики save/reset пишут и удаляют per-user
+// настройки в _settings (для анонима user="").
+func TestReportSettingsSaveReset(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "rs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.EnsureSettingsSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	rep := &reportpkg.Report{Name: "Продажи"}
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{Reports: []*reportpkg.Report{rep}})
+	s := &Server{store: db, reg: registry}
+
+	raw := `{"variant":"X"}`
+	form := url.Values{"__settings": {raw}}
+	r := reqWithChi("POST", "/ui/report/Продажи/settings/save", form, map[string]string{"name": "Продажи"})
+	w := httptest.NewRecorder()
+	s.reportSettingsSave(w, r)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("save: ожидался 303, получен %d", w.Code)
+	}
+	if got, _ := db.GetReportUserSettings(ctx, "Продажи", ""); got != raw {
+		t.Fatalf("save: хотели %q, получили %q", raw, got)
+	}
+
+	r2 := reqWithChi("POST", "/ui/report/Продажи/settings/reset", url.Values{}, map[string]string{"name": "Продажи"})
+	w2 := httptest.NewRecorder()
+	s.reportSettingsReset(w2, r2)
+	if w2.Code != http.StatusSeeOther {
+		t.Fatalf("reset: ожидался 303, получен %d", w2.Code)
+	}
+	if got, _ := db.GetReportUserSettings(ctx, "Продажи", ""); got != "" {
+		t.Fatalf("reset: ожидали пусто, получили %q", got)
 	}
 }
