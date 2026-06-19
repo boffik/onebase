@@ -106,11 +106,14 @@ func richCfgData(tab string) *configuratorData {
 // виджеты, главная, управляемые формы) — основной источник execute-ошибок
 // html/template после миграции с text/template (план 55, защита от регресса).
 func TestConfigurator_PagesRender(t *testing.T) {
+	// Якоря — фрагменты, уникальные для тела конкретной вкладки (а не общий
+	// syntax-ref-panel, который cfg-main рендерит для всех вкладок), чтобы сабтест
+	// доказывал рендер именно этой вкладки, а не только отсутствие execute-ошибки.
 	cases := []struct{ tab, anchor string }{
 		{"tree", `class="obj-tabs"`},
-		{"convert", `id="syntax-ref-panel"`},
-		{"files", `id="syntax-ref-panel"`},
-		{"backup", `id="syntax-ref-panel"`},
+		{"convert", `id="convert-src-dir"`},
+		{"files", `class="files-grid"`},
+		{"backup", `name="backup_schedule"`},
 	}
 	for _, c := range cases {
 		t.Run(c.tab, func(t *testing.T) {
