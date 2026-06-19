@@ -37,8 +37,10 @@ func TestConfigurator_XSS_Escaped(t *testing.T) {
 	if !strings.Contains(out, "&lt;img") {
 		t.Error("HTML-контекст: ожидалась esc-форма &lt;img — её нет")
 	}
-	// JS-контекст (_cfgEntityNames внутри <script>): должно быть <-экранировано.
-	if !strings.Contains(out, `<img`) {
+	// JS-контекст (_cfgEntityNames внутри <script>): < должно стать <.
+	// Проверяем именно escape-форму, а не сырой `<img` (он есть в статичном
+	// <img id="logo-preview"> страницы — такой ассерт был бы всегда истинным).
+	if !strings.Contains(out, "\\u003cimg") {
 		t.Error("JS-контекст: ожидалась esc-форма \\u003cimg — её нет")
 	}
 	// M2: funcmap "js" (json.Marshal) экранирует < как < — брейкаут из
@@ -46,7 +48,7 @@ func TestConfigurator_XSS_Escaped(t *testing.T) {
 	if strings.Contains(out, jsBreakout) {
 		t.Error("js-funcmap: сырой </script>-брейкаут в выводе")
 	}
-	if !strings.Contains(out, `</script`) {
+	if !strings.Contains(out, "\\u003c/script") {
 		t.Error("js-funcmap: ожидалась esc-форма \\u003c/script — её нет")
 	}
 	if strings.Contains(out, `\\u003c`) {
