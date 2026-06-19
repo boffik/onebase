@@ -2,8 +2,8 @@ package launcher
 
 import (
 	"encoding/json"
+	"html/template"
 	"strings"
-	"text/template"
 
 	"github.com/ivantit66/onebase/internal/i18n"
 )
@@ -29,14 +29,14 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 	},
 	"lower": strings.ToLower,
 	"join":  strings.Join,
-	"js": func(v any) string {
-		// json.Marshal по умолчанию экранирует <, >, & в \uXXXX — безопасно
-		// для вставки в <script> (text/template не экранирует сам).
+	"js": func(v any) template.JS {
+		// json.Marshal экранирует <, >, & в \uXXXX; возвращаем template.JS,
+		// чтобы html/template не экранировал повторно (двойное экранирование).
 		b, err := json.Marshal(v)
 		if err != nil {
-			return "null"
+			return template.JS("null")
 		}
-		return string(b)
+		return template.JS(b)
 	},
 	"fieldTypeLabel": func(typ, ref string) string {
 		switch typ {
