@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/ivantit66/onebase/internal/i18n"
 )
 
 func renderCfgTree(t *testing.T, data *configuratorData) string {
@@ -72,6 +74,33 @@ func TestAccountRegDetail_Precision(t *testing.T) {
 	for _, want := range []string{`name="res.0.length"`, `name="res.0.scale"`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("accountreg-detail: нет фрагмента %q", want)
+		}
+	}
+}
+
+// Регистр накопления с AvailableLangs: titles-блоки должны рендериться.
+// Проверяет, что AvailableLangs теперь передаётся в под-шаблон register-detail
+// (ранее guard {{if $.AvailableLangs}} был всегда ложен из-за отсутствия ключа).
+func TestRegisterDetail_TitlesBlockRendered(t *testing.T) {
+	data := &configuratorData{
+		Base:           &Base{ID: "b", Name: "X", ConfigSource: "file"},
+		Lang:           "ru",
+		Tab:            "tree",
+		AvailableLangs: []i18n.Lang{{Code: "en", Native: "English"}},
+		Registers: []cfgRegister{{
+			Name:       "Остатки",
+			Dimensions: []cfgField{{Name: "Товар", Type: "string"}},
+			Resources:  []cfgField{{Name: "Сумма", Type: "number"}},
+		}},
+	}
+	html := renderCfgTree(t, data)
+	for _, want := range []string{
+		`name="titles.en"`,
+		`name="dim.0.titles.en"`,
+		`name="res.0.titles.en"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("register-detail: titles-блок не найден: %q", want)
 		}
 	}
 }

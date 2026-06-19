@@ -5087,7 +5087,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-panel" id="r-{{.Name}}">
     <div class="panel-title">📊 {{.Name}}</div>
     <div class="panel-kind">{{t $.Lang "Регистр накопления"}}</div>
-    {{template "register-detail" (dict "Register" . "BaseID" $.Base.ID "AllEntityNames" $.AllEntityNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "Lang" $.Lang)}}
+    {{template "register-detail" (dict "Register" . "BaseID" $.Base.ID "AllEntityNames" $.AllEntityNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "Lang" $.Lang "AvailableLangs" $.AvailableLangs)}}
   </div>
   {{end}}
 

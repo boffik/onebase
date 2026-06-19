@@ -224,10 +224,11 @@ resources:
 	form.Set("dim.0.titles.en", "Product")
 	form.Set("res.0.name", "Кол")
 	form.Set("res.0.type", "number")
+	form.Set("res.0.titles.en", "Quantity")
 
 	rec := postCfgRv(t, "test", "/bases/test/configurator/register-fields", form, h.configuratorSaveRegisterFields)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
 	}
-	assertFileContainsRv(t, p, "titles:", "en: Stock", "en: Product")
+	assertFileContainsRv(t, p, "titles:", "en: Stock", "en: Product", "en: Quantity")
 }
