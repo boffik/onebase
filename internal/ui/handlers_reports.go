@@ -83,7 +83,10 @@ func (s *Server) getReport(w http.ResponseWriter, r *http.Request) *reportpkg.Re
 func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpkg.Report, paramValues map[string]any) {
 	// Выбранный вариант компоновки (параметр __variant); пусто → основной.
 	variant := r.FormValue("__variant")
-	comp := rep.ActiveComposition(variant)
+	// Рантайм-настройки пользователя (панель «Настройки»). Эффективная
+	// компоновка: override (settings.Composition) → вариант → основной.
+	settings := readReportSettings(r)
+	comp := effectiveComposition(rep, settings)
 	// Build query params: convert date strings to time.Time for proper PG type inference.
 	// Keep paramValues unchanged so the form repopulates with the original strings.
 	queryValues := make(map[string]any, len(paramValues))
@@ -160,6 +163,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 				"ParamValues":   paramValues,
 				"ReportParams":  reportParams,
 				"ActiveVariant": variant,
+				"UserSettings":  settings,
 			})
 			return
 		}
@@ -184,6 +188,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 			"ParamValues":   paramValues,
 			"ReportParams":  reportParams,
 			"ActiveVariant": variant,
+			"UserSettings":  settings,
 		})
 		return
 	}
@@ -201,6 +206,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		"ChartOption":   chartOption,
 		"ReportParams":  reportParams,
 		"ActiveVariant": variant,
+		"UserSettings":  settings,
 	})
 }
 
