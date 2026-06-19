@@ -1888,7 +1888,9 @@ func buildTPSaveField(r *http.Request, lang, keyBase, tpName, name string) (save
 		typ = typ + ":" + ref
 	}
 	typ = numberTypeWithSpec(typ, r.FormValue(keyBase+".length"), r.FormValue(keyBase+".scale"))
-	return saveField{Name: name, Type: typ}, ""
+	sf := saveField{Name: name, Type: typ}
+	sf.Titles = parseMapForm(r, keyBase+".titles")
+	return sf, ""
 }
 
 func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request) {
@@ -2025,6 +2027,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			}
 			typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("tp.%s.field.%d.length", tpName, i)), r.FormValue(fmt.Sprintf("tp.%s.field.%d.scale", tpName, i)))
 			sf := saveField{Name: name, Type: typ}
+			sf.Titles = parseMapForm(r, fmt.Sprintf("tp.%s.field.%d.titles", tpName, i))
 			// В ТЧ дефолт allow_inline_create = false; пишем только если
 			// чекбокс установлен (отличие от дефолта).
 			if r.FormValue(fmt.Sprintf("tp.%s.field.%d.inline_present", tpName, i)) == "1" {

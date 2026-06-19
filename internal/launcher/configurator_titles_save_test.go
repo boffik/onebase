@@ -58,6 +58,40 @@ fields:
 	assertFileContainsRv(t, p, "en: SKU")
 }
 
+func TestSaveFields_KeepsTablePartFieldTitles(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	p := writeCfgFileRv(t, cfgDir, "documents", "Заказ.yaml", `name: Заказ
+title: Заказ
+fields:
+  - name: Номер
+    type: string
+tableparts:
+  - name: Товары
+    fields:
+      - name: Цена
+        type: number
+        titles:
+          en: Price
+`)
+	form := url.Values{}
+	form.Set("entity", "Заказ")
+	form.Set("entity_kind", "Документ")
+	form.Set("based_on_present", "1")
+	form.Set("tp_names", "Товары")
+	form.Set("field.0.name", "Номер")
+	form.Set("field.0.type", "string")
+	form.Set("tp.Товары.field.0.name", "Цена")
+	form.Set("tp.Товары.field.0.type", "number")
+	form.Set("tp.Товары.field.0.titles.en", "Price")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/fields", form, h.configuratorSaveFields)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, p, "en: Price")
+}
+
 func TestSaveFields_ClearingAllObjectTitlesRemovesKey(t *testing.T) {
 	h, cfgDir := newFileBaseHandler(t)
 	h.runner = NewRunner()
