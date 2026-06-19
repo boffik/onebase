@@ -160,8 +160,8 @@ type cfgField struct {
 	Type              string
 	RefEntity         string
 	EnumName          string
-	Length            int               // разрядность number(L,P): всего знаков (Длина)
-	Scale             int               // знаков после запятой (Точность)
+	Length            int // разрядность number(L,P): всего знаков (Длина)
+	Scale             int // знаков после запятой (Точность)
 	FormListHidden    bool
 	FormItemHidden    bool
 	AllowInlineCreate *bool             // nil = дефолт контекста (true в шапке, false в ТЧ)
@@ -201,16 +201,16 @@ type cfgTablePart struct {
 
 type cfgEntity struct {
 	Name             string
-	Kind             string            // "Справочник" / "Документ"
+	Kind             string // "Справочник" / "Документ"
 	Posting          bool
 	Hierarchical     bool
-	BasedOn          []string          // источники для ввода на основании (Plan 38)
-	Receivers        []string          // обратный список: куда вводится на основании текущего объекта
+	BasedOn          []string // источники для ввода на основании (Plan 38)
+	Receivers        []string // обратный список: куда вводится на основании текущего объекта
 	Fields           []cfgField
 	TableParts       []cfgTablePart
-	Source           string            // raw .os content (object module)
-	PostingSource    string            // raw .posting.os content (ОбработкаПроведения)
-	ManagerSource    string            // raw .manager.os content (модуль менеджера)
+	Source           string // raw .os content (object module)
+	PostingSource    string // raw .posting.os content (ОбработкаПроведения)
+	ManagerSource    string // raw .manager.os content (модуль менеджера)
 	LinkedPrintForms []cfgPrintForm
 	Predefined       []cfgPredefined
 	Titles           map[string]string // переводы синонима объекта
@@ -307,6 +307,8 @@ type cfgDSLPrintForm struct {
 
 type cfgInfoRegister struct {
 	Name       string
+	Title      string
+	Titles     map[string]string
 	Periodic   bool
 	Dimensions []cfgField
 	Resources  []cfgField
@@ -789,7 +791,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, ir := range proj.InfoRegisters {
-		rv := cfgInfoRegister{Name: ir.Name, Periodic: ir.Periodic}
+		rv := cfgInfoRegister{Name: ir.Name, Title: ir.Title, Titles: ir.Titles, Periodic: ir.Periodic}
 		for _, f := range ir.Dimensions {
 			rv.Dimensions = append(rv.Dimensions, toCfgField(f))
 		}
@@ -2786,7 +2788,7 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 	// чтобы отличить «форма не имела блока переводов» (AvailableLangs пуст) от
 	// «пользователь очистил все переводы». Только во втором случае ключ titles: удаляется.
 	var (
-		newTitles     map[string]string
+		newTitles      map[string]string
 		hasTitlesBlock bool
 	)
 	for k := range r.Form {
@@ -3615,18 +3617,25 @@ func findInfoRegFilePath(dir, name string) (string, error) {
 	return "", fmt.Errorf("inforeg %q not found", name)
 }
 
-func saveInfoRegToFile(dir string, reg saveInfoReg) error {
+func saveInfoRegToFile(dir string, reg saveInfoReg, objTitles *map[string]string) error {
 	p, err := findInfoRegFilePath(dir, reg.Name)
 	if err != nil {
 		return err
 	}
-	// Title/Titles не редактируются в этой форме — переносим из существующего
-	// файла, иначе Marshal свежего reg затёр бы синоним регистра.
+	// Round-trip: читаем существующий файл, чтобы сохранить поля, которые
+	// форма не редактирует. Titles объекта перезаписываем только если форма
+	// прислала блок переводов (objTitles != nil).
 	if raw, rerr := os.ReadFile(p); rerr == nil {
 		var existing saveInfoReg
 		if yaml.Unmarshal(raw, &existing) == nil {
-			reg.Title, reg.Titles = existing.Title, existing.Titles
+			reg.Title = existing.Title
+			if objTitles == nil {
+				reg.Titles = existing.Titles
+			}
 		}
+	}
+	if objTitles != nil {
+		reg.Titles = *objTitles
 	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
@@ -3635,7 +3644,7 @@ func saveInfoRegToFile(dir string, reg saveInfoReg) error {
 	return os.WriteFile(p, out, 0o644)
 }
 
-func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg) error {
+func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg, objTitles *map[string]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -3656,14 +3665,21 @@ func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg)
 		var existing saveInfoReg
 		if yaml.Unmarshal(content, &existing) == nil && existing.Name == reg.Name {
 			targetPath = p
-			// сохраняем синоним регистра (в форме не редактируется)
-			reg.Title, reg.Titles = existing.Title, existing.Titles
+			// Round-trip: сохраняем поля, которые форма не редактирует.
+			// Titles перезаписываем только если форма прислала блок переводов.
+			reg.Title = existing.Title
+			if objTitles == nil {
+				reg.Titles = existing.Titles
+			}
 			break
 		}
 	}
 	rows.Close()
 	if targetPath == "" {
 		return fmt.Errorf("inforeg %q not found in DB config", reg.Name)
+	}
+	if objTitles != nil {
+		reg.Titles = *objTitles
 	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
@@ -3694,11 +3710,16 @@ func (h *handler) configuratorSaveInfoRegFields(w http.ResponseWriter, r *http.R
 		Dimensions: parseRegSection(r, "dim"),
 		Resources:  parseRegSection(r, "res"),
 	}
+	var objTitles *map[string]string
+	if formHasMapField(r, "titles") {
+		t := parseMapForm(r, "titles")
+		objTitles = &t
+	}
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveInfoRegToDB(r.Context(), b, reg)
+		saveErr = h.saveInfoRegToDB(r.Context(), b, reg, objTitles)
 	} else {
-		saveErr = saveInfoRegToFile(b.Path, reg)
+		saveErr = saveInfoRegToFile(b.Path, reg, objTitles)
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {

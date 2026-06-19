@@ -105,6 +105,32 @@ func TestRegisterDetail_TitlesBlockRendered(t *testing.T) {
 	}
 }
 
+// Регистр сведений с AvailableLangs: titles-блоки объекта и измерений/ресурсов
+// должны рендериться в inline-форме (доступ к $.AvailableLangs из корня).
+func TestInfoRegDetail_TitlesBlockRendered(t *testing.T) {
+	data := &configuratorData{
+		Base:           &Base{ID: "b", Name: "X", ConfigSource: "file"},
+		Lang:           "ru",
+		Tab:            "tree",
+		AvailableLangs: []i18n.Lang{{Code: "en", Native: "English"}},
+		InfoRegisters: []cfgInfoRegister{{
+			Name:       "Курсы",
+			Dimensions: []cfgField{{Name: "Валюта", Type: "string"}},
+			Resources:  []cfgField{{Name: "Курс", Type: "number"}},
+		}},
+	}
+	html := renderCfgTree(t, data)
+	for _, want := range []string{
+		`name="titles.en"`,
+		`name="dim.0.titles.en"`,
+		`name="res.0.titles.en"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("inforeg-detail: titles-блок не найден: %q", want)
+		}
+	}
+}
+
 // Константа: у типа «число» — инпуты Длина/Точность (имена length/scale).
 func TestConstantDetail_Precision(t *testing.T) {
 	data := &configuratorData{

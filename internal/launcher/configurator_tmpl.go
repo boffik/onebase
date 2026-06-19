@@ -18,7 +18,12 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		}
 		return key
 	},
-		"selIf": func(a, b string) string { if a == b { return " selected" }; return "" },
+	"selIf": func(a, b string) string {
+		if a == b {
+			return " selected"
+		}
+		return ""
+	},
 	"dict": func(pairs ...any) map[string]any {
 		m := make(map[string]any, len(pairs)/2)
 		for i := 0; i+1 < len(pairs); i += 2 {
@@ -90,20 +95,20 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		return out
 	},
 	"formLabel": func(name string) string {
-			lower := strings.ToLower(name)
-			switch lower {
-			case "формаобъекта":
-				return "Форма объекта"
-			case "формасписка":
-				return "Форма списка"
-			case "формавыбора":
-				return "Форма выбора"
-			case "форма":
-				return "Форма"
-			default:
-				return name
-			}
-		},
+		lower := strings.ToLower(name)
+		switch lower {
+		case "формаобъекта":
+			return "Форма объекта"
+		case "формасписка":
+			return "Форма списка"
+		case "формавыбора":
+			return "Форма выбора"
+		case "форма":
+			return "Форма"
+		default:
+			return name
+		}
+	},
 }).Parse(cfgTitlesBlock + cfgCSS + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgSyntaxRef + cfgFoot))
 
 // ── Partial: переводы (titles-block) ─────────────────────────────────────────
@@ -5107,6 +5112,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <input type="radio" name="periodic" value="false" {{if not .Periodic}}checked{{end}}> {{t $.Lang "Непериодический"}}
       </label>
     </div>
+    {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
     {{$allEntities := $.AllEntityNames}}
     {{if .Dimensions}}
     <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Измерения"}} ({{len .Dimensions}})</summary>
@@ -5136,6 +5142,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </select>
       </td>
     </tr>
+    {{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddField('ir-dim-{{.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
@@ -5169,6 +5176,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </select>
       </td>
     </tr>
+    {{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddField('ir-res-{{.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
