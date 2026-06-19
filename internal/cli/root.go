@@ -21,5 +21,5 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(initCmd, devCmd, runCmd, migrateCmd, buildCmd, startCmd, ibasesCmd, convertCmd, backupCmd, restoreCmd, deployCmd, serviceCmd)
+	rootCmd.AddCommand(initCmd, devCmd, runCmd, migrateCmd, buildCmd, startCmd, ibasesCmd, convertCmd, backupCmd, restoreCmd, deployCmd, serviceCmd, deviceAgentCmd)
 }

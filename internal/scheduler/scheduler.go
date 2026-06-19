@@ -216,6 +216,9 @@ func (s *Scheduler) buildDSLVars(ctx context.Context, mc *runtime.MovementsColle
 	for k, v := range interpreter.NewHTTPFunctions() {
 		vars[k] = v
 	}
+	for k, v := range interpreter.NewEquipmentFunctions() {
+		vars[k] = v
+	}
 	for k, v := range interpreter.NewEmailFunctions(s.mailer) {
 		vars[k] = v
 	}
