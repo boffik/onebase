@@ -1,0 +1,85 @@
+# Этап 31 — Оборудование в основном UI onebase
+
+## Контекст
+
+Подсистема оборудования уже есть. Сейчас доступны **две** модели работы:
+
+1. **In-process** — серверный DSL вызывает `ПодключитьОборудование` и печатает сам. Работает, только если железо физически на сервере (локальный запуск, сервер = касса).
+2. **device-agent** — отдельный процесс на машине кассира (`onebase device-agent`) с собственной HTML-страницей кассы (`internal/deviceagent/page.go`); браузер шлёт `fetch` на `localhost:8765`.
+
+Чего НЕ хватает: **основной UI onebase** (серверный рендеринг форм/обработок на `:8080`) не умеет обращаться к агенту кассира. Кассир работает в формах onebase, а печать/сканер — мимо.
+
+Ключевые факты для ориентира:
+- Агент уже отдаёт CORS-заголовки (`internal/deviceagent/agent.go`, middleware `cors`) — кросс-origin вызовы из `:8080` на `:8765` разрешены.
+- Агент: `POST /print /drawer /display /weight /pay`, `GET /events` (SSE), токен `X-Agent-Token` (для `/events` — `?token=`).
+- В основном UI push-канала (SSE/WebSocket) нет; формы — классический серверный рендеринг (`internal/ui/`).
+
+## Цель
+
+Из форм и РМК-обработок основного UI onebase управлять оборудованием на машине кассира через её локальный агент.
+
+## Подход: тонкий JS-мост браузер → localhost-агент
+
+Сервер onebase НЕ ходит к агенту (агент за NAT на машине кассира). Ходит **браузер кассира** — он на той же машине, что и агент.
+
+### Часть А — адрес и токен агента
+
+Где взять `http://127.0.0.1:8765` и токен в браузере:
+- Настройка рабочего места: хранить в `localStorage` (поля «Адрес агента», «Токен») + форма настроек в UI.
+- Либо системная константа onebase `АдресАгентаОборудования` (но токен per-машина — лучше localStorage).
+
+### Часть Б — JS-хелпер `onebaseDevice`
+
+Встроить в шаблоны UI (`internal/ui/templates.go`) маленький клиент:
+
+```js
+window.onebaseDevice = {
+  base: localStorage.getItem('agentURL') || 'http://127.0.0.1:8765',
+  token: localStorage.getItem('agentToken') || '',
+  async call(path, body){
+    const r = await fetch(this.base + path, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Agent-Token':this.token},
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error((await r.json()).error || r.status);
+    return r.json();
+  },
+  printReceipt(driver, params, receipt){ return this.call('/print', {driver, params, receipt}); },
+  weight(driver, params){ return this.call('/weight', {driver, params}); },
+  pay(driver, params, amount){ return this.call('/pay', {driver, params, amount}); }
+};
+```
+
+### Часть В — кнопки в формах/обработках
+
+- Форма документа «Чек»/«Реализация»: кнопка «Пробить чек» → `onebaseDevice.printReceipt(...)` с данными табличной части.
+- Обработки РМК: кнопка рядом с серверной «Выполнить», вызывающая агент из браузера.
+- Источник параметров оборудования — справочник `ПодключаемоеОборудование` (сервер отдаёт их в форму при рендере).
+
+### Часть Г — события сканера в формах
+
+В форме с полем штрихкода:
+```js
+const es = new EventSource(onebaseDevice.base + '/events?driver=scanner_tcp&port=...&token=' + onebaseDevice.token);
+es.onmessage = e => { document.querySelector('#barcode').value = e.data; /* + submit/поиск */ };
+```
+Это даёт «сканирование в форму» без серверного push.
+
+## Файлы
+
+- `internal/ui/templates.go` — JS-хелпер `onebaseDevice` в общий layout.
+- `internal/ui/` — страница/блок настроек рабочего места (адрес+токен агента в localStorage).
+- Шаблоны форм документов и обработок — кнопки «Пробить чек»/«Сканер»/«Оплата».
+- Возможно сервер отдаёт настройки оборудования из справочника в данные формы.
+
+## Тесты и проверка
+
+- Серверный код минимален (отдаёт JS/настройки) — unit-тесты на рендер хелпера.
+- Основная проверка — ручная/e2e: запустить onebase `:8080` + `device-agent` + `nc`-эмуляторы, открыть форму, нажать «Пробить чек», убедиться, что байты ушли на эмулятор.
+
+## Риски / решения
+
+- **Смешанный контент**: onebase по HTTPS + агент по HTTP localhost — браузеры обычно разрешают `http://127.0.0.1`, но проверить; при необходимости — самоподписанный TLS на агенте.
+- **Токен в localStorage** — приемлемо для localhost-агента; не cookie, поэтому CORS `*` безопасен.
+- **Опционально**: серверный SSE в самом onebase (события форм сервер→браузер) — отдельная бОльшая задача, в этот этап не входит.
