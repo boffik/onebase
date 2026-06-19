@@ -5360,6 +5360,15 @@ const cfgTabTree = `{{define "tab-tree"}}
               <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindex('cg-{{$rn}}','comp.grouping.')">✕</button></td></tr>
             {{end}}{{end}}
           </table>
+          <div class="section-hd" style="margin-top:12px">{{t $.Lang "Колонки (кросс-таблица)"}}
+            <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddRow('cc-{{$rn}}','comp.column.')">+</button>
+            <span style="font-weight:normal;color:#888;font-size:11px;margin-left:8px">{{t $.Lang "если заполнено — отчёт строится кросс-таблицей"}}</span></div>
+          <table class="fields-tbl" id="cc-{{$rn}}">
+            {{with .Composition}}{{range $i, $c := .Columns}}
+            <tr><td><input type="text" name="comp.column.{{$i}}" value="{{$c}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
+              <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();compReindex('cc-{{$rn}}','comp.column.')">✕</button></td></tr>
+            {{end}}{{end}}
+          </table>
           <div class="section-hd" style="margin-top:12px">{{t $.Lang "Показатели"}}
             <button type="button" class="cfg-add-btn" style="font-size:14px;margin-left:8px" onclick="compAddMeasure('cm-{{$rn}}')">+</button></div>
           <table class="fields-tbl" id="cm-{{$rn}}">
