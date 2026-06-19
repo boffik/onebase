@@ -5844,6 +5844,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{$sub.Title}}" placeholder="{{t $.Lang "Название подсистемы"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" $sub.Titles)}}{{end}}
       <div class="fg" style="margin-top:8px">
         <label>{{t $.Lang "Иконка"}}</label>
         <input type="text" name="icon" value="{{$sub.Icon}}" placeholder="shopping-cart">

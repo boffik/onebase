@@ -325,6 +325,7 @@ type cfgPredefined struct {
 type cfgSubsystem struct {
 	Name     string
 	Title    string
+	Titles   map[string]string
 	Icon     string
 	Order    int
 	Contents metadata.SubsystemContents
@@ -887,6 +888,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		data.Subsystems = append(data.Subsystems, cfgSubsystem{
 			Name:        sub.Name,
 			Title:       sub.Title,
+			Titles:      sub.Titles,
 			Icon:        sub.Icon,
 			Order:       sub.Order,
 			Contents:    sub.Contents,
@@ -3393,7 +3395,11 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	// Сохраняем переводы (titles) и метаданные рабочего стола из уже
 	// существующего файла, чтобы перезапись не теряла данные, которых нет в форме.
 	if existing, lerr := metadata.LoadSubsystemFile(targetFile); lerr == nil && existing != nil {
-		ys.Titles = existing.Titles
+		if formHasMapField(r, "titles") {
+			ys.Titles = parseMapForm(r, "titles")
+		} else {
+			ys.Titles = existing.Titles
+		}
 		if existing.HomePage != nil {
 			ys.HomePage = &yamlHomePage{
 				Title:   existing.HomePage.Title,
@@ -3402,6 +3408,8 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 				Widgets: existing.HomePage.Widgets,
 			}
 		}
+	} else if formHasMapField(r, "titles") {
+		ys.Titles = parseMapForm(r, "titles")
 	}
 
 	// Раскладка виджетов рабочего стола из формы: режим «Авто» — отмеченные

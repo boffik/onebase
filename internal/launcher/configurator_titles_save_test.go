@@ -186,3 +186,19 @@ func TestSaveProcessor_PersistsTitlesAndParamLabels(t *testing.T) {
 	procPath := cfgDir + "/processors/" + nameToFilename("Загрузка") + ".yaml"
 	assertFileContainsRv(t, procPath, "titles:", "en: Import", "labels:", "en: File")
 }
+
+func TestSaveSubsystem_PersistsTitles(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	form := url.Values{}
+	form.Set("subsystem_name", "Продажи")
+	form.Set("title", "Продажи")
+	form.Set("order", "1")
+	form.Set("titles.en", "Sales")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/subsystem", form, h.configuratorSaveSubsystem)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, cfgDir+"/subsystems/"+nameToFilename("Продажи")+".yaml", "titles:", "en: Sales")
+}
