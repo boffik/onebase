@@ -156,6 +156,32 @@ func TestAccountRegDetail_TitlesBlockRendered(t *testing.T) {
 	}
 }
 
+// Справочник с AvailableLangs: titles-блоки объекта и реквизита должны рендериться.
+// Проверяет, что AvailableLangs передаётся в под-шаблон entity-detail
+// (защита от регрессии класса T7: если ключ выпадет из dict — блоки пропадут незаметно).
+func TestEntityDetail_TitlesBlockRendered(t *testing.T) {
+	data := &configuratorData{
+		Base:           &Base{ID: "b", Name: "X", ConfigSource: "file"},
+		Lang:           "ru",
+		Tab:            "tree",
+		AvailableLangs: []i18n.Lang{{Code: "en", Native: "English"}},
+		Catalogs: []cfgEntity{{
+			Name:   "Товар",
+			Kind:   "Справочник",
+			Fields: []cfgField{{Name: "Артикул", Type: "string"}},
+		}},
+	}
+	html := renderCfgTree(t, data)
+	for _, want := range []string{
+		`name="titles.en"`,
+		`name="field.0.titles.en"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("entity-detail: titles-блок не найден: %q", want)
+		}
+	}
+}
+
 // Константа: у типа «число» — инпуты Длина/Точность (имена length/scale).
 func TestConstantDetail_Precision(t *testing.T) {
 	data := &configuratorData{

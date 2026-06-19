@@ -3031,6 +3031,7 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
+	// Полная пересборка YAML из формы (round-trip отсутствует) — гейт formHasMapField не нужен: старого значения нет, omitempty уберёт пустое.
 	yamlData, _ := yaml.Marshal(saveProcessor{
 		Name: procName, Title: title, Params: newParams,
 		Titles: parseMapForm(r, "titles"),
