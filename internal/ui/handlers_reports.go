@@ -86,6 +86,11 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	// Рантайм-настройки пользователя (панель «Настройки»). Эффективная
 	// компоновка: override (settings.Composition) → вариант → основной.
 	settings := readReportSettings(r)
+	if settings == nil {
+		// Нет явных правок в запросе — подставляем сохранённые настройки
+		// пользователя, чтобы отчёт открылся в привычном виде (план 70, D1).
+		settings = loadUserSettings(r.Context(), s.store, rep.Name, currentUserLogin(r))
+	}
 	comp := effectiveComposition(rep, settings)
 	// Build query params: convert date strings to time.Time for proper PG type inference.
 	// Keep paramValues unchanged so the form repopulates with the original strings.
@@ -394,6 +399,10 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 	// Эффективная компоновка с учётом рантайм-настроек пользователя (план 70).
 	// readReportSettings читает __settings через FormValue (для GET — из query).
 	settings := readReportSettings(r)
+	if settings == nil {
+		// Без явного __settings — выгружаем в сохранённом пользователем виде.
+		settings = loadUserSettings(r.Context(), s.store, rep.Name, currentUserLogin(r))
+	}
 	comp := effectiveComposition(rep, settings)
 	paramValues := make(map[string]any, len(rep.Params))
 	for _, p := range rep.Params {

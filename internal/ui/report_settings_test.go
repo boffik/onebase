@@ -168,3 +168,26 @@ func TestReportSettingsSaveReset(t *testing.T) {
 		t.Fatalf("reset: ожидали пусто, получили %q", got)
 	}
 }
+
+// TestLoadUserSettings: автозагрузка сохранённых настроек по пользователю.
+func TestLoadUserSettings(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "load.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.EnsureSettingsSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SaveReportUserSettings(ctx, "Продажи", "alice", `{"variant":"X"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	if s := loadUserSettings(ctx, db, "Продажи", "alice"); s == nil || s.Variant != "X" {
+		t.Fatalf("alice: %+v", s)
+	}
+	if s := loadUserSettings(ctx, db, "Продажи", "bob"); s != nil {
+		t.Fatalf("bob: ожидали nil, получили %+v", s)
+	}
+}

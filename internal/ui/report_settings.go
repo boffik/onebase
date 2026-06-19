@@ -6,12 +6,14 @@ package ui
 // report.UserReportSettings).
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/auth"
 	reportpkg "github.com/ivantit66/onebase/internal/report"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // readReportSettings разбирает пользовательские настройки из поля __settings
@@ -40,6 +42,20 @@ func effectiveComposition(rep *reportpkg.Report, s *reportpkg.UserReportSettings
 		return rep.ActiveComposition(s.Variant)
 	}
 	return rep.ActiveComposition("")
+}
+
+// loadUserSettings загружает сохранённые рантайм-настройки отчёта пользователя
+// из _settings. Нет настроек или повреждённый JSON → nil (стандартный вид).
+func loadUserSettings(ctx context.Context, store *storage.DB, report, user string) *reportpkg.UserReportSettings {
+	raw, err := store.GetReportUserSettings(ctx, report, user)
+	if err != nil || raw == "" {
+		return nil
+	}
+	st, err := reportpkg.ParseUserSettings(raw)
+	if err != nil {
+		return nil
+	}
+	return st
 }
 
 // currentUserLogin возвращает логин текущего пользователя или "" для анонимной/
