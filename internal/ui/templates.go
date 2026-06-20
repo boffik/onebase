@@ -48,6 +48,14 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	},
 	"isRef":      func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum":     func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
+	"enumLabel": func(labels map[string]map[string]string, field, value string) string {
+		if m, ok := labels[field]; ok {
+			if lbl, ok := m[value]; ok && lbl != "" {
+				return lbl
+			}
+		}
+		return value
+	},
 	"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
 	"isImage":    func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeImage) },
 	// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
@@ -1050,6 +1058,7 @@ const tplList = `
       </td>
     {{else if eq (str .Type) "date"}}<td>{{fmtDate (index $row .Name)}}</td>
     {{else if isRichText (str .Type)}}<td style="color:#64748b">{{richPlain (index $row .Name)}}</td>
+    {{else if isEnum (str .Type)}}<td>{{enumLabel $.EnumLabels .Name (str (index $row .Name))}}</td>
     {{else}}<td>{{fmtCell (index $row .Name)}}</td>{{end}}
   {{end}}
   <td>
@@ -1145,6 +1154,7 @@ const tplList = `
     {{if eq (str .Type) "date"}}<td style="white-space:nowrap">{{fmtDate (index $row .Name)}}</td>
     {{else if isImage (str .Type)}}<td>{{$iv := index $row .Name}}{{if $iv}}<img src="/ui/_image/{{$iv}}" style="height:34px;width:34px;object-fit:cover;border-radius:5px;vertical-align:middle" alt="">{{else}}<span style="color:#cbd5e1">—</span>{{end}}</td>
     {{else if isRichText (str .Type)}}<td style="white-space:nowrap;color:#64748b">{{richPlain (index $row .Name)}}</td>
+    {{else if isEnum (str .Type)}}<td style="white-space:nowrap">{{enumLabel $.EnumLabels .Name (str (index $row .Name))}}</td>
     {{else}}<td style="white-space:nowrap">{{if and (eq .Name "Наименование") $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row .Name)}}{{if and (eq .Name "Наименование") (index $row "_is_predefined")}} <span title="{{t $.Lang "Предопределённый элемент"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}</td>{{end}}
   {{end}}
   <td>

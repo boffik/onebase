@@ -101,6 +101,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		totalPages = (total + params.Limit - 1) / params.Limit
 	}
 
+	lang := s.resolveLang(r)
 	s.render(w, r, "page-list", map[string]any{
 		"Entity":           entity,
 		"Rows":             rows,
@@ -121,6 +122,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		"HasNext":          page < totalPages,
 		"PrevPage":         page - 1,
 		"NextPage":         page + 1,
+		"EnumLabels":       s.buildEnumLabels(entity, lang),
 	})
 }
 
@@ -148,6 +150,28 @@ func buildCatalogTree(rows []map[string]any) []map[string]any {
 	}
 	walk("", 0)
 	return result
+}
+
+// buildEnumLabels строит карту имя_поля → значение → перевод(lang) для
+// enum-полей сущности — для отображения переведённых значений в списках.
+// Исходное значение в данных строки не подменяется (остаётся идентификатором).
+func (s *Server) buildEnumLabels(entity *metadata.Entity, lang string) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	for _, f := range entity.Fields {
+		if f.EnumName == "" {
+			continue
+		}
+		en := s.reg.GetEnum(f.EnumName)
+		if en == nil {
+			continue
+		}
+		m := map[string]string{}
+		for _, v := range en.Values {
+			m[v] = en.ValueTitle(v, lang)
+		}
+		out[f.Name] = m
+	}
+	return out
 }
 
 func (s *Server) form(w http.ResponseWriter, r *http.Request) {

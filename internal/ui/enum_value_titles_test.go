@@ -24,6 +24,25 @@ func newRegistryForEnumTest(t *testing.T) *runtime.Registry {
 	return reg
 }
 
+func TestBuildEnumLabels(t *testing.T) {
+	reg := newRegistryForEnumTest(t)
+	s := &Server{reg: reg}
+	ent := &metadata.Entity{
+		Name: "Задача",
+		Fields: []metadata.Field{
+			{Name: "Приоритет", Type: "enum:Приоритет", EnumName: "Приоритет"},
+			{Name: "Имя", Type: "string"},
+		},
+	}
+	labels := s.buildEnumLabels(ent, "en")
+	if labels["Приоритет"]["Высокий"] != "High" {
+		t.Errorf("labels = %v", labels)
+	}
+	if _, ok := labels["Имя"]; ok {
+		t.Error("не-enum поле не должно попадать в EnumLabels")
+	}
+}
+
 func TestLoadEnumOptions_TranslatesLabels(t *testing.T) {
 	reg := newRegistryForEnumTest(t)
 	s := &Server{reg: reg}
