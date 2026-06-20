@@ -66,7 +66,7 @@ const tplManagedForm = `
         <select name="{{$fn}}"{{if $el.ReadOnly}} disabled{{end}}{{if $hChg}} onchange="obFire('{{$el.Name}}','ПриИзменении')"{{end}}>
           <option value="">— выбрать —</option>
           {{range index $ctx.EnumOptions $fn}}
-          <option value="{{.}}" {{if eq . (index $ctx.Values $fn)}}selected{{end}}>{{.}}</option>
+          <option value="{{.Value}}" {{if eq .Value (index $ctx.Values $fn)}}selected{{end}}>{{.Label}}</option>
           {{end}}
         </select>
       {{else if eq (str $f.Type) "date"}}

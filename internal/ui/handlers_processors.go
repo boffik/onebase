@@ -44,7 +44,7 @@ func (s *Server) processorForm(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		refOpts, _ := s.loadRefOptions(r.Context(), virtEntity)
-		enumOpts := s.loadEnumOptions(virtEntity)
+		enumOpts := s.loadEnumOptions(virtEntity, s.resolveLang(r))
 		for k, v := range processorEnumOptions(proc) {
 			enumOpts[k] = v
 		}
@@ -220,7 +220,7 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderProcessorManagedResult(w http.ResponseWriter, r *http.Request, proc *processorpkg.Processor, paramValues map[string]any, messages []string, runErr string) {
 	virtEntity := processorVirtualEntity(proc)
 	refOpts, _ := s.loadRefOptions(r.Context(), virtEntity)
-	enumOpts := s.loadEnumOptions(virtEntity)
+	enumOpts := s.loadEnumOptions(virtEntity, s.resolveLang(r))
 	for k, v := range processorEnumOptions(proc) {
 		enumOpts[k] = v
 	}
@@ -317,11 +317,15 @@ func processorVirtualEntity(proc *processorpkg.Processor) *metadata.Entity {
 
 // processorEnumOptions возвращает synthetic enum options для choice-параметров
 // обработки, дополняя результат loadEnumOptions.
-func processorEnumOptions(proc *processorpkg.Processor) map[string][]string {
-	opts := make(map[string][]string)
+func processorEnumOptions(proc *processorpkg.Processor) map[string][]EnumOption {
+	opts := make(map[string][]EnumOption)
 	for _, p := range proc.Params {
 		if p.Type == "choice" && len(p.Options) > 0 {
-			opts[p.Name] = p.Options
+			list := make([]EnumOption, 0, len(p.Options))
+			for _, v := range p.Options {
+				list = append(list, EnumOption{Value: v, Label: v})
+			}
+			opts[p.Name] = list
 		}
 	}
 	return opts

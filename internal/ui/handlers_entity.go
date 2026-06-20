@@ -160,7 +160,7 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 	}
 	refOptions, _ := s.loadRefOptions(r.Context(), entity)
 	tpRefOpts, _ := s.loadTPRefOptions(r.Context(), entity)
-	enumOpts := s.loadEnumOptions(entity)
+	enumOpts := s.loadEnumOptions(entity, s.resolveLang(r))
 	// Pre-fill date fields with current datetime for new documents
 	values := map[string]string{}
 	if entity.Kind == metadata.KindDocument {
@@ -398,7 +398,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			"Messages":     result.DSLMessages,
 			"Values":       formValues(r, entity),
 			"RefOptions":   refOptions,
-			"EnumOptions":  s.loadEnumOptions(entity),
+			"EnumOptions":  s.loadEnumOptions(entity, s.resolveLang(r)),
 			"TPRefOptions": tpRefOpts,
 			"TPRefMeta":    tpRefMeta(entity),
 			// tpRows мог быть обогащён до *interpreter.Ref хуком проведения
@@ -497,7 +497,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	refOptions, _ := s.loadRefOptions(r.Context(), entity)
 	tpRefOpts, _ := s.loadTPRefOptions(r.Context(), entity)
-	enumOpts := s.loadEnumOptions(entity)
+	enumOpts := s.loadEnumOptions(entity, s.resolveLang(r))
 	vals := make(map[string]string)
 	for _, f := range entity.Fields {
 		v := row[f.Name]
@@ -694,7 +694,7 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 			"Error":        result.DSLError,
 			"Values":       formValues(r, entity),
 			"RefOptions":   refOptions,
-			"EnumOptions":  s.loadEnumOptions(entity),
+			"EnumOptions":  s.loadEnumOptions(entity, s.resolveLang(r)),
 			"TPRefOptions": tpRefOpts2,
 			"TPRefMeta":    tpRefMeta(entity),
 			// См. submit: проведение могло обогатить tpRows до *Ref —

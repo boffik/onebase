@@ -1478,7 +1478,7 @@ const tplForm = `
     <select name="{{$fn}}">
       <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{range index $.EnumOptions $fn}}
-      <option value="{{.}}" {{if eq . (index $.Values $fn)}}selected{{end}}>{{.}}</option>
+      <option value="{{.Value}}" {{if eq .Value (index $.Values $fn)}}selected{{end}}>{{.Label}}</option>
       {{end}}
     </select>
   {{else if eq (str .Type) "date"}}
