@@ -193,6 +193,30 @@ func (s *Server) buildTPEnumLabels(entity *metadata.Entity, lang string) map[str
 	return out
 }
 
+// buildTPEnumOrder строит карту tpName → fieldName → []value в порядке объявления
+// values перечисления — для DOM-ТЧ applyTableParts, чтобы <option> шли в правильном
+// семантическом порядке, а не в алфавитном (Object.keys не гарантирует порядок).
+func (s *Server) buildTPEnumOrder(entity *metadata.Entity) map[string]map[string][]string {
+	out := map[string]map[string][]string{}
+	for _, tp := range entity.TableParts {
+		fieldOrder := map[string][]string{}
+		for _, f := range tp.Fields {
+			if f.EnumName == "" {
+				continue
+			}
+			en := s.reg.GetEnum(f.EnumName)
+			if en == nil {
+				continue
+			}
+			fieldOrder[f.Name] = en.Values
+		}
+		if len(fieldOrder) > 0 {
+			out[tp.Name] = fieldOrder
+		}
+	}
+	return out
+}
+
 func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -244,6 +268,7 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 		"EnumOptions":   enumOpts,
 		"TPRefOptions":  tpRefOpts,
 		"TPEnumLabels":  tpEnumLabels,
+		"TPEnumOrder":   s.buildTPEnumOrder(entity),
 		"TPRefMeta":     tpRefMeta(entity),
 		"TablePartRows": tablePartRows,
 		"FolderOptions": folderOpts,
@@ -448,6 +473,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			"EnumOptions":  s.loadEnumOptions(entity, langErr),
 			"TPRefOptions": tpRefOpts,
 			"TPEnumLabels": s.buildTPEnumLabels(entity, langErr),
+			"TPEnumOrder":  s.buildTPEnumOrder(entity),
 			"TPRefMeta":    tpRefMeta(entity),
 			// tpRows мог быть обогащён до *interpreter.Ref хуком проведения
 			// (EnrichTPRows мутирует слайсы on place). jsJSON сериализовал бы
@@ -653,6 +679,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		"EnumOptions":   enumOpts,
 		"TPRefOptions":  tpRefOpts,
 		"TPEnumLabels":  tpEnumLabelsEdit,
+		"TPEnumOrder":   s.buildTPEnumOrder(entity),
 		"TPRefMeta":     tpRefMeta(entity),
 		"TablePartRows": tpRows,
 		"ID":            id.String(),
@@ -749,6 +776,7 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 			"EnumOptions":  s.loadEnumOptions(entity, langSubmit),
 			"TPRefOptions": tpRefOpts2,
 			"TPEnumLabels": s.buildTPEnumLabels(entity, langSubmit),
+			"TPEnumOrder":  s.buildTPEnumOrder(entity),
 			"TPRefMeta":    tpRefMeta(entity),
 			// См. submit: проведение могло обогатить tpRows до *Ref —
 			// сериализуем к UUID-строкам, иначе грид покажет «[object Object]».

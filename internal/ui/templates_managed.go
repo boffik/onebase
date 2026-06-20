@@ -461,6 +461,9 @@ window._tpRefOpts = {{jsJSON .TPRefOptions}};
 // Переводы значений перечислений для ТЧ — используются при JS-перерисовке.
 // Структура: {tpName: {fieldName: {value: label}}}.
 window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
+// Порядок значений перечислений для DOM-ТЧ (applyTableParts).
+// Структура: {tpName: {fieldName: [value, ...]}} — значения в порядке объявления values:.
+window._tpEnumOrder = {{jsJSON .TPEnumOrder}};
 // obFire — общая JS-обвязка для onclick/onchange элементов формы.
 // Отправляет текущие form-values + имя элемента/события в /ui/.../form-event,
 // получает JSON с новыми значениями и сообщениями от Сообщить(), применяет их.
@@ -556,6 +559,7 @@ window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
       const rows = tps[tpName] || [];
       const refOpts = (window._tpRefOpts && window._tpRefOpts[tpName]) || {};
       const tpEnumLabels = (window._tpEnumLabels && window._tpEnumLabels[tpName]) || {};
+      const tpEnumOrder = (window._tpEnumOrder && window._tpEnumOrder[tpName]) || {};
       const hasCmd = tbody.getAttribute('data-tp-cmd') === '1';
       tbody.innerHTML = '';
       rows.forEach(function(row, idx){
@@ -595,10 +599,14 @@ window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
             const sel = document.createElement('select');
             sel.name = 'tp.' + tpName + '.' + idx + '.' + f.name;
             const cur = (v == null ? '' : String(v));
-            Object.keys(enumLabMap).forEach(function(val){
+            // Используем _tpEnumOrder для правильного порядка значений (порядок
+            // объявления values:), а не алфавитный Object.keys(enumLabMap).
+            const orderedVals = (tpEnumOrder[f.name] && tpEnumOrder[f.name].length > 0)
+              ? tpEnumOrder[f.name] : Object.keys(enumLabMap);
+            orderedVals.forEach(function(val){
               const o = document.createElement('option');
               o.value = val;
-              o.textContent = enumLabMap[val];
+              o.textContent = enumLabMap[val] !== undefined ? enumLabMap[val] : val;
               if (val === cur) o.selected = true;
               sel.appendChild(o);
             });

@@ -123,6 +123,7 @@ func TestManagedFormGridEnumAttr(t *testing.T) {
 		"EnumOptions":   map[string]any{},
 		"TPRefOptions":  map[string]any{},
 		"TPEnumLabels":  tpEnumLabels,
+		"TPEnumOrder":   map[string]map[string][]string{},
 		"TPRefMeta":     map[string]any{},
 		"TablePartRows": map[string][]map[string]any{"Товары": {}},
 		"User":          nil,
