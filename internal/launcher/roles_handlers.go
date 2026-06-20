@@ -29,7 +29,7 @@ type rolePermSection struct {
 var rolePermSections = []rolePermSection{
 	{"catalog", "Справочники", []roleOp{{"read", "Чтение"}, {"write", "Запись"}, {"delete", "Удаление"}}},
 	{"document", "Документы", []roleOp{{"read", "Чтение"}, {"write", "Запись"}, {"delete", "Удаление"}, {"post", "Проведение"}, {"unpost", "Отмена"}}},
-	{"register", "Регистры накопления", []roleOp{{"read", "Чтение"}, {"write", "Запись"}}},
+	{"register", "Регистры (накопления и бухгалтерии)", []roleOp{{"read", "Чтение"}, {"write", "Запись"}}},
 	{"inforeg", "Регистры сведений", []roleOp{{"read", "Чтение"}, {"write", "Запись"}, {"delete", "Удаление"}}},
 	{"report", "Отчёты", []roleOp{{"run", "Запуск"}}},
 }
@@ -243,6 +243,9 @@ func roleMatrixHTML(data *configuratorData) string {
 	}
 	for _, rg := range data.Registers {
 		ents["register"] = append(ents["register"], rg.Name)
+	}
+	for _, ar := range data.AccountRegisters {
+		ents["register"] = append(ents["register"], ar.Name)
 	}
 	for _, ir := range data.InfoRegisters {
 		ents["inforeg"] = append(ents["inforeg"], ir.Name)

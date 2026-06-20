@@ -32,7 +32,7 @@ func aiToolsTestServer(t *testing.T) *Server {
 
 func TestAISchemaText(t *testing.T) {
 	s := aiToolsTestServer(t)
-	txt := s.aiSchemaText()
+	txt := s.aiSchemaText(context.Background())
 	if !strings.Contains(txt, "Товар") {
 		t.Fatalf("в описании нет справочника Товар: %s", txt)
 	}
@@ -56,7 +56,7 @@ func TestAISchemaText_NonDataObjects(t *testing.T) {
 		},
 	})
 	s := &Server{reg: reg}
-	txt := s.aiSchemaText()
+	txt := s.aiSchemaText(context.Background())
 	if !strings.Contains(txt, "Отчёты") || !strings.Contains(txt, "ВаловаяПрибыль") ||
 		!strings.Contains(txt, "Отчёт по валовой прибыли (ФИФО)") {
 		t.Fatalf("в карте конфигурации нет отчёта: %s", txt)
@@ -159,7 +159,7 @@ func TestAISchemaText_TablePartsAndPosting(t *testing.T) {
 		},
 	}
 	s, _ := newSubmitTestServer(t, []*metadata.Entity{doc})
-	txt := s.aiSchemaText()
+	txt := s.aiSchemaText(context.Background())
 	for _, sub := range []string{"Заказ", "(проводится)", "ТЧ Товары", "Количество"} {
 		if !strings.Contains(txt, sub) {
 			t.Fatalf("в срезе нет %q: %s", sub, txt)
@@ -214,5 +214,29 @@ func TestAITools_FlaggedUserGetsTools(t *testing.T) {
 	tools, exec := s.aiTools(r)
 	if tools == nil || exec == nil {
 		t.Fatalf("пользователь с AIDataAccess должен получать инструменты ИИ: tools=%v exec!=nil=%v", tools, exec != nil)
+	}
+}
+
+func TestAISchemaText_RBACFiltered(t *testing.T) {
+	ctx := context.Background()
+	pub := &metadata.Entity{Name: "Товар", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}}}
+	secret := &metadata.Entity{Name: "Секрет", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Код", Type: metadata.FieldTypeString}}}
+	s, _ := newSubmitTestServer(t, []*metadata.Entity{pub, secret})
+	if err := s.store.SaveAIDataScope(ctx, storage.AIDataScopeRBAC); err != nil {
+		t.Fatal(err)
+	}
+	// Не-админ с правом read только на «Товар».
+	user := &auth.User{Login: "u", Roles: []*auth.Role{{
+		Permissions: auth.Permission{Catalogs: map[string][]string{"Товар": {"read"}}},
+	}}}
+	uctx := auth.ContextWithUser(ctx, user)
+	txt := s.aiSchemaText(uctx)
+	if !strings.Contains(txt, "Товар") {
+		t.Fatalf("разрешённый объект отсутствует: %s", txt)
+	}
+	if strings.Contains(txt, "Секрет") {
+		t.Fatalf("запрещённый объект просочился в схему: %s", txt)
 	}
 }

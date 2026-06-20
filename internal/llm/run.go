@@ -70,9 +70,9 @@ func (r *Runner) Run(ctx context.Context, task string, req ChatRequest) (ChatRes
 }
 
 // RunWithTools выполняет запрос с доступными инструментами (tool-use). Цикл
-// реализован для Anthropic-протокола (он же GLM через z.ai); модели иных типов в
-// цепочке пропускаются. Если ни одна модель не поддерживает инструменты или
-// tools пуст — деградирует до обычного Run (ответ без доступа к данным).
+// реализован для всех протоколов (anthropic/openai/compatible/gemini) через
+// completeTools с фолбэком по цепочке профиля. Если tools пуст — деградирует до
+// обычного Run; если все модели цепочки без ключа — тоже Run (ответ без данных).
 func (r *Runner) RunWithTools(ctx context.Context, task string, req ChatRequest, tools []Tool, exec ToolExecutor) (ChatResponse, error) {
 	if len(tools) == 0 {
 		return r.Run(ctx, task, req)
@@ -84,16 +84,13 @@ func (r *Runner) RunWithTools(ctx context.Context, task string, req ChatRequest,
 	var lastErr error
 	tried := 0
 	for _, rm := range chain {
-		if rm.Endpoint.Kind != KindAnthropic {
-			continue // tool-use пока только для Anthropic-протокола
-		}
 		if rm.Endpoint.APIKey == "" {
 			lastErr = fmt.Errorf("endpoint %q: не задан API-ключ", rm.Endpoint.Name)
 			continue
 		}
 		tried++
-		r.logf("llm: задача %q (tools) → модель %s", task, rm.Model.Name)
-		resp, err := completeAnthropicTools(ctx, httpClient(rm.Endpoint), rm, req, tools, exec)
+		r.logf("llm: задача %q (tools) → модель %s (%s)", task, rm.Model.Name, rm.Endpoint.Kind)
+		resp, err := completeTools(ctx, httpClient(rm.Endpoint), rm, req, tools, exec)
 		if err == nil {
 			r.logf("llm: ответила модель %s (tools)", rm.Model.Name)
 			return resp, nil
@@ -108,8 +105,8 @@ func (r *Runner) RunWithTools(ctx context.Context, task string, req ChatRequest,
 		r.logf("llm: модель %s недоступна (%v) — фолбэк", rm.Model.Name, err)
 	}
 	if tried == 0 {
-		// Нет моделей с поддержкой инструментов — отвечаем без них.
-		r.logf("llm: задача %q — нет anthropic-моделей для tool-use, ответ без инструментов", task)
+		// Нет моделей с ключом — отвечаем без инструментов.
+		r.logf("llm: задача %q — нет доступных моделей для tool-use, ответ без инструментов", task)
 		return r.Run(ctx, task, req)
 	}
 	return ChatResponse{}, fmt.Errorf("задача %q (tools): все модели исчерпаны: %w", task, lastErr)
@@ -140,6 +137,21 @@ func complete(ctx context.Context, rm ResolvedModel, req ChatRequest) (ChatRespo
 		return completeOpenAI(ctx, hc, rm, req)
 	default:
 		return ChatResponse{}, fmt.Errorf("endpoint %q: неизвестный тип провайдера %q", rm.Endpoint.Name, rm.Endpoint.Kind)
+	}
+}
+
+// completeTools диспетчеризует tool-use по типу endpoint'а. Поддерживаются все
+// протоколы; неизвестный тип → ошибка (модель в RunWithTools пропускается фолбэком).
+func completeTools(ctx context.Context, hc *http.Client, rm ResolvedModel, req ChatRequest, tools []Tool, exec ToolExecutor) (ChatResponse, error) {
+	switch rm.Endpoint.Kind {
+	case KindAnthropic:
+		return completeAnthropicTools(ctx, hc, rm, req, tools, exec)
+	case KindOpenAI, KindCompatible:
+		return completeOpenAITools(ctx, hc, rm, req, tools, exec)
+	case KindGemini:
+		return completeGeminiTools(ctx, hc, rm, req, tools, exec)
+	default:
+		return ChatResponse{}, fmt.Errorf("endpoint %q: тип %q не поддерживает tool-use", rm.Endpoint.Name, rm.Endpoint.Kind)
 	}
 }
 
