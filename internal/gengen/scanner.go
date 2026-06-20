@@ -213,6 +213,11 @@ func scanEntityDir(dir string, kind metadata.Kind, fn func(*metadata.Entity)) {
 }
 
 // scanEnumDir reads enum YAML files.
+// Поддерживает оба формата values:
+//   - старый: values: [A, B, C]          (строки)
+//   - новый:  values: [{name: A, titles: {en: ...}}, ...]
+//
+// gengen использует только имена значений; переводы игнорируются.
 func scanEnumDir(dir string, fn func(name string, values []string)) {
 	if _, err := os.Stat(dir); err != nil {
 		return
@@ -221,21 +226,12 @@ func scanEnumDir(dir string, fn func(name string, values []string)) {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".yaml") {
 			return nil
 		}
-		// Enum format: name + values array
-		type rawEnum struct {
-			Name   string   `yaml:"name"`
-			Values []string `yaml:"values"`
-		}
-		data, err := os.ReadFile(path)
+		en, err := metadata.LoadEnumFile(path)
 		if err != nil {
 			return nil
 		}
-		var raw rawEnum
-		if err := yamlUnmarshal(data, &raw); err != nil {
-			return nil
-		}
-		if raw.Name != "" {
-			fn(raw.Name, raw.Values)
+		if en.Name != "" {
+			fn(en.Name, en.Values)
 		}
 		return nil
 	})
@@ -263,16 +259,4 @@ func extractTableParts(tps []metadata.TablePart) []TablePartInfo {
 		})
 	}
 	return out
-}
-
-// yamlUnmarshal is a helper to avoid importing yaml.v3 in this file directly.
-func yamlUnmarshal(data []byte, v interface{}) error {
-	return yamlUnmarshalImpl(data, v)
-}
-
-// yamlUnmarshalImpl is set by init() to break import cycle.
-var yamlUnmarshalImpl = func(data []byte, v interface{}) error {
-	// Fallback: use the standard yaml package via a separate file.
-	// This is overridden in scanner_yaml.go.
-	return nil
 }
