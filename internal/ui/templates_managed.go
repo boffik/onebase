@@ -555,6 +555,7 @@ window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
       });
       const rows = tps[tpName] || [];
       const refOpts = (window._tpRefOpts && window._tpRefOpts[tpName]) || {};
+      const tpEnumLabels = (window._tpEnumLabels && window._tpEnumLabels[tpName]) || {};
       const hasCmd = tbody.getAttribute('data-tp-cmd') === '1';
       tbody.innerHTML = '';
       rows.forEach(function(row, idx){
@@ -571,6 +572,7 @@ window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
           const td = document.createElement('td');
           const v = row[f.name];
           const isRef = f.type === 'reference' || f.type.indexOf('reference') === 0;
+          const isEnum = f.type === 'enum' || f.type.indexOf('enum') === 0;
           if (isRef && refOpts[f.name]) {
             const sel = document.createElement('select');
             sel.name = 'tp.' + tpName + '.' + idx + '.' + f.name;
@@ -585,6 +587,19 @@ window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
               o.value = opt.id;
               o.textContent = opt._label;
               if (String(opt.id) === cur) o.selected = true;
+              sel.appendChild(o);
+            });
+            td.appendChild(sel);
+          } else if (isEnum && tpEnumLabels[f.name]) {
+            const enumLabMap = tpEnumLabels[f.name];
+            const sel = document.createElement('select');
+            sel.name = 'tp.' + tpName + '.' + idx + '.' + f.name;
+            const cur = (v == null ? '' : String(v));
+            Object.keys(enumLabMap).forEach(function(val){
+              const o = document.createElement('option');
+              o.value = val;
+              o.textContent = enumLabMap[val];
+              if (val === cur) o.selected = true;
               sel.appendChild(o);
             });
             td.appendChild(sel);

@@ -165,11 +165,7 @@ func (s *Server) buildEnumLabels(entity *metadata.Entity, lang string) map[strin
 		if en == nil {
 			continue
 		}
-		m := map[string]string{}
-		for _, v := range en.Values {
-			m[v] = en.ValueTitle(v, lang)
-		}
-		out[f.Name] = m
+		out[f.Name] = enumValueLabels(en, lang)
 	}
 	return out
 }
@@ -188,11 +184,7 @@ func (s *Server) buildTPEnumLabels(entity *metadata.Entity, lang string) map[str
 			if en == nil {
 				continue
 			}
-			m := map[string]string{}
-			for _, v := range en.Values {
-				m[v] = en.ValueTitle(v, lang)
-			}
-			fieldMap[f.Name] = m
+			fieldMap[f.Name] = enumValueLabels(en, lang)
 		}
 		if len(fieldMap) > 0 {
 			out[tp.Name] = fieldMap
