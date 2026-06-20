@@ -451,6 +451,19 @@ if (window.__obEmbedded) {
     var title = (a.getAttribute('title') || a.textContent || '').replace(/\s+/g, ' ').trim() || 'Форма';
     try { shell.postMessage({ source: 'obOpenTab', url: href, title: title }, '*'); } catch (_) {}
   });
+  // Фаза 3: сообщаем оболочке о несохранённых правках, чтобы она предупредила при
+  // закрытии вкладки/окна (защита от потери ввода).
+  (function () {
+    var dirty = false;
+    function report(d) {
+      if (d === dirty) return; dirty = d;
+      try { if (window.parent && window.parent.obOpenTab) window.parent.postMessage({ source: 'obDirty', dirty: d }, '*'); } catch (_) {}
+    }
+    function onEdit(e) { var t = e.target; if (t && t.matches && t.matches('input,textarea,select')) report(true); }
+    document.addEventListener('input', onEdit, true);
+    document.addEventListener('change', onEdit, true);
+    document.addEventListener('submit', function () { report(false); }, true); // правки уходят на сервер
+  })();
 }
 </script>
 <style>
