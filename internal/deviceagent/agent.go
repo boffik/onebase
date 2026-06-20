@@ -262,7 +262,21 @@ func (a *Agent) weight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "weight": val})
 }
 
+// requireToken запрещает денежные/фискальные операции, когда агент запущен без
+// токена: при пустом токене auth-middleware пропускает всё, и без этой проверки
+// любая вкладка в браузере кассы могла бы пробить оплату/фискальный чек.
+func (a *Agent) requireToken(w http.ResponseWriter) bool {
+	if a.token == "" {
+		writeErr(w, http.StatusForbidden, "операция запрещена: агент запущен без токена (--token)")
+		return false
+	}
+	return true
+}
+
 func (a *Agent) pay(w http.ResponseWriter, r *http.Request) {
+	if !a.requireToken(w) {
+		return
+	}
 	var req payRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "некорректный JSON: "+err.Error())
@@ -290,6 +304,9 @@ func (a *Agent) pay(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Agent) fiscal(w http.ResponseWriter, r *http.Request) {
+	if !a.requireToken(w) {
+		return
+	}
 	var req fiscalRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "некорректный JSON: "+err.Error())

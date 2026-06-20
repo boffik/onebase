@@ -2,6 +2,7 @@ package equipment
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -171,5 +172,52 @@ func TestAtol_NoItems(t *testing.T) {
 	defer dev.Disconnect()
 	if _, err := dev.(FiscalRegistrar).RegisterReceipt(FiscalReceipt{Type: "приход"}); err == nil {
 		t.Error("ожидалась ошибка для чека без позиций")
+	}
+}
+
+// Регрессия (безопасность 54-ФЗ): задание принято (POST ok), но опрос статуса
+// падает — чек мог быть пробит в ФН. Драйвер обязан вернуть FiscalStateUnknownError
+// c uuid, а не обычную ошибку, чтобы вызывающий не повторил пробитие вслепую.
+func TestAtol_StateUnknownOnPollFailure(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"isError":false}`)) // задание принято — чек ушёл в ФН
+	})
+	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "сервис недоступен", http.StatusInternalServerError) // опрос падает
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	dev, _ := Open("atol_kkt", map[string]string{"порт": srv.URL})
+	defer dev.Disconnect()
+	_, err := dev.(FiscalRegistrar).RegisterReceipt(sampleFiscalReceipt())
+	var unknown *FiscalStateUnknownError
+	if !errors.As(err, &unknown) {
+		t.Fatalf("ожидалась *FiscalStateUnknownError, получено: %v", err)
+	}
+	if unknown.UUID == "" {
+		t.Error("в ошибке нет uuid для ручной сверки чека")
+	}
+}
+
+// Валидация ДО обращения к ФН: некорректный чек (нулевой итог, отрицательные
+// значения) должен отсекаться драйвером, а не уходить на фискализацию.
+func TestAtol_RejectsInvalidReceipt(t *testing.T) {
+	url, _ := atolEmulator(t, `{}`)
+	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
+	defer dev.Disconnect()
+	kkt := dev.(FiscalRegistrar)
+
+	if _, err := kkt.RegisterReceipt(FiscalReceipt{Type: "приход", Items: []FiscalItem{{Name: "X", Qty: 1, Price: 0}}}); err == nil {
+		t.Error("ожидалась ошибка для нулевого итога чека")
+	}
+	neg := FiscalReceipt{
+		Type:     "приход",
+		Payments: []FiscalPayment{{Type: "наличные", Sum: 100}},
+		Items:    []FiscalItem{{Name: "X", Qty: -1, Price: 100, Sum: 100}},
+	}
+	if _, err := kkt.RegisterReceipt(neg); err == nil {
+		t.Error("ожидалась ошибка для отрицательного количества")
 	}
 }

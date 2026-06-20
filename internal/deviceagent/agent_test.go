@@ -238,6 +238,27 @@ func TestAgent_Fiscal(t *testing.T) {
 	}
 }
 
+// Безопасность 54-ФЗ: агент без токена обязан ОТКЛОНЯТЬ фискализацию и оплату.
+// При пустом токене auth-middleware пропускает всё, поэтому денежные маршруты
+// защищены отдельной проверкой (иначе любая вкладка в браузере кассы пробила бы
+// чек/оплату).
+func TestAgent_Fiscal_Pay_RequireToken(t *testing.T) {
+	srv := httptest.NewServer(New("").Handler()) // агент запущен без токена
+	defer srv.Close()
+
+	resp := post(t, srv.URL+"/fiscal", "", `{"driver":"atol_kkt","params":{}}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("/fiscal без токена: статус %d, ожидался 403", resp.StatusCode)
+	}
+
+	resp2 := post(t, srv.URL+"/pay", "", `{"driver":"acquiring_tcp","params":{},"amount":100}`)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Errorf("/pay без токена: статус %d, ожидался 403", resp2.StatusCode)
+	}
+}
+
 // SSE: события сканера долетают до клиента через text/event-stream (push-канал).
 func TestAgent_Events_SSE(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

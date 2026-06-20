@@ -14,8 +14,27 @@ import (
 )
 
 func init() {
-	Register("atol_kkt", func() Device { return &atolDevice{timeout: 30 * time.Second, poll: 50 * time.Millisecond} })
+	Register("atol_kkt", func() Device {
+		return &atolDevice{timeout: 30 * time.Second, reqTimeout: 10 * time.Second, poll: 50 * time.Millisecond}
+	})
 }
+
+// FiscalStateUnknownError сигнализирует, что задание на пробитие чека УЖЕ
+// отправлено в ФН (POST прошёл), но получить фискальный результат не удалось
+// (сеть/таймаут опроса). Чек, возможно, пробит и ушёл в ОФД, поэтому повторная
+// регистрация ОПАСНА (риск двойного чека по 54-ФЗ). Состояние нужно сверить по
+// UUID через драйвер ККТ, а не повторять автоматически. Вызывающий код может
+// отличить этот случай через errors.As.
+type FiscalStateUnknownError struct {
+	UUID string
+	Err  error
+}
+
+func (e *FiscalStateUnknownError) Error() string {
+	return fmt.Sprintf("ккт: состояние чека НЕИЗВЕСТНО (uuid=%s): %v; НЕ повторять регистрацию автоматически — сверьте чек по uuid", e.UUID, e.Err)
+}
+
+func (e *FiscalStateUnknownError) Unwrap() error { return e.Err }
 
 // atolDevice — драйвер фискального регистратора через «Драйвер ККТ АТОЛ v10».
 //
@@ -31,10 +50,11 @@ func init() {
 // ККТ должны быть сверены с актуальной документацией драйвера. Штрих-М имеет
 // иной протокол — это отдельный драйвер shtrih_kkt по тому же интерфейсу.
 type atolDevice struct {
-	baseURL string
-	client  *http.Client
-	timeout time.Duration // общий дедлайн ожидания фискального результата
-	poll    time.Duration // интервал опроса статуса
+	baseURL    string
+	client     *http.Client
+	timeout    time.Duration // общий дедлайн ожидания фискального результата
+	reqTimeout time.Duration // таймаут одного HTTP-запроса (чтобы один зависший опрос не съел весь бюджет)
+	poll       time.Duration // интервал опроса статуса
 }
 
 func (d *atolDevice) Kind() string { return "фискальный_регистратор" }
@@ -53,7 +73,12 @@ func (d *atolDevice) Connect(params map[string]string) error {
 			d.timeout = time.Duration(sec) * time.Second
 		}
 	}
-	d.client = &http.Client{Timeout: d.timeout}
+	// Таймаут одного запроса отделён от общего дедлайна: один зависший GET не
+	// должен выесть весь бюджет ожидания, иначе не останется попыток опроса.
+	if d.reqTimeout <= 0 || d.reqTimeout > d.timeout {
+		d.reqTimeout = d.timeout
+	}
+	d.client = &http.Client{Timeout: d.reqTimeout}
 	return nil
 }
 
@@ -67,6 +92,21 @@ func (d *atolDevice) RegisterReceipt(r FiscalReceipt) (FiscalResult, error) {
 	}
 	if len(r.Items) == 0 {
 		return FiscalResult{}, fmt.Errorf("ккт: чек без позиций")
+	}
+	// Валидация ДО обращения к ФН: некорректный чек должен отсекаться здесь, а не
+	// всплывать ошибкой уже после попытки фискализации (см. FiscalStateUnknownError).
+	if total := receiptTotal(r); total <= 0 {
+		return FiscalResult{}, fmt.Errorf("ккт: некорректный итог чека (%.2f) — нечего фискализировать", total)
+	}
+	for _, it := range r.Items {
+		if it.Qty < 0 || it.Price < 0 || it.Sum < 0 {
+			return FiscalResult{}, fmt.Errorf("ккт: отрицательные значения в позиции %q", it.Name)
+		}
+	}
+	for _, p := range r.Payments {
+		if p.Sum < 0 {
+			return FiscalResult{}, fmt.Errorf("ккт: отрицательная сумма оплаты (%s)", p.Type)
+		}
 	}
 	uuid := newUUID()
 	body, err := json.Marshal(atolTaskFromReceipt(uuid, r))
@@ -86,7 +126,7 @@ func (d *atolDevice) post(url string, body []byte) error {
 		return fmt.Errorf("ккт: отправка задания: %w", err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("ккт: сервис вернул %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
@@ -106,27 +146,31 @@ func (d *atolDevice) await(uuid string, r FiscalReceipt) (FiscalResult, error) {
 	deadline := time.Now().Add(d.timeout)
 	url := d.baseURL + "/api/v2/requests/" + uuid
 	for {
+		// Задание уже отправлено в ФН — любой сбой опроса означает «состояние
+		// неизвестно» (чек мог пробиться), поэтому возвращаем FiscalStateUnknownError,
+		// а не обычную ошибку, чтобы вызывающий не повторил пробитие вслепую.
 		resp, err := d.client.Get(url)
 		if err != nil {
-			return FiscalResult{}, fmt.Errorf("ккт: опрос статуса: %w", err)
+			return FiscalResult{}, &FiscalStateUnknownError{UUID: uuid, Err: fmt.Errorf("опрос статуса: %w", err)}
 		}
-		raw, _ := io.ReadAll(resp.Body)
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
 		if resp.StatusCode >= 300 {
-			return FiscalResult{}, fmt.Errorf("ккт: опрос статуса вернул %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+			return FiscalResult{}, &FiscalStateUnknownError{UUID: uuid, Err: fmt.Errorf("опрос статуса вернул %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))}
 		}
 		var st atolStatus
 		if err := json.Unmarshal(raw, &st); err != nil {
-			return FiscalResult{}, fmt.Errorf("ккт: разбор статуса: %w", err)
+			return FiscalResult{}, &FiscalStateUnknownError{UUID: uuid, Err: fmt.Errorf("разбор статуса: %w", err)}
 		}
 		if st.IsError {
+			// ФН/драйвер сообщил об ошибке регистрации — чек НЕ пробит, повтор безопасен.
 			return FiscalResult{}, fmt.Errorf("ккт: ошибка регистрации чека: %s", st.firstError())
 		}
 		if st.Ready && len(st.Results) > 0 {
 			return st.Results[0].Result.toFiscalResult(r), nil
 		}
 		if time.Now().After(deadline) {
-			return FiscalResult{}, fmt.Errorf("ккт: превышено время ожидания фискального результата")
+			return FiscalResult{}, &FiscalStateUnknownError{UUID: uuid, Err: fmt.Errorf("превышено время ожидания фискального результата")}
 		}
 		time.Sleep(d.poll)
 	}
