@@ -111,16 +111,19 @@ type saveInfoReg struct {
 }
 
 type saveAccountReg struct {
-	Name      string      `yaml:"name"`
-	Title     string      `yaml:"title,omitempty"`
-	Accounts  string      `yaml:"accounts,omitempty"`
-	Resources []saveField `yaml:"resources,omitempty"`
+	Name      string            `yaml:"name"`
+	Title     string            `yaml:"title,omitempty"`
+	Titles    map[string]string `yaml:"titles,omitempty"`
+	Accounts  string            `yaml:"accounts,omitempty"`
+	Resources []saveField       `yaml:"resources,omitempty"`
 }
 
 // applyAccountRegFields точечно правит редактируемые в форме ключи плана счетов
 // прямо в дереве YAML, сохраняя блок subconto, многоязычные titles и любые
 // прочие поля (раньше свежий marshal saveAccountReg стирал subconto и titles).
-func applyAccountRegFields(raw []byte, reg saveAccountReg) ([]byte, error) {
+// setTitles=true означает, что форма содержала блок titles и его нужно записать
+// (включая удаление ключа при пустом значении); false — не трогать.
+func applyAccountRegFields(raw []byte, reg saveAccountReg, setTitles bool) ([]byte, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(raw, &root); err != nil {
 		return nil, err
@@ -150,6 +153,11 @@ func applyAccountRegFields(raw []byte, reg saveAccountReg) ([]byte, error) {
 			return nil, err
 		}
 	}
+	if setTitles {
+		if err := setYAMLMapField(doc, "titles", anyOrNil(reg.Titles)); err != nil {
+			return nil, err
+		}
+	}
 	return yaml.Marshal(&root)
 }
 
@@ -164,7 +172,8 @@ type cfgField struct {
 	Scale             int // знаков после запятой (Точность)
 	FormListHidden    bool
 	FormItemHidden    bool
-	AllowInlineCreate *bool // nil = дефолт контекста (true в шапке, false в ТЧ)
+	AllowInlineCreate *bool             // nil = дефолт контекста (true в шапке, false в ТЧ)
+	Titles            map[string]string // переводы синонима поля
 }
 
 // InlineAllowChecked — состояние чекбокса «Кнопка + в picker'е» с учётом
@@ -188,8 +197,9 @@ type cfgConstant struct {
 	RefEntity string
 	Default   string
 	Label     string
-	Length    int // разрядность number(L,P): всего знаков (Длина)
-	Scale     int // знаков после запятой (Точность)
+	Labels    map[string]string // переводы подписи по языкам
+	Length    int               // разрядность number(L,P): всего знаков (Длина)
+	Scale     int               // знаков после запятой (Точность)
 }
 
 type cfgTablePart struct {
@@ -211,24 +221,29 @@ type cfgEntity struct {
 	ManagerSource    string // raw .manager.os content (модуль менеджера)
 	LinkedPrintForms []cfgPrintForm
 	Predefined       []cfgPredefined
+	Titles           map[string]string // переводы синонима объекта
 }
 
 type cfgRegister struct {
 	Name       string
+	Title      string
+	Titles     map[string]string
 	Dimensions []cfgField
 	Resources  []cfgField
 	Attributes []cfgField
 }
 
 type cfgParam struct {
-	Name  string
-	Type  string
-	Label string
+	Name   string
+	Type   string
+	Label  string
+	Labels map[string]string
 }
 
 type cfgReport struct {
 	Name        string
 	Title       string
+	Titles      map[string]string
 	Query       string
 	ChartProc   string
 	ChartSource string
@@ -254,6 +269,7 @@ type cfgModule struct {
 type cfgProcessor struct {
 	Name   string
 	Title  string
+	Titles map[string]string
 	Source string
 	Params []cfgParam
 }
@@ -299,6 +315,8 @@ type cfgDSLPrintForm struct {
 
 type cfgInfoRegister struct {
 	Name       string
+	Title      string
+	Titles     map[string]string
 	Periodic   bool
 	Dimensions []cfgField
 	Resources  []cfgField
@@ -307,6 +325,7 @@ type cfgInfoRegister struct {
 type cfgAccountRegister struct {
 	Name      string
 	Title     string
+	Titles    map[string]string
 	Accounts  string
 	Resources []cfgField
 }
@@ -319,6 +338,7 @@ type cfgPredefined struct {
 type cfgSubsystem struct {
 	Name     string
 	Title    string
+	Titles   map[string]string
 	Icon     string
 	Order    int
 	Contents metadata.SubsystemContents
@@ -340,9 +360,10 @@ type widgetOption struct {
 // для визуального редактора конфигуратора (галочки виджетов + раскладка).
 type cfgHomePage struct {
 	Title   string
-	Widgets []string   // отмеченные виджеты (режим «Авто»)
-	Rows    [][]string // раскладка по рядам (режим «По рядам»)
-	Layout  string     // "auto" | "rows"
+	Titles  map[string]string // переводы заголовка (titles в YAML)
+	Widgets []string          // отмеченные виджеты (режим «Авто»)
+	Rows    [][]string        // раскладка по рядам (режим «По рядам»)
+	Layout  string            // "auto" | "rows"
 }
 
 type configuratorData struct {
@@ -644,6 +665,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 			Source:        sources[strings.ToLower(e.Name)],
 			PostingSource: postingSources[strings.ToLower(e.Name)],
 			ManagerSource: managerSources[strings.ToLower(e.Name)],
+			Titles:        e.Titles,
 		}
 		if e.Kind == metadata.KindCatalog {
 			ev.Kind = "Справочник"
@@ -772,7 +794,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, reg := range proj.Registers {
-		rv := cfgRegister{Name: reg.Name}
+		rv := cfgRegister{Name: reg.Name, Title: reg.Title, Titles: reg.Titles}
 		for _, f := range reg.Dimensions {
 			rv.Dimensions = append(rv.Dimensions, toCfgField(f))
 		}
@@ -786,7 +808,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, ir := range proj.InfoRegisters {
-		rv := cfgInfoRegister{Name: ir.Name, Periodic: ir.Periodic}
+		rv := cfgInfoRegister{Name: ir.Name, Title: ir.Title, Titles: ir.Titles, Periodic: ir.Periodic}
 		for _, f := range ir.Dimensions {
 			rv.Dimensions = append(rv.Dimensions, toCfgField(f))
 		}
@@ -797,7 +819,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, ar := range proj.AccountRegisters {
-		rv := cfgAccountRegister{Name: ar.Name, Title: ar.Title, Accounts: ar.Accounts}
+		rv := cfgAccountRegister{Name: ar.Name, Title: ar.Title, Titles: ar.Titles, Accounts: ar.Accounts}
 		for _, f := range ar.Resources {
 			rv.Resources = append(rv.Resources, toCfgField(f))
 		}
@@ -820,6 +842,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 			RefEntity: c.RefEntity,
 			Default:   c.Default,
 			Label:     c.Label,
+			Labels:    c.Labels,
 			Length:    c.Length,
 			Scale:     c.Scale,
 		})
@@ -828,12 +851,12 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	repSources := readReportSources(proj.Dir)
 
 	for _, rep := range proj.Reports {
-		rv := cfgReport{Name: rep.Name, Title: rep.Title, Query: rep.Query, ChartProc: rep.ChartProc, Composition: rep.Composition}
+		rv := cfgReport{Name: rep.Name, Title: rep.Title, Titles: rep.Titles, Query: rep.Query, ChartProc: rep.ChartProc, Composition: rep.Composition}
 		if src, ok := repSources[strings.ToLower(rep.Name)]; ok {
 			rv.ChartSource = src
 		}
 		for _, p := range rep.Params {
-			rv.Params = append(rv.Params, cfgParam{Name: p.Name, Type: p.Type, Label: p.Label})
+			rv.Params = append(rv.Params, cfgParam{Name: p.Name, Type: p.Type, Label: p.Label, Labels: p.Labels})
 		}
 		data.Reports = append(data.Reports, rv)
 	}
@@ -852,10 +875,11 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		rv := cfgProcessor{
 			Name:   proc.Name,
 			Title:  proc.Title,
+			Titles: proc.Titles,
 			Source: procSources[strings.ToLower(proc.Name)],
 		}
 		for _, p := range proc.Params {
-			rv.Params = append(rv.Params, cfgParam{Name: p.Name, Type: p.Type, Label: p.Label})
+			rv.Params = append(rv.Params, cfgParam{Name: p.Name, Type: p.Type, Label: p.Label, Labels: p.Labels})
 		}
 		data.Processors = append(data.Processors, rv)
 	}
@@ -885,6 +909,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		data.Subsystems = append(data.Subsystems, cfgSubsystem{
 			Name:        sub.Name,
 			Title:       sub.Title,
+			Titles:      sub.Titles,
 			Icon:        sub.Icon,
 			Order:       sub.Order,
 			Contents:    sub.Contents,
@@ -920,14 +945,17 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	// Глобальная главная для визуального редактора (галочки / drag-конструктор).
 	ghTitle := ""
 	var ghRows [][]string
+	var ghTitles map[string]string
 	if proj.HomePage != nil {
 		ghRows = proj.HomePage.RowGroups()
 		if proj.HomePage.Title != "" && proj.HomePage.Title != "Главная" {
 			ghTitle = proj.HomePage.Title
 		}
+		ghTitles = proj.HomePage.Titles
 	}
 	data.GlobalHome = cfgHomePage{
 		Title:   ghTitle,
+		Titles:  ghTitles,
 		Widgets: homeWidgetsNames(proj.HomePage),
 		Rows:    ghRows,
 		Layout:  homeLayoutMode(proj.HomePage),
@@ -1245,7 +1273,7 @@ func toCfgField(f metadata.Field) cfgField {
 	} else if f.EnumName != "" {
 		typ = "enum"
 	}
-	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName, Length: f.Length, Scale: f.Scale, AllowInlineCreate: f.AllowInlineCreate}
+	return cfgField{Name: f.Name, Type: typ, RefEntity: f.RefEntity, EnumName: f.EnumName, Length: f.Length, Scale: f.Scale, AllowInlineCreate: f.AllowInlineCreate, Titles: f.Titles}
 }
 
 func readOSSources(dir string) (sources, postingSources, managerSources map[string]string) {
@@ -1618,7 +1646,7 @@ func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]
 	}
 }
 
-func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string) error {
+func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string, objTitles *map[string]string) error {
 	filePath, err := findEntityFilePath(dir, entityName)
 	if err != nil {
 		return err
@@ -1632,6 +1660,9 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 		return err
 	}
 	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn)
+	if objTitles != nil {
+		ent.Titles = *objTitles
+	}
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -1639,7 +1670,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	return os.WriteFile(filePath, out, 0o644)
 }
 
-func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string) error {
+func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string, objTitles *map[string]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -1677,6 +1708,9 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 	}
 
 	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn)
+	if objTitles != nil {
+		ent.Titles = *objTitles
+	}
 	out, err := yaml.Marshal(&ent)
 	if err != nil {
 		return err
@@ -1866,6 +1900,56 @@ func formRowIndices(r *http.Request, base string) []int {
 	return idxs
 }
 
+// anyOrNil превращает nil-карту в нетипизированный nil, чтобы setYAMLMapField
+// удалил ключ (типизированный nil map, обёрнутый в any, != nil).
+func anyOrNil(m map[string]string) any {
+	if m == nil {
+		return nil
+	}
+	return m
+}
+
+// formHasMapField сообщает, содержала ли форма блок ключей "<prefix>.*"
+// (хотя бы один, пусть и с пустым значением). Отличает «блок переводов был
+// отрендерен и отправлен» (применяем, включая очистку) от «блока не было»
+// (не трогаем существующее). Используется для round-trip/точечных сохранений.
+func formHasMapField(r *http.Request, prefix string) bool {
+	pfx := prefix + "."
+	for key := range r.Form {
+		if strings.HasPrefix(key, pfx) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseMapForm читает значения формы вида "<prefix>.<lang>" в map[lang]value.
+// Скан по ключам формы (а не по списку языков) — чтобы не зависеть от бандла
+// локализации. Пропускает: базовый язык ru (он в title/label), пустые значения
+// и остатки с точкой (защита от пересечения с вложенными префиксами, напр.
+// "titles." не должен ловить "field.0.titles.en"). nil при пустом результате —
+// тогда omitempty / setYAMLMapField(nil) убирают ключ из YAML.
+func parseMapForm(r *http.Request, prefix string) map[string]string {
+	pfx := prefix + "."
+	out := map[string]string{}
+	for key, vals := range r.Form {
+		if !strings.HasPrefix(key, pfx) || len(vals) == 0 {
+			continue
+		}
+		lang := strings.TrimPrefix(key, pfx)
+		if lang == "" || lang == "ru" || strings.Contains(lang, ".") {
+			continue
+		}
+		if v := strings.TrimSpace(vals[0]); v != "" {
+			out[lang] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // parseRegSection читает секцию полей регистра/плана счетов из формы. Существующие
 // строки приходят как <prefix>.<i>.{name,type,length,scale,ref} (обрыв на первом
 // пустом), добавленные кнопкой «+ Добавить» — как new_<prefix>.<idx>.* (пропуск
@@ -1885,7 +1969,9 @@ func parseRegSection(r *http.Request, prefix string) []saveField {
 			typ = typ + ":" + ref
 		}
 		typ = numberTypeWithSpec(typ, r.FormValue(keyBase+".length"), r.FormValue(keyBase+".scale"))
-		fields = append(fields, saveField{Name: name, Type: typ})
+		sf := saveField{Name: name, Type: typ}
+		sf.Titles = parseMapForm(r, keyBase+".titles")
+		fields = append(fields, sf)
 	}
 	for i := 0; i < 500; i++ {
 		if strings.TrimSpace(r.FormValue(fmt.Sprintf("%s.%d.name", prefix, i))) == "" {
@@ -1916,7 +2002,9 @@ func buildTPSaveField(r *http.Request, lang, keyBase, tpName, name string) (save
 		typ = typ + ":" + ref
 	}
 	typ = numberTypeWithSpec(typ, r.FormValue(keyBase+".length"), r.FormValue(keyBase+".scale"))
-	return saveField{Name: name, Type: typ}, ""
+	sf := saveField{Name: name, Type: typ}
+	sf.Titles = parseMapForm(r, keyBase+".titles")
+	return sf, ""
 }
 
 func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request) {
@@ -1990,6 +2078,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		}
 		typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("field.%d.length", i)), r.FormValue(fmt.Sprintf("field.%d.scale", i)))
 		sf := saveField{Name: name, Type: typ}
+		sf.Titles = parseMapForm(r, fmt.Sprintf("field.%d.titles", i))
 		// allow_inline_create — пишем только если значение отличается от дефолта
 		// контекста (true в шапке). Шаблон отрисовывает hidden inline_present=1
 		// только для ссылочных полей, поэтому маркер косвенно фильтрует тип.
@@ -2024,7 +2113,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			typ = typ + ":" + ref
 		}
 		typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("new_field.%d.length", i)), r.FormValue(fmt.Sprintf("new_field.%d.scale", i)))
-		fields = append(fields, saveField{Name: name, Type: typ})
+		fields = append(fields, saveField{Name: name, Type: typ, Titles: parseMapForm(r, fmt.Sprintf("new_field.%d.titles", i))})
 	}
 
 	tpFields := make(map[string][]saveField)
@@ -2052,6 +2141,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 			}
 			typ = numberTypeWithSpec(typ, r.FormValue(fmt.Sprintf("tp.%s.field.%d.length", tpName, i)), r.FormValue(fmt.Sprintf("tp.%s.field.%d.scale", tpName, i)))
 			sf := saveField{Name: name, Type: typ}
+			sf.Titles = parseMapForm(r, fmt.Sprintf("tp.%s.field.%d.titles", tpName, i))
 			// В ТЧ дефолт allow_inline_create = false; пишем только если
 			// чекбокс установлен (отличие от дефолта).
 			if r.FormValue(fmt.Sprintf("tp.%s.field.%d.inline_present", tpName, i)) == "1" {
@@ -2108,11 +2198,17 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	var objTitles *map[string]string
+	if formHasMapField(r, "titles") {
+		tm := parseMapForm(r, "titles")
+		objTitles = &tm
+	}
+
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting, hierarchical, basedOn)
+		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting, hierarchical, basedOn, objTitles)
 	} else {
-		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting, hierarchical, basedOn)
+		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting, hierarchical, basedOn, objTitles)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -2261,7 +2357,7 @@ func findRegisterFilePath(dir, regName string) (string, error) {
 	return "", fmt.Errorf("register %q not found", regName)
 }
 
-func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField) error {
+func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField, objTitles *map[string]string) error {
 	filePath, err := findRegisterFilePath(dir, regName)
 	if err != nil {
 		return err
@@ -2277,6 +2373,9 @@ func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField)
 	reg.Dimensions = dims
 	reg.Resources = res
 	reg.Attributes = attrs
+	if objTitles != nil {
+		reg.Titles = *objTitles
+	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
 		return err
@@ -2284,7 +2383,7 @@ func saveRegisterFieldsToFile(dir, regName string, dims, res, attrs []saveField)
 	return os.WriteFile(filePath, out, 0o644)
 }
 
-func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName string, dims, res, attrs []saveField) error {
+func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName string, dims, res, attrs []saveField, objTitles *map[string]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -2321,6 +2420,9 @@ func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName s
 	reg.Dimensions = dims
 	reg.Resources = res
 	reg.Attributes = attrs
+	if objTitles != nil {
+		reg.Titles = *objTitles
+	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
 		return err
@@ -2350,11 +2452,17 @@ func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.
 	res := parseRegSection(r, "res")
 	attrs := parseRegSection(r, "attr")
 
+	var regTitles *map[string]string
+	if formHasMapField(r, "titles") {
+		t := parseMapForm(r, "titles")
+		regTitles = &t
+	}
+
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveRegisterFieldsToDB(r.Context(), b, regName, dims, res, attrs)
+		saveErr = h.saveRegisterFieldsToDB(r.Context(), b, regName, dims, res, attrs, regTitles)
 	} else {
-		saveErr = saveRegisterFieldsToFile(b.Path, regName, dims, res, attrs)
+		saveErr = saveRegisterFieldsToFile(b.Path, regName, dims, res, attrs, regTitles)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -2623,6 +2731,9 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 				cf.Constants[i].Label = label
 				cf.Constants[i].Type = typ
 				cf.Constants[i].Default = def
+				if formHasMapField(r, "labels") {
+					cf.Constants[i].Labels = parseMapForm(r, "labels")
+				}
 				break
 			}
 		}
@@ -2729,9 +2840,10 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 	chartSource := r.FormValue("chart_source")
 
 	type saveParam struct {
-		Name  string `yaml:"name"`
-		Type  string `yaml:"type"`
-		Label string `yaml:"label,omitempty"`
+		Name   string            `yaml:"name"`
+		Type   string            `yaml:"type"`
+		Label  string            `yaml:"label,omitempty"`
+		Labels map[string]string `yaml:"labels,omitempty"`
 	}
 	type saveReport struct {
 		Name        string              `yaml:"name"`
@@ -2751,7 +2863,21 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 		}
 		ptype := r.FormValue(fmt.Sprintf("param.%d.type", i))
 		plabel := strings.TrimSpace(r.FormValue(fmt.Sprintf("param.%d.label", i)))
-		newParams = append(newParams, saveParam{Name: pname, Type: ptype, Label: plabel})
+		newParams = append(newParams, saveParam{
+			Name:   pname,
+			Type:   ptype,
+			Label:  plabel,
+			Labels: parseMapForm(r, fmt.Sprintf("param.%d.labels", i)),
+		})
+	}
+
+	// Переводы объекта: вычисляем до updateReportFile — нужен гейт, чтобы
+	// отличить «форма не имела блока переводов» (AvailableLangs пуст) от
+	// «пользователь очистил все переводы». Только во втором случае ключ titles: удаляется.
+	var newTitles map[string]string
+	hasTitlesBlock := formHasMapField(r, "titles")
+	if hasTitlesBlock {
+		newTitles = parseMapForm(r, "titles")
 	}
 
 	// Правим только редактируемые в форме ключи прямо в дереве YAML, чтобы не
@@ -2771,6 +2897,11 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 		}
 		if title != "" { // пустой title не трогаем — сохраняем существующий
 			if err := setYAMLMapField(doc, "title", title); err != nil {
+				return nil, err
+			}
+		}
+		if hasTitlesBlock {
+			if err := setYAMLMapField(doc, "titles", anyOrNil(newTitles)); err != nil {
 				return nil, err
 			}
 		}
@@ -2940,14 +3071,16 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 	source := r.FormValue("source")
 
 	type saveParam struct {
-		Name  string `yaml:"name"`
-		Type  string `yaml:"type"`
-		Label string `yaml:"label,omitempty"`
+		Name   string            `yaml:"name"`
+		Type   string            `yaml:"type"`
+		Label  string            `yaml:"label,omitempty"`
+		Labels map[string]string `yaml:"labels,omitempty"`
 	}
 	type saveProcessor struct {
-		Name   string      `yaml:"name"`
-		Title  string      `yaml:"title,omitempty"`
-		Params []saveParam `yaml:"params,omitempty"`
+		Name   string            `yaml:"name"`
+		Title  string            `yaml:"title,omitempty"`
+		Titles map[string]string `yaml:"titles,omitempty"`
+		Params []saveParam       `yaml:"params,omitempty"`
 	}
 
 	var newParams []saveParam
@@ -2958,10 +3091,17 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 		}
 		ptype := r.FormValue(fmt.Sprintf("param.%d.type", i))
 		plabel := strings.TrimSpace(r.FormValue(fmt.Sprintf("param.%d.label", i)))
-		newParams = append(newParams, saveParam{Name: pname, Type: ptype, Label: plabel})
+		newParams = append(newParams, saveParam{
+			Name: pname, Type: ptype, Label: plabel,
+			Labels: parseMapForm(r, fmt.Sprintf("param.%d.labels", i)),
+		})
 	}
 
-	yamlData, _ := yaml.Marshal(saveProcessor{Name: procName, Title: title, Params: newParams})
+	// Полная пересборка YAML из формы (round-trip отсутствует) — гейт formHasMapField не нужен: старого значения нет, omitempty уберёт пустое.
+	yamlData, _ := yaml.Marshal(saveProcessor{
+		Name: procName, Title: title, Params: newParams,
+		Titles: parseMapForm(r, "titles"),
+	})
 	yamlFilename := "processors/" + nameToFilename(procName) + ".yaml"
 	srcFilename := "src/" + processorSrcFilename(procName)
 
@@ -3353,7 +3493,11 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	// Сохраняем переводы (titles) и метаданные рабочего стола из уже
 	// существующего файла, чтобы перезапись не теряла данные, которых нет в форме.
 	if existing, lerr := metadata.LoadSubsystemFile(targetFile); lerr == nil && existing != nil {
-		ys.Titles = existing.Titles
+		if formHasMapField(r, "titles") {
+			ys.Titles = parseMapForm(r, "titles")
+		} else {
+			ys.Titles = existing.Titles
+		}
 		if existing.HomePage != nil {
 			ys.HomePage = &yamlHomePage{
 				Title:   existing.HomePage.Title,
@@ -3362,6 +3506,8 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 				Widgets: existing.HomePage.Widgets,
 			}
 		}
+	} else if formHasMapField(r, "titles") {
+		ys.Titles = parseMapForm(r, "titles")
 	}
 
 	// Раскладка виджетов рабочего стола из формы: режим «Авто» — отмеченные
@@ -3551,18 +3697,25 @@ func findInfoRegFilePath(dir, name string) (string, error) {
 	return "", fmt.Errorf("inforeg %q not found", name)
 }
 
-func saveInfoRegToFile(dir string, reg saveInfoReg) error {
+func saveInfoRegToFile(dir string, reg saveInfoReg, objTitles *map[string]string) error {
 	p, err := findInfoRegFilePath(dir, reg.Name)
 	if err != nil {
 		return err
 	}
-	// Title/Titles не редактируются в этой форме — переносим из существующего
-	// файла, иначе Marshal свежего reg затёр бы синоним регистра.
+	// Round-trip: читаем существующий файл, чтобы сохранить поля, которые
+	// форма не редактирует. Titles объекта перезаписываем только если форма
+	// прислала блок переводов (objTitles != nil).
 	if raw, rerr := os.ReadFile(p); rerr == nil {
 		var existing saveInfoReg
 		if yaml.Unmarshal(raw, &existing) == nil {
-			reg.Title, reg.Titles = existing.Title, existing.Titles
+			reg.Title = existing.Title
+			if objTitles == nil {
+				reg.Titles = existing.Titles
+			}
 		}
+	}
+	if objTitles != nil {
+		reg.Titles = *objTitles
 	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
@@ -3571,7 +3724,7 @@ func saveInfoRegToFile(dir string, reg saveInfoReg) error {
 	return os.WriteFile(p, out, 0o644)
 }
 
-func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg) error {
+func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg, objTitles *map[string]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -3592,14 +3745,21 @@ func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg)
 		var existing saveInfoReg
 		if yaml.Unmarshal(content, &existing) == nil && existing.Name == reg.Name {
 			targetPath = p
-			// сохраняем синоним регистра (в форме не редактируется)
-			reg.Title, reg.Titles = existing.Title, existing.Titles
+			// Round-trip: сохраняем поля, которые форма не редактирует.
+			// Titles перезаписываем только если форма прислала блок переводов.
+			reg.Title = existing.Title
+			if objTitles == nil {
+				reg.Titles = existing.Titles
+			}
 			break
 		}
 	}
 	rows.Close()
 	if targetPath == "" {
 		return fmt.Errorf("inforeg %q not found in DB config", reg.Name)
+	}
+	if objTitles != nil {
+		reg.Titles = *objTitles
 	}
 	out, err := yaml.Marshal(&reg)
 	if err != nil {
@@ -3630,11 +3790,16 @@ func (h *handler) configuratorSaveInfoRegFields(w http.ResponseWriter, r *http.R
 		Dimensions: parseRegSection(r, "dim"),
 		Resources:  parseRegSection(r, "res"),
 	}
+	var objTitles *map[string]string
+	if formHasMapField(r, "titles") {
+		t := parseMapForm(r, "titles")
+		objTitles = &t
+	}
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveInfoRegToDB(r.Context(), b, reg)
+		saveErr = h.saveInfoRegToDB(r.Context(), b, reg, objTitles)
 	} else {
-		saveErr = saveInfoRegToFile(b.Path, reg)
+		saveErr = saveInfoRegToFile(b.Path, reg, objTitles)
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
@@ -3669,7 +3834,7 @@ func findAccountRegFilePath(dir, name string) (string, error) {
 	return "", fmt.Errorf("accountreg %q not found", name)
 }
 
-func saveAccountRegToFile(dir string, reg saveAccountReg) error {
+func saveAccountRegToFile(dir string, reg saveAccountReg, setTitles bool) error {
 	p, err := findAccountRegFilePath(dir, reg.Name)
 	if err != nil {
 		// новый файл — subconto/titles сохранять неоткуда, marshal свежего reg
@@ -3685,14 +3850,14 @@ func saveAccountRegToFile(dir string, reg saveAccountReg) error {
 	if rerr != nil {
 		return rerr
 	}
-	out, merr := applyAccountRegFields(raw, reg)
+	out, merr := applyAccountRegFields(raw, reg, setTitles)
 	if merr != nil {
 		return merr
 	}
 	return os.WriteFile(p, out, 0o644)
 }
 
-func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccountReg) error {
+func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccountReg, setTitles bool) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -3725,7 +3890,7 @@ func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccou
 	// для новой записи marshal свежего reg.
 	var out []byte
 	if len(existingContent) > 0 {
-		out, err = applyAccountRegFields(existingContent, reg)
+		out, err = applyAccountRegFields(existingContent, reg, setTitles)
 	} else {
 		out, err = yaml.Marshal(&reg)
 	}
@@ -3757,11 +3922,15 @@ func (h *handler) configuratorSaveAccountRegister(w http.ResponseWriter, r *http
 		Accounts:  strings.TrimSpace(r.FormValue("accounts")),
 		Resources: parseRegSection(r, "res"),
 	}
+	setTitles := formHasMapField(r, "titles")
+	if setTitles {
+		reg.Titles = parseMapForm(r, "titles")
+	}
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveAccountRegToDB(r.Context(), b, reg)
+		saveErr = h.saveAccountRegToDB(r.Context(), b, reg, setTitles)
 	} else {
-		saveErr = saveAccountRegToFile(b.Path, reg)
+		saveErr = saveAccountRegToFile(b.Path, reg, setTitles)
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {

@@ -21,8 +21,8 @@ import (
 // работают и с файловой конфигурацией, и с конфигурацией в БД.
 
 // configuratorSavePage пишет pages/<Имя>.yaml (метаданные) и src/<Имя>.page.os
-// (обработчик). Переводы заголовка (titles) переносятся из существующего файла —
-// визуальный редактор их не теряет (отдельная правка — план 66 п.3, i18n).
+// (обработчик). Переводы (titles): если форма содержит блок titles.* — берутся
+// из формы; иначе переносятся из существующего файла (не перезаписываются).
 func (h *handler) configuratorSavePage(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -55,8 +55,11 @@ func (h *handler) configuratorSavePage(w http.ResponseWriter, r *http.Request) {
 		Roles:  splitConfigList(r.FormValue("roles")),
 		Params: splitConfigList(r.FormValue("params")),
 	}
-	// Переносим titles из текущей конфигурации (визуальный редактор их не правит).
-	if proj, lerr := h.loadProjectFor(r.Context(), b); lerr == nil && proj != nil {
+	// Titles: если форма содержит блок titles.* — берём из формы (редактирование
+	// переводов), иначе переносим из существующей конфигурации (не трогаем).
+	if formHasMapField(r, "titles") {
+		pg.Titles = parseMapForm(r, "titles")
+	} else if proj, lerr := h.loadProjectFor(r.Context(), b); lerr == nil && proj != nil {
 		for _, ex := range proj.Pages {
 			if strings.EqualFold(ex.Name, name) {
 				pg.Titles = ex.Titles

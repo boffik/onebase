@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"strings"
 
@@ -32,8 +33,9 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 		}
 		return m
 	},
-	"lower": strings.ToLower,
-	"join":  strings.Join,
+	"lower":  strings.ToLower,
+	"join":   strings.Join,
+	"printf": fmt.Sprintf,
 	"js": func(v any) template.JS {
 		// json.Marshal экранирует <, >, & в \uXXXX; возвращаем template.JS,
 		// чтобы html/template не экранировал повторно (двойное экранирование).
@@ -107,7 +109,25 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 			return name
 		}
 	},
-}).Parse(cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgSyntaxRef + cfgFoot))
+}).Parse(cfgTitlesBlock + cfgHead + cfgMain + cfgTabTree + cfgRegDetail + cfgTabConvert + cfgTabFiles + cfgTabBackup + cfgSyntaxRef + cfgFoot))
+
+// ── Partial: переводы (titles-block) ─────────────────────────────────────────
+
+const cfgTitlesBlock = `{{define "titles-block"}}
+<details class="titles-block" style="margin:4px 0 10px">
+  <summary style="cursor:pointer;font-size:12px;color:#666">🌐 {{t .Lang "Переводы"}}{{if .Values}} ({{len .Values}}){{end}}</summary>
+  <div style="margin-top:6px">
+    {{range .Langs}}{{if ne .Code "ru"}}
+    <div style="display:flex;gap:6px;margin-bottom:3px;align-items:center">
+      <span style="width:78px;color:#888;font-size:12px">{{.Native}}</span>
+      <input type="text" name="{{$.Prefix}}.{{.Code}}" value="{{index $.Values .Code}}"
+             style="flex:1;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+    </div>
+    {{end}}{{end}}
+  </div>
+</details>
+{{end}}
+`
 
 // ── Head / foot ───────────────────────────────────────────────────────────────
 
@@ -753,7 +773,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-panel" id="e-{{.Name}}">
     <div class="panel-title">📄 {{.Name}}</div>
     <div class="panel-kind">{{t $.Lang "Справочник"}}</div>
-    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms "Lang" $.Lang)}}
+    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms "Lang" $.Lang "AvailableLangs" $.AvailableLangs)}}
   </div>
   {{end}}
 
@@ -765,7 +785,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       {{if .Posting}}<span style="background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">{{t $.Lang "проводится"}}</span>{{end}}
     </div>
     <div class="panel-kind">{{t $.Lang "Документ"}}</div>
-    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms "Lang" $.Lang)}}
+    {{template "entity-detail" (dict "Entity" . "BaseID" $.Base.ID "ConfigSource" $.Base.ConfigSource "ModuleSaved" $.ModuleSaved "ModuleSavedEntity" $.ModuleSavedEntity "AllEntityNames" $.AllEntityNames "AllEnumNames" $.AllEnumNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "ManagedForms" $.ManagedForms "Lang" $.Lang "AvailableLangs" $.AvailableLangs)}}
   </div>
   {{end}}
 
@@ -774,7 +794,7 @@ const cfgTabTree = `{{define "tab-tree"}}
   <div class="cfg-panel" id="r-{{.Name}}">
     <div class="panel-title">📊 {{.Name}}</div>
     <div class="panel-kind">{{t $.Lang "Регистр накопления"}}</div>
-    {{template "register-detail" (dict "Register" . "BaseID" $.Base.ID "AllEntityNames" $.AllEntityNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "Lang" $.Lang)}}
+    {{template "register-detail" (dict "Register" . "BaseID" $.Base.ID "AllEntityNames" $.AllEntityNames "FieldsSaved" $.FieldsSaved "FieldsSavedEntity" $.FieldsSavedEntity "Lang" $.Lang "AvailableLangs" $.AvailableLangs)}}
   </div>
   {{end}}
 
@@ -794,6 +814,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <input type="radio" name="periodic" value="false" {{if not .Periodic}}checked{{end}}> {{t $.Lang "Непериодический"}}
       </label>
     </div>
+    {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
     {{$allEntities := $.AllEntityNames}}
     {{if .Dimensions}}
     <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Измерения"}} ({{len .Dimensions}})</summary>
@@ -823,6 +844,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </select>
       </td>
     </tr>
+    {{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddField('ir-dim-{{.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
@@ -856,6 +878,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </select>
       </td>
     </tr>
+    {{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddField('ir-res-{{.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
@@ -881,6 +904,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       <label>{{t $.Lang "Заголовок"}}</label>
       <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Отображаемое имя"}}">
     </div>
+    {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
     <div class="fg" style="margin-bottom:12px">
       <label>{{t $.Lang "План счетов (имя объекта)"}}</label>
       <input type="text" name="accounts" value="{{.Accounts}}" placeholder="{{t $.Lang "ПланСчетов"}}">
@@ -906,6 +930,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         </span>
       </td>
     </tr>
+    {{if $.AvailableLangs}}<tr><td colspan="2" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
@@ -953,6 +978,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="label" value="{{.Label}}" placeholder="{{t $.Lang "Отображаемое имя"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "labels" "Values" .Labels)}}{{end}}
       <div class="fg" style="margin-top:8px">
         <label>{{t $.Lang "Тип"}}</label>
         <select name="type" onchange="cfgToggleRef(this,'cnref-{{.Name}}');cfgToggleNum(this,'cnnum-{{.Name}}')">
@@ -998,6 +1024,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Название отчёта"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
       <div class="obj-editor">
         <div class="obj-tabs">
           <div class="obj-tab active" onclick="cfgObjTab(this,'ot-rep-params-{{$rn}}')">{{t $.Lang "Параметры"}}</div>
@@ -1030,6 +1057,7 @@ const cfgTabTree = `{{define "tab-tree"}}
               <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
               <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();repReindex('params-{{$rn}}')">✕</button></td>
             </tr>
+            {{if $.AvailableLangs}}<tr><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "param.%d.labels" $i) "Values" $p.Labels)}}</td></tr>{{end}}
             {{end}}
           </table>
         </div>
@@ -1207,6 +1235,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{.Title}}" placeholder="{{t $.Lang "Название обработки"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
       <div class="obj-editor">
         <div class="obj-tabs">
           <div class="obj-tab active" onclick="cfgObjTab(this,'ot-proc-params-{{$pn}}')">{{t $.Lang "Параметры"}}</div>
@@ -1233,6 +1262,7 @@ const cfgTabTree = `{{define "tab-tree"}}
               <td><input type="text" name="param.{{$i}}.label" value="{{$p.Label}}" placeholder="{{$p.Name}}" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>
               <td><button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px" onclick="this.closest('tr').remove();repReindex('pparams-{{$pn}}')">✕</button></td>
             </tr>
+            {{if $.AvailableLangs}}<tr><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "param.%d.labels" $i) "Values" $p.Labels)}}</td></tr>{{end}}
             {{end}}
           </table>
         </div>
@@ -1526,6 +1556,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{$sub.Title}}" placeholder="{{t $.Lang "Название подсистемы"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" $sub.Titles)}}{{end}}
       <div class="fg" style="margin-top:8px">
         <label>{{t $.Lang "Иконка"}}</label>
         <input type="text" name="icon" value="{{$sub.Icon}}" placeholder="shopping-cart">
@@ -1668,6 +1699,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="title" value="{{.Title}}" placeholder="{{.Name}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
       <div class="fg">
         <label>{{t $.Lang "Иконка"}}</label>
         <input type="text" name="icon" value="{{.Icon}}" placeholder="layout-dashboard">
@@ -1711,6 +1743,7 @@ const cfgTabTree = `{{define "tab-tree"}}
         <label>{{t $.Lang "Заголовок"}}</label>
         <input type="text" name="home_title" value="{{.GlobalHome.Title}}" placeholder="{{t $.Lang "Главная"}}">
       </div>
+      {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .GlobalHome.Titles)}}{{end}}
       {{if .Widgets}}
       <div class="fg" style="margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <label style="font-size:12px;color:#555">{{t $.Lang "Раскладка"}}</label>
@@ -1784,6 +1817,8 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{$allEnums := .AllEnumNames}}
 {{$fSaved := .FieldsSaved}}
 {{$fSavedEnt := .FieldsSavedEntity}}
+{{$lang := .Lang}}
+{{$availLangs := .AvailableLangs}}
 
 <div class="obj-editor">
   <div class="obj-tabs">
@@ -1799,6 +1834,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 <input type="hidden" name="entity" value="{{$e.Name}}">
 <input type="hidden" name="entity_kind" value="{{$e.Kind}}">
 {{range $e.TableParts}}<input type="hidden" name="tp_names" value="{{.Name}}">{{end}}
+{{if $availLangs}}{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" "titles" "Values" $e.Titles)}}{{end}}
 
 {{if eq $e.Kind "Документ"}}
 <div class="section-hd">{{t $.Lang "Свойства"}}</div>
@@ -1888,6 +1924,7 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{end}}
   </td>
 </tr>
+{{if $availLangs}}<tr><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" (printf "field.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('ft-{{$e.Name}}','new_field','{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>
@@ -1934,6 +1971,7 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{end}}
   </td>
 </tr>
+{{if $availLangs}}<tr><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" (printf "tp.%s.field.%d.titles" $tp.Name $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('ft-{{$e.Name}}-tp{{$j}}','new_tp.{{$tp.Name}}.field','{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>
@@ -2218,6 +2256,7 @@ const cfgRegDetail = `{{define "register-detail"}}
 
 <form method="POST" action="/bases/{{$baseID}}/configurator/register-fields">
 <input type="hidden" name="register" value="{{$rg.Name}}">
+{{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" $rg.Titles)}}{{end}}
 
 <div class="section-hd">{{t $.Lang "Измерения"}}</div>
 <table class="fields-tbl" id="rg-dim-{{$rg.Name}}">
@@ -2246,6 +2285,7 @@ const cfgRegDetail = `{{define "register-detail"}}
     </select>
   </td>
 </tr>
+{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-dim-{{$rg.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
@@ -2277,6 +2317,7 @@ const cfgRegDetail = `{{define "register-detail"}}
     </select>
   </td>
 </tr>
+{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-res-{{$rg.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
@@ -2308,6 +2349,7 @@ const cfgRegDetail = `{{define "register-detail"}}
     </select>
   </td>
 </tr>
+{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "attr.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-attr-{{$rg.Name}}','new_attr','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить реквизит"}}</button>
