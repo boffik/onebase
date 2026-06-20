@@ -3127,6 +3127,41 @@ function repAddParam(tableId) {
   tr.querySelector('input[type=text]').focus();
 }
 
+// ── Enum values add/remove/reindex ────────────────────────────────────────────
+function enumReindex(containerId) {
+  var c = document.getElementById(containerId);
+  if (!c) return;
+  var rows = c.querySelectorAll('.enum-val-row');
+  rows.forEach(function(row, i) {
+    row.querySelectorAll('input,select').forEach(function(el) {
+      if (el.name) {
+        el.name = el.name.replace(/value\.\d+\./, 'value.' + i + '.');
+      }
+    });
+    var btn = row.querySelector('button[type=button]');
+    if (btn) btn.setAttribute('onclick', 'enumRemoveVal(this,\'' + containerId + '\')');
+  });
+}
+function enumRemoveVal(btn, containerId) {
+  btn.closest('.enum-val-row').remove();
+  enumReindex(containerId);
+}
+function enumAddVal(containerId) {
+  var c = document.getElementById(containerId);
+  if (!c) return;
+  var i = c.querySelectorAll('.enum-val-row').length;
+  var div = document.createElement('div');
+  div.className = 'enum-val-row';
+  div.style.cssText = 'display:flex;gap:6px;align-items:flex-start;margin-bottom:4px';
+  div.innerHTML = '<div style="flex:1"><input type="text" name="value.' + i + '.name" value=""'
+    + ' style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px"'
+    + ' placeholder="ИмяЗначения"></div>'
+    + '<button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0"'
+    + ' onclick="enumRemoveVal(this,\'' + containerId + '\')">✕</button>';
+  c.appendChild(div);
+  div.querySelector('input[type=text]').focus();
+}
+
 // ── Конструктор компоновки: динамические строки вкладки «Структура» (план 59) ──
 function compAddRow(id,prefix){var t=document.getElementById(id);var i=t.rows.length;var tr=t.insertRow();
   tr.innerHTML='<td><input type="text" name="'+prefix+i+'" style="width:100%;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px"></td>'+
@@ -5249,13 +5284,30 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   {{/* Enums */}}
   {{range .Enums}}
+  {{$en := .}}
   <div class="cfg-panel" id="en-{{.Name}}">
     <div class="panel-title">🔢 {{.Name}}</div>
     <div class="panel-kind">{{t $.Lang "Перечисление"}}</div>
-    <div class="section-hd">{{t $.Lang "Значения"}} <span class="edit-hint">({{t $.Lang "каждое значение — отдельная строка"}})</span></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/enum">
       <input type="hidden" name="enum_name" value="{{.Name}}">
-      <textarea name="values" rows="8" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:4px;resize:vertical;font-family:inherit">{{range .Values}}{{.}}&#10;{{end}}</textarea>
+      <div class="section-hd" style="margin-bottom:6px">{{t $.Lang "Значения"}}</div>
+      <div id="enum-vals-{{.Name}}">
+        {{range $i, $v := .EnumValues}}
+        <div class="enum-val-row" style="display:flex;gap:6px;align-items:flex-start;margin-bottom:4px">
+          <div style="flex:1">
+            <input type="text" name="value.{{$i}}.name" value="{{$v.Name}}"
+                   style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px">
+            {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "value.%d.titles" $i) "Values" $v.Titles)}}{{end}}
+          </div>
+          <button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0"
+                  onclick="enumRemoveVal(this,'enum-vals-{{$en.Name}}')">✕</button>
+        </div>
+        {{end}}
+      </div>
+      <button type="button" onclick="enumAddVal('enum-vals-{{.Name}}')"
+              style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0 10px">
+        + {{t $.Lang "Добавить значение"}}
+      </button>
       <div class="module-save-row">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}
