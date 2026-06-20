@@ -2260,6 +2260,23 @@ const cfgTabTree = `{{define "tab-tree"}}
   </div>{{/* end ot-modules */}}
 
 </div>{{/* end obj-editor */}}
+<script>
+// issue #132 фаза 2: «открыть в редакторе» из дерева файлов — выделить объект по
+// selectedTreeId надёжно (по готовности DOM, самодостаточно — не зависит от
+// автовыбора в configurator.js).
+(function(){
+  var id=(window.__cfg&&window.__cfg.selectedTreeId)||''; if(!id)return;
+  function go(){
+    var n=document.querySelector('.cfg-item[data-id="'+String(id).replace(/["\\]/g,'')+'"]');
+    if(!n)return;
+    var grp=n.closest('details.cfg-tree'); if(grp)grp.open=true;
+    if(typeof selItem==='function')selItem(n);
+    try{n.scrollIntoView({block:'center'});}catch(e){}
+    n.style.outline='2px solid #f59e0b'; setTimeout(function(){n.style.outline='';},1600);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();
+})();
+</script>
 {{end}}`
 
 // ── Register detail (editable) ────────────────────────────────────────────────
@@ -2433,6 +2450,9 @@ const cfgTabFiles = `{{define "tab-files"}}
 .ftfile:hover{background:#f0f4ff;color:#1a4a80}
 .ftfile.sel{background:#e8eeff;color:#1a4a80;font-weight:600}
 .ftfile.loose{padding-left:14px;color:#64748b}
+.ftedit{text-decoration:none;color:#94a3b8;font-size:13px;margin-left:6px;opacity:.35;transition:opacity .12s,color .12s}
+.ftobj>summary:hover .ftedit{opacity:1}
+.ftedit:hover{color:#1a4a80}
 </style>
 <div class="files-tree-wrap">
   <div class="files-tree" id="files-tree">
@@ -2443,7 +2463,7 @@ const cfgTabFiles = `{{define "tab-files"}}
       {{range .Objects}}
         {{if .Name}}
         <details class="ftobj">
-          <summary>📄 {{.Name}}</summary>
+          <summary>📄 {{.Name}}{{if .NodeID}} <a class="ftedit" href="/bases/{{$.Base.ID}}/configurator?tab=tree&select={{.NodeID}}" title="{{t $.Lang "Открыть в редакторе"}}">✎</a>{{end}}</summary>
           {{range .Files}}<a class="ftfile" href="#" data-path="{{.Path}}" onclick="cfgViewFile(this);return false" title="{{.Path}}">{{.Label}}</a>{{end}}
         </details>
         {{else}}{{range .Files}}<a class="ftfile loose" href="#" data-path="{{.Path}}" onclick="cfgViewFile(this);return false" title="{{.Path}}">{{.Path}}</a>{{end}}{{end}}
