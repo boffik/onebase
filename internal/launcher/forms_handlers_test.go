@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/processor"
+	"github.com/ivantit66/onebase/internal/project"
 )
 
 // listManagedFormsFromFS должен возвращать nil/nil для проектов без forms/.
@@ -241,5 +244,88 @@ func TestFormFiles(t *testing.T) {
 	}
 	if op != wantOP {
 		t.Errorf("op = %q, want %q", op, wantOP)
+	}
+}
+
+// Issue #133: заготовка «Форма объекта» строится из реальных реквизитов объекта.
+// У обработки нет реквизита «Наименование» — шаблон не должен его подставлять.
+func TestNewFormYAMLTemplate_ScaffoldByKind(t *testing.T) {
+	proj := &project.Project{
+		Entities: []*metadata.Entity{
+			{Name: "Контрагент", Kind: metadata.KindCatalog, Fields: []metadata.Field{
+				{Name: "Наименование", Type: metadata.FieldTypeString},
+				{Name: "ИНН", Title: "ИНН контрагента", Type: metadata.FieldTypeString},
+			}},
+		},
+		Processors: []*processor.Processor{
+			{Name: "ЗагрузкаЦен", Params: []processor.Param{{Name: "Файл", Label: "Файл с ценами"}}},
+			{Name: "ПустаяОбработка"}, // без параметров — главный кейс issue #133
+		},
+	}
+
+	t.Run("обработка без параметров — пустая группа, без Наименования", func(t *testing.T) {
+		attrs := objectScaffoldAttrs(proj, "ПустаяОбработка")
+		if len(attrs) != 0 {
+			t.Fatalf("ожидалось 0 реквизитов, получили %d", len(attrs))
+		}
+		y := newFormYAMLTemplate("ПустаяОбработка", "ФормаОбъекта", attrs)
+		if strings.Contains(y, "Наименование") {
+			t.Errorf("шаблон обработки не должен содержать «Наименование»:\n%s", y)
+		}
+		if !strings.Contains(y, "children: []") {
+			t.Errorf("ожидалась пустая группа children: [] :\n%s", y)
+		}
+		// Сгенерированная форма обязана валидно загружаться.
+		mustLoadForm(t, y, "ПустаяОбработка")
+	})
+
+	t.Run("обработка с параметрами — поля из параметров", func(t *testing.T) {
+		attrs := objectScaffoldAttrs(proj, "ЗагрузкаЦен")
+		y := newFormYAMLTemplate("ЗагрузкаЦен", "ФормаОбъекта", attrs)
+		if strings.Contains(y, "Наименование") {
+			t.Errorf("шаблон обработки не должен содержать «Наименование»:\n%s", y)
+		}
+		if !strings.Contains(y, "data_path: Объект.Файл") {
+			t.Errorf("ожидалось поле по параметру «Файл»:\n%s", y)
+		}
+		if !strings.Contains(y, `ru: "Файл с ценами"`) {
+			t.Errorf("ожидалась подпись из Label параметра:\n%s", y)
+		}
+		mustLoadForm(t, y, "ЗагрузкаЦен")
+	})
+
+	t.Run("справочник — поля из метаданных, включая Наименование", func(t *testing.T) {
+		attrs := objectScaffoldAttrs(proj, "Контрагент")
+		y := newFormYAMLTemplate("Контрагент", "ФормаОбъекта", attrs)
+		if !strings.Contains(y, "data_path: Объект.Наименование") {
+			t.Errorf("шаблон справочника должен содержать поле «Наименование»:\n%s", y)
+		}
+		if !strings.Contains(y, "data_path: Объект.ИНН") || !strings.Contains(y, `ru: "ИНН контрагента"`) {
+			t.Errorf("шаблон справочника должен содержать поле «ИНН» с синонимом:\n%s", y)
+		}
+		mustLoadForm(t, y, "Контрагент")
+	})
+
+	t.Run("неизвестный объект — фолбэк на пустую группу", func(t *testing.T) {
+		if attrs := objectScaffoldAttrs(proj, "НетТакого"); attrs != nil {
+			t.Errorf("ожидался nil для неизвестного объекта, получили %v", attrs)
+		}
+		y := newFormYAMLTemplate("НетТакого", "ФормаОбъекта", nil)
+		if strings.Contains(y, "Наименование") {
+			t.Errorf("фолбэк-шаблон не должен содержать «Наименование»:\n%s", y)
+		}
+	})
+}
+
+// mustLoadForm проверяет, что YAML-заготовка валидно парсится загрузчиком
+// управляемых форм (тем же, что и live-валидация в конфигураторе).
+func mustLoadForm(t *testing.T, yaml, entity string) {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "x.form.yaml")
+	if err := os.WriteFile(p, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loader.NewManagedFormLoader().LoadFormFile(p, entity); err != nil {
+		t.Errorf("сгенерированная форма не загружается: %v\n%s", err, yaml)
 	}
 }
