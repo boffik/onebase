@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/metadata"
@@ -40,6 +42,107 @@ func TestBuildEnumLabels(t *testing.T) {
 	}
 	if _, ok := labels["Имя"]; ok {
 		t.Error("не-enum поле не должно попадать в EnumLabels")
+	}
+}
+
+func TestBuildTPEnumLabels(t *testing.T) {
+	reg := newRegistryForEnumTest(t)
+	s := &Server{reg: reg}
+	ent := &metadata.Entity{
+		Name: "Заказ",
+		TableParts: []metadata.TablePart{
+			{
+				Name: "Товары",
+				Fields: []metadata.Field{
+					{Name: "Приоритет", Type: "enum:Приоритет", EnumName: "Приоритет"},
+					{Name: "Количество", Type: "number"},
+				},
+			},
+		},
+	}
+	tpLabels := s.buildTPEnumLabels(ent, "en")
+	tp := tpLabels["Товары"]
+	if tp == nil {
+		t.Fatal("tpLabels[Товары] == nil")
+	}
+	if tp["Приоритет"]["Высокий"] != "High" {
+		t.Errorf("tpLabels[Товары][Приоритет][Высокий] = %q, ждали High", tp["Приоритет"]["Высокий"])
+	}
+	if _, ok := tp["Количество"]; ok {
+		t.Error("не-enum поле не должно попадать в TPEnumLabels")
+	}
+}
+
+// TestManagedFormGridEnumAttr проверяет, что при рендере managed-формы
+// с ТабличнойЧастью, содержащей enum-поле, в HTML присутствует data-sg-enum
+// и флаг "enum":true в data-sg-cols — признаки того, что карта переводов
+// прокинута в SlickGrid.
+func TestManagedFormGridEnumAttr(t *testing.T) {
+	form := &metadata.FormModule{
+		Name:       "ФормаОбъекта",
+		Kind:       "object",
+		EntityName: "Заказ",
+		LayoutKind: metadata.FormLayoutManaged,
+		Title:      map[string]string{"ru": "Заказ"},
+		Elements: []*metadata.FormElement{
+			{
+				Kind:     metadata.FormElementTablePart,
+				Name:     "ЭлементТовары",
+				TitleMap: map[string]string{"ru": "Товары"},
+				DataPath: "Объект.Товары",
+			},
+		},
+	}
+	ent := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		TableParts: []metadata.TablePart{
+			{
+				Name: "Товары",
+				Fields: []metadata.Field{
+					{Name: "Приоритет", Type: "enum:Приоритет", EnumName: "Приоритет"},
+					{Name: "Количество", Type: "number"},
+				},
+			},
+		},
+		Forms: []*metadata.FormModule{form},
+	}
+
+	tpEnumLabels := map[string]map[string]map[string]string{
+		"Товары": {
+			"Приоритет": {"Высокий": "High", "Низкий": "Low"},
+		},
+	}
+
+	data := map[string]any{
+		"Entity":        ent,
+		"Form":          form,
+		"IsNew":         true,
+		"Values":        map[string]string{},
+		"RefOptions":    map[string]any{},
+		"EnumOptions":   map[string]any{},
+		"TPRefOptions":  map[string]any{},
+		"TPEnumLabels":  tpEnumLabels,
+		"TPRefMeta":     map[string]any{},
+		"TablePartRows": map[string][]map[string]any{"Товары": {}},
+		"User":          nil,
+		"Lang":          "en",
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "page-managed-form", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	html := buf.String()
+
+	if !strings.Contains(html, "data-sg-enum=") {
+		t.Error("HTML не содержит data-sg-enum — карта переводов enum не прокинута в грид")
+	}
+	if !strings.Contains(html, `"enum":true`) {
+		t.Error(`HTML не содержит "enum":true в data-sg-cols — enum-поле не помечено`)
+	}
+	if !strings.Contains(html, "Высокий") {
+		t.Error("HTML не содержит значений enum-карты в data-sg-enum")
 	}
 }
 

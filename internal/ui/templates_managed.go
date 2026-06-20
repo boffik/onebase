@@ -137,6 +137,7 @@ const tplManagedForm = `
   {{$tpMeta := tablePartByName $ctx.Entity $tpName}}
   {{$tpRows := index $ctx.TablePartRows $tpName}}
   {{$tpRef := index $ctx.TPRefOptions $tpName}}
+  {{$tpEnum := index $ctx.TPEnumLabels $tpName}}
   {{$tpCmds := tpCommandButtons $el}}
   <h3 style="margin:18px 0 8px;font-size:14px">{{fieldTitleRU $el.TitleMap (or $tpMeta.Title $tpName)}}</h3>
   {{if $tpMeta}}
@@ -156,8 +157,9 @@ const tplManagedForm = `
        data-sg-el="{{$el.Name}}"
        {{if $el.ReadOnly}}data-sg-ro="1"{{end}}
        {{if hasHandler $el "ПриИзменении"}}data-sg-recalc="1"{{end}}
-       data-sg-cols='[{{range $i, $f := $tpMeta.Fields}}{{if $i}},{{end}}{"id":"{{$f.Name}}","name":"{{$f.Name}}","type":"{{$f.Type}}"{{if $f.RefEntity}},"ref":"{{$f.RefEntity}}"{{end}}}{{end}}]'
+       data-sg-cols='[{{range $i, $f := $tpMeta.Fields}}{{if $i}},{{end}}{"id":"{{$f.Name}}","name":"{{$f.Name}}","type":"{{$f.Type}}"{{if $f.RefEntity}},"ref":"{{$f.RefEntity}}"{{end}}{{if isEnum (str $f.Type)}},"enum":true{{end}}}{{end}}]'
        data-sg-ref='{{jsJSON $tpRef}}'
+       data-sg-enum='{{jsJSON $tpEnum}}'
        data-sg-rows='{{jsJSON $tpRows}}'
        {{if $tpCmds}}data-sg-cmd="1"{{end}}></div>
   <input type="hidden" name="tp_json.{{$tpName}}" id="tp-json-{{$tpName}}" value="">
@@ -456,6 +458,9 @@ const tplManagedForm = `
 // событий obFire, чтобы ссылочные колонки рендерились как select, а не
 // как text input с UUID. Структура: {tpName: {fieldName: [{id, _label}, ...]}}.
 window._tpRefOpts = {{jsJSON .TPRefOptions}};
+// Переводы значений перечислений для ТЧ — используются при JS-перерисовке.
+// Структура: {tpName: {fieldName: {value: label}}}.
+window._tpEnumLabels = {{jsJSON .TPEnumLabels}};
 // obFire — общая JS-обвязка для onclick/onchange элементов формы.
 // Отправляет текущие form-values + имя элемента/события в /ui/.../form-event,
 // получает JSON с новыми значениями и сообщениями от Сообщить(), применяет их.
@@ -1153,7 +1158,7 @@ function addVtRow(vtName, fields) {
   }
 
   // Build SlickGrid columns from metadata with editors (plan 48, phase 3).
-  function buildColumns(colsMeta, refOpts) {
+  function buildColumns(colsMeta, refOpts, enumLabels) {
     var columns = [];
     for (var i = 0; i < colsMeta.length; i++) {
       var c = colsMeta[i];
@@ -1195,6 +1200,17 @@ function addVtRow(vtName, fields) {
               if (String(opts[k].id) === String(value)) return "<span>" + opts[k]._label + "</span>";
             }
             return "<span>" + String(value) + "</span>";
+          };
+        })(c.id);
+      } else if (c.enum) {
+        col.cssClass = "ob-enum";
+        col.editor = Slick.Editors.Text;
+        col.formatter = (function(enumField) {
+          return function(row, cell, value) {
+            if (value == null || value === "") return "";
+            var labels = (enumLabels && enumLabels[enumField]) || {};
+            var lbl = labels[value];
+            return "<span>" + (lbl != null ? lbl : String(value)) + "</span>";
           };
         })(c.id);
       } else if (c.type === "bool") {
@@ -1338,9 +1354,10 @@ function addVtRow(vtName, fields) {
     // работали именно в новых документах.
     var colsRaw = JSON.parse(div.getAttribute("data-sg-cols") || "[]") || [];
     var refOpts = JSON.parse(div.getAttribute("data-sg-ref") || "null") || {};
+    var enumLabels = JSON.parse(div.getAttribute("data-sg-enum") || "null") || {};
     var rowsRaw = JSON.parse(div.getAttribute("data-sg-rows") || "[]") || [];
 
-    var columns = buildColumns(colsRaw, refOpts);
+    var columns = buildColumns(colsRaw, refOpts, enumLabels);
     // _ord — исходный порядок строки. Клиентская сортировка меняет ПОРЯДОК
     // ОТОБРАЖЕНИЯ (dataView.sort), но при сохранении (obGridSync) строки
     // сериализуются по _ord — чтобы сортировка «для просмотра» не переставляла
