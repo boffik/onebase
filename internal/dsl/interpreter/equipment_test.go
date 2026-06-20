@@ -262,3 +262,26 @@ func TestEquipment_Fiscal_DSL(t *testing.T) {
 	result := runEqSrc(t, src, interpreter.NewEquipmentFunctions())
 	assert.Equal(t, "40", result)
 }
+
+// Декларативный дисплей покупателя через DSL: протокол (hex-команды + {text})
+// и кодировка заданы параметрами, но доступны через тот же метод Показать —
+// драйвер scripted_display реализует CustomerDisplay, слой DSL не меняется.
+func TestEquipment_ScriptedDisplay_DSL(t *testing.T) {
+	addr, received := captureTCP(t)
+
+	src := fmt.Sprintf(`Функция Тест()
+  Дисплей = ПодключитьОборудование("scripted_display", Новый Структура(
+    "Порт,КомандаИниц,КомандаОчистки,ШаблонСтроки1,ШаблонСтроки2,Ширина",
+    "%s", "1B40", "0C", "1B5141{text}0D", "1B5142{text}0D", "20"));
+  Дисплей.Показать("Молоко", "ИТОГО 150");
+  Дисплей.Отключить();
+  Возврат "ок";
+КонецФункции`, addr)
+
+	result := runEqSrc(t, src, interpreter.NewEquipmentFunctions())
+	assert.Equal(t, "ок", result)
+
+	got := string(<-received)
+	assert.Contains(t, got, "\x1bQA", "нет hex-префикса верхней строки (ESC Q A)")
+	assert.Contains(t, got, "\x1bQB", "нет hex-префикса нижней строки (ESC Q B)")
+}
