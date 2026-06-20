@@ -406,7 +406,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"pageRaw": func(s string) template.HTML { return template.HTML(s) },
 	// pageChart конвертирует чарт-блок страницы в widget.ChartData для echartsJSON.
 	"pageChart": pageChartData,
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAgentSettings + tplPOS + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAgentSettings + tplPOS + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom + tplAppShell))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -418,7 +418,15 @@ const tplHead = `
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="onebase">
 <title>{{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</title>
+<script>
+// Вкладочная оболочка (issue #129): когда страница открыта во фрейме оболочки
+// /ui/app, прячем хром (топбар/подсистемы) — навигация идёт из оболочки. Флаг
+// читают формы (напр. «провалиться в карточку» открывает вкладку, а не окно).
+window.__obEmbedded = (window.self !== window.top);
+if (window.__obEmbedded) document.documentElement.className += ' ob-embedded';
+</script>
 <style>
+.ob-embedded .topbar,.ob-embedded .subsys-bar{display:none!important}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-height:100vh;background:#f5f5f5}
 .topbar{background:#1e293b;color:#fff;padding:0 16px;display:flex;align-items:center;height:38px;flex-shrink:0;position:sticky;top:0;z-index:100}
@@ -2017,7 +2025,18 @@ function openRefCurrent(selOrId) {
   if (!sel) return;
   var refEntity = sel.getAttribute('data-ref-entity') || '';
   if (!refEntity || !sel.value) return;
-  window.open('/ui/_ref-open/' + encodeURIComponent(refEntity) + '/' + encodeURIComponent(sel.value), '_blank');
+  var refURL = '/ui/_ref-open/' + encodeURIComponent(refEntity) + '/' + encodeURIComponent(sel.value);
+  // В оболочке вкладок (issue #129) «провалиться в карточку» открывает новую
+  // вкладку рядом, а не отдельное окно браузера. Дивертим только если родитель —
+  // действительно оболочка (есть obOpenTab); иначе (напр. picker-модал на
+  // обычной странице) обычный window.open.
+  try {
+    if (window.__obEmbedded && window.parent && window.parent.obOpenTab) {
+      window.parent.postMessage({ source: 'obOpenTab', url: refURL, title: refEntity }, '*');
+      return;
+    }
+  } catch (e) {}
+  window.open(refURL, '_blank');
 }
 
 // openRefCreate — открывает модалку с iframe для inline-создания элемента

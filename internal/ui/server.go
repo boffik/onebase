@@ -154,6 +154,7 @@ func (s *Server) Mount(r chi.Router) {
 	mountStatic(r)
 	r.Get("/ui", s.index)
 	r.Get("/ui/", s.index)
+	r.Get("/ui/app", s.appShell) // оболочка вкладок (issue #129/#130, фаза 1)
 
 	// Gengen — ДО catch-all роутов! (иначе /ui/dev/gengen матчится как {kind}/{entity})
 	r.Get("/ui/dev/gengen", s.gengenPage)
