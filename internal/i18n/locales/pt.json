@@ -613,5 +613,7 @@
   "Форма объекта": "Formulário do objeto",
   "есть": "sim",
   "нет управляемых форм.": "sem formulários gerenciados.",
-  "Длина, Точность": "Comprimento, Precisão"
+  "Длина, Точность": "Comprimento, Precisão",
+  "Рабочее место кассира (РМК)": "Posto de caixa (PDV)",
+  "Настройки агента оборудования": "Configurações do agente de equipamento"
 }

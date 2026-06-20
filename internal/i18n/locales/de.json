@@ -810,5 +810,7 @@
   "Сохранение в БД": "Speichern in der Datenbank",
   "Справка по встроенному языку": "Referenz der integrierten Sprache",
   "Синтакс-помощник": "Syntax-Assistent",
-  "Справка": "Hilfe"
+  "Справка": "Hilfe",
+  "Рабочее место кассира (РМК)": "Kassenarbeitsplatz (POS)",
+  "Настройки агента оборудования": "Geräteagent-Einstellungen"
 }

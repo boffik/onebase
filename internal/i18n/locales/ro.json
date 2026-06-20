@@ -613,5 +613,7 @@
   "Форма объекта": "Formular obiect",
   "есть": "da",
   "нет управляемых форм.": "fără formulare gestionate.",
-  "Длина, Точность": "Lungime, Precizie"
+  "Длина, Точность": "Lungime, Precizie",
+  "Рабочее место кассира (РМК)": "Stație de casă (POS)",
+  "Настройки агента оборудования": "Setări agent echipament"
 }

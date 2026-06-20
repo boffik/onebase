@@ -613,5 +613,7 @@
   "Форма объекта": "Obyekt shakili",
   "есть": "bor",
   "нет управляемых форм.": "boshqariladigan shakillar yo'q.",
-  "Длина, Точность": "Uzunlik, Aniqlik"
+  "Длина, Точность": "Uzunlik, Aniqlik",
+  "Рабочее место кассира (РМК)": "Kassir ish joyi (POS)",
+  "Настройки агента оборудования": "Uskuna agenti sozlamalari"
 }
