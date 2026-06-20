@@ -1,0 +1,386 @@
+package equipment
+
+import (
+	"bytes"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+func init() {
+	Register("atol_kkt", func() Device { return &atolDevice{timeout: 30 * time.Second, poll: 50 * time.Millisecond} })
+}
+
+// atolDevice — драйвер фискального регистратора через «Драйвер ККТ АТОЛ v10».
+//
+// Транспорт — HTTP к локальному сервису АТОЛ (по умолчанию 127.0.0.1:16732),
+// который сам общается с фискальным накопителем и ОФД. Протокол асинхронный:
+// POST задания на /api/v2/requests возвращает uuid, после чего статус и
+// фискальный результат забираются опросом GET /api/v2/requests/<uuid>.
+//
+// Поэтому, в отличие от сокетных драйверов, Connect не открывает соединение —
+// бэкенд без состояния; ошибки связи проявляются при RegisterReceipt.
+//
+// ВНИМАНИЕ: имена полей JSON соответствуют АТОЛ v10 и при интеграции с реальной
+// ККТ должны быть сверены с актуальной документацией драйвера. Штрих-М имеет
+// иной протокол — это отдельный драйвер shtrih_kkt по тому же интерфейсу.
+type atolDevice struct {
+	baseURL string
+	client  *http.Client
+	timeout time.Duration // общий дедлайн ожидания фискального результата
+	poll    time.Duration // интервал опроса статуса
+}
+
+func (d *atolDevice) Kind() string { return "фискальный_регистратор" }
+
+func (d *atolDevice) Connect(params map[string]string) error {
+	addr := firstNonEmpty(params["порт"], params["port"], params["адрес"], params["address"])
+	if addr == "" {
+		addr = "127.0.0.1:16732"
+	}
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	d.baseURL = strings.TrimRight(addr, "/")
+	if t := firstNonEmpty(params["таймаут"], params["timeout"]); t != "" {
+		if sec, err := strconv.Atoi(t); err == nil && sec > 0 {
+			d.timeout = time.Duration(sec) * time.Second
+		}
+	}
+	d.client = &http.Client{Timeout: d.timeout}
+	return nil
+}
+
+func (d *atolDevice) Disconnect() error { return nil }
+
+// RegisterReceipt собирает задание формата АТОЛ v10, POST-ит его и опрашивает
+// статус до готовности, возвращая фискальные реквизиты пробитого чека.
+func (d *atolDevice) RegisterReceipt(r FiscalReceipt) (FiscalResult, error) {
+	if d.client == nil {
+		return FiscalResult{}, fmt.Errorf("устройство не подключено")
+	}
+	if len(r.Items) == 0 {
+		return FiscalResult{}, fmt.Errorf("ккт: чек без позиций")
+	}
+	uuid := newUUID()
+	body, err := json.Marshal(atolTaskFromReceipt(uuid, r))
+	if err != nil {
+		return FiscalResult{}, err
+	}
+	if err := d.post(d.baseURL+"/api/v2/requests", body); err != nil {
+		return FiscalResult{}, err
+	}
+	return d.await(uuid, r)
+}
+
+// post отправляет задание и проверяет, что сервис принял его в очередь.
+func (d *atolDevice) post(url string, body []byte) error {
+	resp, err := d.client.Post(url, "application/json; charset=utf-8", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("ккт: отправка задания: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("ккт: сервис вернул %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var ack struct {
+		IsError bool   `json:"isError"`
+		Error   string `json:"error"`
+	}
+	json.Unmarshal(raw, &ack) // отсутствие полей — не ошибка
+	if ack.IsError {
+		return fmt.Errorf("ккт: задание отклонено: %s", ack.Error)
+	}
+	return nil
+}
+
+// await опрашивает /api/v2/requests/<uuid> до готовности результата или дедлайна.
+func (d *atolDevice) await(uuid string, r FiscalReceipt) (FiscalResult, error) {
+	deadline := time.Now().Add(d.timeout)
+	url := d.baseURL + "/api/v2/requests/" + uuid
+	for {
+		resp, err := d.client.Get(url)
+		if err != nil {
+			return FiscalResult{}, fmt.Errorf("ккт: опрос статуса: %w", err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode >= 300 {
+			return FiscalResult{}, fmt.Errorf("ккт: опрос статуса вернул %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		}
+		var st atolStatus
+		if err := json.Unmarshal(raw, &st); err != nil {
+			return FiscalResult{}, fmt.Errorf("ккт: разбор статуса: %w", err)
+		}
+		if st.IsError {
+			return FiscalResult{}, fmt.Errorf("ккт: ошибка регистрации чека: %s", st.firstError())
+		}
+		if st.Ready && len(st.Results) > 0 {
+			return st.Results[0].Result.toFiscalResult(r), nil
+		}
+		if time.Now().After(deadline) {
+			return FiscalResult{}, fmt.Errorf("ккт: превышено время ожидания фискального результата")
+		}
+		time.Sleep(d.poll)
+	}
+}
+
+// ─── формат задания АТОЛ v10 ────────────────────────────────────────────────
+
+type atolTask struct {
+	UUID    string         `json:"uuid"`
+	Request []atolDocument `json:"request"`
+}
+
+type atolDocument struct {
+	Type           string        `json:"type"`           // sell | sellReturn | buy | buyReturn
+	TaxationType   string        `json:"taxationType"`   // osn | usnIncome | ...
+	Items          []atolItem    `json:"items"`
+	Payments       []atolPayment `json:"payments"`
+	Total          float64       `json:"total"`
+	Electronically bool          `json:"electronically"` // только электронный чек, без печати
+	ClientInfo     *atolClient   `json:"clientInfo,omitempty"`
+}
+
+type atolItem struct {
+	Type          string   `json:"type"`          // всегда "position"
+	Name          string   `json:"name"`
+	Price         float64  `json:"price"`
+	Quantity      float64  `json:"quantity"`
+	Amount        float64  `json:"amount"`
+	Tax           atolTax  `json:"tax"`
+	PaymentObject string   `json:"paymentObject"` // признак предмета расчёта, тег 1212
+	PaymentMethod string   `json:"paymentMethod"` // признак способа расчёта, тег 1214
+}
+
+type atolTax struct {
+	Type string `json:"type"` // vat20 | vat10 | vat0 | none | ...
+}
+
+type atolPayment struct {
+	Type string  `json:"type"` // cash | electronically | prepaid | credit
+	Sum  float64 `json:"sum"`
+}
+
+type atolClient struct {
+	Email string `json:"email,omitempty"`
+	Phone string `json:"phone,omitempty"`
+}
+
+// atolStatus — ответ опроса статуса задания.
+type atolStatus struct {
+	Ready   bool         `json:"ready"`
+	IsError bool         `json:"isError"`
+	Results []atolResult `json:"results"`
+}
+
+type atolResult struct {
+	Result atolFiscal `json:"result"`
+	Error  *struct {
+		Description string `json:"description"`
+	} `json:"error"`
+}
+
+func (s atolStatus) firstError() string {
+	for _, r := range s.Results {
+		if r.Error != nil && r.Error.Description != "" {
+			return r.Error.Description
+		}
+	}
+	return "детали не сообщены"
+}
+
+// atolFiscal — фискальные реквизиты из результата регистрации.
+type atolFiscal struct {
+	FNNumber             string  `json:"fnNumber"`
+	FiscalDocumentNumber int64   `json:"fiscalDocumentNumber"`
+	FiscalDocumentSign   string  `json:"fiscalDocumentSign"`
+	ReceiptDatetime      string  `json:"receiptDatetime"`
+	Total                float64 `json:"total"`
+}
+
+// toFiscalResult переносит реквизиты в доменную модель и строит строку QR-кода
+// чека в формате ФНС: t=<дата>&s=<сумма>&fn=<ФН>&i=<ФД>&fp=<ФП>&n=1.
+func (f atolFiscal) toFiscalResult(r FiscalReceipt) FiscalResult {
+	res := FiscalResult{
+		FN: f.FNNumber,
+		FD: fmt.Sprintf("%d", f.FiscalDocumentNumber),
+		FP: f.FiscalDocumentSign,
+	}
+	total := f.Total
+	if total == 0 {
+		total = receiptTotal(r)
+	}
+	if f.FNNumber != "" && f.FiscalDocumentSign != "" {
+		t := strings.NewReplacer("-", "", ":", "", "+", "T", " ", "T").Replace(f.ReceiptDatetime)
+		if i := strings.IndexByte(t, 'T'); i >= 0 && len(t) > i+5 {
+			t = t[:i+5] // YYYYMMDDTHHMM
+		}
+		res.QR = fmt.Sprintf("t=%s&s=%.2f&fn=%s&i=%d&fp=%s&n=1", t, total, f.FNNumber, f.FiscalDocumentNumber, f.FiscalDocumentSign)
+	}
+	return res
+}
+
+// ─── маппинг доменной модели в формат АТОЛ ──────────────────────────────────
+
+func atolTaskFromReceipt(uuid string, r FiscalReceipt) atolTask {
+	doc := atolDocument{
+		Type:         atolOperationType(r.Type),
+		TaxationType: atolTaxation(r.Taxation),
+		Total:        receiptTotal(r),
+	}
+	for _, it := range r.Items {
+		sum := it.Sum
+		if sum == 0 {
+			sum = it.Qty * it.Price
+		}
+		doc.Items = append(doc.Items, atolItem{
+			Type:          "position",
+			Name:          it.Name,
+			Price:         it.Price,
+			Quantity:      it.Qty,
+			Amount:        sum,
+			Tax:           atolTax{Type: atolVAT(it.VAT)},
+			PaymentObject: atolPaymentObject(it.ItemType),
+			PaymentMethod: atolPaymentMethod(it.PaymentType),
+		})
+	}
+	for _, p := range r.Payments {
+		doc.Payments = append(doc.Payments, atolPayment{Type: atolPaymentMode(p.Type), Sum: p.Sum})
+	}
+	// Чек без явных оплат считаем оплаченным наличными на сумму итога.
+	if len(doc.Payments) == 0 {
+		doc.Payments = []atolPayment{{Type: "cash", Sum: doc.Total}}
+	}
+	if r.Email != "" || r.Phone != "" {
+		doc.Electronically = true
+		doc.ClientInfo = &atolClient{Email: r.Email, Phone: r.Phone}
+	}
+	return atolTask{UUID: uuid, Request: []atolDocument{doc}}
+}
+
+// receiptTotal — итог чека: сумма оплат, иначе сумма позиций.
+func receiptTotal(r FiscalReceipt) float64 {
+	var total float64
+	for _, p := range r.Payments {
+		total += p.Sum
+	}
+	if total > 0 {
+		return total
+	}
+	for _, it := range r.Items {
+		if it.Sum != 0 {
+			total += it.Sum
+		} else {
+			total += it.Qty * it.Price
+		}
+	}
+	return total
+}
+
+func atolOperationType(t string) string {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "возвратприхода", "sellreturn":
+		return "sellReturn"
+	case "расход", "buy":
+		return "buy"
+	case "возвратрасхода", "buyreturn":
+		return "buyReturn"
+	default: // "приход" и пустое
+		return "sell"
+	}
+}
+
+func atolTaxation(t string) string {
+	// «УСН_Доход» из перечисления и «уснДоход» из DSL приводим к одному виду.
+	switch strings.ReplaceAll(strings.ToLower(strings.TrimSpace(t)), "_", "") {
+	case "усндоход", "usnincome":
+		return "usnIncome"
+	case "усндоходрасход", "usnincomeoutcome":
+		return "usnIncomeOutcome"
+	case "есхн", "esn":
+		return "esn"
+	case "патент", "patent":
+		return "patent"
+	case "envd":
+		return "envd"
+	default: // "осн" и пустое
+		return "osn"
+	}
+}
+
+func atolVAT(v string) string {
+	// Нормализуем «НДС20_120» (перечисление) и «ндс20/120» (DSL) к одному виду.
+	norm := strings.ToLower(strings.TrimSpace(v))
+	norm = strings.NewReplacer(" ", "", "_", "/").Replace(norm)
+	switch norm {
+	case "ндс20", "vat20":
+		return "vat20"
+	case "ндс10", "vat10":
+		return "vat10"
+	case "ндс20/120", "vat120":
+		return "vat120"
+	case "ндс10/110", "vat110":
+		return "vat110"
+	case "ндс0", "vat0":
+		return "vat0"
+	default: // "безндс" и пустое — без НДС
+		return "none"
+	}
+}
+
+func atolPaymentObject(t string) string {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "услуга", "service":
+		return "service"
+	case "работа", "job":
+		return "job"
+	case "платёж", "платеж", "payment":
+		return "payment"
+	default: // "товар" и пустое
+		return "commodity"
+	}
+}
+
+func atolPaymentMethod(t string) string {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "аванс", "prepayment100", "предоплата100":
+		return "prepayment100"
+	case "частичныйрасчёт", "частичныйрасчет", "advance":
+		return "advance"
+	case "кредит", "credit":
+		return "credit"
+	default: // "полныйРасчёт" и пустое
+		return "fullPayment"
+	}
+}
+
+func atolPaymentMode(t string) string {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "безналичные", "карта", "electronically":
+		return "electronically"
+	case "аванс", "предоплата", "prepaid":
+		return "prepaid"
+	case "кредит", "credit":
+		return "credit"
+	default: // "наличные" и пустое
+		return "cash"
+	}
+}
+
+// newUUID генерирует случайный uuid v4 для идентификации задания.
+func newUUID() string {
+	var b [16]byte
+	rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	h := hex.EncodeToString(b[:])
+	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
+}
