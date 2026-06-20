@@ -121,6 +121,48 @@ values:
 	}
 }
 
+// TestScanProjectFromFiles_EnumsNewFormat проверяет, что scanEnumDir корректно
+// читает перечисления нового формата ({name, titles}) и не теряет имена значений.
+func TestScanProjectFromFiles_EnumsNewFormat(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "enums"), 0o755)
+
+	yamlContent := `name: Приоритет
+values:
+  - name: Высокий
+    titles:
+      en: High
+      de: Hoch
+  - name: Средний
+    titles:
+      en: Medium
+  - Низкий
+`
+	os.WriteFile(filepath.Join(dir, "enums", "приоритет.yaml"), []byte(yamlContent), 0o644)
+
+	manifest, err := ScanProjectFromFiles(dir)
+	if err != nil {
+		t.Fatalf("ScanProjectFromFiles() error: %v", err)
+	}
+
+	en, ok := manifest.Enums["Приоритет"]
+	if !ok {
+		t.Fatal("expected Приоритет enum")
+	}
+	if len(en.Values) != 3 {
+		t.Fatalf("expected 3 values, got %d: %v", len(en.Values), en.Values)
+	}
+	if en.Values[0] != "Высокий" {
+		t.Errorf("Values[0] = %q, want Высокий", en.Values[0])
+	}
+	if en.Values[1] != "Средний" {
+		t.Errorf("Values[1] = %q, want Средний", en.Values[1])
+	}
+	if en.Values[2] != "Низкий" {
+		t.Errorf("Values[2] = %q, want Низкий", en.Values[2])
+	}
+}
+
 func TestScanProjectFromFiles_DSL(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)

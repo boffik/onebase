@@ -186,9 +186,15 @@ func (f cfgField) InlineAllowChecked(inTablePart bool) bool {
 	return !inTablePart
 }
 
-type cfgEnum struct {
+type cfgEnumValue struct {
 	Name   string
-	Values []string
+	Titles map[string]string
+}
+
+type cfgEnum struct {
+	Name       string
+	Values     []string
+	EnumValues []cfgEnumValue
 }
 
 type cfgConstant struct {
@@ -827,7 +833,14 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	}
 
 	for _, en := range proj.Enums {
-		data.Enums = append(data.Enums, cfgEnum{Name: en.Name, Values: en.Values})
+		ev := cfgEnum{Name: en.Name, Values: en.Values}
+		for _, v := range en.Values {
+			ev.EnumValues = append(ev.EnumValues, cfgEnumValue{
+				Name:   v,
+				Titles: en.ValueTitles[v],
+			})
+		}
+		data.Enums = append(data.Enums, ev)
 		data.AllEnumNames = append(data.AllEnumNames, en.Name)
 	}
 
@@ -2626,21 +2639,30 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 	lang := resolveLang(r)
 	r.ParseForm()
 	enumName := r.FormValue("enum_name")
-	rawValues := r.FormValue("values")
 
-	var values []string
-	for _, line := range strings.Split(rawValues, "\n") {
-		v := strings.TrimSpace(line)
-		if v != "" {
-			values = append(values, v)
+	type enumValueOut struct {
+		Name   string            `yaml:"name"`
+		Titles map[string]string `yaml:"titles,omitempty"`
+	}
+	var values []any
+	for i := 0; i < 500; i++ {
+		name := strings.TrimSpace(r.FormValue(fmt.Sprintf("value.%d.name", i)))
+		if name == "" {
+			continue
+		}
+		titles := parseMapForm(r, fmt.Sprintf("value.%d.titles", i))
+		if len(titles) == 0 {
+			values = append(values, name)
+		} else {
+			values = append(values, enumValueOut{Name: name, Titles: titles})
 		}
 	}
 
-	type saveEnum struct {
-		Name   string   `yaml:"name"`
-		Values []string `yaml:"values"`
+	type saveEnumOut struct {
+		Name   string `yaml:"name"`
+		Values []any  `yaml:"values"`
 	}
-	out, _ := yaml.Marshal(saveEnum{Name: enumName, Values: values})
+	out, _ := yaml.Marshal(saveEnumOut{Name: enumName, Values: values})
 
 	var saveErr error
 	if b.ConfigSource == "database" {

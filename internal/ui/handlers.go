@@ -35,9 +35,28 @@ func (s *Server) getEntity(w http.ResponseWriter, r *http.Request) *metadata.Ent
 	return nil
 }
 
-// loadEnumOptions returns enum values for each enum-type field of the entity.
-func (s *Server) loadEnumOptions(entity *metadata.Entity) map[string][]string {
-	opts := make(map[string][]string)
+// EnumOption — опция выпадающего списка enum: Value=имя значения (БД),
+// Label=перевод для текущего языка (ValueTitle).
+type EnumOption struct{ Value, Label string }
+
+// enumValueLabels строит карту value → перевод(lang) для одного перечисления.
+// Используется в buildEnumLabels и buildTPEnumLabels для устранения дублирования.
+// Порядок значений не гарантирован (карта); для dropdown используйте loadEnumOptions,
+// который итерирует en.Values напрямую.
+func enumValueLabels(en *metadata.Enum, lang string) map[string]string {
+	m := make(map[string]string, len(en.Values))
+	for _, v := range en.Values {
+		m[v] = en.ValueTitle(v, lang)
+	}
+	return m
+}
+
+// loadEnumOptions returns enum options for each enum-type field of the entity.
+// Label is the translated display name for the given lang; Value is the
+// canonical identifier stored in the database.
+// Порядок значений сохраняется (итерация по en.Values), что важно для dropdown.
+func (s *Server) loadEnumOptions(entity *metadata.Entity, lang string) map[string][]EnumOption {
+	opts := make(map[string][]EnumOption)
 	for _, f := range entity.Fields {
 		if f.EnumName == "" {
 			continue
@@ -46,7 +65,11 @@ func (s *Server) loadEnumOptions(entity *metadata.Entity) map[string][]string {
 		if en == nil {
 			continue
 		}
-		opts[f.Name] = en.Values
+		list := make([]EnumOption, 0, len(en.Values))
+		for _, v := range en.Values {
+			list = append(list, EnumOption{Value: v, Label: en.ValueTitle(v, lang)})
+		}
+		opts[f.Name] = list
 	}
 	return opts
 }

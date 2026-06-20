@@ -951,13 +951,30 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   {{/* Enums */}}
   {{range .Enums}}
+  {{$en := .}}
   <div class="cfg-panel" id="en-{{.Name}}">
     <div class="panel-title">🔢 {{.Name}}</div>
     <div class="panel-kind">{{t $.Lang "Перечисление"}}</div>
-    <div class="section-hd">{{t $.Lang "Значения"}} <span class="edit-hint">({{t $.Lang "каждое значение — отдельная строка"}})</span></div>
     <form method="POST" action="/bases/{{$.Base.ID}}/configurator/enum">
       <input type="hidden" name="enum_name" value="{{.Name}}">
-      <textarea name="values" rows="8" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:4px;resize:vertical;font-family:inherit">{{range .Values}}{{.}}&#10;{{end}}</textarea>
+      <div class="section-hd" style="margin-bottom:6px">{{t $.Lang "Значения"}}</div>
+      <div id="enum-vals-{{.Name}}">
+        {{range $i, $v := .EnumValues}}
+        <div class="enum-val-row" style="display:flex;gap:6px;align-items:flex-start;margin-bottom:4px">
+          <div style="flex:1">
+            <input type="text" name="value.{{$i}}.name" value="{{$v.Name}}"
+                   style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px">
+            {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "value.%d.titles" $i) "Values" $v.Titles)}}{{end}}
+          </div>
+          <button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0"
+                  onclick="enumRemoveVal(this,'enum-vals-{{$en.Name}}')">✕</button>
+        </div>
+        {{end}}
+      </div>
+      <button type="button" onclick="enumAddVal('enum-vals-{{.Name}}')"
+              style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0 10px">
+        + {{t $.Lang "Добавить значение"}}
+      </button>
       <div class="module-save-row">
         <button class="btn-save" type="submit">{{t $.Lang "Сохранить"}}</button>
         {{if and $.FieldsSaved (eq $.FieldsSavedEntity .Name)}}<span class="save-ok">{{t $.Lang "✓ Сохранено"}}</span>{{end}}

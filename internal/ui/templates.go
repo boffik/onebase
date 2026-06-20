@@ -48,6 +48,14 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	},
 	"isRef":      func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
 	"isEnum":     func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
+	"enumLabel": func(labels map[string]map[string]string, field, value string) string {
+		if m, ok := labels[field]; ok {
+			if lbl, ok := m[value]; ok && lbl != "" {
+				return lbl
+			}
+		}
+		return value
+	},
 	"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
 	"isImage":    func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeImage) },
 	// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
@@ -1050,6 +1058,7 @@ const tplList = `
       </td>
     {{else if eq (str .Type) "date"}}<td>{{fmtDate (index $row .Name)}}</td>
     {{else if isRichText (str .Type)}}<td style="color:#64748b">{{richPlain (index $row .Name)}}</td>
+    {{else if isEnum (str .Type)}}<td>{{enumLabel $.EnumLabels .Name (str (index $row .Name))}}</td>
     {{else}}<td>{{fmtCell (index $row .Name)}}</td>{{end}}
   {{end}}
   <td>
@@ -1091,7 +1100,7 @@ const tplList = `
     {{if eq $i 0}}
     <div class="tile-title">{{if $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row $f.Name)}}{{if index $row "_is_predefined"}} <span title="{{t $.Lang "Предопределённый элемент"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}{{if eq (str $.Entity.Kind) "document"}}{{if index $row "posted"}} <span class="tile-posted" title="{{t $.Lang "Проведён"}}">✓</span>{{end}}{{end}}</div>
     {{else}}{{$v := index $row $f.Name}}{{if $v}}
-    <div class="tile-field"><span class="tile-label">{{$f.DisplayName $.Lang}}:</span> {{if eq (str $f.Type) "date"}}<span class="tile-val">{{fmtDate $v}}</span>{{else if isRichText (str $f.Type)}}<span class="tile-val">{{richPlain $v}}</span>{{else}}<span class="tile-val">{{fmtCell $v}}</span>{{end}}</div>
+    <div class="tile-field"><span class="tile-label">{{$f.DisplayName $.Lang}}:</span> {{if eq (str $f.Type) "date"}}<span class="tile-val">{{fmtDate $v}}</span>{{else if isRichText (str $f.Type)}}<span class="tile-val">{{richPlain $v}}</span>{{else if isEnum (str $f.Type)}}<span class="tile-val">{{enumLabel $.EnumLabels $f.Name (str $v)}}</span>{{else}}<span class="tile-val">{{fmtCell $v}}</span>{{end}}</div>
     {{end}}{{end}}
   {{end}}{{end}}
   <div class="tile-foot">
@@ -1145,6 +1154,7 @@ const tplList = `
     {{if eq (str .Type) "date"}}<td style="white-space:nowrap">{{fmtDate (index $row .Name)}}</td>
     {{else if isImage (str .Type)}}<td>{{$iv := index $row .Name}}{{if $iv}}<img src="/ui/_image/{{$iv}}" style="height:34px;width:34px;object-fit:cover;border-radius:5px;vertical-align:middle" alt="">{{else}}<span style="color:#cbd5e1">—</span>{{end}}</td>
     {{else if isRichText (str .Type)}}<td style="white-space:nowrap;color:#64748b">{{richPlain (index $row .Name)}}</td>
+    {{else if isEnum (str .Type)}}<td style="white-space:nowrap">{{enumLabel $.EnumLabels .Name (str (index $row .Name))}}</td>
     {{else}}<td style="white-space:nowrap">{{if and (eq .Name "Наименование") $.Entity.Hierarchical}}{{if $isFolder}}📁 {{else}}📄 {{end}}{{end}}{{fmtCell (index $row .Name)}}{{if and (eq .Name "Наименование") (index $row "_is_predefined")}} <span title="{{t $.Lang "Предопределённый элемент"}}" style="color:#f59e0b;font-size:11px">★</span>{{end}}</td>{{end}}
   {{end}}
   <td>
@@ -1478,7 +1488,7 @@ const tplForm = `
     <select name="{{$fn}}">
       <option value="">{{t $.Lang "— выбрать —"}}</option>
       {{range index $.EnumOptions $fn}}
-      <option value="{{.}}" {{if eq . (index $.Values $fn)}}selected{{end}}>{{.}}</option>
+      <option value="{{.Value}}" {{if eq .Value (index $.Values $fn)}}selected{{end}}>{{.Label}}</option>
       {{end}}
     </select>
   {{else if eq (str .Type) "date"}}

@@ -2430,6 +2430,41 @@ function repReindex(tableId) {
     if (btn) btn.setAttribute('onclick', 'this.closest(\'tr\').remove();repReindex(\'' + tableId + '\')');
   });
 }
+// ── Enum values add/remove/reindex ────────────────────────────────────────────
+function enumReindex(containerId) {
+  var c = document.getElementById(containerId);
+  if (!c) return;
+  var rows = c.querySelectorAll('.enum-val-row');
+  rows.forEach(function(row, i) {
+    row.querySelectorAll('input,select').forEach(function(el) {
+      if (el.name) {
+        el.name = el.name.replace(/value\.\d+\./, 'value.' + i + '.');
+      }
+    });
+    var btn = row.querySelector('button[type=button]');
+    if (btn) btn.setAttribute('onclick', 'enumRemoveVal(this,\'' + containerId + '\')');
+  });
+}
+function enumRemoveVal(btn, containerId) {
+  btn.closest('.enum-val-row').remove();
+  enumReindex(containerId);
+}
+function enumAddVal(containerId) {
+  var c = document.getElementById(containerId);
+  if (!c) return;
+  var i = c.querySelectorAll('.enum-val-row').length;
+  var div = document.createElement('div');
+  div.className = 'enum-val-row';
+  div.style.cssText = 'display:flex;gap:6px;align-items:flex-start;margin-bottom:4px';
+  div.innerHTML = '<div style="flex:1"><input type="text" name="value.' + i + '.name" value=""'
+    + ' style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px"'
+    + ' placeholder="ИмяЗначения"></div>'
+    + '<button type="button" style="background:none;border:none;color:#c00;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0"'
+    + ' onclick="enumRemoveVal(this,\'' + containerId + '\')">✕</button>';
+  c.appendChild(div);
+  div.querySelector('input[type=text]').focus();
+}
+
 function repAddParam(tableId) {
   var tbl = document.getElementById(tableId);
   if (!tbl) return;
