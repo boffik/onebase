@@ -1064,14 +1064,38 @@ document.addEventListener('keydown', function(e) {
     if (s2 && document.activeElement === s2 && s2.value) { s2.value = ''; filterTree(''); }
   }
 });
-(function(){
+// Поиск узла дерева по точному data-id строковым сравнением — устойчиво к
+// кавычкам/спецсимволам в имени объекта (CSS-селектор на них спотыкается).
+function cfgFindItem(id){
+  if(!id) return null;
+  var all=document.querySelectorAll('[data-id]');
+  for(var i=0;i<all.length;i++){ if(all[i].getAttribute('data-id')===id) return all[i]; }
+  return null;
+}
+// Автовыбор узла дерева после загрузки/перезагрузки: точный selectedTreeId
+// (например, после создания объекта — issue #127) либо prefix-поиск по имени
+// сохранённого объекта. Раскрывает свёрнутую группу, а при явном создании/выборе
+// (directId) ещё и скроллит к узлу с краткой подсветкой. Выполняется по готовности
+// DOM: главный <script> подключается ДО разметки дерева, поэтому без этого узлов
+// в DOM ещё нет.
+function cfgAutoSelect(){
   var directId = window.__cfg.selectedTreeId;
   var saved = window.__cfg.fieldsSaved || window.__cfg.moduleSaved;
   var el=null;
-  if(directId)el=document.querySelector('[data-id="'+directId+'"]');
-  if(!el&&saved&&saved!=='')['e-','r-','ir-','ar-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
-  if(el)selItem(el);else{var f=document.querySelector('.cfg-item');if(f)selItem(f);}
-})();
+  if(directId)el=cfgFindItem(directId);
+  if(!el&&saved&&saved!=='')['e-','r-','ir-','ar-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','wdg-','page-','panel-app'].forEach(function(p){if(!el)el=cfgFindItem(p+saved);});
+  if(el){
+    var grp=el.closest('details.cfg-tree'); if(grp)grp.open=true;   // раскрыть свёрнутую группу
+    selItem(el);
+    if(directId){                                                   // явное создание/выбор — проскроллить и подсветить
+      try{el.scrollIntoView({block:'center'});}catch(e){el.scrollIntoView();}
+      el.style.outline='2px solid #f59e0b';
+      setTimeout(function(){el.style.outline='';},1600);
+    }
+  } else {var f=document.querySelector('.cfg-item');if(f)selItem(f);}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',cfgAutoSelect);
+else cfgAutoSelect();
 
 // ── Module tabs ────────────────────────────────────────────────
 function modTab(el, panelId) {
