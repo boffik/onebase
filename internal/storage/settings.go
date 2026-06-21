@@ -172,6 +172,59 @@ func (db *DB) SaveNavCollapsible(ctx context.Context, on bool) error {
 	return nil
 }
 
+// Режимы открытия форм в Предприятии (issue #129/#130).
+const (
+	// FormModePages — формы открываются отдельными страницами (/ui). Дефолт.
+	FormModePages = "pages"
+	// FormModeTabs — формы открываются во вкладках (оболочка /ui/app).
+	FormModeTabs = "tabs"
+	// DefaultFormOpenMode — режим по умолчанию при отсутствии настройки.
+	DefaultFormOpenMode = FormModePages
+)
+
+// normFormMode приводит значение к каноническому режиму; всё неизвестное —
+// к дефолту pages.
+func normFormMode(v string) string {
+	switch strings.TrimSpace(v) {
+	case FormModeTabs:
+		return FormModeTabs
+	case FormModePages:
+		return FormModePages
+	default:
+		return DefaultFormOpenMode
+	}
+}
+
+// GetFormOpenMode читает глобальный режим открытия форм из _settings
+// (ui.form_open_mode). Отсутствие ключа/таблицы/битое значение → pages.
+func (db *DB) GetFormOpenMode(ctx context.Context) string {
+	d := db.dialect
+	var v string
+	err := db.QueryRow(ctx,
+		`SELECT value FROM _settings WHERE key = `+d.Placeholder(1),
+		"ui.form_open_mode").Scan(&v)
+	if err != nil {
+		return DefaultFormOpenMode
+	}
+	return normFormMode(v)
+}
+
+// SaveFormOpenMode сохраняет глобальный режим (нормализуется к pages/tabs).
+func (db *DB) SaveFormOpenMode(ctx context.Context, mode string) error {
+	if err := db.EnsureSettingsSchema(ctx); err != nil {
+		return err
+	}
+	d := db.dialect
+	q := fmt.Sprintf(
+		`INSERT INTO _settings (key, value) VALUES (%s, %s)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		d.Placeholder(1), d.Placeholder(2))
+	if _, err := db.Exec(ctx, q, "ui.form_open_mode", normFormMode(mode)); err != nil {
+		return fmt.Errorf("settings: save ui.form_open_mode: %w", err)
+	}
+	return nil
+}
+
 // Режимы хранения бинарников (картинки поля image). Аналог двух способов
 // хранения файлов в 1С: «тома на диске» и «в информационной базе».
 const (
