@@ -1,4 +1,10 @@
 {
+  "Вкладки": "Tabs",
+  "Режим открытия форм": "Form opening mode",
+  "Отдельные страницы": "Separate pages",
+  "По умолчанию (глобально)": "Default (global)",
+  "Открывать формы отдельными страницами": "Open forms as separate pages",
+  "Открывать формы во вкладках": "Open forms in tabs",
   "Файлы конфигурации": "Configuration files",
   "Открыть в редакторе": "Open in editor",
   "Выберите файл слева для просмотра": "Select a file on the left to preview",

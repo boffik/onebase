@@ -12,6 +12,7 @@ import (
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/widget"
 )
 
@@ -89,6 +90,17 @@ func (s *Server) logo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
+	// Режим вкладок: входная страница уводит в оболочку /ui/app (issue #129/#130).
+	if s.store.EffectiveFormOpenMode(r.Context(), currentUserLogin(r)) == storage.FormModeTabs {
+		target := "/ui/app"
+		// subsystem передаётся «как есть» — той же конвенцией, что в ссылках
+		// меню (server.go/templates) и в шиме /ui/app (tabs.go).
+		if sub := r.URL.Query().Get("subsystem"); sub != "" {
+			target += "?subsystem=" + sub
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
 	hp := s.reg.HomePage()
 	if sub := r.URL.Query().Get("subsystem"); sub != "" {
 		if ss := s.reg.GetSubsystem(sub); ss != nil && ss.HomePage != nil {

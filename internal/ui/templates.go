@@ -786,6 +786,15 @@ const tplNav = `
 <header class="topbar">
   <button class="nav-toggle" type="button" aria-label="{{t $.Lang "Меню"}}" aria-controls="ob-nav" aria-expanded="false" onclick="obNavToggle()">&#9776;</button>
   <a href="/ui/" class="topbar-title" style="text-decoration:none;color:inherit" title="{{t $.Lang "Главная"}}">{{if .Cfg.Logo}}<img src="/ui/logo" alt="" style="height:22px;max-width:90px;vertical-align:middle;margin-right:6px;border-radius:2px">{{end}}⚡ {{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</a>
+  <form method="post" action="/ui/form-mode" style="display:inline;margin:0">
+    {{if eq (printf "%v" .FormOpenMode) "tabs"}}
+      <input type="hidden" name="mode" value="pages">
+      <button type="submit" class="sys-btn" title="{{t $.Lang "Открывать формы отдельными страницами"}}">&#9645; {{t $.Lang "Страницы"}}</button>
+    {{else}}
+      <input type="hidden" name="mode" value="tabs">
+      <button type="submit" class="sys-btn" title="{{t $.Lang "Открывать формы во вкладках"}}">&#10697; {{t $.Lang "Вкладки"}}</button>
+    {{end}}
+  </form>
   <div class="sys-menu">
     <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; {{t $.Lang "Система"}} &#9660;</button>
     <div class="sys-drop" id="sysd">
@@ -813,6 +822,15 @@ const tplNav = `
         <a href="/ui/dev/gengen">{{t $.Lang "Gengen"}}</a>
       </div>
     </div>{{end}}
+      <div style="border-top:1px solid #f1f5f9;padding:10px 16px">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;font-weight:600">{{t $.Lang "Режим открытия форм"}}</div>
+        <form method="post" action="/ui/form-mode" style="margin:0;padding:0">
+          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="pages" {{if eq (printf "%v" .FormOpenModePersonal) "pages"}}checked{{end}}> {{t $.Lang "Отдельные страницы"}}</label>
+          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="tabs" {{if eq (printf "%v" .FormOpenModePersonal) "tabs"}}checked{{end}}> {{t $.Lang "Вкладки"}}</label>
+          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="default" {{if eq (printf "%v" .FormOpenModePersonal) ""}}checked{{end}}> {{t $.Lang "По умолчанию (глобально)"}}</label>
+          <button type="submit" class="sys-btn" style="margin-top:6px">{{t $.Lang "Применить"}}</button>
+        </form>
+      </div>
       {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">{{t $.Lang "Сменить пароль"}}</a>{{end}}{{end}}
       <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">{{t $.Lang "Выйти"}}</button></form>
     </div>
