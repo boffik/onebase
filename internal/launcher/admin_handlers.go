@@ -661,6 +661,13 @@ func (h *handler) cfgAdminSettings(w http.ResponseWriter, r *http.Request) {
 	if db.GetExecEnabled(r.Context()) {
 		execChecked = "checked"
 	}
+	formMode := db.GetFormOpenMode(r.Context())
+	pagesSel, tabsSel := "", ""
+	if formMode == storage.FormModeTabs {
+		tabsSel = "selected"
+	} else {
+		pagesSel = "selected"
+	}
 	html := fmt.Sprintf(`<div style="padding:16px">
 	<h3 style="margin:0 0 14px;font-size:15px">Параметры базы</h3>
 	<div style="padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;max-width:520px">
@@ -676,6 +683,14 @@ func (h *handler) cfgAdminSettings(w http.ResponseWriter, r *http.Request) {
 	    Сворачиваемые группы в левом меню
 	  </label>
 	  <div style="font-size:11px;color:#666;margin-top:6px">Когда включено, группы меню (Отчёты, Регистры, Обработки…) можно сворачивать; тяжёлые группы свёрнуты по умолчанию, чтобы меню не растягивало страницу.</div>
+	  <label style="font-size:12px;display:flex;align-items:center;gap:10px;margin-top:12px">
+	    Режим открытия форм по умолчанию:
+	    <select id="form_open_mode" style="padding:3px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px">
+	      <option value="pages" %s>Отдельные страницы</option>
+	      <option value="tabs" %s>Вкладки</option>
+	    </select>
+	  </label>
+	  <div style="font-size:11px;color:#666;margin-top:6px">Дефолт для пользователей без личной настройки. «Вкладки» открывают формы в оболочке <code>/ui/app</code>, «Отдельные страницы» — как обычные страницы <code>/ui</code>. Каждый пользователь может переопределить это в «Параметрах».</div>
 	  <div style="font-size:13px;font-weight:600;margin:16px 0 8px">Безопасность</div>
 	  <label style="font-size:12px;display:flex;align-items:center;gap:8px">
 	    <input type="checkbox" id="st-net" %s>
@@ -697,7 +712,8 @@ function cfgSettingsSave(){
   var c=document.getElementById('st-collapsenav').checked;
   var net=document.getElementById('st-net').checked;
   var exec=document.getElementById('st-exec').checked;
-  fetch('/bases/%s/configurator/admin/settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({list_page_size:n,collapsible_nav:c,network_enabled:net,exec_enabled:exec})})
+  var fm=document.getElementById('form_open_mode').value;
+  fetch('/bases/%s/configurator/admin/settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({list_page_size:n,collapsible_nav:c,network_enabled:net,exec_enabled:exec,form_open_mode:fm})})
     .then(function(r){return r.json()})
     .then(function(d){
       var m=document.getElementById('st-msg');
@@ -706,7 +722,7 @@ function cfgSettingsSave(){
     })
     .catch(function(){var m=document.getElementById('st-msg');m.textContent='Ошибка сети';m.style.color='#c00';});
 }
-</script>`, storage.MaxListPageSize, pageSize, storage.MaxListPageSize, navChecked, netChecked, execChecked, b.ID)
+</script>`, storage.MaxListPageSize, pageSize, storage.MaxListPageSize, navChecked, pagesSel, tabsSel, netChecked, execChecked, b.ID)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
 }
@@ -721,10 +737,11 @@ func (h *handler) cfgAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		ListPageSize   int   `json:"list_page_size"`
-		CollapsibleNav *bool `json:"collapsible_nav"`
-		NetworkEnabled *bool `json:"network_enabled"`
-		ExecEnabled    *bool `json:"exec_enabled"`
+		ListPageSize   int    `json:"list_page_size"`
+		CollapsibleNav *bool  `json:"collapsible_nav"`
+		NetworkEnabled *bool  `json:"network_enabled"`
+		ExecEnabled    *bool  `json:"exec_enabled"`
+		FormOpenMode   string `json:"form_open_mode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
@@ -753,6 +770,12 @@ func (h *handler) cfgAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ExecEnabled != nil {
 		if err := db.SaveExecEnabled(r.Context(), *req.ExecEnabled); err != nil {
+			writeJSON(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+	}
+	if req.FormOpenMode != "" {
+		if err := db.SaveFormOpenMode(r.Context(), req.FormOpenMode); err != nil {
 			writeJSON(w, 500, map[string]any{"error": err.Error()})
 			return
 		}
