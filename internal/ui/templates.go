@@ -822,6 +822,15 @@ const tplNav = `
         <a href="/ui/dev/gengen">{{t $.Lang "Gengen"}}</a>
       </div>
     </div>{{end}}
+      <div style="border-top:1px solid #f1f5f9;padding:10px 16px">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;font-weight:600">{{t $.Lang "Режим открытия форм"}}</div>
+        <form method="post" action="/ui/form-mode" style="margin:0;padding:0">
+          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="pages" {{if eq (printf "%v" .FormOpenModePersonal) "pages"}}checked{{end}}> {{t $.Lang "Отдельные страницы"}}</label>
+          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="tabs" {{if eq (printf "%v" .FormOpenModePersonal) "tabs"}}checked{{end}}> {{t $.Lang "Вкладки"}}</label>
+          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="default" {{if eq (printf "%v" .FormOpenModePersonal) ""}}checked{{end}}> {{t $.Lang "По умолчанию (глобально)"}}</label>
+          <button type="submit" class="sys-btn" style="margin-top:6px">{{t $.Lang "Применить"}}</button>
+        </form>
+      </div>
       {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">{{t $.Lang "Сменить пароль"}}</a>{{end}}{{end}}
       <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">{{t $.Lang "Выйти"}}</button></form>
     </div>

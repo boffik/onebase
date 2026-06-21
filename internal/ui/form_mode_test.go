@@ -122,3 +122,15 @@ func TestNav_ShowsTabsToggle(t *testing.T) {
 		t.Error("в топбаре нет формы переключателя режима (/ui/form-mode)")
 	}
 }
+
+// TestParams_HasFormModeRadio проверяет, что в «Параметрах» (меню Система → nav)
+// есть радиогруппа режима открытия форм со всеми тремя значениями: персональный
+// pages/tabs и сброс к глобальному default.
+func TestParams_HasFormModeRadio(t *testing.T) {
+	out := renderNavWithMode(t, storage.FormModeTabs)
+	for _, want := range []string{`value="pages"`, `value="tabs"`, `value="default"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("в «Параметрах» нет радио %s", want)
+		}
+	}
+}

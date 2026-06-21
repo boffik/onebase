@@ -1,5 +1,8 @@
 {
   "Вкладки": "Tabs",
+  "Режим открытия форм": "Form opening mode",
+  "Отдельные страницы": "Separate pages",
+  "По умолчанию (глобально)": "Default (global)",
   "Открывать формы отдельными страницами": "Open forms as separate pages",
   "Открывать формы во вкладках": "Open forms in tabs",
   "Файлы конфигурации": "Configuration files",
