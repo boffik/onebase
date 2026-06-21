@@ -6,13 +6,25 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
-// setFormMode пишет персональный режим открытия форм текущего пользователя
-// (поле формы mode = pages | tabs | default) и уводит на вход выбранного
-// режима. issue #129/#130.
+// setFormMode пишет режим открытия форм текущего пользователя (поле формы
+// mode = pages | tabs | default) и уводит на вход выбранного режима.
+// issue #129/#130.
+//
+// В безавторизационной базе (login == "") персонального режима не существует:
+// эффективный режим анонимной сессии — это глобальный. Поэтому переключатель
+// меняет глобальный режим (SaveFormOpenMode), иначе кнопка/радио были бы
+// мёртвыми — клик ничего не делал бы (SaveUserFormOpenMode при пустом логине —
+// no-op). Для авторизованного пользователя пишется персональный режим.
 func (s *Server) setFormMode(w http.ResponseWriter, r *http.Request) {
 	mode := r.FormValue("mode")
 	login := currentUserLogin(r)
-	if err := s.store.SaveUserFormOpenMode(r.Context(), login, mode); err != nil {
+	var err error
+	if login == "" {
+		err = s.store.SaveFormOpenMode(r.Context(), mode)
+	} else {
+		err = s.store.SaveUserFormOpenMode(r.Context(), login, mode)
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

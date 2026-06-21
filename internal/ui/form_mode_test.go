@@ -89,9 +89,11 @@ func TestSetFormMode_PersistsAndRedirects(t *testing.T) {
 	}
 }
 
-// TestSetFormMode_AnonymousFallsBackToGlobal проверяет краевой случай спеки:
-// у анонимной сессии персонального режима нет, действует глобальный дефолт.
-func TestSetFormMode_AnonymousFallsBackToGlobal(t *testing.T) {
+// TestSetFormMode_AnonymousWritesGlobal: у анонимной сессии (no-auth база,
+// login == "") персонального режима нет, поэтому переключатель меняет
+// ГЛОБАЛЬНЫЙ режим — иначе кнопка/радио были бы мёртвыми (issue #129/#130,
+// фикс блокера ревью). POST mode=tabs → глобальный tabs → редирект в /ui/app.
+func TestSetFormMode_AnonymousWritesGlobal(t *testing.T) {
 	s := newServerForFormMode(t)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/ui/form-mode", strings.NewReader("mode=tabs"))
@@ -100,9 +102,25 @@ func TestSetFormMode_AnonymousFallsBackToGlobal(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("ожидался 303, получено %d", rec.Code)
 	}
-	// Глобально pages (дефолт), персональный не сохранён → редирект на /ui.
-	if loc := rec.Header().Get("Location"); loc != "/ui" {
-		t.Errorf("Location = %q, ожидалось /ui", loc)
+	// Глобальный режим действительно переключился на tabs.
+	if got := s.store.GetFormOpenMode(req.Context()); got != storage.FormModeTabs {
+		t.Errorf("аноним не переключил глобальный режим: %q", got)
+	}
+	// Эффективный режим анонима теперь tabs → редирект в оболочку вкладок.
+	if loc := rec.Header().Get("Location"); loc != "/ui/app" {
+		t.Errorf("Location = %q, ожидалось /ui/app", loc)
+	}
+	// Возврат: POST mode=pages → глобальный снова pages → редирект на /ui
+	// (доказывает, что в no-auth базе переключатель работает в обе стороны).
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/ui/form-mode", strings.NewReader("mode=pages"))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	s.setFormMode(rec2, req2)
+	if got := s.store.GetFormOpenMode(req2.Context()); got != storage.FormModePages {
+		t.Errorf("аноним не вернул глобальный режим в pages: %q", got)
+	}
+	if loc := rec2.Header().Get("Location"); loc != "/ui" {
+		t.Errorf("Location(возврат) = %q, ожидалось /ui", loc)
 	}
 }
 
