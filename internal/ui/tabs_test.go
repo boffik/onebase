@@ -36,6 +36,9 @@ func TestAppShell_Render(t *testing.T) {
 		`source==='obDirty'`,         // фаза 3: приём флага несохранённых правок
 		`tabByWindow`,                // маршрутизация по окну-источнику
 		`beforeunload`,               // предупреждение при уходе со страницы
+		`ob-tabmenu`,                 // фаза 4: контекст-меню вкладки
+		`Закрыть другие`,             // пункт контекст-меню
+		`scrollIntoView`,             // автоскролл активной вкладки
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("оболочка вкладок не содержит %q", want)

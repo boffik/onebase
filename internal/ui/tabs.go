@@ -39,6 +39,9 @@ const tplAppShell = `{{define "page-app-shell"}}
 .ob-tabbody iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none}
 .ob-tabbody iframe.active{display:block}
 .ob-tabempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px;padding:20px;text-align:center}
+.ob-tabmenu{position:fixed;z-index:10000;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:150px;font-size:12px}
+.ob-tabmenu-item{padding:6px 14px;cursor:pointer;color:#334155}
+.ob-tabmenu-item:hover{background:#f0f4ff;color:#1a4a80}
 </style>
 <main class="ob-shell-main" id="ob-shell-main">
   <div class="ob-tabstrip" id="ob-tabstrip" role="tablist"></div>
@@ -58,6 +61,7 @@ const tplAppShell = `{{define "page-app-shell"}}
   function setActive(t){
     active=t||null;
     tabs.forEach(function(x){ x.btn.classList.toggle('active',x===t); x.frame.classList.toggle('active',x===t); });
+    if(active && active.btn.scrollIntoView) active.btn.scrollIntoView({inline:'nearest',block:'nearest'}); // фаза 4: активная вкладка в видимую область
     syncEmpty();
   }
   function closeTab(t){
@@ -67,10 +71,23 @@ const tplAppShell = `{{define "page-app-shell"}}
     if(active===t) setActive(tabs[Math.min(i,tabs.length-1)]||null);
     persist();
   }
+  // Фаза 4: управление множеством вкладок — контекст-меню по правому клику.
+  function closeOthers(keep){ tabs.slice().forEach(function(t){ if(t!==keep) closeTab(t); }); }
+  function tabMenu(t,x,y){
+    var old=document.getElementById('ob-tabmenu'); if(old)old.remove();
+    var m=document.createElement('div'); m.id='ob-tabmenu'; m.className='ob-tabmenu'; m.style.left=x+'px'; m.style.top=y+'px';
+    [['Закрыть',function(){closeTab(t);}],['Закрыть другие',function(){closeOthers(t);}],['Закрыть все',function(){tabs.slice().forEach(closeTab);}]].forEach(function(it){
+      var b=document.createElement('div'); b.className='ob-tabmenu-item'; b.textContent=it[0];
+      b.addEventListener('click',function(){ m.remove(); it[1](); });
+      m.appendChild(b);
+    });
+    document.body.appendChild(m);
+    setTimeout(function(){ document.addEventListener('click',function rm(){ m.remove(); document.removeEventListener('click',rm); }); },0);
+  }
   function openTab(url,title,opts){
     opts=opts||{};
     if(!opts.allowDup){ for(var i=0;i<tabs.length;i++){ if(tabs[i].url===url){ setActive(tabs[i]); return tabs[i]; } } }
-    var btn=document.createElement('div'); btn.className='ob-tab'; btn.setAttribute('role','tab');
+    var btn=document.createElement('div'); btn.className='ob-tab'; btn.setAttribute('role','tab'); btn.title=title||'Форма'; // фаза 4: тултип полного заголовка
     var lab=document.createElement('span'); lab.className='ob-tab-label'; lab.textContent=title||'Форма'; btn.appendChild(lab);
     var dup=document.createElement('span'); dup.className='ob-tab-dup'; dup.textContent='⧉'; dup.title='Открыть ещё один экземпляр'; btn.appendChild(dup);
     var cl=document.createElement('span'); cl.className='ob-tab-close'; cl.textContent='✕'; cl.title='Закрыть'; btn.appendChild(cl);
@@ -80,6 +97,7 @@ const tplAppShell = `{{define "page-app-shell"}}
     btn.addEventListener('mousedown',function(e){ if(e.button===1){ e.preventDefault(); closeTab(t); } });
     cl.addEventListener('click',function(e){ e.stopPropagation(); closeTab(t); });
     dup.addEventListener('click',function(e){ e.stopPropagation(); openTab(t.url, t.title, {allowDup:true}); }); // #130
+    btn.addEventListener('contextmenu',function(e){ e.preventDefault(); setActive(t); tabMenu(t,e.clientX,e.clientY); }); // фаза 4
     strip.appendChild(btn); body.appendChild(frame); tabs.push(t); setActive(t); persist();
     return t;
   }
@@ -89,7 +107,7 @@ const tplAppShell = `{{define "page-app-shell"}}
   window.addEventListener('message',function(ev){
     var d=ev.data; if(!d||typeof d!=='object')return;
     if(d.source==='obOpenTab' && d.url){ openTab(String(d.url), d.title?String(d.title):'Форма', {allowDup:!!d.allowDup}); }
-    else if(d.source==='obSetTitle' && active && d.title){ active.title=String(d.title); active.label.textContent=active.title; persist(); }
+    else if(d.source==='obSetTitle' && active && d.title){ active.title=String(d.title); active.label.textContent=active.title; active.btn.title=active.title; persist(); }
     else if(d.source==='obDirty'){ var dt=tabByWindow(ev.source); if(dt){ dt.dirty=!!d.dirty; dt.btn.classList.toggle('dirty',dt.dirty); } } // фаза 3
   });
 
