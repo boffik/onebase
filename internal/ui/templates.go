@@ -406,7 +406,7 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 	"pageRaw": func(s string) template.HTML { return template.HTML(s) },
 	// pageChart конвертирует чарт-блок страницы в widget.ChartData для echartsJSON.
 	"pageChart": pageChartData,
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAgentSettings + tplPOS + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom))
+}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAgentSettings + tplPOS + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom + tplAppShell))
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
@@ -418,7 +418,56 @@ const tplHead = `
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="onebase">
 <title>{{if .Cfg.AppName}}{{.Cfg.AppName}}{{else}}onebase{{end}}</title>
+<script>
+// Вкладочная оболочка (issue #129/#130): когда страница открыта во фрейме
+// оболочки /ui/app, прячем хром (топбар/подсистемы) — навигация идёт из оболочки.
+window.__obEmbedded = (window.self !== window.top);
+if (window.__obEmbedded) {
+  document.documentElement.className += ' ob-embedded';
+  // Фаза 2: открытие записи/новой формы/отчёта внутри вкладки — это новая
+  // вкладка рядом, а не замена текущей (пагинация/сортировка/фильтры остаются
+  // в той же вкладке — у них тот же путь списка, без id-сегмента).
+  var obOpenableForm = function (href) {
+    if (!/^\/ui\//.test(href)) return false;
+    if (/^\/ui\/(admin|about|logout|login|logo|debug|app|_)/.test(href)) return false;
+    if (href.indexOf('_popup=1') >= 0) return false;
+    if (/^\/ui\/(report|processor)\/[^\/?#]+/.test(href)) return true;     // отчёт/обработка
+    if (/^\/ui\/[^\/?#]+\/[^\/?#]+\/[^\/?#]+/.test(href)) return true;      // {kind}/{entity}/{id|new}
+    return false;
+  };
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || a.target === '_blank') return;
+    var href = a.getAttribute('href') || '';
+    if (!obOpenableForm(href)) return;
+    // Дивертим во вкладку только если родитель — действительно оболочка
+    // (есть obOpenTab). Иначе (напр. picker-модал на обычной странице) —
+    // обычная навигация внутри фрейма.
+    var shell = null;
+    try { if (window.parent && window.parent.obOpenTab) shell = window.parent; } catch (_) {}
+    if (!shell) return;
+    e.preventDefault();
+    var title = (a.getAttribute('title') || a.textContent || '').replace(/\s+/g, ' ').trim() || 'Форма';
+    try { shell.postMessage({ source: 'obOpenTab', url: href, title: title }, '*'); } catch (_) {}
+  });
+  // Фаза 3: сообщаем оболочке о несохранённых правках, чтобы она предупредила при
+  // закрытии вкладки/окна (защита от потери ввода).
+  (function () {
+    var dirty = false;
+    function report(d) {
+      if (d === dirty) return; dirty = d;
+      try { if (window.parent && window.parent.obOpenTab) window.parent.postMessage({ source: 'obDirty', dirty: d }, '*'); } catch (_) {}
+    }
+    function onEdit(e) { var t = e.target; if (t && t.matches && t.matches('input,textarea,select')) report(true); }
+    document.addEventListener('input', onEdit, true);
+    document.addEventListener('change', onEdit, true);
+    document.addEventListener('submit', function () { report(false); }, true); // правки уходят на сервер
+  })();
+}
+</script>
 <style>
+.ob-embedded .topbar,.ob-embedded .subsys-bar{display:none!important}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-height:100vh;background:#f5f5f5}
 .topbar{background:#1e293b;color:#fff;padding:0 16px;display:flex;align-items:center;height:38px;flex-shrink:0;position:sticky;top:0;z-index:100}
@@ -728,16 +777,18 @@ const tplNav = `
     <button class="sys-btn" onclick="var d=document.getElementById('sysd');d.classList.toggle('open')">&#9881; {{t $.Lang "Система"}} &#9660;</button>
     <div class="sys-drop" id="sysd">
       <a href="/ui/about">{{t $.Lang "О программе"}}</a>
+      {{if .IsAdmin}}
       <a href="/ui/admin/users">{{t $.Lang "Пользователи"}}</a>
       <a href="/ui/admin/roles">{{t $.Lang "Роли и права"}}</a>
       <a href="/ui/admin/sessions">{{t $.Lang "Активные пользователи"}}</a>
       <a href="/ui/admin/audit">{{t $.Lang "Журнал изменений"}}</a>
-      {{if .IsAdmin}}<a href="/ui/admin/webhooks">{{t $.Lang "Журнал веб-хуков"}}</a>{{end}}
+      <a href="/ui/admin/webhooks">{{t $.Lang "Журнал веб-хуков"}}</a>
       <a href="/ui/admin/scheduled">{{t $.Lang "Регламентные задания"}}</a>
       <a href="/ui/delete-marked">{{t $.Lang "Удалить помеченные"}}</a>
       <a href="/ui/admin/cleanup">{{t $.Lang "Очистка регистров"}}</a>
+      {{end}}
       <a href="/ui/pos">{{t $.Lang "Рабочее место кассира (РМК)"}}</a>
-      <a href="/ui/settings/agent">{{t $.Lang "Настройки агента оборудования"}}</a>
+      {{if .IsAdmin}}<a href="/ui/settings/agent">{{t $.Lang "Настройки агента оборудования"}}</a>{{end}}
       {{if .IsAdmin}}<a href="/ui/admin/extforms">{{t $.Lang "Внешние печатные формы"}}</a>{{end}}
       {{if .IsAdmin}}<a href="/ui/admin/extreports">{{t $.Lang "Внешние отчёты"}}</a>{{end}}
       {{if .IsAdmin}}<a href="/ui/admin/extprocessors">{{t $.Lang "Внешние обработки"}}</a>{{end}}
@@ -1638,7 +1689,18 @@ const tplForm = `
   });
 })();
 </script>
-{{if and (not .IsNew) (not .IsPopup)}}
+{{template "ob-attachments" .}}
+</div>
+{{template "form-shared-js" .}}
+</main></div></body></html>
+{{end}}
+
+{{/* ob-attachments — панель вложений к записи (issue #152). Общая для
+     page-form и page-managed-form; бэкенд один (handlers_attachments.go,
+     роуты POST /ui/<kind>/<entity>/<id>/attachments). Показывается для
+     сохранённой записи объекта (не новая, не попап, не обработка). */}}
+{{define "ob-attachments"}}
+{{if and (not .IsNew) (not .IsPopup) (not .IsProcessor)}}
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h3 style="margin:0;font-size:14px;font-weight:600;color:#374151">{{t $.Lang "Вложения"}}</h3>
@@ -1684,9 +1746,6 @@ const tplForm = `
 })();
 </script>
 {{end}}
-</div>
-{{template "form-shared-js" .}}
-</main></div></body></html>
 {{end}}
 
 {{/* form-shared-js — общий <script> блок, используется page-form и
@@ -2017,7 +2076,18 @@ function openRefCurrent(selOrId) {
   if (!sel) return;
   var refEntity = sel.getAttribute('data-ref-entity') || '';
   if (!refEntity || !sel.value) return;
-  window.open('/ui/_ref-open/' + encodeURIComponent(refEntity) + '/' + encodeURIComponent(sel.value), '_blank');
+  var refURL = '/ui/_ref-open/' + encodeURIComponent(refEntity) + '/' + encodeURIComponent(sel.value);
+  // В оболочке вкладок (issue #129) «провалиться в карточку» открывает новую
+  // вкладку рядом, а не отдельное окно браузера. Дивертим только если родитель —
+  // действительно оболочка (есть obOpenTab); иначе (напр. picker-модал на
+  // обычной странице) обычный window.open.
+  try {
+    if (window.__obEmbedded && window.parent && window.parent.obOpenTab) {
+      window.parent.postMessage({ source: 'obOpenTab', url: refURL, title: refEntity }, '*');
+      return;
+    }
+  } catch (e) {}
+  window.open(refURL, '_blank');
 }
 
 // openRefCreate — открывает модалку с iframe для inline-создания элемента

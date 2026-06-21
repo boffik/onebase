@@ -1035,6 +1035,65 @@ function initTree() { applyGroupOrder(); initTreeDnd(); }
 initTree();
 document.addEventListener('DOMContentLoaded', initTree);
 
+// ── Перетаскиваемые разделители боковых панелей (issue #131) ────────────────
+// Ширина панели хранится в CSS-переменной (--cfg-left-w / --cfg-dbg-w) и
+// localStorage. .collapsed перебивает переменную по специфичности, поэтому
+// сворачивание дерева продолжает работать. side:'right' — ручка справа от панели
+// (дерево слева), 'left' — слева (панель отладки справа).
+function cfgMakeResizer(target, opts){
+  var h=document.createElement('div');
+  h.className='cfg-resizer';
+  if(opts.id)h.id=opts.id;
+  h.title='Потяните, чтобы изменить ширину';
+  if(opts.side==='left')target.parentNode.insertBefore(h,target);
+  else target.parentNode.insertBefore(h,target.nextSibling);
+  h.addEventListener('pointerdown',function(e){
+    e.preventDefault();
+    try{h.setPointerCapture(e.pointerId);}catch(_){}
+    h.classList.add('dragging');
+    document.body.classList.add('cfg-resizing');
+    var startX=e.clientX, startW=target.getBoundingClientRect().width;
+    function move(ev){
+      var dx=ev.clientX-startX;
+      var w=opts.side==='left'?startW-dx:startW+dx;
+      w=Math.max(opts.min,Math.min(opts.max,w));
+      document.documentElement.style.setProperty(opts.cssVar,w+'px');
+    }
+    function up(){
+      h.classList.remove('dragging');
+      document.body.classList.remove('cfg-resizing');
+      h.removeEventListener('pointermove',move);
+      h.removeEventListener('pointerup',up);
+      var cur=getComputedStyle(document.documentElement).getPropertyValue(opts.cssVar).trim();
+      try{localStorage.setItem(opts.storeKey,cur);}catch(_){}
+    }
+    h.addEventListener('pointermove',move);
+    h.addEventListener('pointerup',up);
+  });
+  // двойной клик по ручке — сброс к ширине по умолчанию
+  h.addEventListener('dblclick',function(){
+    document.documentElement.style.removeProperty(opts.cssVar);
+    try{localStorage.removeItem(opts.storeKey);}catch(_){}
+  });
+  return h;
+}
+function cfgRestoreVar(cssVar,storeKey){
+  try{var v=localStorage.getItem(storeKey);if(v)document.documentElement.style.setProperty(cssVar,v);}catch(_){}
+}
+function initResizers(){
+  cfgRestoreVar('--cfg-left-w','cfgLeftW');
+  cfgRestoreVar('--cfg-dbg-w','cfgDbgW');
+  var left=document.getElementById('cfg-sidebar');
+  if(left&&!left._rsz){left._rsz=cfgMakeResizer(left,{side:'right',cssVar:'--cfg-left-w',storeKey:'cfgLeftW',min:150,max:600});}
+  var dbg=document.getElementById('dbg-panel');
+  if(dbg&&!dbg._rsz){
+    var rz=cfgMakeResizer(dbg,{side:'left',cssVar:'--cfg-dbg-w',storeKey:'cfgDbgW',min:220,max:680,id:'dbg-resizer'});
+    rz.style.display=(dbg.style.display==='none')?'none':'';   // показывается вместе с панелью отладки
+    dbg._rsz=rz;
+  }
+}
+document.addEventListener('DOMContentLoaded',initResizers);
+
 // ── Поиск/фильтр по дереву метаданных (как в 1С) ───────────────────────────
 function filterTree(q) {
   q = (q || '').trim().toLowerCase();
@@ -1064,14 +1123,38 @@ document.addEventListener('keydown', function(e) {
     if (s2 && document.activeElement === s2 && s2.value) { s2.value = ''; filterTree(''); }
   }
 });
-(function(){
+// Поиск узла дерева по точному data-id строковым сравнением — устойчиво к
+// кавычкам/спецсимволам в имени объекта (CSS-селектор на них спотыкается).
+function cfgFindItem(id){
+  if(!id) return null;
+  var all=document.querySelectorAll('[data-id]');
+  for(var i=0;i<all.length;i++){ if(all[i].getAttribute('data-id')===id) return all[i]; }
+  return null;
+}
+// Автовыбор узла дерева после загрузки/перезагрузки: точный selectedTreeId
+// (например, после создания объекта — issue #127) либо prefix-поиск по имени
+// сохранённого объекта. Раскрывает свёрнутую группу, а при явном создании/выборе
+// (directId) ещё и скроллит к узлу с краткой подсветкой. Выполняется по готовности
+// DOM: главный <script> подключается ДО разметки дерева, поэтому без этого узлов
+// в DOM ещё нет.
+function cfgAutoSelect(){
   var directId = window.__cfg.selectedTreeId;
   var saved = window.__cfg.fieldsSaved || window.__cfg.moduleSaved;
   var el=null;
-  if(directId)el=document.querySelector('[data-id="'+directId+'"]');
-  if(!el&&saved&&saved!=='')['e-','r-','ir-','ar-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','panel-app'].forEach(function(p){if(!el)el=document.querySelector('[data-id="'+p+saved+'"]');});
-  if(el)selItem(el);else{var f=document.querySelector('.cfg-item');if(f)selItem(f);}
-})();
+  if(directId)el=cfgFindItem(directId);
+  if(!el&&saved&&saved!=='')['e-','r-','ir-','ar-','en-','cn-','rep-','mod-','proc-','pf-','dpf-','mkt-','sub-','wdg-','page-','panel-app'].forEach(function(p){if(!el)el=cfgFindItem(p+saved);});
+  if(el){
+    var grp=el.closest('details.cfg-tree'); if(grp)grp.open=true;   // раскрыть свёрнутую группу
+    selItem(el);
+    if(directId){                                                   // явное создание/выбор — проскроллить и подсветить
+      try{el.scrollIntoView({block:'center'});}catch(e){el.scrollIntoView();}
+      el.style.outline='2px solid #f59e0b';
+      setTimeout(function(){el.style.outline='';},1600);
+    }
+  } else {var f=document.querySelector('.cfg-item');if(f)selItem(f);}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',cfgAutoSelect);
+else cfgAutoSelect();
 
 // ── Module tabs ────────────────────────────────────────────────
 function modTab(el, panelId) {
@@ -3264,6 +3347,7 @@ function dbgToggle() {
         btn.innerHTML = '&#128027; Отладка: ВКЛ';
         btn.className = 'dbg-topbar-btn dbg-on';
         panel.style.display = 'flex';
+        var rzOn = document.getElementById('dbg-resizer'); if (rzOn) rzOn.style.display = '';   // issue #131
         dbgUpdateStatus('running', 'init');
         var diagEl = document.getElementById('dbg-diag');
         if (diagEl) diagEl.innerHTML = '<div style="color:#22c55e;font-size:10px">Enable OK: dbg=' + (d.dbg_ptr||'?') + ' sess=' + (d.sess_ptr||'?') + '</div>';
@@ -3278,6 +3362,7 @@ function dbgToggle() {
         btn.innerHTML = '&#128027; Отладка: ВЫКЛ';
         btn.className = 'dbg-topbar-btn';
         panel.style.display = 'none';
+        var rzOff = document.getElementById('dbg-resizer'); if (rzOff) rzOff.style.display = 'none';   // issue #131
         dbgStopPoll();
         dbgClearLineHighlight();
         dbgUpdateStatus('disabled', 'off');

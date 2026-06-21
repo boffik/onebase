@@ -196,6 +196,14 @@ const tplFormsEditor = `
 .editor-tabs{display:flex;background:#f8fafc;border-bottom:1px solid #eef0f5}
 .editor-tab{padding:8px 14px;cursor:pointer;font-size:12px;border-bottom:2px solid transparent;color:#64748b}
 .editor-tab.active{color:#1a4a80;border-bottom-color:#1a4a80;background:#fff;font-weight:600}
+/* Палитра реквизитов объекта — перетаскивание/клик вставляет поле (issue #134) */
+.attr-palette{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:8px 12px;margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.attr-palette-label{font-size:12px;color:#64748b;margin-right:4px}
+.attr-chip{display:inline-flex;align-items:center;background:#eef4ff;border:1px solid #c7d8f5;border-radius:14px;padding:3px 10px;font-size:12px;color:#1a4a80;cursor:grab;user-select:none}
+.attr-chip:hover{background:#dce8ff;border-color:#9cbef0}
+.attr-chip:active{cursor:grabbing}
+.attr-chip.dragging{opacity:.4}
+#yaml-editor.attr-drop-target{outline:2px dashed #1a4a80;outline-offset:-2px}
 </style>
 <body>
 {{template "forms-header" .}}
@@ -226,6 +234,15 @@ const tplFormsEditor = `
   </form>
   <span class="editor-meta">{{.EditingForm.Entity}}.{{.EditingForm.Name}}{{if .EditingForm.Kind}} · {{.EditingForm.Kind}}{{end}}</span>
 </div>
+
+{{if .EditingFormAttrs}}
+<div class="attr-palette" id="attr-palette">
+  <span class="attr-palette-label">Реквизиты объекта (клик или перетащите в YAML, чтобы добавить поле):</span>
+  {{range .EditingFormAttrs}}
+  <span class="attr-chip" draggable="true" data-attr="{{.Name}}" data-title="{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}" onclick="insertFieldFromChip(this)" title="Вставить поле для «{{.Name}}»">{{.Name}}</span>
+  {{end}}
+</div>
+{{end}}
 
 <div class="editor-grid">
   <div class="editor-pane">
@@ -306,6 +323,82 @@ if (typeof require === 'undefined') {
 function getYAML() { return window.yamlEditor ? window.yamlEditor.getValue() : (window._yamlTA ? window._yamlTA.value : ''); }
 function getOS()   { return window.osEditor ? window.osEditor.getValue() : (window._osTA ? window._osTA.value : ''); }
 function setYAML(v) { if (window.yamlEditor) window.yamlEditor.setValue(v); else if (window._yamlTA) window._yamlTA.value = v; }
+
+// ── Палитра реквизитов: вставка поля ПолеВвода по клику/дропу (issue #134) ──
+function _attrFieldSnippet(attr, title, base) {
+  var t = String(title || attr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  var b = base || '      ';
+  return b + '- kind: ПолеВвода\n' +
+         b + '  name: Поле' + attr + '\n' +
+         b + '  title:\n' +
+         b + '    ru: "' + t + '"\n' +
+         b + '  data_path: Объект.' + attr;
+}
+// Отступ строки под курсором Monaco (или 6 пробелов по умолчанию).
+function _yamlCursorIndent() {
+  if (window.yamlEditor) {
+    var pos = window.yamlEditor.getPosition();
+    var line = window.yamlEditor.getModel().getLineContent(pos.lineNumber);
+    var m = line.match(/^\s*/);
+    return (m && m[0]) ? m[0] : '      ';
+  }
+  return '      ';
+}
+function insertFieldText(attr, title) {
+  var snippet = _attrFieldSnippet(attr, title, _yamlCursorIndent());
+  if (window.yamlEditor) {
+    var ed = window.yamlEditor, pos = ed.getPosition();
+    var col = ed.getModel().getLineMaxColumn(pos.lineNumber);
+    ed.executeEdits('insert-field', [{
+      range: new monaco.Range(pos.lineNumber, col, pos.lineNumber, col),
+      text: '\n' + snippet, forceMoveMarkers: true
+    }]);
+    ed.focus();
+  } else if (window._yamlTA) {
+    var ta = window._yamlTA, p = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+    ta.value = ta.value.slice(0, p) + '\n' + snippet + ta.value.slice(p);
+  }
+  if (typeof refreshPreview === 'function') refreshPreview();
+}
+function insertFieldFromChip(chip) {
+  insertFieldText(chip.getAttribute('data-attr'), chip.getAttribute('data-title'));
+}
+(function () {
+  var pal = document.getElementById('attr-palette');
+  if (!pal) return;
+  pal.addEventListener('dragstart', function (e) {
+    var chip = e.target.closest ? e.target.closest('.attr-chip') : null;
+    if (!chip) return;
+    chip.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/onebase-attr',
+      JSON.stringify({ attr: chip.getAttribute('data-attr'), title: chip.getAttribute('data-title') }));
+  });
+  pal.addEventListener('dragend', function (e) {
+    var chip = e.target.closest ? e.target.closest('.attr-chip') : null;
+    if (chip) chip.classList.remove('dragging');
+  });
+  var host = document.getElementById('yaml-editor');
+  if (!host) return;
+  host.addEventListener('dragover', function (e) {
+    if ((e.dataTransfer.types || []).indexOf('text/onebase-attr') < 0) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+    host.classList.add('attr-drop-target');
+  });
+  host.addEventListener('dragleave', function () { host.classList.remove('attr-drop-target'); });
+  host.addEventListener('drop', function (e) {
+    var raw = e.dataTransfer.getData('text/onebase-attr');
+    host.classList.remove('attr-drop-target');
+    if (!raw) return;
+    e.preventDefault();
+    var d; try { d = JSON.parse(raw); } catch (_) { return; }
+    if (window.yamlEditor && window.yamlEditor.getTargetAtClientPoint) {
+      var tgt = window.yamlEditor.getTargetAtClientPoint(e.clientX, e.clientY);
+      if (tgt && tgt.position) window.yamlEditor.setPosition(tgt.position);
+    }
+    insertFieldText(d.attr, d.title);
+  });
+})();
 
 // setGridFlag — переключатель SlickGrid (план 48). Проставляет/снимает
 // use_grid: true у всех элементов kind: ТабличнаяЧасть в YAML формы.

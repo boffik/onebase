@@ -384,6 +384,7 @@ type configuratorData struct {
 	AvailableLangs   []i18n.Lang
 	DSNMasked        string
 	Tab              string // "tree" | "convert" | "files"
+	ConfigFileTree   []fileTreeCategory // дерево файлов для вкладки «Файлы» (issue #132)
 	Entities         []cfgEntity
 	Catalogs         []cfgEntity
 	Docs             []cfgEntity
@@ -401,7 +402,10 @@ type configuratorData struct {
 	// План 37, этап 4: управляемые формы.
 	ManagedForms []cfgManagedForm
 	EditingForm  *cfgManagedForm
-	Subsystems   []cfgSubsystem
+	// EditingFormAttrs — реквизиты редактируемого объекта для палитры
+	// перетаскивания реквизитов на форму (issue #134).
+	EditingFormAttrs []formScaffoldAttr
+	Subsystems       []cfgSubsystem
 	Widgets      []cfgWidget
 	// GroupOrder — пользовательский порядок групп дерева (ключи data-group/data-gid)
 	// для клиентской перестановки; пусто — порядок по умолчанию из шаблона.
@@ -482,6 +486,11 @@ func (h *handler) configuratorPage(w http.ResponseWriter, r *http.Request) {
 		tab = "tree"
 	}
 	data := h.loadCfgData(r.Context(), b, tab)
+	// «Открыть в редакторе» из дерева файлов (issue #132, фаза 2): ?select=<data-id>
+	// узла → выделить объект в дереве (через SelectedTreeID/bootstrap).
+	if sel := strings.TrimSpace(r.URL.Query().Get("select")); sel != "" && data.SelectedTreeID == "" {
+		data.SelectedTreeID = sel
+	}
 	if cookie, cerr := r.Cookie("onebase_session"); cerr == nil {
 		data.SessionToken = cookie.Value
 	}
@@ -646,6 +655,11 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		return data
 	}
 	defer proj.Close()
+
+	// Вкладка «Файлы»: дерево файлов конфигурации (issue #132).
+	if tab == "files" {
+		data.ConfigFileTree = h.buildConfigFileTree(ctx, b, proj)
+	}
 
 	if appCfg, _ := project.LoadConfig(proj.Dir); appCfg != nil {
 		data.AppName = appCfg.Name
@@ -2579,7 +2593,34 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 	data := h.loadCfgData(r.Context(), b, "tree")
 	data.FieldsSavedEntity = name
 	data.FieldsSaved = true
+	// issue #127: спозиционировать дерево на только что созданном объекте —
+	// передаём точный data-id его узла, дальше клиент раскроет группу,
+	// проскроллит и выделит его.
+	data.SelectedTreeID = treeNodeID(kind, name)
 	renderCfg(w, r, data)
+}
+
+// treeNodeID возвращает data-id узла дерева конфигуратора для (вид, имя). Набор
+// префиксов обязан совпадать с разметкой дерева (configurator_tmpl.go) и
+// перечнем видов в newObjectContent. Пустая строка — для видов без узла в дереве.
+func treeNodeID(kind, name string) string {
+	prefix := map[string]string{
+		"catalog":    "e-",
+		"document":   "e-",
+		"register":   "r-",
+		"inforeg":    "ir-",
+		"accountreg": "ar-",
+		"enum":       "en-",
+		"subsystem":  "sub-",
+		"widget":     "wdg-",
+		"processor":  "proc-",
+		"page":       "page-",
+		"module":     "mod-",
+	}[kind]
+	if prefix == "" {
+		return ""
+	}
+	return prefix + name
 }
 
 func newObjectContent(kind, name string) (subdir, content string) {

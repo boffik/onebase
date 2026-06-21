@@ -15,6 +15,7 @@ import (
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/ivantit66/onebase/internal/project"
 )
 
 // ── Управляемые формы в конфигураторе (план 37, этап 4) ──────────────────────
@@ -265,17 +266,27 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 			break
 		}
 	}
+	// Реквизиты объекта: для шаблона новой формы (issue #133) и для палитры
+	// перетаскивания реквизитов на форму в редакторе (issue #134). Поля
+	// справочника/документа либо параметры обработки/отчёта; у обработки нет
+	// «Наименования».
+	var attrs []formScaffoldAttr
+	if proj, perr := h.loadProjectFor(r.Context(), b); perr == nil {
+		attrs = objectScaffoldAttrs(proj, entity)
+		proj.Close()
+	}
+
 	if form == nil {
-		// «Новая форма» — заранее заполненный шаблон YAML.
+		// «Новая форма» — заранее заполненный шаблон YAML из реальных реквизитов.
 		form = &cfgManagedForm{
 			Entity: entity,
 			Name:   name,
 			Kind:   "object",
-			YAML:   newFormYAMLTemplate(entity, name),
+			YAML:   newFormYAMLTemplate(entity, name, attrs),
 		}
 	}
 
-	data := &configuratorData{Base: b, EditingForm: form, Lang: resolveLang(r)}
+	data := &configuratorData{Base: b, EditingForm: form, EditingFormAttrs: attrs, Lang: resolveLang(r)}
 	if q := r.URL.Query().Get("saved"); q != "" {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = q
@@ -287,15 +298,65 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 	renderFormsEditor(w, data)
 }
 
-// newFormYAMLTemplate — начальный YAML при создании новой формы.
-func newFormYAMLTemplate(entity, name string) string {
+// formScaffoldAttr — реквизит объекта (поле справочника/документа либо параметр
+// обработки/отчёта), из которого строится заготовка новой формы.
+type formScaffoldAttr struct {
+	Name  string
+	Title string // синоним/подпись; пустой → подставляется Name
+}
+
+// objectScaffoldAttrs возвращает реквизиты объекта <entity> для заготовки новой
+// формы: поля справочника/документа либо параметры обработки/отчёта. Возвращает
+// nil, если объект не найден или у него нет реквизитов — тогда форма создаётся с
+// пустой группой, а не с полем «Наименование», которого у обработок нет (issue
+// #133).
+func objectScaffoldAttrs(proj *project.Project, entity string) []formScaffoldAttr {
+	if proj == nil || entity == "" {
+		return nil
+	}
+	for _, e := range proj.Entities {
+		if strings.EqualFold(e.Name, entity) {
+			attrs := make([]formScaffoldAttr, 0, len(e.Fields))
+			for _, f := range e.Fields {
+				attrs = append(attrs, formScaffoldAttr{Name: f.Name, Title: f.Title})
+			}
+			return attrs
+		}
+	}
+	for _, p := range proj.Processors {
+		if strings.EqualFold(p.Name, entity) {
+			attrs := make([]formScaffoldAttr, 0, len(p.Params))
+			for _, pr := range p.Params {
+				attrs = append(attrs, formScaffoldAttr{Name: pr.Name, Title: pr.Label})
+			}
+			return attrs
+		}
+	}
+	for _, rep := range proj.Reports {
+		if strings.EqualFold(rep.Name, entity) {
+			attrs := make([]formScaffoldAttr, 0, len(rep.Params))
+			for _, pr := range rep.Params {
+				attrs = append(attrs, formScaffoldAttr{Name: pr.Name, Title: pr.Label})
+			}
+			return attrs
+		}
+	}
+	return nil
+}
+
+// newFormYAMLTemplate — начальный YAML при создании новой формы. Группа
+// «Реквизиты» заполняется реальными реквизитами объекта (attrs); если их нет
+// (например, обработка без параметров) — группа остаётся пустой, без хардкодного
+// поля «Наименование» (issue #133).
+func newFormYAMLTemplate(entity, name string, attrs []formScaffoldAttr) string {
 	if name == "" {
 		name = "ФормаОбъекта"
 	}
 	if entity == "" {
 		entity = "Сущность"
 	}
-	return fmt.Sprintf(`schema: onebase.form/v1
+	var b strings.Builder
+	fmt.Fprintf(&b, `schema: onebase.form/v1
 form:
   name: %s
   kind: object
@@ -308,14 +369,34 @@ elements:
     name: Реквизиты
     title:
       ru: "Реквизиты"
-    children:
-      - kind: ПолеВвода
-        name: ПолеНаименование
-        title:
-          ru: "Наименование"
-        data_path: Объект.Наименование
-        required: true
 `, name, entity)
+	if len(attrs) == 0 {
+		// Реквизитов нет — пустая группа; пользователь добавит элементы сам.
+		b.WriteString("    children: []\n")
+		return b.String()
+	}
+	b.WriteString("    children:\n")
+	for _, a := range attrs {
+		title := a.Title
+		if title == "" {
+			title = a.Name
+		}
+		fmt.Fprintf(&b, `      - kind: ПолеВвода
+        name: Поле%s
+        title:
+          ru: %s
+        data_path: Объект.%s
+`, a.Name, yamlDQString(title), a.Name)
+	}
+	return b.String()
+}
+
+// yamlDQString оборачивает строку в безопасный YAML double-quoted скаляр
+// (экранирует обратный слэш и кавычку).
+func yamlDQString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
 }
 
 // configuratorFormsSave — POST: пишет YAML и (опционально) .form.os.

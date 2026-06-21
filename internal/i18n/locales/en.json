@@ -1,4 +1,8 @@
 {
+  "Файлы конфигурации": "Configuration files",
+  "Открыть в редакторе": "Open in editor",
+  "Выберите файл слева для просмотра": "Select a file on the left to preview",
+  "Откройте объект из меню слева": "Open an object from the menu on the left",
   "Показаны первые строки — данных больше потолка.": "Showing the first rows — there is more data than the cap.",
   "PDF-файл": "PDF file",
   "В PDF не найден текстовый слой: похоже, это скан или изображение. Импорт макета возможен только для PDF с текстом (выгрузка из 1С/Excel).": "No text layer found in the PDF: it looks like a scan or image. Layout import only works for PDFs with text (1C/Excel export).",

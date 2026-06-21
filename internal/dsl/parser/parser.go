@@ -61,7 +61,12 @@ func (p *Parser) ParseProgram() (*ast.Program, error) {
 	}
 	for p.cur.Type != token.EOF {
 		if p.cur.Type != token.PROCEDURE && p.cur.Type != token.FUNCTION {
-			return nil, fmt.Errorf("%s:%d:%d: expected Procedure or Function, got %q",
+			// На верхнем уровне модуля допустимы только объявления переменных
+			// (Перем …) и Процедуры/Функции — тела модуля (операторов вне
+			// процедур) в onebase нет, как и в модуле объекта 1С. Вместо
+			// невнятного «expected Procedure or Function, got "ф"» сообщаем
+			// причину и подсказываем, что делать (issue #128).
+			return nil, fmt.Errorf("%s:%d:%d: оператор «%s» вне процедуры или функции — поместите код в Процедуру или Функцию (тело модуля не поддерживается)",
 				p.cur.File, p.cur.Line, p.cur.Col, p.cur.Literal)
 		}
 		proc, err := p.parseProcedure()
