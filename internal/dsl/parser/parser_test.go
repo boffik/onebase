@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
@@ -271,5 +272,30 @@ func TestParser_ExportModifier(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// issue #128: оператор вне процедуры/функции (попытка «тела модуля») должен
+// давать понятную ошибку с подсказкой, а не сырое и невнятное
+// «expected Procedure or Function, got "ф"».
+func TestParser_StatementOutsideProcedure_Issue128(t *testing.T) {
+	src := "Процедура Выполнить()\n  Сообщить(\"Привет!\")\nКонецПроцедуры\nф=6;\n"
+	_, err := parser.New(lexer.New(src, "test.os")).ParseProgram()
+	if err == nil {
+		t.Fatal("ожидалась ошибка на операторе вне процедуры, получили nil")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "expected Procedure or Function") {
+		t.Errorf("сообщение осталось невнятным англоязычным: %q", msg)
+	}
+	for _, want := range []string{"вне процедуры или функции", "«ф»", "Процедуру или Функцию"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("в сообщении нет %q: %q", want, msg)
+		}
+	}
+	// Координаты должны сохраниться как префикс file:line:col: — иначе сломается
+	// кликабельный переход к ошибке в конфигураторе (configcheck.parseErrLocRe).
+	if !strings.Contains(msg, "test.os:4:1:") {
+		t.Errorf("потеряны координаты file:line:col в сообщении: %q", msg)
 	}
 }
