@@ -29,6 +29,7 @@ const tplAppShell = `{{define "page-app-shell"}}
 .ob-tabstrip{display:flex;gap:2px;background:#e2e8f0;padding:4px 6px 0;overflow-x:auto;flex-shrink:0;min-height:34px}
 .ob-tab{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-bottom:none;border-radius:6px 6px 0 0;padding:5px 8px 5px 12px;font-size:12px;color:#334155;cursor:pointer;white-space:nowrap;max-width:230px}
 .ob-tab.active{background:#fff;color:#1a4a80;font-weight:600}
+.ob-tab.dirty .ob-tab-label::after{content:" •";color:#e8b400;font-weight:700}
 .ob-tab-label{overflow:hidden;text-overflow:ellipsis}
 .ob-tab-dup{color:#94a3b8;font-size:12px;line-height:1;border-radius:3px;padding:0 3px}
 .ob-tab-dup:hover{color:#1a4a80;background:#dbeafe}
@@ -61,6 +62,7 @@ const tplAppShell = `{{define "page-app-shell"}}
   }
   function closeTab(t){
     var i=tabs.indexOf(t); if(i<0)return;
+    if(t.dirty && !window.confirm('В этой вкладке есть несохранённые изменения. Закрыть вкладку?'))return; // фаза 3
     t.btn.remove(); t.frame.remove(); tabs.splice(i,1);
     if(active===t) setActive(tabs[Math.min(i,tabs.length-1)]||null);
     persist();
@@ -83,10 +85,12 @@ const tplAppShell = `{{define "page-app-shell"}}
   }
   window.obOpenTab=openTab;
 
+  function tabByWindow(win){ for(var i=0;i<tabs.length;i++){ if(tabs[i].frame.contentWindow===win)return tabs[i]; } return null; }
   window.addEventListener('message',function(ev){
     var d=ev.data; if(!d||typeof d!=='object')return;
     if(d.source==='obOpenTab' && d.url){ openTab(String(d.url), d.title?String(d.title):'Форма', {allowDup:!!d.allowDup}); }
     else if(d.source==='obSetTitle' && active && d.title){ active.title=String(d.title); active.label.textContent=active.title; persist(); }
+    else if(d.source==='obDirty'){ var dt=tabByWindow(ev.source); if(dt){ dt.dirty=!!d.dirty; dt.btn.classList.toggle('dirty',dt.dirty); } } // фаза 3
   });
 
   function openable(href){
@@ -112,6 +116,11 @@ const tplAppShell = `{{define "page-app-shell"}}
     if(tabs.length) setActive(tabs[0]);
   }catch(e){}
   syncEmpty();
+
+  // Фаза 3: предупредить о потере несохранённых правок при закрытии/перезагрузке окна.
+  window.addEventListener('beforeunload',function(e){
+    for(var i=0;i<tabs.length;i++){ if(tabs[i].dirty){ e.preventDefault(); e.returnValue=''; return ''; } }
+  });
 })();
 </script>
 </div></body></html>
