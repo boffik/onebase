@@ -2414,6 +2414,62 @@ const cfgTabConvert = `{{define "tab-convert"}}
 
 const cfgTabFiles = `{{define "tab-files"}}
 <div class="pad">
+{{if .ConfigFileTree}}
+<style>
+.files-tree-wrap{display:flex;gap:14px;margin-bottom:22px;height:62vh;min-height:360px}
+.files-tree{flex:0 0 340px;overflow:auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}
+.files-tree h3{font-size:13px;margin:0 0 8px;color:#374151}
+.files-view{flex:1;display:flex;flex-direction:column;background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;min-width:0}
+.files-view-hd{padding:8px 12px;background:#f8fafc;border-bottom:1px solid #eef0f5;font-size:12px;color:#475569;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.files-view-body{flex:1;margin:0;padding:12px 14px;overflow:auto;font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.5;white-space:pre;color:#1e293b}
+.ftcat{border-top:1px solid #f1f5f9}
+.ftcat:first-child{border-top:none}
+.ftcat>summary{font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px;padding:7px 4px;cursor:pointer;list-style:none}
+.ftcat>summary::-webkit-details-marker{display:none}
+.ftobj{margin-left:8px}
+.ftobj>summary{font-size:13px;color:#1a3a6a;font-weight:600;padding:3px 4px;cursor:pointer;list-style:none}
+.ftobj>summary::marker{content:""}
+.ftfile{display:block;padding:3px 4px 3px 24px;font-size:12px;color:#334155;text-decoration:none;border-radius:4px}
+.ftfile:hover{background:#f0f4ff;color:#1a4a80}
+.ftfile.sel{background:#e8eeff;color:#1a4a80;font-weight:600}
+.ftfile.loose{padding-left:14px;color:#64748b}
+</style>
+<div class="files-tree-wrap">
+  <div class="files-tree" id="files-tree">
+    <h3>📂 {{t $.Lang "Файлы конфигурации"}}</h3>
+    {{range .ConfigFileTree}}
+    <details class="ftcat" open>
+      <summary>{{.Name}}</summary>
+      {{range .Objects}}
+        {{if .Name}}
+        <details class="ftobj">
+          <summary>📄 {{.Name}}</summary>
+          {{range .Files}}<a class="ftfile" href="#" data-path="{{.Path}}" onclick="cfgViewFile(this);return false" title="{{.Path}}">{{.Label}}</a>{{end}}
+        </details>
+        {{else}}{{range .Files}}<a class="ftfile loose" href="#" data-path="{{.Path}}" onclick="cfgViewFile(this);return false" title="{{.Path}}">{{.Path}}</a>{{end}}{{end}}
+      {{end}}
+    </details>
+    {{end}}
+  </div>
+  <div class="files-view">
+    <div class="files-view-hd" id="files-view-path">{{t $.Lang "Выберите файл слева для просмотра"}}</div>
+    <pre class="files-view-body" id="files-view-body"></pre>
+  </div>
+</div>
+<script>
+function cfgViewFile(el){
+  var path=el.getAttribute('data-path');
+  document.querySelectorAll('#files-tree .ftfile.sel').forEach(function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  document.getElementById('files-view-path').textContent=path;
+  var body=document.getElementById('files-view-body'); body.textContent='…';
+  fetch('/bases/{{.Base.ID}}/configurator/file?path='+encodeURIComponent(path))
+    .then(function(r){ if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); })
+    .then(function(t){ body.textContent=t; })
+    .catch(function(e){ body.textContent='Ошибка: '+e.message; });
+}
+</script>
+{{end}}
 <div class="files-grid">
   <div class="file-card">
     <h3>📤 {{t $.Lang "Выгрузить конфигурацию"}}</h3>

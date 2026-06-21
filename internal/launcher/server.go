@@ -149,6 +149,7 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/forms/validate", s.h.configuratorFormsValidate)
 		r.Post("/bases/{id}/configurator/forms/preview", s.h.configuratorFormsPreview)
 		r.Post("/bases/{id}/configurator/forms/import-1c", s.h.configuratorFormsImport1C)
+		r.Get("/bases/{id}/configurator/file", s.h.configuratorFileRaw) // raw-просмотр файла, issue #132
 		r.Post("/bases/{id}/configurator/app", s.h.configuratorSaveApp)
 		r.Post("/bases/{id}/configurator/subsystem", s.h.configuratorSaveSubsystem)
 		r.Post("/bases/{id}/configurator/widget", s.h.configuratorSaveWidget)

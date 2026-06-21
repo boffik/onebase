@@ -384,6 +384,7 @@ type configuratorData struct {
 	AvailableLangs   []i18n.Lang
 	DSNMasked        string
 	Tab              string // "tree" | "convert" | "files"
+	ConfigFileTree   []fileTreeCategory // дерево файлов для вкладки «Файлы» (issue #132)
 	Entities         []cfgEntity
 	Catalogs         []cfgEntity
 	Docs             []cfgEntity
@@ -649,6 +650,11 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		return data
 	}
 	defer proj.Close()
+
+	// Вкладка «Файлы»: дерево файлов конфигурации (issue #132).
+	if tab == "files" {
+		data.ConfigFileTree = h.buildConfigFileTree(ctx, b, proj)
+	}
 
 	if appCfg, _ := project.LoadConfig(proj.Dir); appCfg != nil {
 		data.AppName = appCfg.Name
