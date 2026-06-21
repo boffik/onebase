@@ -320,6 +320,11 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	if _, ok := data["IsAdmin"]; !ok {
 		data["IsAdmin"] = s.isAdmin(r)
 	}
+	if _, ok := data["FormOpenMode"]; !ok {
+		login := currentUserLogin(r)
+		data["FormOpenMode"] = s.store.EffectiveFormOpenMode(r.Context(), login)
+		data["FormOpenModePersonal"] = s.store.GetUserFormOpenMode(r.Context(), login)
+	}
 	// Default per-entity permission flags so partial render paths (e.g. validation
 	// errors) still show the right action buttons.
 	if ent, ok := data["Entity"].(*metadata.Entity); ok {
