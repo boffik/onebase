@@ -334,25 +334,55 @@ function _attrFieldSnippet(attr, title, base) {
          b + '    ru: "' + t + '"\n' +
          b + '  data_path: Объект.' + attr;
 }
-// Отступ строки под курсором Monaco (или 6 пробелов по умолчанию).
-function _yamlCursorIndent() {
-  if (window.yamlEditor) {
-    var pos = window.yamlEditor.getPosition();
-    var line = window.yamlEditor.getModel().getLineContent(pos.lineNumber);
-    var m = line.match(/^\s*/);
-    return (m && m[0]) ? m[0] : '      ';
+// Куда и с каким отступом вставлять новый элемент списка формы (issue #134).
+// Раньше отступ копировался со строки под курсором, а вставка шла сразу после
+// неё — поэтому дроп не на строку '- ' давал кривой отступ, а дроп в середину
+// элемента разрывал его → невалидный YAML («mapping values are not allowed»).
+// Теперь: отступ = как у ближайшего элемента списка ('- ') на/выше курсора, а
+// вставка — ПОСЛЕ конца этого элемента (перед следующим '- ' или дедентом).
+function _yamlInsertPoint() {
+  var fb = { indent: '      ', afterLine: null };
+  if (!window.yamlEditor) return fb;
+  var model = window.yamlEditor.getModel();
+  var pos = window.yamlEditor.getPosition();
+  var total = model.getLineCount();
+  var startLine = 0, indent = null;
+  for (var ln = pos.lineNumber; ln >= 1; ln--) {
+    var t = model.getLineContent(ln);
+    var mi = t.match(/^(\s*)-\s/);
+    if (mi) { startLine = ln; indent = mi[1]; break; }
+    var mh = t.match(/^(\s*)(elements|children|groups|fields)\s*:\s*$/);
+    if (mh) { return { indent: mh[1] + '  ', afterLine: ln }; }
   }
-  return '      ';
+  if (startLine === 0) {
+    for (var dn = pos.lineNumber; dn <= total; dn++) {
+      var td = model.getLineContent(dn);
+      var mhd = td.match(/^(\s*)(elements|children|groups|fields)\s*:\s*$/);
+      if (mhd) { return { indent: mhd[1] + '  ', afterLine: dn }; }
+    }
+    return fb;
+  }
+  var endLine = total;
+  for (var k = startLine + 1; k <= total; k++) {
+    var s = model.getLineContent(k);
+    if (!s.trim()) continue;
+    var lead = (s.match(/^\s*/) || [''])[0].length;
+    if (lead <= indent.length) { endLine = k - 1; break; }
+  }
+  return { indent: indent, afterLine: endLine };
 }
 function insertFieldText(attr, title) {
-  var snippet = _attrFieldSnippet(attr, title, _yamlCursorIndent());
+  var ip = _yamlInsertPoint();
+  var snippet = _attrFieldSnippet(attr, title, ip.indent);
   if (window.yamlEditor) {
-    var ed = window.yamlEditor, pos = ed.getPosition();
-    var col = ed.getModel().getLineMaxColumn(pos.lineNumber);
+    var ed = window.yamlEditor, model = ed.getModel();
+    var line = ip.afterLine != null ? ip.afterLine : ed.getPosition().lineNumber;
+    var col = model.getLineMaxColumn(line);
     ed.executeEdits('insert-field', [{
-      range: new monaco.Range(pos.lineNumber, col, pos.lineNumber, col),
+      range: new monaco.Range(line, col, line, col),
       text: '\n' + snippet, forceMoveMarkers: true
     }]);
+    ed.setPosition({ lineNumber: line + 1, column: model.getLineMaxColumn(line + 1) });
     ed.focus();
   } else if (window._yamlTA) {
     var ta = window._yamlTA, p = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
