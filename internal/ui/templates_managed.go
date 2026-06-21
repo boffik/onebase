@@ -271,6 +271,17 @@ const tplManagedForm = `
   </div>
   {{end}}
   {{end}}
+{{else if eq (str $el.Kind) "ПолеДаты"}}
+  {{/* Нативный выбор ДАТЫ без времени (issue #150). Браузер показывает дату
+       по локали (в ru — дд.ММ.гггг). Значение круглим до YYYY-MM-DD, что
+       корректно парсится при сохранении (formToFields, layout 2006-01-02). */}}
+  {{$fn := dpField $el.DataPath}}
+  {{$hChg := hasHandler $el "ПриИзменении"}}
+  {{$dv := index $ctx.Values $fn}}
+  <div class="form-group">
+    <label>{{fieldTitleRU $el.TitleMap $fn}}{{if $el.Required}} <span style="color:#dc2626">*</span>{{end}}</label>
+    <input type="date" name="{{$fn}}" value="{{if ge (len $dv) 10}}{{slice $dv 0 10}}{{else}}{{$dv}}{{end}}"{{if $el.ReadOnly}} readonly{{end}}{{if $hChg}} onchange="obFire('{{$el.Name}}','ПриИзменении')"{{end}}>
+  </div>
 {{else if eq (str $el.Kind) "СтраницаКоманднаяПанель"}}
   {{/* пропускаем — отрисовывается через toolbar в обвязке формы */}}
 {{else if eq (str $el.Kind) "КоманднаяПанель"}}
