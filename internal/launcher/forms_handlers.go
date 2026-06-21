@@ -266,16 +266,18 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 			break
 		}
 	}
+	// Реквизиты объекта: для шаблона новой формы (issue #133) и для палитры
+	// перетаскивания реквизитов на форму в редакторе (issue #134). Поля
+	// справочника/документа либо параметры обработки/отчёта; у обработки нет
+	// «Наименования».
+	var attrs []formScaffoldAttr
+	if proj, perr := h.loadProjectFor(r.Context(), b); perr == nil {
+		attrs = objectScaffoldAttrs(proj, entity)
+		proj.Close()
+	}
+
 	if form == nil {
-		// «Новая форма» — заранее заполненный шаблон YAML. Реквизиты группы
-		// строим из реальных реквизитов объекта (поля справочника/документа или
-		// параметры обработки/отчёта), а не из хардкода «Наименование» — у
-		// обработок такого реквизита нет (issue #133).
-		var attrs []formScaffoldAttr
-		if proj, perr := h.loadProjectFor(r.Context(), b); perr == nil {
-			attrs = objectScaffoldAttrs(proj, entity)
-			proj.Close()
-		}
+		// «Новая форма» — заранее заполненный шаблон YAML из реальных реквизитов.
 		form = &cfgManagedForm{
 			Entity: entity,
 			Name:   name,
@@ -284,7 +286,7 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	data := &configuratorData{Base: b, EditingForm: form, Lang: resolveLang(r)}
+	data := &configuratorData{Base: b, EditingForm: form, EditingFormAttrs: attrs, Lang: resolveLang(r)}
 	if q := r.URL.Query().Get("saved"); q != "" {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = q

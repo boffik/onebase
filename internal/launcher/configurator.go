@@ -401,7 +401,10 @@ type configuratorData struct {
 	// План 37, этап 4: управляемые формы.
 	ManagedForms []cfgManagedForm
 	EditingForm  *cfgManagedForm
-	Subsystems   []cfgSubsystem
+	// EditingFormAttrs — реквизиты редактируемого объекта для палитры
+	// перетаскивания реквизитов на форму (issue #134).
+	EditingFormAttrs []formScaffoldAttr
+	Subsystems       []cfgSubsystem
 	Widgets      []cfgWidget
 	// GroupOrder — пользовательский порядок групп дерева (ключи data-group/data-gid)
 	// для клиентской перестановки; пусто — порядок по умолчанию из шаблона.

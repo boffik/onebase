@@ -329,3 +329,55 @@ func mustLoadForm(t *testing.T, yaml, entity string) {
 		t.Errorf("сгенерированная форма не загружается: %v\n%s", err, yaml)
 	}
 }
+
+// Issue #134: в редакторе форм рендерится палитра реквизитов объекта —
+// перетаскиваемые/кликабельные чипы, вставляющие поле ПолеВвода.
+func TestFormsEditor_AttrPalette(t *testing.T) {
+	data := &configuratorData{
+		Base: &Base{ID: "test-base"},
+		EditingForm: &cfgManagedForm{
+			Entity: "Контрагент", Name: "ФормаОбъекта", Kind: "object",
+			YAML: "schema: onebase.form/v1\n",
+		},
+		EditingFormAttrs: []formScaffoldAttr{
+			{Name: "Наименование"},                 // Title пуст → подпись = Name
+			{Name: "ИНН", Title: "ИНН контрагента"}, // Title задан
+		},
+	}
+	var buf bytes.Buffer
+	if err := formsTmpl.ExecuteTemplate(&buf, "forms-editor", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	html := buf.String()
+	for _, want := range []string{
+		`class="attr-palette"`,
+		`data-attr="Наименование"`,
+		`data-attr="ИНН"`,
+		`data-title="ИНН контрагента"`,
+		`onclick="insertFieldFromChip(this)"`,
+		`draggable="true"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("в редакторе формы нет %q", want)
+		}
+	}
+	// У реквизита без Title подпись чипа = его имя (data-title=Name).
+	if !strings.Contains(html, `data-attr="Наименование" data-title="Наименование"`) {
+		t.Errorf("ожидался data-title=Name для реквизита без синонима")
+	}
+}
+
+// Без реквизитов (например, объект не найден) палитра не рендерится.
+func TestFormsEditor_AttrPalette_EmptyHidden(t *testing.T) {
+	data := &configuratorData{
+		Base:        &Base{ID: "test-base"},
+		EditingForm: &cfgManagedForm{Entity: "Стуб", Name: "ФормаОбъекта", Kind: "object", YAML: "schema: onebase.form/v1\n"},
+	}
+	var buf bytes.Buffer
+	if err := formsTmpl.ExecuteTemplate(&buf, "forms-editor", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	if strings.Contains(buf.String(), `class="attr-palette"`) {
+		t.Error("палитра не должна рендериться без реквизитов")
+	}
+}
