@@ -486,6 +486,11 @@ func (h *handler) configuratorPage(w http.ResponseWriter, r *http.Request) {
 		tab = "tree"
 	}
 	data := h.loadCfgData(r.Context(), b, tab)
+	// «Открыть в редакторе» из дерева файлов (issue #132, фаза 2): ?select=<data-id>
+	// узла → выделить объект в дереве (через SelectedTreeID/bootstrap).
+	if sel := strings.TrimSpace(r.URL.Query().Get("select")); sel != "" && data.SelectedTreeID == "" {
+		data.SelectedTreeID = sel
+	}
 	if cookie, cerr := r.Cookie("onebase_session"); cerr == nil {
 		data.SessionToken = cookie.Value
 	}

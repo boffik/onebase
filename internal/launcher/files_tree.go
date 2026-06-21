@@ -33,8 +33,25 @@ type fileTreeFile struct {
 // fileTreeObject — объект конфигурации с его файлами. Name пустой → файлы
 // рендерятся прямо под категорией (config-уровень, «Прочее»).
 type fileTreeObject struct {
-	Name  string
-	Files []fileTreeFile
+	Name   string
+	NodeID string // data-id узла дерева конфигурации — для «открыть в редакторе» (issue #132 фаза 2); пусто → редактора нет
+	Files  []fileTreeFile
+}
+
+// categoryNodePrefix — раздел → префикс data-id узла в дереве конфигурации
+// (должен совпадать с разметкой configurator_tmpl.go).
+var categoryNodePrefix = map[string]string{
+	"Справочники":          "e-",
+	"Документы":            "e-",
+	"Перечисления":         "en-",
+	"Регистры накопления":  "r-",
+	"Регистры сведений":    "ir-",
+	"Регистры бухгалтерии":  "ar-",
+	"Отчёты":               "rep-",
+	"Обработки":            "proc-",
+	"Страницы":             "page-",
+	"Подсистемы":           "sub-",
+	"Виджеты":              "wdg-",
 }
 
 // fileTreeCategory — раздел дерева (Справочники, Документы, …).
@@ -213,7 +230,13 @@ func buildConfigFileTreeFrom(proj *project.Project, paths []string) []fileTreeCa
 		var objList []fileTreeObject
 		for objName, files := range objs {
 			sort.Slice(files, func(i, j int) bool { return files[i].Label < files[j].Label })
-			objList = append(objList, fileTreeObject{Name: objName, Files: files})
+			obj := fileTreeObject{Name: objName, Files: files}
+			if objName != "" {
+				if p := categoryNodePrefix[catName]; p != "" {
+					obj.NodeID = p + objName // issue #132 фаза 2
+				}
+			}
+			objList = append(objList, obj)
 		}
 		// объекты по имени; безымянная группа («Прочее»/config) — в конец.
 		sort.Slice(objList, func(i, j int) bool {

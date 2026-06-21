@@ -77,6 +77,9 @@ func TestBuildConfigFileTree(t *testing.T) {
 	if cat.Objects[0].Name != "Контрагент" || len(cat.Objects[0].Files) != 3 {
 		t.Errorf("у «Контрагент» должно быть 3 файла (метаданные+модуль+форма), получили %+v", cat.Objects[0])
 	}
+	if cat.Objects[0].NodeID != "e-Контрагент" { // фаза 2: id узла для «открыть в редакторе»
+		t.Errorf("NodeID = %q, ожидался e-Контрагент", cat.Objects[0].NodeID)
+	}
 	// Документ: метаданные + проведение под одним объектом.
 	if d := findCat("Документы"); d == nil || len(d.Objects) != 1 || len(d.Objects[0].Files) != 2 {
 		t.Errorf("ожидался «Документы»→«Поступление» с 2 файлами, получили %+v", d)
@@ -104,7 +107,7 @@ func TestTabFiles_Render(t *testing.T) {
 		Lang: "ru",
 		ConfigFileTree: []fileTreeCategory{
 			{Name: "Справочники", Objects: []fileTreeObject{
-				{Name: "Контрагент", Files: []fileTreeFile{
+				{Name: "Контрагент", NodeID: "e-Контрагент", Files: []fileTreeFile{
 					{Label: "Метаданные", Path: "catalogs/Контрагент.yaml"},
 					{Label: "Модуль объекта", Path: "src/Контрагент.module.os"},
 				}},
@@ -127,6 +130,9 @@ func TestTabFiles_Render(t *testing.T) {
 		`onclick="cfgViewFile(this)`,
 		`/bases/test-base/configurator/file?path=`,
 		`class="ftfile loose"`, // безымянная группа (app.yaml)
+		`class="ftedit"`,       // фаза 2: «открыть в редакторе»
+		`tab=tree`,             // ведёт на вкладку дерева
+		`select=`,              // с выбором узла
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("tab-files не содержит %q", want)
