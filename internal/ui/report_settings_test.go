@@ -180,6 +180,30 @@ func TestReportSettingsPanel(t *testing.T) {
 	}
 }
 
+// TestReportSettingsPanelAppearance: панель «Настройки» содержит контролы
+// оформления (линии сетки + зебра), через которые пользователь задаёт вид себе.
+func TestReportSettingsPanelAppearance(t *testing.T) {
+	rep := &reportpkg.Report{Name: "sales", Title: "Продажи"}
+	var buf bytes.Buffer
+	data := map[string]any{
+		"Report":       rep,
+		"ParamValues":  map[string]any{},
+		"ReportParams": []reportParamUI{},
+		"ReportCols":   []string{"Товар", "Сумма"},
+		"Cfg":          Config{},
+		"Lang":         "ru",
+	}
+	if err := tmpl.ExecuteTemplate(&buf, "page-report", data); err != nil {
+		t.Fatalf("execute page-report: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{`id="rs-lines"`, `id="rs-zebra"`, `value="vertical"`, `value="both"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("в панели нет контрола оформления %q", want)
+		}
+	}
+}
+
 // TestReportSettingsPanelHidden: без ReportCols панель не рендерится
 // (обратная совместимость с отчётами без компоновки).
 func TestReportSettingsPanelHidden(t *testing.T) {
