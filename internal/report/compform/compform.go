@@ -101,6 +101,14 @@ func Parse(f url.Values) (*report.Composition, bool) {
 		})
 	}
 
+	// Оформление вывода (план 71): линии сетки + зебра. Lines валидируем по
+	// белому списку — значение приходит и из недоверенной рантайм-формы (__settings),
+	// а дальше уходит в CSS-класс; неизвестное → "" (исторический вид).
+	c.Appearance = report.Appearance{
+		Lines: normLines(f.Get("comp.appearance.lines")),
+		Zebra: f.Get("comp.appearance.zebra") != "",
+	}
+
 	// Диаграмма (пустой type → нет диаграммы)
 	if ct := strings.TrimSpace(f.Get("comp.chart.type")); ct != "" {
 		var series []string
@@ -123,4 +131,21 @@ func Parse(f url.Values) (*report.Composition, bool) {
 		return nil, true
 	}
 	return c, true
+}
+
+// normLines нормализует значение линий сетки по белому списку. "horizontal"
+// (синоним умолчания) и любой неизвестный ввод → "" — исторический вид только с
+// нижними границами. Значение уходит в CSS-класс рендера, поэтому произвольный
+// ввод из недоверенной рантайм-формы (__settings) сюда не просачивается.
+func normLines(v string) string {
+	switch strings.TrimSpace(strings.ToLower(v)) {
+	case "vertical":
+		return "vertical"
+	case "both":
+		return "both"
+	case "none":
+		return "none"
+	default: // "", "horizontal", мусор
+		return ""
+	}
 }

@@ -69,6 +69,31 @@ func TestRenderCrossMultiMeasureTitle(t *testing.T) {
 	}
 }
 
+func TestRenderCrossAppearance(t *testing.T) {
+	// Оформление компоновки даёт класс таблицы и в кросс-режиме; report-cross
+	// сохраняется. Дефолт (нулевой Appearance) — прежний класс без rep-*.
+	rows := []compose.Row{{"Товар": "А", "Месяц": "Янв", "Сумма": "100"}}
+	spec := &report.Composition{
+		Groupings:  []string{"Товар"},
+		Columns:    []string{"Месяц"},
+		Measures:   []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Appearance: report.Appearance{Lines: "vertical"},
+	}
+	cr, _ := compose.ComposeCross(rows, *spec, nil)
+	out := string(renderCrossTable(cr, spec))
+	if !strings.Contains(out, `class="report-composed rep-lines-v report-cross"`) {
+		t.Fatalf("ожидали класс оформления на кросс-таблице:\n%s", out)
+	}
+
+	specDef := *spec
+	specDef.Appearance = report.Appearance{}
+	cr2, _ := compose.ComposeCross(rows, specDef, nil)
+	out2 := string(renderCrossTable(cr2, &specDef))
+	if !strings.Contains(out2, `class="report-composed report-cross"`) {
+		t.Fatalf("дефолт кросс-таблицы должен сохранять прежний класс:\n%s", out2)
+	}
+}
+
 func TestCrossSheetRowsDuplicateField(t *testing.T) {
 	// Регрессия #17 (Excel): два показателя на одном Field не должны затирать
 	// друг друга. У каждой колонки своя подпись (Title) и свой формат — как уже

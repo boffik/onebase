@@ -73,10 +73,13 @@ func effectiveComposition(rep *reportpkg.Report, s *reportpkg.UserReportSettings
 //     ВСЕГДА из доверенного показателя с тем же Field; показатель, которого нет
 //     в доверенной компоновке, добавляется БЕЗ Expr (Expr обнуляется), чтобы
 //     инъекция вычисляемого показателя не исполнялась;
-//   - сортировка (Sort), итоги (Totals), детальные строки (Detail).
+//   - сортировка (Sort), итоги (Totals), детальные строки (Detail);
+//   - общее оформление вывода (Appearance: линии сетки, зебра) — чистая
+//     презентация без исполняемых выражений, поэтому берётся из пользовательского
+//     ввода; Lines канонизируется safeAppearance (мусор → "").
 //
-// Из доверенной компоновки целиком наследуются исполняемые/оформительские и
-// навигационные аспекты: Conditional (When+Style), Chart, DetailLink,
+// Из доверенной компоновки целиком наследуются ИСПОЛНЯЕМЫЕ и навигационные
+// аспекты: Conditional (When+Style — When исполняется!), Chart, DetailLink,
 // DetailEntity. Они НИКОГДА не берутся из пользовательского ввода.
 func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition {
 	if base == nil {
@@ -98,6 +101,7 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 	out.Sort = append([]reportpkg.SortKey(nil), u.Sort...)
 	out.Totals = u.Totals
 	out.Detail = u.Detail
+	out.Appearance = safeAppearance(u.Appearance) // презентация: безопасно из пользователя
 
 	// Показатели: презентация — из пользовательского ввода, Expr — только из
 	// доверенной компоновки (по совпадению Field), иначе обнуляем.
@@ -119,6 +123,19 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 		out.Measures = measures
 	}
 	return &out
+}
+
+// safeAppearance канонизирует оформление из пользовательского ввода (__settings —
+// JSON, минует compform.normLines): Lines сводится к известным значениям, иначе
+// "" (исторический вид). Рендер (appearanceClass) и так игнорирует неизвестный
+// Lines, но канонизация не даёт мусору оседать в _settings. Zebra — bool, как есть.
+func safeAppearance(a reportpkg.Appearance) reportpkg.Appearance {
+	switch a.Lines {
+	case "vertical", "both", "none": // допустимые
+	default:
+		a.Lines = ""
+	}
+	return a
 }
 
 // loadUserSettings загружает сохранённые рантайм-настройки отчёта пользователя

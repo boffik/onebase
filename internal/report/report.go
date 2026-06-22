@@ -47,6 +47,7 @@ type Composition struct {
 	Detail       bool       `yaml:"detail"`
 	Sort         []SortKey  `yaml:"sort"`
 	Conditional  []CondRule `yaml:"conditional"`
+	Appearance   Appearance `yaml:"appearance"` // общее оформление вывода (линии, зебра)
 	Chart        *ChartSpec `yaml:"chart"`
 	DetailLink   string     `yaml:"detail_link"`   // поле строки с UUID регистратора/ссылки
 	DetailEntity string     `yaml:"detail_entity"` // имя сущности для перехода по ссылке
@@ -87,6 +88,16 @@ type CellStyle struct {
 	Background string `yaml:"background"`
 	Bold       bool   `yaml:"bold"`
 	Italic     bool   `yaml:"italic"`
+}
+
+// Appearance — общее оформление вывода компоновки (план 71): свойства всей
+// таблицы, не зависящие от условий (в отличие от Conditional). Нулевое значение
+// = исторический вид (горизонтальные линии, без зебры) — существующие отчёты не
+// меняются. Lines: "" или "horizontal" — только нижние границы (как было);
+// "vertical" — только вертикальные; "both" — полная сетка; "none" — без линий.
+type Appearance struct {
+	Lines string `yaml:"lines" json:"lines,omitempty"`
+	Zebra bool   `yaml:"zebra" json:"zebra,omitempty"`
 }
 
 // ChartSpec задаёт параметры диаграммы, встроенной в отчёт.

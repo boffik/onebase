@@ -509,6 +509,12 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .report-composed td.num{font-variant-numeric:tabular-nums}
 .report-composed tr.grp:hover td{background:#f8fafc}
 .report-composed tr.grand td{font-weight:700;border-top:2px solid #e2e8f0}
+.report-composed.rep-lines-v td,.report-composed.rep-lines-v th{border-bottom:none;border-right:1px solid #eef2f7}
+.report-composed.rep-lines-v td:last-child,.report-composed.rep-lines-v th:last-child{border-right:none}
+.report-composed.rep-lines-both td,.report-composed.rep-lines-both th{border-right:1px solid #eef2f7}
+.report-composed.rep-lines-both td:last-child,.report-composed.rep-lines-both th:last-child{border-right:none}
+.report-composed.rep-lines-none td,.report-composed.rep-lines-none th{border-bottom:none}
+.report-composed.rep-zebra tbody tr:nth-child(even){background:#fafbfc}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}
@@ -2545,6 +2551,17 @@ const tplReport = `
       <button type="button" class="btn btn-sm" onclick="this.parentNode.remove()">×</button>
     </div>
   </template>
+  <div class="rs-appearance" style="margin:12px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <label>{{t $.Lang "Линии сетки"}}
+      <select id="rs-lines" style="margin-left:6px">
+        <option value="">{{t $.Lang "горизонтальные (как сейчас)"}}</option>
+        <option value="vertical">{{t $.Lang "вертикальные"}}</option>
+        <option value="both">{{t $.Lang "и те и те"}}</option>
+        <option value="none">{{t $.Lang "без линий"}}</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="rs-zebra"> {{t $.Lang "Чередование строк (зебра)"}}</label>
+  </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn btn-primary" type="submit">{{t $.Lang "Применить"}}</button>
     <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/save">{{t $.Lang "Сохранить"}}</button>
@@ -2564,6 +2581,10 @@ const tplReport = `
       var mf=meas.map(function(m){return m.Field||m.field;});
       document.querySelectorAll('.rs-group').forEach(function(el){ if(groups.indexOf(el.value)>=0) el.checked=true; });
       document.querySelectorAll('.rs-measure').forEach(function(el){ if(mf.indexOf(el.value)>=0) el.checked=true; });
+      var ap=comp.Appearance||comp.appearance||{};
+      var lines=ap.lines||ap.Lines||"";if(lines==="horizontal")lines="";
+      var le=document.getElementById('rs-lines');if(le)le.value=lines;
+      var ze=document.getElementById('rs-zebra');if(ze)ze.checked=!!(ap.zebra||ap.Zebra);
     }catch(e){}
   }
   window.rsCollect=function(){
@@ -2574,7 +2595,9 @@ const tplReport = `
       if(f&&op&&f.value){ filters.push({field:f.value,op:op.value,value:v?v.value:""}); }
     });
     var variantEl=document.querySelector('input[name="__variant"]');
-    var s={variant:variantEl?variantEl.value:"",composition:{Groupings:groupings,Measures:measures},filters:filters};
+    var lines=(document.getElementById('rs-lines')||{}).value||"";
+    var zebra=!!(document.getElementById('rs-zebra')||{}).checked;
+    var s={variant:variantEl?variantEl.value:"",composition:{Groupings:groupings,Measures:measures,appearance:{lines:lines,zebra:zebra}},filters:filters};
     if(hidden)hidden.value=JSON.stringify(s);
   };
   window.rsAddFilter=function(){
