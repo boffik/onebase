@@ -182,6 +182,31 @@ func TestEntityDetail_TitlesBlockRendered(t *testing.T) {
 	}
 }
 
+// Поля переводов больше не оборачиваются в спойлер <details> у каждого
+// реквизита — это плоский <div class="titles-block">, видимостью которого
+// управляет глобальный режим переводов (кнопка 🌐 в топбаре). Защита от
+// возврата к «спойлеру у каждого поля», от которого захламлялся экран.
+func TestTitlesBlock_FlatNotDetails(t *testing.T) {
+	data := &configuratorData{
+		Base:           &Base{ID: "b", Name: "X", ConfigSource: "file"},
+		Lang:           "ru",
+		Tab:            "tree",
+		AvailableLangs: []i18n.Lang{{Code: "en", Native: "English"}},
+		Catalogs: []cfgEntity{{
+			Name:   "Товар",
+			Kind:   "Справочник",
+			Fields: []cfgField{{Name: "Артикул", Type: "string"}},
+		}},
+	}
+	html := renderCfgTree(t, data)
+	if !strings.Contains(html, `<div class="titles-block">`) {
+		t.Error(`titles-block должен быть плоским <div class="titles-block">`)
+	}
+	if strings.Contains(html, `<details class="titles-block"`) {
+		t.Error("titles-block не должен быть <details> — спойлер у каждого поля убран")
+	}
+}
+
 // Константа: у типа «число» — инпуты Длина/Точность (имена length/scale).
 func TestConstantDetail_Precision(t *testing.T) {
 	data := &configuratorData{

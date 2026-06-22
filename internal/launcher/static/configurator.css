@@ -233,6 +233,19 @@ pre.convert-out{background:#f5f7fa;border:1px solid #e2e6ed;padding:12px;border-
 .cfg-save-topbar:hover{background:#15803d}
 .cfg-save-topbar:disabled{opacity:.6;cursor:default}
 
+/* ── Режим переводов ──────────────────────────────────────────
+   Поля перевода (.titles-block) скрыты, пока не включён режим
+   переводов (кнопка 🌐 в топбаре). Так экран не захламляют
+   реквизиты, которые локализуют редко; включил — видно у всех. */
+.titles-block{display:none;margin:4px 0 10px}
+html.cfg-titles-on .titles-block{display:block}
+/* строку-обёртку перевода в таблицах полей сворачиваем целиком,
+   чтобы под каждым полем не оставался пустой отступ */
+tr:has(> td > .titles-block){display:none}
+html.cfg-titles-on tr:has(> td > .titles-block){display:table-row}
+/* активное состояние кнопки-тумблера в топбаре */
+html.cfg-titles-on #cfg-titles-toggle{background:#16a34a;border-color:#22c55e}
+
 .cfg-menu-wrap{position:relative}
 .cfg-menu-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px}
 .cfg-menu-btn:hover{background:rgba(255,255,255,.25)}

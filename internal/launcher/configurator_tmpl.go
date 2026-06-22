@@ -113,19 +113,19 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 
 // ── Partial: переводы (titles-block) ─────────────────────────────────────────
 
+// Сами поля перевода (по языку). Видимость — глобально через режим переводов
+// (класс html.cfg-titles-on, кнопка 🌐 в топбаре); по умолчанию .titles-block
+// скрыт, поэтому у каждого реквизита больше не висит строка-спойлер «Переводы».
 const cfgTitlesBlock = `{{define "titles-block"}}
-<details class="titles-block" style="margin:4px 0 10px">
-  <summary style="cursor:pointer;font-size:12px;color:#666">🌐 {{t .Lang "Переводы"}}{{if .Values}} ({{len .Values}}){{end}}</summary>
-  <div style="margin-top:6px">
-    {{range .Langs}}{{if ne .Code "ru"}}
-    <div style="display:flex;gap:6px;margin-bottom:3px;align-items:center">
-      <span style="width:78px;color:#888;font-size:12px">{{.Native}}</span>
-      <input type="text" name="{{$.Prefix}}.{{.Code}}" value="{{index $.Values .Code}}"
-             style="flex:1;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
-    </div>
-    {{end}}{{end}}
+<div class="titles-block">
+  {{range .Langs}}{{if ne .Code "ru"}}
+  <div style="display:flex;gap:6px;margin-bottom:3px;align-items:center">
+    <span style="width:78px;color:#888;font-size:12px">🌐 {{.Native}}</span>
+    <input type="text" name="{{$.Prefix}}.{{.Code}}" value="{{index $.Values .Code}}"
+           style="flex:1;padding:3px 5px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
   </div>
-</details>
+  {{end}}{{end}}
+</div>
 {{end}}
 `
 
@@ -143,6 +143,11 @@ window.MonacoEnvironment = { getWorkerUrl: function () {
     "self.MonacoEnvironment={baseUrl:'" + location.origin + "/vendor/monaco/'};" +
     "importScripts('" + location.origin + "/vendor/monaco/vs/base/worker/workerMain.js');");
 }};
+</script>
+<script>
+// Режим переводов запоминается между сессиями (одна кнопка 🌐 в топбаре вместо
+// спойлера у каждого реквизита). Класс ставим до отрисовки — поля не «прыгают».
+try{if(localStorage.getItem('cfgTitlesOn')==='1')document.documentElement.classList.add('cfg-titles-on');}catch(e){}
 </script>
 <!-- ECharts: тот же движок, что рисует графики в пользовательском режиме —
      предпросмотр виджета выглядит как у пользователя. Грузим ДО AMD-загрузчика
@@ -176,6 +181,7 @@ window.MonacoEnvironment = { getWorkerUrl: function () {
   <span style="font-size:11px;color:#7aa8d8">{{.DSNMasked}} · :{{.Base.Port}} · {{t $.Lang "платформа"}} {{.PlatformVer}}</span>
   <button id="cfg-save-topbar" onclick="cfgSaveActive()" title="{{t $.Lang "Сохранить (Ctrl+S)"}}" class="cfg-save-topbar">&#128190; {{t $.Lang "Сохранить"}}</button>
   <button onclick="launchEnterprise()" title="{{t $.Lang "Запустить предприятие"}}" class="run-enterprise-btn"><svg viewBox="0 0 24 24" fill="#333"><polygon points="6,3 20,12 6,21"/></svg></button>
+  {{if eq .Tab "tree"}}<button id="cfg-titles-toggle" class="dbg-topbar-btn" onclick="cfgTitlesToggle()" title="{{t $.Lang "Показать/скрыть поля переводов у всех объектов"}}">&#127760; {{t $.Lang "Переводы"}}</button>{{end}}
   <button id="dbg-toggle" class="dbg-topbar-btn" onclick="dbgToggle()">&#128027; {{t $.Lang "Отладка: ВЫКЛ"}}</button>
   <button onclick="toggleSyntaxRef()" title="{{t $.Lang "Синтакс-помощник"}} (F1)" class="dbg-topbar-btn">&#10067; {{t $.Lang "Справка"}}</button>
   <span id="monaco-status" style="font-size:9px;color:#94a3b8">Monaco:...</span>
