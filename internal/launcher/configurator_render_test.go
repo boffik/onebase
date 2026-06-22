@@ -128,6 +128,35 @@ func TestConfigurator_PagesRender(t *testing.T) {
 	}
 }
 
+func renderCfgMain(t *testing.T, data *configuratorData) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := cfgTmpl.ExecuteTemplate(&buf, "cfg-main", data); err != nil {
+		t.Fatalf("ExecuteTemplate cfg-main: %v", err)
+	}
+	return buf.String()
+}
+
+// Глобальный тумблер режима переводов: одна кнопка в топбаре вместо спойлера у
+// каждого поля. Есть на вкладке «Дерево» (где правят объекты), нет на других
+// вкладках. Раннее восстановление состояния (класс cfg-titles-on из localStorage)
+// присутствует в head, чтобы поля не «прыгали» при загрузке.
+func TestTitlesToggle_TopbarButton(t *testing.T) {
+	tree := renderCfgMain(t, richCfgData("tree"))
+	if !strings.Contains(tree, `id="cfg-titles-toggle"`) {
+		t.Error("на вкладке «Дерево» нет кнопки режима переводов")
+	}
+	if !strings.Contains(tree, "cfgTitlesToggle()") {
+		t.Error("кнопка режима переводов не вызывает cfgTitlesToggle()")
+	}
+	if !strings.Contains(tree, "cfg-titles-on") || !strings.Contains(tree, "cfgTitlesOn") {
+		t.Error("в head нет раннего восстановления режима переводов из localStorage")
+	}
+	if files := renderCfgMain(t, richCfgData("files")); strings.Contains(files, `id="cfg-titles-toggle"`) {
+		t.Error("кнопка режима переводов не должна показываться вне «Дерева»")
+	}
+}
+
 // TestConfigurator_CSSExternalized: CSS вынесен в /static/configurator.css —
 // в HTML присутствует <link>, а инлайн-правила (напр. .cfg-modal-body{) ушли
 // из рендера в файл (план 55 фаза 2a).

@@ -3155,6 +3155,14 @@ function cfgMenuToggle() {
   var m = document.getElementById('cfg-menu');
   m.classList.toggle('open');
 }
+// cfgTitlesToggle — глобальный режим переводов: показывает/прячет поля переводов
+// (.titles-block) у всех объектов разом. По умолчанию выключен, чтобы экран не
+// захламляли реквизиты, которые локализуют редко. Состояние — в localStorage;
+// класс на <html>, подсветка кнопки — через CSS (html.cfg-titles-on …).
+function cfgTitlesToggle() {
+  var on = document.documentElement.classList.toggle('cfg-titles-on');
+  try { localStorage.setItem('cfgTitlesOn', on ? '1' : '0'); } catch (e) {}
+}
 function cfgModalClose() {
   var modal = document.getElementById('cfg-modal');
   modal.classList.remove('active');
