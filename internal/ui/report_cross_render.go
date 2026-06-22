@@ -15,17 +15,23 @@ import (
 	"github.com/ivantit66/onebase/internal/report/compose"
 )
 
-func renderCrossTable(cr *compose.CrossResult, spec *report.Composition) template.HTML {
-	// Показатели берём по ИНДЕКСУ (CrossCol.MeasureIdx), а не по Field: два
-	// показателя с одинаковым Field, но разным Agg — разные колонки (issue #17),
-	// и подпись/формат/выравнивание у них берутся из своего описания показателя.
+// measureByIdx возвращает функцию выбора показателя колонки по CrossCol.MeasureIdx.
+// Два показателя с одинаковым Field — разные колонки (issue #17): сопоставление по
+// индексу не даёт им затирать подпись/формат/выравнивание друг друга. Общая для
+// HTML- (renderCrossTable) и Excel-рендера (crossSheetRows), чтобы логика не
+// разъезжалась — именно расхождение этих двух путей и было причиной #17.
+func measureByIdx(spec *report.Composition) func(compose.CrossCol) report.Measure {
 	byIdx := spec.Measures
-	measureAt := func(c compose.CrossCol) report.Measure {
+	return func(c compose.CrossCol) report.Measure {
 		if c.MeasureIdx >= 0 && c.MeasureIdx < len(byIdx) {
 			return byIdx[c.MeasureIdx]
 		}
 		return report.Measure{Field: c.Measure}
 	}
+}
+
+func renderCrossTable(cr *compose.CrossResult, spec *report.Composition) template.HTML {
+	measureAt := measureByIdx(spec)
 	multiMeasure := len(spec.Measures) > 1
 
 	var b strings.Builder
