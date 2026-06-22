@@ -35,7 +35,7 @@ func renderCrossTable(cr *compose.CrossResult, spec *report.Composition) templat
 	multiMeasure := len(spec.Measures) > 1
 
 	var b strings.Builder
-	b.WriteString(`<table class="report-composed report-cross">`)
+	b.WriteString(`<table class="` + appearanceClass(spec) + ` report-cross">`)
 
 	// Шапка: первый столбец — строковые измерения; далее по колонке на CrossCol.
 	b.WriteString(`<thead><tr><th>` + html.EscapeString(strings.Join(spec.Groupings, " / ")) + `</th>`)

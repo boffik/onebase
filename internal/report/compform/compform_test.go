@@ -241,6 +241,49 @@ func TestParseDetailLink(t *testing.T) {
 	}
 }
 
+func TestParseAppearance(t *testing.T) {
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "М")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.appearance.lines", "both")
+	f.Set("comp.appearance.zebra", "on")
+	c, present := compform.Parse(f)
+	if !present || c == nil {
+		t.Fatalf("present=%v c=%v", present, c)
+	}
+	if c.Appearance.Lines != "both" || !c.Appearance.Zebra {
+		t.Fatalf("appearance: %+v", c.Appearance)
+	}
+}
+
+func TestParseAppearanceGarbageLines(t *testing.T) {
+	// Недоверенное значение lines (как из __settings) нормализуется к "" — в
+	// CSS-класс рендера произвольная строка не просачивается.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.grouping.0", "М")
+	f.Set("comp.measure.0.field", "Сумма")
+	f.Set("comp.appearance.lines", "vertical; } body{display:none")
+	c, _ := compform.Parse(f)
+	if c == nil || c.Appearance.Lines != "" {
+		t.Fatalf("мусорный lines должен стать пустым: %+v", c)
+	}
+}
+
+func TestParseAppearanceOnlyCleared(t *testing.T) {
+	// Только оформление, без группировок/показателей/правил → композиция считается
+	// пустой (nil, true): оформление само по себе её непустой не делает.
+	f := url.Values{}
+	f.Set("comp.present", "1")
+	f.Set("comp.appearance.lines", "both")
+	f.Set("comp.appearance.zebra", "on")
+	c, present := compform.Parse(f)
+	if !present || c != nil {
+		t.Fatalf("только appearance: ждали present=true, c=nil; получили present=%v c=%+v", present, c)
+	}
+}
+
 func TestParseDetailLinkEmpty(t *testing.T) {
 	// Пустые detail_link и detail_entity не ломают существующую логику
 	// и не попадают в условие очистки (composition с группировками сохраняется).

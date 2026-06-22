@@ -69,6 +69,48 @@ composition:
 	}
 }
 
+func TestParseAppearance(t *testing.T) {
+	src := []byte(`
+name: Тест
+query: "ВЫБРАТЬ 1"
+composition:
+  groupings: [Менеджер]
+  measures:
+    - { field: Сумма, agg: sum }
+  appearance: { lines: both, zebra: true }
+`)
+	r, err := ParseBytes(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Composition == nil {
+		t.Fatal("Composition is nil")
+	}
+	if r.Composition.Appearance.Lines != "both" || !r.Composition.Appearance.Zebra {
+		t.Fatalf("appearance: %+v", r.Composition.Appearance)
+	}
+}
+
+func TestParseAppearanceDefault(t *testing.T) {
+	// Без блока appearance — нулевое значение (исторический вид): пустые Lines,
+	// зебра выключена. Гарантия обратной совместимости существующих отчётов.
+	src := []byte(`
+name: Тест
+query: "ВЫБРАТЬ 1"
+composition:
+  groupings: [Менеджер]
+  measures:
+    - { field: Сумма, agg: sum }
+`)
+	r, err := ParseBytes(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Composition.Appearance.Lines != "" || r.Composition.Appearance.Zebra {
+		t.Fatalf("ожидали нулевое оформление, получили %+v", r.Composition.Appearance)
+	}
+}
+
 func TestParseNoComposition(t *testing.T) {
 	r, err := ParseBytes([]byte("name: X\nquery: \"ВЫБРАТЬ 1\"\n"))
 	if err != nil {

@@ -304,6 +304,53 @@ func TestWriteDetailLinkCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestAppearanceClass(t *testing.T) {
+	cases := []struct {
+		app  report.Appearance
+		want string
+	}{
+		{report.Appearance{}, "report-composed"},
+		{report.Appearance{Lines: "horizontal"}, "report-composed"}, // синоним умолчания
+		{report.Appearance{Lines: "vertical"}, "report-composed rep-lines-v"},
+		{report.Appearance{Lines: "both"}, "report-composed rep-lines-both"},
+		{report.Appearance{Lines: "none"}, "report-composed rep-lines-none"},
+		{report.Appearance{Zebra: true}, "report-composed rep-zebra"},
+		{report.Appearance{Lines: "both", Zebra: true}, "report-composed rep-lines-both rep-zebra"},
+		{report.Appearance{Lines: "мусор"}, "report-composed"}, // неизвестное → дефолт
+	}
+	for _, c := range cases {
+		spec := &report.Composition{Appearance: c.app}
+		if got := appearanceClass(spec); got != c.want {
+			t.Errorf("appearanceClass(%+v) = %q, ждали %q", c.app, got, c.want)
+		}
+	}
+	if got := appearanceClass(nil); got != "report-composed" {
+		t.Errorf("nil spec → %q, ждали report-composed", got)
+	}
+}
+
+func TestRenderComposedAppearance(t *testing.T) {
+	rows := []compose.Row{{"М": "Иванов", "Сумма": "150"}}
+	spec := report.Composition{
+		Groupings:  []string{"М"},
+		Measures:   []report.Measure{{Field: "Сумма", Agg: "sum"}},
+		Appearance: report.Appearance{Lines: "both", Zebra: true},
+	}
+	res, _ := compose.Compose(rows, spec, nil)
+	out := string(renderComposedTable(res, &spec))
+	if !strings.Contains(out, `class="report-composed rep-lines-both rep-zebra"`) {
+		t.Fatalf("ожидали классы оформления на таблице:\n%s", out)
+	}
+	// Дефолт (нулевой Appearance) — прежний класс, без классов оформления.
+	specDef := spec
+	specDef.Appearance = report.Appearance{}
+	res2, _ := compose.Compose(rows, specDef, nil)
+	out2 := string(renderComposedTable(res2, &specDef))
+	if !strings.Contains(out2, `class="report-composed"`) || strings.Contains(out2, "rep-lines") || strings.Contains(out2, "rep-zebra") {
+		t.Fatalf("дефолт не должен содержать классы оформления:\n%s", out2)
+	}
+}
+
 func TestComposedPathEscaping(t *testing.T) {
 	// Значение группировки с «/» не должно ломать префиксную схему путей:
 	// сиблинг «Иванов/Доп» обязан иметь экранированный data-group, иначе

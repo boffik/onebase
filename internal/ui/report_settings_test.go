@@ -109,6 +109,41 @@ func TestEffectiveCompositionNoDSLExecution(t *testing.T) {
 	}
 }
 
+// TestEffectiveCompositionAppearance: оформление (Appearance) — презентация,
+// поэтому берётся из пользовательского ввода (в отличие от Conditional/Expr).
+// Недопустимое значение Lines канонизируется в "" (safeAppearance), чтобы мусор
+// не уходил в CSS-класс рендера и не оседал в _settings.
+func TestEffectiveCompositionAppearance(t *testing.T) {
+	trusted := &reportpkg.Composition{
+		Groupings:  []string{"Товар"},
+		Measures:   []reportpkg.Measure{{Field: "Сумма", Agg: "sum"}},
+		Appearance: reportpkg.Appearance{Lines: "horizontal"}, // дефолт отчёта
+	}
+	rep := &reportpkg.Report{Composition: trusted}
+
+	// 1) Пользователь включает вертикальные линии и зебру — применяется.
+	userComp := &reportpkg.Composition{
+		Groupings:  []string{"Товар"},
+		Measures:   []reportpkg.Measure{{Field: "Сумма", Agg: "sum"}},
+		Appearance: reportpkg.Appearance{Lines: "both", Zebra: true},
+	}
+	eff := effectiveComposition(rep, &reportpkg.UserReportSettings{Composition: userComp})
+	if eff.Appearance.Lines != "both" || !eff.Appearance.Zebra {
+		t.Fatalf("пользовательское оформление не применено: %+v", eff.Appearance)
+	}
+
+	// 2) Мусорный Lines из __settings канонизируется в "".
+	evilComp := &reportpkg.Composition{
+		Groupings:  []string{"Товар"},
+		Measures:   []reportpkg.Measure{{Field: "Сумма", Agg: "sum"}},
+		Appearance: reportpkg.Appearance{Lines: "evil; }body{display:none"},
+	}
+	eff2 := effectiveComposition(rep, &reportpkg.UserReportSettings{Composition: evilComp})
+	if eff2.Appearance.Lines != "" {
+		t.Fatalf("мусорный Lines должен канонизироваться в \"\": %q", eff2.Appearance.Lines)
+	}
+}
+
 // TestReportSettingsPanel: панель «Настройки» рендерится при наличии ReportCols,
 // содержит чекбоксы доступных полей и скрытое поле __settings.
 func TestReportSettingsPanel(t *testing.T) {

@@ -509,6 +509,12 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .report-composed td.num{font-variant-numeric:tabular-nums}
 .report-composed tr.grp:hover td{background:#f8fafc}
 .report-composed tr.grand td{font-weight:700;border-top:2px solid #e2e8f0}
+.report-composed.rep-lines-v td,.report-composed.rep-lines-v th{border-bottom:none;border-right:1px solid #eef2f7}
+.report-composed.rep-lines-v td:last-child,.report-composed.rep-lines-v th:last-child{border-right:none}
+.report-composed.rep-lines-both td,.report-composed.rep-lines-both th{border-right:1px solid #eef2f7}
+.report-composed.rep-lines-both td:last-child,.report-composed.rep-lines-both th:last-child{border-right:none}
+.report-composed.rep-lines-none td,.report-composed.rep-lines-none th{border-bottom:none}
+.report-composed.rep-zebra tbody tr:nth-child(even){background:#fafbfc}
 .app-body{display:flex;flex:1;overflow:hidden}
 aside{width:210px;background:#1e293b;color:#fff;padding:16px 0;flex-shrink:0;overflow-y:auto}
 aside .sec{font-size:11px;text-transform:uppercase;color:#94a3b8;margin:14px 12px 4px;letter-spacing:.05em}

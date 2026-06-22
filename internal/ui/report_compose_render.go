@@ -18,7 +18,7 @@ import (
 // walkComposed (общий с Excel-выгрузкой); htmlComposeSink рисует каждую строку.
 func renderComposedTable(res *compose.Result, spec *report.Composition) template.HTML {
 	var b strings.Builder
-	b.WriteString(`<table class="report-composed">`)
+	b.WriteString(`<table class="` + appearanceClass(spec) + `">`)
 	b.WriteString(`<thead><tr><th>` + html.EscapeString(strings.Join(spec.Groupings, " / ")) + `</th>`)
 	for _, m := range spec.Measures {
 		b.WriteString(`<th class="num" style="` + html.EscapeString(measureAlign(m)) + `">` + html.EscapeString(measureTitle(m)) + `</th>`)
@@ -164,6 +164,30 @@ func measureAlign(m report.Measure) string {
 	default:
 		return "text-align:right"
 	}
+}
+
+// appearanceClass возвращает CSS-классы таблицы отчёта по оформлению компоновки
+// (план 71). База — "report-composed"; доп. классы выбираются switch'ем по
+// фиксированным именам, поэтому недоверенное значение Appearance.Lines (приходит
+// и из __settings) не попадает в разметку произвольной строкой. "" и "horizontal"
+// → без доп. класса (исторический вид: только нижние границы).
+func appearanceClass(spec *report.Composition) string {
+	cls := "report-composed"
+	if spec == nil {
+		return cls
+	}
+	switch spec.Appearance.Lines {
+	case "vertical":
+		cls += " rep-lines-v"
+	case "both":
+		cls += " rep-lines-both"
+	case "none":
+		cls += " rep-lines-none"
+	}
+	if spec.Appearance.Zebra {
+		cls += " rep-zebra"
+	}
+	return cls
 }
 
 // joinStyles объединяет два CSS-стиля через ";", пропуская пустые части.
