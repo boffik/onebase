@@ -119,6 +119,15 @@ func (p *docProxy) CallMethod(method string, args []any) any {
 			interpreter.RaiseUserError("НайтиПоРеквизиту(" + p.entity.Name + "): имя реквизита должно быть строкой")
 		}
 		return p.findByField(field, fmt.Sprint(args[1]), args[1])
+	case "проверитьсовпадениепореквизиту", "matchbyattribute":
+		if len(args) < 2 {
+			interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "): нужны имя реквизита и значение")
+		}
+		field, ok := args[0].(string)
+		if !ok {
+			interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "): имя реквизита должно быть строкой")
+		}
+		return p.matchByField(field, args[1])
 	case "удалить", "delete":
 		if len(args) == 0 {
 			interpreter.RaiseUserError("Удалить(" + p.entity.Name + "): не передана ссылка")
@@ -192,6 +201,21 @@ func (p *docProxy) findByField(field, value string, raw any) any {
 		return nil
 	}
 	return &interpreter.Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
+}
+
+// matchByField — safe-match по реквизиту документа: Структура со Статусом,
+// Ссылкой (только при ровно одном совпадении) и Количеством.
+func (p *docProxy) matchByField(field string, raw any) any {
+	value := interpreter.MatchValueString(raw)
+	idStr, display, count, err := p.s.store.MatchCatalogByField(p.ctx(), p.entity, field, value)
+	if err != nil {
+		interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
+	}
+	var ref *interpreter.Ref
+	if count == 1 {
+		ref = &interpreter.Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
+	}
+	return interpreter.NewMatchResultStruct(ref, count)
 }
 
 // DeleteRef реализует interpreter.RefManager — удаление документа по UUID.

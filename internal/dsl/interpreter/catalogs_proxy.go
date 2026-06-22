@@ -10,11 +10,59 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
+// Статусы safe-match API (ПроверитьСовпадениеПоРеквизиту): кладутся в поле
+// Статус результата, чтобы прикладной код мог явно различать create/update/conflict.
+const (
+	MatchStatusNone     = "НеНайдено"
+	MatchStatusOne      = "НайденаОдна"
+	MatchStatusMultiple = "НайденоНесколько"
+)
+
+// NewMatchResultStruct собирает результат safe-match в Структуру с полями
+// Статус / Ссылка / Количество. ref задаётся только при ровно одном совпадении.
+// Экспортируется, чтобы тем же результатом пользовался путь Документы.X в ui.
+func NewMatchResultStruct(ref *Ref, count int) *Struct {
+	status := MatchStatusNone
+	switch {
+	case count == 1:
+		status = MatchStatusOne
+	case count >= 2:
+		status = MatchStatusMultiple
+	}
+	var refVal any // nil → Неопределено при отсутствии/неоднозначности
+	if ref != nil {
+		refVal = ref
+	}
+	s := &Struct{vals: map[string]any{}}
+	s.Set("Статус", status)
+	s.Set("Ссылка", refVal)
+	s.Set("Количество", float64(count))
+	return s
+}
+
+// MatchValueString приводит DSL-значение к строке для поиска по реквизиту:
+// у ссылки берётся наименование, числа форматируются без экспоненты (как Строка()).
+// Экспортируется для пути Документы.X в пакете ui.
+func MatchValueString(raw any) string {
+	if r, ok := raw.(*Ref); ok {
+		return r.Name
+	}
+	if s, err := builtinToString([]any{raw}, "", 0); err == nil {
+		if str, ok := s.(string); ok {
+			return str
+		}
+	}
+	return fmt.Sprintf("%v", raw)
+}
+
 // CatalogsDB extends PredefinedDB with field-based lookups and writes.
 // Returns ("", "", false, nil) on not-found so the DSL can compare against nil.
 type CatalogsDB interface {
 	PredefinedDB
 	FindCatalogByField(ctx context.Context, entity *metadata.Entity, fieldName, value string) (idStr, display string, ok bool, err error)
+	// MatchCatalogByField — safe-match: количество совпадений и (при ровно
+	// одном) id/представление найденной записи.
+	MatchCatalogByField(ctx context.Context, entity *metadata.Entity, fieldName, value string) (idStr, display string, count int, err error)
 	// WriteCatalogRecord upserts a record. idStr пустой →
 	// генерируется новый UUID. Возвращает UUID записанной записи.
 	WriteCatalogRecord(ctx context.Context, entity *metadata.Entity, idStr string, fields map[string]any) (string, error)
@@ -147,6 +195,15 @@ func (p *CatalogProxy) CallMethod(method string, args []any) any {
 			RaiseUserError("НайтиПоРеквизиту(" + p.entity.Name + "): имя реквизита должно быть строкой")
 		}
 		return p.findByField(field, args[1:])
+	case "проверитьсовпадениепореквизиту", "matchbyattribute":
+		if len(args) < 2 {
+			RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "): нужны имя реквизита и значение")
+		}
+		field, ok := args[0].(string)
+		if !ok {
+			RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "): имя реквизита должно быть строкой")
+		}
+		return p.matchByField(field, args[1])
 	case "создать", "create":
 		return &CatalogRecordWriter{
 			entity: p.entity,
@@ -233,6 +290,21 @@ func (p *CatalogProxy) findByField(field string, args []any) any {
 		return nil
 	}
 	return &Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
+}
+
+// matchByField — safe-match по реквизиту: возвращает Структуру со Статусом,
+// Ссылкой (только при ровно одном совпадении) и Количеством.
+func (p *CatalogProxy) matchByField(field string, raw any) any {
+	value := MatchValueString(raw)
+	idStr, display, count, err := p.db.MatchCatalogByField(p.ctx(), p.entity, field, value)
+	if err != nil {
+		RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
+	}
+	var ref *Ref
+	if count == 1 {
+		ref = &Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
+	}
+	return NewMatchResultStruct(ref, count)
 }
 
 // CatalogRecordWriter — записываемый объект справочника/документа,

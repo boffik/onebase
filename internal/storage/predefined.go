@@ -316,3 +316,66 @@ func (db *DB) FindCatalogByField(ctx context.Context, entity *metadata.Entity, f
 	}
 	return idStr, display, true, nil
 }
+
+// MatchCatalogByField ищет записи справочника/документа по точному совпадению
+// реквизита для сценария safe-match (0 / 1 / несколько). Возвращает количество
+// совпадений и — только когда оно ровно одно — id и представление найденной
+// записи. Для «несколько» количество точное (отдельный COUNT), чтобы прикладной
+// код мог сообщить число дублей. fieldName сопоставляется без учёта регистра.
+func (db *DB) MatchCatalogByField(ctx context.Context, entity *metadata.Entity, fieldName, value string) (string, string, int, error) {
+	var field *metadata.Field
+	for i := range entity.Fields {
+		if strings.EqualFold(entity.Fields[i].Name, fieldName) {
+			field = &entity.Fields[i]
+			break
+		}
+	}
+	if field == nil {
+		return "", "", 0, fmt.Errorf("entity %s has no field %q", entity.Name, fieldName)
+	}
+	col := metadata.ColumnName(*field)
+	table := metadata.TableName(entity.Name)
+	d := db.dialect
+	// LIMIT 2 различает 0 / 1 / «несколько» одним запросом; точный счёт для
+	// «несколько» добираем отдельным COUNT (редкий неоднозначный случай).
+	rows, err := db.Query(ctx,
+		fmt.Sprintf(`SELECT id, %s FROM %s WHERE %s = %s LIMIT 2`, col, table, col, d.Placeholder(1)),
+		value,
+	)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("match %s.%s: %w", entity.Name, fieldName, err)
+	}
+	var idStr, display string
+	n := 0
+	for rows.Next() {
+		n++
+		if n == 1 {
+			if err := rows.Scan(&idStr, &display); err != nil {
+				rows.Close()
+				return "", "", 0, fmt.Errorf("match %s.%s scan: %w", entity.Name, fieldName, err)
+			}
+			continue
+		}
+		break // достаточно знать, что совпадений больше одного
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return "", "", 0, fmt.Errorf("match %s.%s rows: %w", entity.Name, fieldName, err)
+	}
+	rows.Close() // освобождаем соединение/транзакцию перед COUNT
+
+	switch n {
+	case 0:
+		return "", "", 0, nil
+	case 1:
+		return idStr, display, 1, nil
+	}
+	cnt := 0
+	if err := db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s = %s`, table, col, d.Placeholder(1)),
+		value,
+	).Scan(&cnt); err != nil {
+		return "", "", 0, fmt.Errorf("match %s.%s count: %w", entity.Name, fieldName, err)
+	}
+	return "", "", cnt, nil
+}

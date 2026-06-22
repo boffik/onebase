@@ -13,9 +13,12 @@ import (
 type fakeCatalogsDB struct {
 	predefinedID map[string]string // "Entity/Name" → uuid
 	byField      map[string]map[string]struct{ ID, Display string }
-	stored       map[string]map[string]any // "Entity/uuid" → шапка для GetByID
-	written      []map[string]any          // запись через WriteCatalogRecord
-	deleted      []string                  // UUID, удалённые через Delete
+	// matchRows — все совпадения по реквизиту для safe-match: "Entity/Field" →
+	// значение → список найденных записей (0/1/несколько).
+	matchRows map[string]map[string][]struct{ ID, Display string }
+	stored    map[string]map[string]any // "Entity/uuid" → шапка для GetByID
+	written   []map[string]any          // запись через WriteCatalogRecord
+	deleted   []string                  // UUID, удалённые через Delete
 }
 
 func (f *fakeCatalogsDB) GetByID(_ context.Context, entityName string, id uuid.UUID, _ *metadata.Entity) (map[string]any, error) {
@@ -53,6 +56,18 @@ func (f *fakeCatalogsDB) FindCatalogByField(_ context.Context, entity *metadata.
 		}
 	}
 	return "", "", false, nil
+}
+
+func (f *fakeCatalogsDB) MatchCatalogByField(_ context.Context, entity *metadata.Entity, fieldName, value string) (string, string, int, error) {
+	hits := f.matchRows[entity.Name+"/"+fieldName][value]
+	switch len(hits) {
+	case 0:
+		return "", "", 0, nil
+	case 1:
+		return hits[0].ID, hits[0].Display, 1, nil
+	default:
+		return "", "", len(hits), nil
+	}
 }
 
 func (f *fakeCatalogsDB) WriteCatalogRecord(_ context.Context, entity *metadata.Entity, idStr string, fields map[string]any) (string, error) {
@@ -312,4 +327,93 @@ func TestRef_DeleteWithoutManager(t *testing.T) {
 		}
 	}()
 	(&Ref{UUID: "x", Name: "Тест"}).CallMethod("удалить", nil)
+}
+
+// ─── ПроверитьСовпадениеПоРеквизиту (safe-match 0/1/несколько) ───────────────
+
+// matchEnv готовит окружение с заданными совпадениями по реквизиту ИНН.
+func matchEnv(t *testing.T, hits []struct{ ID, Display string }) *CatalogProxy {
+	t.Helper()
+	root, db, _ := newCatalogsTestEnv()
+	db.matchRows = map[string]map[string][]struct{ ID, Display string }{
+		"ТипЦен/ИНН": {"7701234567": hits},
+	}
+	return root.Get("ТипЦен").(*CatalogProxy)
+}
+
+func matchResult(t *testing.T, cp *CatalogProxy) *Struct {
+	t.Helper()
+	v := cp.CallMethod("проверитьсовпадениепореквизиту", []any{"ИНН", "7701234567"})
+	s, ok := v.(*Struct)
+	if !ok {
+		t.Fatalf("ожидалась *Struct, получили %T", v)
+	}
+	return s
+}
+
+func TestMatchByAttribute_NotFound(t *testing.T) {
+	s := matchResult(t, matchEnv(t, nil))
+	if got := s.Get("Статус"); got != MatchStatusNone {
+		t.Errorf("Статус = %v, want %q", got, MatchStatusNone)
+	}
+	if got := s.Get("Количество"); got != float64(0) {
+		t.Errorf("Количество = %v, want 0", got)
+	}
+	if got := s.Get("Ссылка"); got != nil {
+		t.Errorf("Ссылка = %v, want nil", got)
+	}
+}
+
+func TestMatchByAttribute_One(t *testing.T) {
+	cp := matchEnv(t, []struct{ ID, Display string }{
+		{ID: "22222222-2222-2222-2222-222222222222", Display: "ООО Ромашка"},
+	})
+	s := matchResult(t, cp)
+	if got := s.Get("Статус"); got != MatchStatusOne {
+		t.Errorf("Статус = %v, want %q", got, MatchStatusOne)
+	}
+	if got := s.Get("Количество"); got != float64(1) {
+		t.Errorf("Количество = %v, want 1", got)
+	}
+	ref, ok := s.Get("Ссылка").(*Ref)
+	if !ok {
+		t.Fatalf("Ссылка = %T, want *Ref", s.Get("Ссылка"))
+	}
+	if ref.UUID != "22222222-2222-2222-2222-222222222222" {
+		t.Errorf("Ссылка.UUID = %q", ref.UUID)
+	}
+	// Ссылка несёт менеджера → ПолучитьОбъект() работает для обновления записи.
+	if ref.Manager == nil {
+		t.Error("Ссылка без менеджера — ПолучитьОбъект() не сработает")
+	}
+}
+
+func TestMatchByAttribute_Multiple(t *testing.T) {
+	cp := matchEnv(t, []struct{ ID, Display string }{
+		{ID: "aaaa", Display: "Дубль 1"},
+		{ID: "bbbb", Display: "Дубль 2"},
+		{ID: "cccc", Display: "Дубль 3"},
+	})
+	s := matchResult(t, cp)
+	if got := s.Get("Статус"); got != MatchStatusMultiple {
+		t.Errorf("Статус = %v, want %q", got, MatchStatusMultiple)
+	}
+	if got := s.Get("Количество"); got != float64(3) {
+		t.Errorf("Количество = %v, want 3 (точное число дублей)", got)
+	}
+	if got := s.Get("Ссылка"); got != nil {
+		t.Errorf("Ссылка = %v, want nil при неоднозначности", got)
+	}
+}
+
+// Без значения — понятная ошибка, а не тихий nil.
+func TestMatchByAttribute_MissingArg(t *testing.T) {
+	root, _, _ := newCatalogsTestEnv()
+	cp := root.Get("ТипЦен").(*CatalogProxy)
+	defer func() {
+		if recover() == nil {
+			t.Error("ожидалась ошибка: не передано значение реквизита")
+		}
+	}()
+	cp.CallMethod("проверитьсовпадениепореквизиту", []any{"ИНН"})
 }
