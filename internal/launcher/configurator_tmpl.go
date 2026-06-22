@@ -728,7 +728,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
       <div class="fg" style="margin-top:10px">
         <label>{{t $.Lang "Лицензия конфигурации"}}</label>
-        <input type="text" name="app_license" value="{{.AppLicense}}" placeholder="MIT / проприетарная / ...">
+        <input type="text" name="app_license" value="{{.AppLicense}}" placeholder="{{t $.Lang "MIT / проприетарная / ..."}}">
       </div>
       <div class="fg" style="margin-top:10px">
         <label>{{t $.Lang "Язык интерфейса"}}</label>
@@ -744,7 +744,7 @@ const cfgTabTree = `{{define "tab-tree"}}
           <img id="logo-preview" src="{{if .AppLogo}}/bases/{{.Base.ID}}/configurator/logo{{end}}" style="max-height:48px;max-width:120px;border:1px solid #e2e8f0;border-radius:4px;padding:2px;{{if not .AppLogo}}display:none{{end}}">
           <div>
             <label class="btn-save" style="cursor:pointer;display:inline-block;padding:4px 12px;font-size:12px">
-              Загрузить
+              {{t $.Lang "Загрузить файл"}}
               <input type="file" name="app_logo_file" accept="image/*" style="display:none" onchange="previewLogo(this)">
             </label>
             {{if .AppLogo}}<button type="button" onclick="removeLogo()" style="margin-left:6px;padding:4px 8px;font-size:12px;background:none;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;color:#ef4444">{{t $.Lang "Удалить"}}</button>{{end}}
