@@ -116,3 +116,137 @@ func (s *Server) runFormReadHook(ctx context.Context, entity *metadata.Entity, f
 
 	return s.interp.Run(decl, thisObj, vars)
 }
+
+// runFormWriteHook исполняет серверный обработчик события записи формы
+// (ПередЗаписью/ПриЗаписи/ПослеЗаписи) уровня формы, если он объявлен, с
+// «Объект»=obj. Мутации Объекта остаются в obj. Возвращает ошибку обработчика
+// (для ПередЗаписью/ПриЗаписи — повод отказать в записи). Сообщения копятся в msgs.
+//
+// Аналог runFormReadHook, но «Объект» передаётся снаружи (а не загружается из
+// БД), а тип события — параметр. Используется в save-пути (submit/submitEdit).
+func (s *Server) runFormWriteHook(ctx context.Context, entity *metadata.Entity, form *metadata.FormModule, obj *runtime.Object, event metadata.FormEventType, msgs *[]string) error {
+	if form == nil || s.interp == nil || obj == nil {
+		return nil
+	}
+	procName := resolveHandlerProc(form, "", string(event))
+	if procName == "" {
+		return nil
+	}
+	program, ok := form.ProgramAST.(*ast.Program)
+	if !ok || program == nil {
+		return nil
+	}
+	var decl *ast.ProcedureDecl
+	for _, p := range program.Procedures {
+		if strings.EqualFold(p.Name.Literal, procName) {
+			decl = p
+			break
+		}
+	}
+	if decl == nil {
+		return nil
+	}
+
+	mc := runtime.NewMovementsCollector(entity.Name, obj.ID)
+	vars := s.buildDSLVarsWithMessages(ctx, mc, msgs)
+	thisObj := &formObjectThis{obj: obj, entity: entity, form: form}
+	vars["Объект"] = thisObj
+	vars["ЭтотОбъект"] = thisObj
+
+	formProcs := make(map[string]*ast.ProcedureDecl, len(program.Procedures))
+	for _, p := range program.Procedures {
+		formProcs[strings.ToLower(p.Name.Literal)] = p
+	}
+	vars["__form_procs__"] = formProcs
+
+	return s.interp.Run(decl, thisObj, vars)
+}
+
+// runPreSaveFormHooks исполняет ПередЗаписью и ПриЗаписи (если объявлены) ДО
+// записи. Если ни одно событие не объявлено — no-op (obj не трогается, поведение
+// save как раньше). Иначе: обогащаем ссылки шапки (чтобы в хуках работали
+// ЗначениеРеквизитаОбъекта и работа со ссылками, как в событиях полей), запускаем
+// обработчики, затем сводим регистр ключей полей и возвращаем ссылочные значения
+// к UUID-строкам — чтобы Save получил ровно то же, что и без хуков.
+//
+// Возвращает ошибку обработчика — вызывающий код обязан отказать в записи
+// (перерисовать форму с ошибкой), как при DSLError из entityService.Save.
+func (s *Server) runPreSaveFormHooks(ctx context.Context, entity *metadata.Entity, obj *runtime.Object, msgs *[]string) error {
+	before := pickObjectFormWithHook(entity, string(metadata.FormEventBeforeWrite))
+	onWrite := pickObjectFormWithHook(entity, string(metadata.FormEventOnWrite))
+	if before == nil && onWrite == nil {
+		return nil
+	}
+
+	s.enrichHeaderRefs(ctx, entity, obj)
+
+	if before != nil {
+		if err := s.runFormWriteHook(ctx, entity, before, obj, metadata.FormEventBeforeWrite, msgs); err != nil {
+			return err
+		}
+	}
+	if onWrite != nil {
+		if err := s.runFormWriteHook(ctx, entity, onWrite, obj, metadata.FormEventOnWrite, msgs); err != nil {
+			return err
+		}
+	}
+
+	canonicalizeFields(obj, entity)
+	derefFields(obj)
+	return nil
+}
+
+// runAfterWriteFormHook исполняет ПослеЗаписи (если объявлено) ПОСЛЕ успешной
+// записи — с перезагруженным из БД Объектом (есть присвоенный номер/ссылки).
+// Отменить запись уже нельзя, поэтому ошибка обработчика логируется в msgs, но
+// не прерывает поток (запись состоялась).
+func (s *Server) runAfterWriteFormHook(ctx context.Context, entity *metadata.Entity, id uuid.UUID, msgs *[]string) {
+	form := pickObjectFormWithHook(entity, string(metadata.FormEventAfterWrite))
+	if form == nil {
+		return
+	}
+	obj, err := s.loadRuntimeObject(ctx, entity, id)
+	if err != nil {
+		return
+	}
+	if err := s.runFormWriteHook(ctx, entity, form, obj, metadata.FormEventAfterWrite, msgs); err != nil && msgs != nil {
+		*msgs = append(*msgs, "ПослеЗаписи: "+err.Error())
+	}
+}
+
+// canonicalizeFields сводит obj.Fields к одному ключу на поле сущности в
+// оригинальном регистре. Нужно потому, что formToFields пишет ключи в оригинале
+// (PascalCase), а Object.Set (через который хук делает Объект.Поле = …) — в
+// нижнем регистре. Без сведения у поля было бы два ключа, и Save мог прочитать
+// устаревшее значение, проигнорировав мутацию хука. Не-полевые ключи
+// (parent_id, is_folder) не трогаем.
+func canonicalizeFields(obj *runtime.Object, entity *metadata.Entity) {
+	if obj == nil || entity == nil {
+		return
+	}
+	for _, fd := range entity.Fields {
+		low := strings.ToLower(fd.Name)
+		if low == fd.Name {
+			continue // ключ и так каноничный/нижний — дубля быть не может
+		}
+		lv, hasLow := obj.Fields[low]
+		if _, hasOrig := obj.Fields[fd.Name]; hasLow && hasOrig {
+			obj.Fields[fd.Name] = lv // мутация хука (нижний регистр) приоритетна
+			delete(obj.Fields, low)
+		}
+	}
+}
+
+// derefFields возвращает ссылочные значения шапки к UUID-строкам перед записью.
+// runPreSaveFormHooks обогащает ссылки до *Ref ради хуков; здесь возвращаем их
+// обратно, чтобы Save получил те же UUID-строки, что и без хуков.
+func derefFields(obj *runtime.Object) {
+	if obj == nil {
+		return
+	}
+	for k, v := range obj.Fields {
+		if rl, ok := v.(interface{ GetRefUUID() string }); ok {
+			obj.Fields[k] = rl.GetRefUUID()
+		}
+	}
+}

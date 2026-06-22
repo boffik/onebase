@@ -26,9 +26,10 @@ const (
 	FormEventOnDelete       FormEventType = "ПриУдалении"        // OnDelete
 	FormEventAfterDelete    FormEventType = "ПослеУдаления"      // AfterDelete
 	// События для табличных частей (замечание #15): даём YAML-конфигу
-	// возможность их объявлять. UI пока умеет дергать ExecuteElementEvent
-	// generic-маршрутом — кастомные триггеры (auto-fill цены при добавлении
-	// строки и т.п.) реализуются в конфиге пользователя.
+	// возможность их объявлять. UI дёргает их generic-маршрутом через
+	// handleManagedFormEvent (resolveHandlerProc + interp.Run) — кастомные
+	// триггеры (auto-fill цены при добавлении/удалении строки и т.п.)
+	// реализуются в конфиге пользователя.
 	FormEventOnRowAdded     FormEventType = "ПриДобавленииСтроки"  // OnRowAdded
 	FormEventOnRowChanged   FormEventType = "ПриИзмененииСтроки"   // OnRowChanged
 	FormEventOnRowDeleted   FormEventType = "ПриУдаленииСтроки"    // OnRowDeleted
@@ -120,7 +121,32 @@ type FormElement struct {
 	Mask            string            `yaml:"mask,omitempty"`           // маска ввода
 	Type            string            `yaml:"type,omitempty"`           // "file" для файлового поля, и т.п.
 	Choice          bool              `yaml:"choice,omitempty"`         // включена кнопка выбора у InputField
-	UnknownXML      []byte            `yaml:"unknown_xml,omitempty"`    // экзотический XML, сохраняется как есть
+	// Choices — декларативный список значений для выбора (аналог 1С СписокВыбора).
+	// Задаётся в .form.yaml на элементе kind: ПолеСписка; рендерер показывает
+	// <select> с этими значениями, а выбор дёргает событие ПриИзменении.
+	Choices    []FormChoice `yaml:"choices,omitempty"`
+	UnknownXML []byte       `yaml:"unknown_xml,omitempty"` // экзотический XML, сохраняется как есть
+}
+
+// FormChoice — один пункт списка значений элемента ПолеСписка. Value хранится
+// в реквизите (строкой), Title — локализованная подпись (ru, en, ...) по образцу
+// Enum.ValueTitles; если перевода нет, в качестве подписи используется Value.
+type FormChoice struct {
+	Value string            `yaml:"value"`
+	Title map[string]string `yaml:"title,omitempty"`
+}
+
+// ChoiceLabel возвращает подпись пункта для указанного языка с откатом на Value.
+func (c FormChoice) ChoiceLabel(lang string) string {
+	if c.Title != nil {
+		if t, ok := c.Title[lang]; ok && t != "" {
+			return t
+		}
+		if t, ok := c.Title["ru"]; ok && t != "" {
+			return t
+		}
+	}
+	return c.Value
 }
 
 // FormAction — переопределение стандартного действия формы объекта (issue #151).

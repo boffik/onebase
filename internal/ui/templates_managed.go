@@ -107,6 +107,23 @@ const tplManagedForm = `
     {{end}}
     {{if $el.Hint}}<small style="color:#94a3b8;font-size:11px">{{$el.Hint}}</small>{{end}}
   </div>
+{{else if eq (str $el.Kind) "ПолеСписка"}}
+  {{/* Реквизит со списком значений (аналог 1С СписокВыбора): <select> из
+       декларативных choices (ключ контекста — имя элемента). Выбор дёргает
+       ПриИзменении тем же путём obFire, что enum/ссылка — обработчик в .form.os
+       может подгрузить связанные данные и вернуть их в values. */}}
+  {{$fn := dpField $el.DataPath}}
+  {{$hChg := hasHandler $el "ПриИзменении"}}
+  <div class="form-group">
+    <label>{{fieldTitleRU $el.TitleMap $fn}}{{if $el.Required}} <span style="color:#dc2626">*</span>{{end}}</label>
+    <select name="{{$fn}}"{{if hasHandler $el "НачалоВыбора"}} data-el="{{$el.Name}}" onfocus="obStartListChoice('{{$el.Name}}')"{{end}}{{if $el.ReadOnly}} disabled{{end}}{{if $hChg}} onchange="obFire('{{$el.Name}}','ПриИзменении')"{{end}}>
+      <option value="">— выбрать —</option>
+      {{range index $ctx.ChoiceOptions $el.Name}}
+      <option value="{{.Value}}" {{if eq .Value (index $ctx.Values $fn)}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+    {{if $el.Hint}}<small style="color:#94a3b8;font-size:11px">{{$el.Hint}}</small>{{end}}
+  </div>
 {{else if eq (str $el.Kind) "Флажок"}}
   {{$fn := dpField $el.DataPath}}
   <div class="form-group" style="display:flex;align-items:center;gap:8px">
@@ -157,6 +174,8 @@ const tplManagedForm = `
        data-sg-el="{{$el.Name}}"
        {{if $el.ReadOnly}}data-sg-ro="1"{{end}}
        {{if hasHandler $el "ПриИзменении"}}data-sg-recalc="1"{{end}}
+       {{if hasHandler $el "ПриДобавленииСтроки"}}data-sg-rowadd="1"{{end}}
+       {{if hasHandler $el "ПриУдаленииСтроки"}}data-sg-rowdel="1"{{end}}
        data-sg-cols='[{{range $i, $f := $tpMeta.Fields}}{{if $i}},{{end}}{"id":"{{$f.Name}}","name":"{{$f.Name}}","type":"{{$f.Type}}"{{if $f.RefEntity}},"ref":"{{$f.RefEntity}}"{{end}}{{if isEnum (str $f.Type)}},"enum":true{{end}}}{{end}}]'
        data-sg-ref='{{jsJSON $tpRef}}'
        data-sg-enum='{{jsJSON $tpEnum}}'
@@ -549,6 +568,36 @@ window._tpEnumOrder = {{jsJSON .TPEnumOrder}};
       }
     });
   }
+  // applyChoiceList — заполняет <select> элемента ПолеСписка динамическим списком
+  // значений из ответа НачалоВыбора (choiceList). Текущее значение сохраняется,
+  // если присутствует в новом списке.
+  function applyChoiceList(elName, list){
+    if (!elName || !list) return;
+    const sel = document.querySelector('select[data-el="' + (window.CSS && CSS.escape ? CSS.escape(elName) : elName) + '"]');
+    if (!sel) return;
+    const cur = sel.value;
+    while (sel.options.length) sel.remove(0);
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '— выбрать —'; sel.appendChild(o0);
+    for (let i = 0; i < list.length; i++){
+      const o = document.createElement('option');
+      o.value = list[i].value;
+      o.textContent = (list[i].label != null && list[i].label !== '') ? list[i].label : list[i].value;
+      if (String(list[i].value) === String(cur)) o.selected = true;
+      sel.appendChild(o);
+    }
+  }
+  // obStartListChoice — событие НачалоВыбора для ПолеСписка: на фокусе элемента
+  // обработчик формы формирует список значений (ДобавитьЗначениеСписка), ответ
+  // приходит в choiceList и применяется applyChoiceList. Флаг busy защищает от
+  // повторных одновременных запросов по одному элементу.
+  window.obStartListChoice = function(elName){
+    window._obListChoiceBusy = window._obListChoiceBusy || {};
+    if (!elName || window._obListChoiceBusy[elName] || !window.obFire) return;
+    window._obListChoiceBusy[elName] = true;
+    Promise.resolve(window.obFire(elName, 'НачалоВыбора')).catch(function(){}).then(function(){
+      window._obListChoiceBusy[elName] = false;
+    });
+  };
   // Перерисовка табчастей по ответу сервера. tbody у нас имеет
   // id=mtp-body-<TP> и атрибут data-tp-fields="name|type[:Ref],name|type,..."
   // где field-meta использовалось для определения типа input при первичном рендере;
@@ -817,6 +866,7 @@ window._tpEnumOrder = {{jsJSON .TPEnumOrder}};
       }
       window.applyTableParts(data.tableparts);
       applyValues(data.values);
+      applyChoiceList(elementName, data.choiceList);
       applyFormTables(data.formTables);
       (data.messages || []).forEach(m => flash(m, 'ok'));
       if (data.error) flash(data.error, 'err');
@@ -1297,6 +1347,18 @@ function addVtRow(vtName, fields) {
   };
 
   // Add empty row to grid
+  // obFireRowEvent — серверное событие строки ТЧ (ПриДобавленииСтроки/
+  // ПриУдаленииСтроки). Дёргается после добавления/удаления строки, но только
+  // если у элемента ТЧ объявлен обработчик (флаг data-sg-rowadd/data-sg-rowdel),
+  // — иначе впустую гоняли бы сеть. Путь тот же, что у ПриИзменении: obFire
+  // синхронизирует ТЧ (obGridSync) и применяет values/tableparts из ответа.
+  window.obFireRowEvent = function(tpName, attr, eventName) {
+    var div = document.getElementById("sg-" + tpName);
+    if (!div || div.getAttribute(attr) !== "1") return;
+    var elName = div.getAttribute("data-sg-el") || tpName;
+    if (window.obFire) window.obFire(elName, eventName, {_tp: tpName});
+  };
+
   window.obGridAddRow = function(tpName) {
     var g = (window._obGrids || {})[tpName];
     if (!g) return;
@@ -1321,6 +1383,7 @@ function addVtRow(vtName, fields) {
       g.grid.setActiveCell(rowIdx, 0);
       g.grid.editActiveCell();
     }
+    obFireRowEvent(tpName, "data-sg-rowadd", "ПриДобавленииСтроки");
   };
 
   // Delete selected row from grid
@@ -1341,6 +1404,7 @@ function addVtRow(vtName, fields) {
     window._obFormDirty = true;
     g.grid.invalidate();
     g.grid.setSelectedRows([]);
+    obFireRowEvent(tpName, "data-sg-rowdel", "ПриУдаленииСтроки");
   };
 
   // SlickGrid-aware applyTableParts. Оборачивает window.applyTableParts (DOM-
@@ -1510,6 +1574,7 @@ function addVtRow(vtName, fields) {
           for (var i = 0; i < toRemove.length; i++) dataView.deleteItem(toRemove[i].id);
           window._obFormDirty = true;
           grid.invalidate();
+          obFireRowEvent(tpName, "data-sg-rowdel", "ПриУдаленииСтроки");
           e.stopImmediatePropagation();
         }
       }

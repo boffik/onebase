@@ -74,6 +74,28 @@ func (s *Server) loadEnumOptions(entity *metadata.Entity, lang string) map[strin
 	return opts
 }
 
+// loadChoiceOptions returns declarative value-list options (аналог 1С СписокВыбора)
+// for each managed-form element that carries a `choices` block. Ключ — имя элемента
+// (список значений живёт на элементе формы, а не на поле сущности). Label —
+// локализованная подпись с откатом на Value; порядок следует объявлению в YAML.
+func loadChoiceOptions(form *metadata.FormModule, lang string) map[string][]EnumOption {
+	opts := make(map[string][]EnumOption)
+	if form == nil {
+		return opts
+	}
+	form.Walk(func(el *metadata.FormElement) bool {
+		if len(el.Choices) > 0 {
+			list := make([]EnumOption, 0, len(el.Choices))
+			for _, c := range el.Choices {
+				list = append(list, EnumOption{Value: c.Value, Label: c.ChoiceLabel(lang)})
+			}
+			opts[el.Name] = list
+		}
+		return true
+	})
+	return opts
+}
+
 func (s *Server) usersForSelection(ctx context.Context) []map[string]any {
 	if s.authRepo == nil {
 		return nil

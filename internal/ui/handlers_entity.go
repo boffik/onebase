@@ -433,6 +433,36 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 	return
 }
 
+// renderObjectFormError перерисовывает форму объекта с баннером ошибки — когда
+// серверный хук формы (ПередЗаписью/ПриЗаписи) отклонил запись через
+// ВызватьИсключение. Контекст совпадает с веткой DSLError в submit/submitEdit.
+func (s *Server) renderObjectFormError(w http.ResponseWriter, r *http.Request, entity *metadata.Entity, isNew bool, errMsg string, msgs []string, tpRows map[string][]map[string]any) {
+	refOptions, _ := s.loadRefOptions(r.Context(), entity)
+	tpRefOpts, _ := s.loadTPRefOptions(r.Context(), entity)
+	lang := s.resolveLang(r)
+	data := map[string]any{
+		"Entity":        entity,
+		"IsNew":         isNew,
+		"Error":         errMsg,
+		"Messages":      msgs,
+		"Values":        formValues(r, entity),
+		"RefOptions":    refOptions,
+		"EnumOptions":   s.loadEnumOptions(entity, lang),
+		"TPRefOptions":  tpRefOpts,
+		"TPEnumLabels":  s.buildTPEnumLabels(entity, lang),
+		"TPEnumOrder":   s.buildTPEnumOrder(entity),
+		"TPRefMeta":     tpRefMeta(entity),
+		"TablePartRows": serializeTablePartRowsForEntity(tpRows, entity),
+	}
+	if isNew {
+		if entity.Hierarchical {
+			data["FolderOptions"] = s.loadFolderOptions(r.Context(), entity)
+		}
+		data["IsPopup"] = r.FormValue("_popup") == "1"
+	}
+	s.renderEntityForm(w, r, "object", data)
+}
+
 func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -440,6 +470,14 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	}
 	obj, fields, tpRows, action, ok := s.parseSubmitForm(w, r, entity, nil)
 	if !ok {
+		return
+	}
+
+	// Серверные события записи формы (ПередЗаписью/ПриЗаписи) — до Save. Бросок
+	// ВызватьИсключение в обработчике отменяет запись и перерисовывает форму.
+	var hookMsgs []string
+	if hookErr := s.runPreSaveFormHooks(r.Context(), entity, obj, &hookMsgs); hookErr != nil {
+		s.renderObjectFormError(w, r, entity, true, hookErr.Error(), hookMsgs, obj.TablePartRows)
 		return
 	}
 
@@ -485,6 +523,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// ПослеЗаписи — после успешной записи (Объект перезагружается с номером/ссылками).
+	s.runAfterWriteFormHook(r.Context(), entity, obj.ID, &hookMsgs)
 
 	// Popup-режим (создание из iframe в родительской форме): не редиректим,
 	// а отдаём страничку, которая через postMessage сообщает родителю id
@@ -566,10 +607,19 @@ try {
 // с той же формы, которую увидит пользователь. Возвращаем только форму, реально
 // объявляющую обработчик; если ни одна не объявляет — nil (хук не запускается).
 func pickObjectFormWithReadHook(entity *metadata.Entity) *metadata.FormModule {
+	return pickObjectFormWithHook(entity, string(metadata.FormEventOnReadAtServer))
+}
+
+// pickObjectFormWithHook возвращает форму ОБЪЕКТА (Kind=="object"), объявляющую
+// серверный обработчик события evt. Приоритет — managed-форма (она же рендерится),
+// затем autogen (src/<entity>.form.os): обработчик считается с той же формы,
+// которую видит пользователь. Если ни одна не объявляет — nil (хук не запускается).
+// Обобщение pickObjectFormWithReadHook на любое серверное событие формы
+// (ПриЧтенииНаСервере, ПередЗаписью, ПриЗаписи, ПослеЗаписи).
+func pickObjectFormWithHook(entity *metadata.Entity, evt string) *metadata.FormModule {
 	if entity == nil {
 		return nil
 	}
-	evt := string(metadata.FormEventOnReadAtServer)
 	declares := func(fm *metadata.FormModule) bool {
 		return fm != nil && strings.EqualFold(fm.Kind, "object") &&
 			resolveHandlerProc(fm, "", evt) != ""
@@ -787,6 +837,14 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Серверные события записи формы (ПередЗаписью/ПриЗаписи) — до Save. Бросок
+	// ВызватьИсключение в обработчике отменяет запись и перерисовывает форму.
+	var hookMsgs []string
+	if hookErr := s.runPreSaveFormHooks(r.Context(), entity, obj, &hookMsgs); hookErr != nil {
+		s.renderObjectFormError(w, r, entity, false, hookErr.Error(), hookMsgs, obj.TablePartRows)
+		return
+	}
+
 	// Парсим _version для оптимистической блокировки. Если поля нет —
 	// expectedVersion=nil, UpsertVersioned не проверяет (поведение как раньше).
 	var expectedVersion *int64
@@ -837,6 +895,9 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// ПослеЗаписи — после успешной записи (Объект перезагружается с номером/ссылками).
+	s.runAfterWriteFormHook(r.Context(), entity, id, &hookMsgs)
 
 	if action == "post_and_close" {
 		http.Redirect(w, r, listURL(entity), http.StatusSeeOther)
