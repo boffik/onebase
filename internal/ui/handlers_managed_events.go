@@ -48,6 +48,10 @@ type formEventResponse struct {
 	// PickerData != nil — обработчик фазы 1 вызвал ПоказатьПодбор: клиент
 	// открывает модальный диалог мультивыбора вместо применения ТЧ (план 46).
 	PickerData *pickerPayload `json:"pickerData,omitempty"`
+	// ChoiceList — динамический список значений для элемента ПолеСписка,
+	// сформированный обработчиком НачалоВыбора (билтин ДобавитьЗначениеСписка).
+	// Клиент заполняет им <select> того элемента, что инициировал событие.
+	ChoiceList []choiceListItem `json:"choiceList,omitempty"`
 }
 
 // handleManagedFormEvent — единая точка обработки событий managed-форм.
@@ -182,6 +186,14 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 	vars["ПоказатьПодбор"] = pickerFn
 	vars["ShowPicker"] = pickerFn
 
+	// Динамический список значений (НачалоВыбора): билтин ДобавитьЗначениеСписка
+	// копит пункты в sink; после Run они уходят в ответ как choiceList, и клиент
+	// заполняет ими <select> элемента ПолеСписка.
+	var choiceItems []choiceListItem
+	choiceFn := newChoiceListBuiltin(&choiceItems)
+	vars["ДобавитьЗначениеСписка"] = choiceFn
+	vars["AddChoiceItem"] = choiceFn
+
 	// Фаза 2: результат диалога приходит как _pick_result (JSON) → переменная
 	// ПодборРезультат (Массив структур) для обработчика события Выбор.
 	if pr := parsePickResult(r.FormValue("_pick_result")); pr != nil {
@@ -219,6 +231,7 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 		Messages:   msgs,
 		FormTables: formTablesFromObj(obj, form),
 		PickerData: picker,
+		ChoiceList: choiceItems,
 	})
 }
 
@@ -262,17 +275,31 @@ func serializeFieldsForEntity(in map[string]any, entity *metadata.Entity) map[st
 		return nil
 	}
 	out := make(map[string]any, len(in))
-	for k, v := range in {
-		outKey := k
-		if entity != nil {
-			for _, f := range entity.Fields {
-				if strings.EqualFold(f.Name, k) {
-					outKey = f.Name
-					break
-				}
+	handled := make(map[string]bool) // нижне-регистровые ключи, поглощённые полями сущности
+	if entity != nil {
+		for _, f := range entity.Fields {
+			low := strings.ToLower(f.Name)
+			// Мутация хука (Объект.Поле = …) пишется через Object.Set в нижнем
+			// регистре, а исходное значение из формы — в оригинальном. При дубле
+			// детерминированно побеждает мутация (раньше исход зависел от порядка
+			// обхода карты и был флаки).
+			v, ok := in[low]
+			if !ok {
+				v, ok = in[f.Name]
 			}
+			if !ok {
+				continue
+			}
+			out[f.Name] = serializeValue(v)
+			handled[low] = true
 		}
-		out[outKey] = serializeValue(v)
+	}
+	// Остальные ключи (parent_id, is_folder, реквизиты формы вне сущности).
+	for k, v := range in {
+		if handled[strings.ToLower(k)] {
+			continue
+		}
+		out[k] = serializeValue(v)
 	}
 	return out
 }

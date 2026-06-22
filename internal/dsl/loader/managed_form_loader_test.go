@@ -167,6 +167,61 @@ actions:
 	}
 }
 
+// Реквизит со списком значений (ПолеСписка + choices) должен разбираться из
+// .form.yaml в FormElement.Choices с локализованными подписями.
+func TestManagedFormLoader_ParseChoices(t *testing.T) {
+	dir := t.TempDir()
+	yamlPath := filepath.Join(dir, "задача.form.yaml")
+	doc := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Задача
+elements:
+  - kind: ПолеСписка
+    name: ПолеПриоритет
+    data_path: Объект.Приоритет
+    choices:
+      - value: high
+        title: { ru: "Высокий", en: "High" }
+      - value: low
+        title: { ru: "Низкий" }
+      - value: raw
+    events:
+      ПриИзменении: ПриоритетПриИзменении
+`
+	if err := os.WriteFile(yamlPath, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mfl := NewManagedFormLoader()
+	form, err := mfl.LoadFormFile(yamlPath, "Задача")
+	if err != nil {
+		t.Fatalf("LoadFormFile: %v", err)
+	}
+	if len(form.Elements) != 1 {
+		t.Fatalf("elements = %d, want 1", len(form.Elements))
+	}
+	el := form.Elements[0]
+	if el.Kind != metadata.FormElementInputList {
+		t.Errorf("kind = %q, want ПолеСписка", el.Kind)
+	}
+	if len(el.Choices) != 3 {
+		t.Fatalf("choices = %d, want 3", len(el.Choices))
+	}
+	if el.Choices[0].Value != "high" || el.Choices[0].Title["en"] != "High" {
+		t.Errorf("choice[0] = %+v", el.Choices[0])
+	}
+	if got := el.Choices[0].ChoiceLabel("en"); got != "High" {
+		t.Errorf("ChoiceLabel(en) = %q, want High", got)
+	}
+	if got := el.Choices[1].ChoiceLabel("en"); got != "Низкий" { // нет en → откат на ru
+		t.Errorf("ChoiceLabel(en) fallback to ru = %q, want Низкий", got)
+	}
+	if got := el.Choices[2].ChoiceLabel("ru"); got != "raw" { // нет title → откат на value
+		t.Errorf("ChoiceLabel(ru) fallback to value = %q, want raw", got)
+	}
+}
+
 func TestManagedFormLoader_LoadEntityForms_NoDir(t *testing.T) {
 	dir := t.TempDir()
 	mfl := NewManagedFormLoader()

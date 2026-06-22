@@ -42,6 +42,10 @@ func (s *Server) renderEntityForm(w http.ResponseWriter, r *http.Request, kind s
 	managed := pickManagedForm(entity, kind)
 	if managed != nil {
 		data["Form"] = managed
+		// Списки значений (СписокВыбора) объявлены на элементах формы, а не на
+		// полях сущности, поэтому собираем их из самой managed-формы. Единая
+		// точка покрывает все пути рендера (new/edit/повторный показ с ошибкой).
+		data["ChoiceOptions"] = loadChoiceOptions(managed, s.resolveLang(r))
 		s.render(w, r, "page-managed-form", data)
 		return
 	}
