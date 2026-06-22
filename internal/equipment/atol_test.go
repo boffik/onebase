@@ -302,19 +302,23 @@ func TestAtol_IdempotencyKeyReusesUUID(t *testing.T) {
 }
 
 // ResolveByUUID дозапрашивает результат по сохранённому uuid, не пробивая чек.
+// Вызывается через интерфейс FiscalRegistrar (контракт #24): метод восстановления
+// после FiscalStateUnknownError должен быть доступен любому фискальному драйверу,
+// а не только конкретному *atolDevice.
 func TestAtol_ResolveByUUID(t *testing.T) {
 	url, _ := atolEmulator(t, `{"fnNumber":"9999078900012345","fiscalDocumentNumber":42,"fiscalDocumentSign":"222","receiptDatetime":"2026-06-19T10:00:00+03:00","total":60}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
 	defer dev.Disconnect()
+	kkt := dev.(FiscalRegistrar)
 
-	res, err := dev.(*atolDevice).ResolveByUUID("some-saved-uuid")
+	res, err := kkt.ResolveByUUID("some-saved-uuid")
 	if err != nil {
 		t.Fatalf("ResolveByUUID: %v", err)
 	}
 	if res.FD != "42" {
 		t.Errorf("FD = %q, ожидался 42", res.FD)
 	}
-	if _, err := dev.(*atolDevice).ResolveByUUID("  "); err == nil {
+	if _, err := kkt.ResolveByUUID("  "); err == nil {
 		t.Error("ожидалась ошибка для пустого uuid")
 	}
 }
