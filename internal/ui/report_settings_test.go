@@ -40,6 +40,41 @@ func TestEffectiveComposition(t *testing.T) {
 	}
 }
 
+func TestReportSettingsWithRequestVariant(t *testing.T) {
+	main := &reportpkg.Composition{Groupings: []string{"Основной"}}
+	variantComp := &reportpkg.Composition{Groupings: []string{"Вариант"}}
+	rep := &reportpkg.Report{
+		Composition: main,
+		Variants:    []reportpkg.ReportVariant{{Name: "V", Composition: variantComp}},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/report/sales", strings.NewReader("__variant=V"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	settings := reportSettingsWithRequestVariant(req, nil)
+	if settings == nil || settings.Variant != "V" {
+		t.Fatalf("__variant не попал в настройки: %+v", settings)
+	}
+	if got := effectiveComposition(rep, settings); got != variantComp {
+		t.Fatalf("__variant должен выбрать вариант компоновки, got %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/ui/report/sales", strings.NewReader("__variant="))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	settings = reportSettingsWithRequestVariant(req, &reportpkg.UserReportSettings{Variant: "V"})
+	if settings == nil || settings.Variant != "" {
+		t.Fatalf("явный пустой __variant должен сбрасывать на основной, got %+v", settings)
+	}
+	if got := effectiveComposition(rep, settings); got != main {
+		t.Fatalf("пустой __variant должен выбрать основную компоновку, got %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/ui/report/sales", nil)
+	settings = reportSettingsWithRequestVariant(req, &reportpkg.UserReportSettings{Variant: "V"})
+	if settings == nil || settings.Variant != "V" {
+		t.Fatalf("без __variant сохранённые настройки не должны меняться, got %+v", settings)
+	}
+}
+
 // TestEffectiveCompositionNoDSLExecution: ключевой тест безопасности (issue #1).
 // Пользователь присылает __settings с вычисляемым показателем (Expr) и условием
 // оформления (When), содержащими вредоносное DSL. Эффективная компоновка НЕ

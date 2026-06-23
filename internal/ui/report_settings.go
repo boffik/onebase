@@ -41,6 +41,39 @@ func readReportSettings(r *http.Request) *reportpkg.UserReportSettings {
 	return s
 }
 
+// reportSettingsWithRequestVariant накладывает явный __variant из запроса поверх
+// настроек отчёта. Это важно для селектора вариантов: обычный submit формы шлёт
+// только __variant, без __settings, но выбранный вариант всё равно должен менять
+// доверенную базовую компоновку.
+func reportSettingsWithRequestVariant(r *http.Request, s *reportpkg.UserReportSettings) *reportpkg.UserReportSettings {
+	variant, ok := requestFormValue(r, "__variant")
+	if !ok {
+		return s
+	}
+	if s == nil {
+		s = &reportpkg.UserReportSettings{}
+	} else {
+		cp := *s
+		s = &cp
+	}
+	s.Variant = variant
+	return s
+}
+
+func requestFormValue(r *http.Request, name string) (string, bool) {
+	if err := r.ParseForm(); err != nil {
+		return "", false
+	}
+	vs, ok := r.Form[name]
+	if !ok {
+		return "", false
+	}
+	if len(vs) == 0 {
+		return "", true
+	}
+	return vs[0], true
+}
+
 // effectiveComposition вычисляет компоновку, по которой строится отчёт.
 //
 // БЕЗОПАСНОСТЬ (issue #1): база компоновки берётся ИСКЛЮЧИТЕЛЬНО из доверенной

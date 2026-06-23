@@ -91,6 +91,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		// пользователя, чтобы отчёт открылся в привычном виде (план 70, D1).
 		settings = loadUserSettings(r.Context(), s.store, rep.Name, currentUserLogin(r))
 	}
+	settings = reportSettingsWithRequestVariant(r, settings)
 	comp := effectiveComposition(rep, settings)
 	// Build query params: convert date strings to time.Time for proper PG type inference.
 	// Keep paramValues unchanged so the form repopulates with the original strings.
@@ -405,6 +406,7 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		// Без явного __settings — выгружаем в сохранённом пользователем виде.
 		settings = loadUserSettings(r.Context(), s.store, rep.Name, currentUserLogin(r))
 	}
+	settings = reportSettingsWithRequestVariant(r, settings)
 	comp := effectiveComposition(rep, settings)
 	paramValues := make(map[string]any, len(rep.Params))
 	for _, p := range rep.Params {
