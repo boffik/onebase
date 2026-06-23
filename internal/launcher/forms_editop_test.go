@@ -172,6 +172,26 @@ func TestApplyEditOp_InsertContainer(t *testing.T) {
 	}
 }
 
+// insert табличной части: в YAML kind ТабличнаяЧасть с data_path и пустым
+// children (контейнер колонок), узел становится выбранным container (D1).
+func TestApplyEditOp_InsertTablePart(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "insert", Parent: "", Index: 1, Kind: "ТабличнаяЧасть",
+		Name: "ТабСтроки", DataPath: "Объект.Строки", TitleRU: "Строки",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp insert tablepart: %v", err)
+	}
+	for _, want := range []string{"kind: ТабличнаяЧасть", "data_path: Объект.Строки", "children: []"} {
+		if !strings.Contains(res.YAML, want) {
+			t.Errorf("YAML без %q:\n%s", want, res.YAML)
+		}
+	}
+	if info := res.Model[res.SelectedID]; !info.Container {
+		t.Errorf("ТЧ должна быть container: id=%q info=%+v", res.SelectedID, info)
+	}
+}
+
 // move через эндпоинт меняет порядок соседей. Индекс — как его шлёт клиент при
 // «↓ Ниже» (finalIdx+1 = srcIdx+2 из-за компенсации сдвига в Move), follow-up
 // #164 слайс B2.

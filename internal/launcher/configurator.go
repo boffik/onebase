@@ -410,6 +410,10 @@ type configuratorData struct {
 	// в корень конфигуратора (follow-up #164, слайс A). Пусто → фолбэк на
 	// e-<Entity> редактируемой формы.
 	FormEditFrom string
+	// EditingFormTableParts — табличные части редактируемого объекта с составом
+	// колонок: палитра ТЧ на холсте и редактор состава колонок (follow-up #164,
+	// слайсы D1/D2).
+	EditingFormTableParts []formTablePart
 	Subsystems       []cfgSubsystem
 	Widgets          []cfgWidget
 	// GroupOrder — пользовательский порядок групп дерева (ключи data-group/data-gid)

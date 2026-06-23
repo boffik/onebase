@@ -399,6 +399,26 @@ func TestFormsEditor_AttrPalette(t *testing.T) {
 	}
 }
 
+// Палитра табличных частей рендерится из EditingFormTableParts и несёт data-tp
+// для drag-drop вставки ТЧ (follow-up #164, слайс D1).
+func TestFormsEditor_TablePartPalette(t *testing.T) {
+	data := &configuratorData{
+		Base:        &Base{ID: "b"},
+		EditingForm: &cfgManagedForm{Entity: "Заказ", Name: "ФормаОбъекта", Kind: "object", YAML: "schema: onebase.form/v1\n"},
+		EditingFormTableParts: []formTablePart{
+			{Name: "Товары", Title: "Товары", Columns: []formScaffoldAttr{{Name: "Номенклатура"}}},
+		},
+	}
+	var buf bytes.Buffer
+	if err := formsTmpl.ExecuteTemplate(&buf, "forms-editor", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `id="tablepart-palette"`) || !strings.Contains(out, `data-tp="Товары"`) {
+		t.Errorf("нет палитры табличных частей:\n%s", extractContext(out, "tablepart", 220))
+	}
+}
+
 // Без реквизитов (например, объект не найден) палитра не рендерится.
 func TestFormsEditor_AttrPalette_EmptyHidden(t *testing.T) {
 	data := &configuratorData{

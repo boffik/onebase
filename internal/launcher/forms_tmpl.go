@@ -205,6 +205,8 @@ const tplFormsEditor = `
 .attr-chip.dragging{opacity:.4}
 .struct-chip{background:#fef3e8;border-color:#f3d6b3;color:#9a5b1a}
 .struct-chip:hover{background:#fde9d0;border-color:#e8c191}
+.tablepart-chip{background:#fef9c3;border-color:#f3e0a0;color:#92400e}
+.tablepart-chip:hover{background:#fdf3b8;border-color:#e9d27e}
 #yaml-editor.attr-drop-target{outline:2px dashed #1a4a80;outline-offset:-2px}
 /* Визуальный конструктор форм (#164): холст, drop-зоны, панель свойств */
 .rp-tabs{display:flex;gap:2px}
@@ -233,6 +235,10 @@ const tplFormsEditor = `
 .fc-label{color:#475569}
 .fc-btn button{padding:5px 10px;border:1px solid #d0d7e3;border-radius:5px;background:#f8fafc;pointer-events:none}
 .fc-table .fc-tp{background:#fef9c3;color:#92400e;padding:6px 8px;border-radius:6px;font-size:12px}
+.fc-cols{display:flex;flex-wrap:wrap;gap:4px;padding:4px 2px 0}
+.fc-col{font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:2px 7px;color:#475569}
+.fc-col.fc-selected{outline:2px solid #1a4a80;background:#eef4ff}
+.fc-cols-empty{font-size:11px;color:#94a3b8;font-style:italic}
 .fc-unknown{background:#fef2f2;color:#991b1b;font-size:12px}
 .fc-kind{color:#94a3b8;font-size:11px}
 #canvas-host.fc-canvas-disabled{opacity:.5;pointer-events:none}
@@ -297,6 +303,15 @@ const tplFormsEditor = `
   <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Страница (перетащите в набор страниц)">＋ Страница</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Надпись" data-name="Надпись" data-title="Надпись" title="Текстовая надпись">＋ Надпись</span>
 </div>
+
+{{if .EditingFormTableParts}}
+<div class="struct-palette" id="tablepart-palette">
+  <span class="attr-palette-label">Табличные части (перетащите на холст):</span>
+  {{range .EditingFormTableParts}}
+  <span class="attr-chip tablepart-chip" draggable="true" data-tp="{{.Name}}" data-title="{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}" title="Добавить табличную часть «{{.Name}}»">▦ {{.Name}}</span>
+  {{end}}
+</div>
+{{end}}
 
 <div class="editor-grid">
   <div class="editor-pane">
@@ -522,6 +537,27 @@ function insertFieldFromChip(chip) {
   });
 })();
 
+// Палитра табличных частей (#164, слайс D1): свой mime text/onebase-tablepart,
+// drop вставляет kind:ТабличнаяЧасть с name=Таб<ТЧ> и data_path=Объект.<ТЧ>.
+(function () {
+  var pal = document.getElementById('tablepart-palette');
+  if (!pal) return;
+  pal.addEventListener('dragstart', function (e) {
+    var chip = e.target.closest ? e.target.closest('.tablepart-chip') : null;
+    if (!chip) return;
+    chip.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/onebase-tablepart', JSON.stringify({
+      tp: chip.getAttribute('data-tp'),
+      title: chip.getAttribute('data-title') || ''
+    }));
+  });
+  pal.addEventListener('dragend', function (e) {
+    var chip = e.target.closest ? e.target.closest('.tablepart-chip') : null;
+    if (chip) chip.classList.remove('dragging');
+  });
+})();
+
 // setGridFlag — переключатель SlickGrid (план 48). Проставляет/снимает
 // use_grid: true у всех элементов kind: ТабличнаяЧасть в YAML формы.
 // Делаем построчно, без YAML-парсера: сначала убираем все строки use_grid,
@@ -696,7 +732,8 @@ function renderCanvasHTML(html) {
     var types = e.dataTransfer.types || [];
     var hasStruct = types.indexOf('text/onebase-struct') >= 0;
     var hasAttr = types.indexOf('text/onebase-attr') >= 0;
-    if (!hasStruct && !hasAttr) return;
+    var hasTP = types.indexOf('text/onebase-tablepart') >= 0;
+    if (!hasStruct && !hasAttr && !hasTP) return;
     if (dz.classList.contains('fc-drop-page') && !hasStruct) return; // page-зоны — только структура
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
     dz.classList.add('fc-drop-over');
@@ -718,7 +755,16 @@ function renderCanvasHTML(html) {
       editOp({ op: 'insert', parent: parent, index: index, kind: s.kind, name: s.name || '', title_ru: s.title || '' }, true);
       return;
     }
-    if (dz.classList.contains('fc-drop-page')) return; // реквизиты в Pages напрямую не кладём
+    if (dz.classList.contains('fc-drop-page')) return; // в Pages напрямую кладём только страницы
+    // Табличная часть — свой mime.
+    var traw = e.dataTransfer.getData('text/onebase-tablepart');
+    if (traw) {
+      e.preventDefault();
+      var tp; try { tp = JSON.parse(traw); } catch (_) { return; }
+      editOp({ op: 'insert', parent: parent, index: index, kind: 'ТабличнаяЧасть',
+        name: 'Таб' + tp.tp, data_path: 'Объект.' + tp.tp, title_ru: tp.title || tp.tp }, true);
+      return;
+    }
     var raw = e.dataTransfer.getData('text/onebase-attr');
     if (!raw) return;
     e.preventDefault();

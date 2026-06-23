@@ -190,3 +190,46 @@ elements:
 		t.Errorf("нет drop-зоны страниц после последней страницы:\n%s", out)
 	}
 }
+
+// Холст табличной части показывает её колонки (kind:Колонка), каждую со своим
+// node-id и подписью из последнего сегмента data_path; выбранная подсвечена
+// (follow-up #164, слайс D1).
+func TestRenderFormCanvas_TablePartColumns(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заказ
+elements:
+  - kind: ТабличнаяЧасть
+    name: ТабТовары
+    data_path: Объект.Товары
+    children:
+      - kind: Колонка
+        name: КолНоменклатура
+        data_path: Объект.Товары.Номенклатура
+      - kind: Колонка
+        name: КолКоличество
+        data_path: Объект.Товары.Количество
+`
+	doc, err := formdoc.Load([]byte(src))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out, err := renderFormCanvas(doc, "elements.0.children.0")
+	if err != nil {
+		t.Fatalf("renderFormCanvas: %v", err)
+	}
+	if !strings.Contains(out, "fc-cols") {
+		t.Errorf("нет контейнера колонок:\n%s", out)
+	}
+	if !strings.Contains(out, `data-node-id="elements.0.children.0"`) || !strings.Contains(out, `data-node-id="elements.0.children.1"`) {
+		t.Errorf("колонки без node-id:\n%s", out)
+	}
+	if !strings.Contains(out, "Номенклатура") || !strings.Contains(out, "Количество") {
+		t.Errorf("нет подписей колонок:\n%s", out)
+	}
+	if !strings.Contains(out, "fc-col fc-selected") {
+		t.Errorf("выбранная колонка не подсвечена:\n%s", out)
+	}
+}

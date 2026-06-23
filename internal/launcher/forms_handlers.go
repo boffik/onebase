@@ -273,8 +273,10 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 	// справочника/документа либо параметры обработки/отчёта; у обработки нет
 	// «Наименования».
 	var attrs []formScaffoldAttr
+	var tableParts []formTablePart
 	if proj, perr := h.loadProjectFor(r.Context(), b); perr == nil {
 		attrs = objectScaffoldAttrs(proj, entity)
+		tableParts = objectScaffoldTableParts(proj, entity)
 		proj.Close()
 	}
 
@@ -288,7 +290,7 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	data := &configuratorData{Base: b, EditingForm: form, EditingFormAttrs: attrs, Lang: resolveLang(r)}
+	data := &configuratorData{Base: b, EditingForm: form, EditingFormAttrs: attrs, EditingFormTableParts: tableParts, Lang: resolveLang(r)}
 	// Узел дерева, из которого открыли редактор — для back-link «← В конфигуратор»
 	// и проброса дальше в save/delete-формы (follow-up #164, слайс A).
 	data.FormEditFrom = strings.TrimSpace(r.URL.Query().Get("from"))
@@ -306,8 +308,8 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 // formScaffoldAttr — реквизит объекта (поле справочника/документа либо параметр
 // обработки/отчёта), из которого строится заготовка новой формы.
 type formScaffoldAttr struct {
-	Name  string
-	Title string // синоним/подпись; пустой → подставляется Name
+	Name  string `json:"name"`
+	Title string `json:"title"` // синоним/подпись; пустой → подставляется Name
 }
 
 // objectScaffoldAttrs возвращает реквизиты объекта <entity> для заготовки новой
@@ -345,6 +347,38 @@ func objectScaffoldAttrs(proj *project.Project, entity string) []formScaffoldAtt
 			}
 			return attrs
 		}
+	}
+	return nil
+}
+
+// formTablePart — табличная часть объекта с составом колонок для палитры ТЧ на
+// холсте (drop вставляет ТабличнуюЧасть) и редактора состава колонок (follow-up
+// #164, слайсы D1/D2).
+type formTablePart struct {
+	Name    string             `json:"name"`
+	Title   string             `json:"title"`
+	Columns []formScaffoldAttr `json:"columns"`
+}
+
+// objectScaffoldTableParts возвращает табличные части справочника/документа
+// <entity> с их полями (колонками). Только сущности — у обработок/отчётов ТЧ нет.
+func objectScaffoldTableParts(proj *project.Project, entity string) []formTablePart {
+	if proj == nil || entity == "" {
+		return nil
+	}
+	for _, e := range proj.Entities {
+		if !strings.EqualFold(e.Name, entity) {
+			continue
+		}
+		tps := make([]formTablePart, 0, len(e.TableParts))
+		for _, tp := range e.TableParts {
+			cols := make([]formScaffoldAttr, 0, len(tp.Fields))
+			for _, f := range tp.Fields {
+				cols = append(cols, formScaffoldAttr{Name: f.Name, Title: f.Title})
+			}
+			tps = append(tps, formTablePart{Name: tp.Name, Title: tp.Title, Columns: cols})
+		}
+		return tps
 	}
 	return nil
 }

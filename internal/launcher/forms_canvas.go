@@ -132,9 +132,27 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><button type="button" disabled>%s</button></div>`,
 			elWrapClass("fc-btn", id, selectedID), id, kind, title)
 
-	case metadata.FormElementTable, metadata.FormElementTablePart:
+	case metadata.FormElementTable:
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><div class="fc-tp">▦ %s</div></div>`,
 			elWrapClass("fc-table", id, selectedID), id, kind, title)
+
+	case metadata.FormElementTablePart:
+		// Заголовок ТЧ (выбирается кликом) + колонки-дети kind:Колонка, каждая со
+		// своим node-id, чтобы их можно было выбирать/удалять/переставлять и
+		// редактировать состав (follow-up #164, слайсы D1/D2).
+		fmt.Fprintf(buf, `<div class="%s" data-node-id="%s" data-kind="%s"><div class="fc-tp fc-pick">▦ %s</div><div class="fc-cols">`,
+			elWrapClass("fc-table", id, selectedID), id, kind, title)
+		if len(en.Children) == 0 {
+			buf.WriteString(`<span class="fc-cols-empty">колонки не выбраны</span>`)
+		}
+		for _, c := range en.Children {
+			if c == nil || c.El == nil {
+				continue
+			}
+			fmt.Fprintf(buf, `<span class="%s fc-pick" data-node-id="%s" data-kind="%s">%s</span>`,
+				elWrapClass("fc-col", c.NodeID, selectedID), c.NodeID, html.EscapeString(string(c.El.Kind)), html.EscapeString(columnLabel(c.El)))
+		}
+		buf.WriteString(`</div></div>`)
 
 	default:
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s">%s <span class="fc-kind">%s</span></div>`,
@@ -188,6 +206,24 @@ func canvasModel(doc *formdoc.Doc) (map[string]canvasElementInfo, error) {
 	}
 	walk(els)
 	return m, nil
+}
+
+// columnLabel выбирает подпись колонки ТЧ для холста: ru-заголовок → поле
+// (field или последний сегмент data_path) → имя.
+func columnLabel(el *metadata.FormElement) string {
+	if el.TitleMap != nil && el.TitleMap["ru"] != "" {
+		return el.TitleMap["ru"]
+	}
+	if el.Title != "" {
+		return el.Title
+	}
+	if el.FieldName != "" {
+		return el.FieldName
+	}
+	if f := lastSegment(el.DataPath); f != "" {
+		return f
+	}
+	return el.Name
 }
 
 // canvasTitle выбирает отображаемый заголовок элемента: ru-локаль → legacy
