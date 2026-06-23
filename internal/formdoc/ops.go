@@ -257,6 +257,9 @@ func (d *Doc) Move(nodeID, newParentID string, index int) error {
 	if err != nil {
 		return err
 	}
+	if newParentID != "" && (newParentID == nodeID || strings.HasPrefix(newParentID, nodeID+"."+childrenKey+".")) {
+		return fmt.Errorf("formdoc: нельзя перенести узел %q внутрь собственного поддерева", nodeID)
+	}
 	dstSeq, _, err := d.targetSeq(newParentID)
 	if err != nil {
 		return err

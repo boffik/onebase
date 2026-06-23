@@ -341,3 +341,18 @@ elements:
 		t.Errorf("пустой набор должен удалять ключ options:\n%s", out)
 	}
 }
+
+// Move не должен позволять переносить узел внутрь собственного поддерева:
+// yaml.Node хранит указатели, и такой перенос создал бы цикл, который нельзя
+// безопасно сериализовать обратно в YAML.
+func TestMove_RejectsMoveIntoOwnSubtree(t *testing.T) {
+	doc, _ := Load([]byte(elemSample))
+
+	err := doc.Move("elements.0", "elements.0.children.0", 0)
+	if err == nil {
+		t.Fatalf("ожидалась ошибка при переносе родителя внутрь потомка")
+	}
+	if !strings.Contains(err.Error(), "собственного поддерева") {
+		t.Fatalf("неожиданная ошибка: %v", err)
+	}
+}
