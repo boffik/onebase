@@ -216,6 +216,38 @@ form:
 	}
 }
 
+// Регрессия (follow-up #164, слайс A): back-link «← В конфигуратор» терял
+// объект-источник и вёл в корень. С ?from=<nodeID> он обязан вести на узел
+// дерева, из которого открыли редактор; без from — фолбэк на e-<Entity>.
+func TestFormsEditor_BackLinkCarriesFrom(t *testing.T) {
+	base := &Base{ID: "b1"}
+	form := &cfgManagedForm{Entity: "Customer", Name: "ФормаОбъекта", Kind: "object", YAML: "schema: onebase.form/v1\n"}
+
+	// С from → back-link и hidden-поля сохраняют узел-источник.
+	var buf bytes.Buffer
+	withFrom := &configuratorData{Base: base, EditingForm: form, FormEditFrom: "proc-Загрузка"}
+	if err := formsTmpl.ExecuteTemplate(&buf, "forms-editor", withFrom); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	gotFrom := buf.String()
+	if !strings.Contains(gotFrom, "/bases/b1/configurator?tab=tree&select=proc-") {
+		t.Errorf("back-link не ведёт на from-узел.\n%s", extractContext(gotFrom, "В конфигуратор", 220))
+	}
+	if !strings.Contains(gotFrom, `name="from" value="proc-Загрузка"`) {
+		t.Error("в save/delete формах нет hidden-поля from")
+	}
+
+	// Без from → фолбэк на e-<Entity>.
+	buf.Reset()
+	noFrom := &configuratorData{Base: base, EditingForm: form}
+	if err := formsTmpl.ExecuteTemplate(&buf, "forms-editor", noFrom); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	if !strings.Contains(buf.String(), "/bases/b1/configurator?tab=tree&select=e-Customer") {
+		t.Errorf("фолбэк back-link не e-<Entity>.\n%s", extractContext(buf.String(), "В конфигуратор", 220))
+	}
+}
+
 // extractContext возвращает кусок строки вокруг указанного маркера.
 func extractContext(s, marker string, span int) string {
 	i := strings.Index(s, marker)

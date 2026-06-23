@@ -231,6 +231,8 @@ func (h *handler) configuratorFormsList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	data := &configuratorData{Base: b, ManagedForms: forms, Lang: resolveLang(r)}
+	// Сохранить узел-источник для back-link после delete-редиректа (follow-up #164).
+	data.FormEditFrom = strings.TrimSpace(r.URL.Query().Get("from"))
 	// Подсветить флаги после save/delete-редиректа.
 	if q := r.URL.Query().Get("saved"); q != "" {
 		data.FieldsSaved = true
@@ -287,6 +289,9 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	data := &configuratorData{Base: b, EditingForm: form, EditingFormAttrs: attrs, Lang: resolveLang(r)}
+	// Узел дерева, из которого открыли редактор — для back-link «← В конфигуратор»
+	// и проброса дальше в save/delete-формы (follow-up #164, слайс A).
+	data.FormEditFrom = strings.TrimSpace(r.URL.Query().Get("from"))
 	if q := r.URL.Query().Get("saved"); q != "" {
 		data.FieldsSaved = true
 		data.FieldsSavedEntity = q
@@ -433,6 +438,9 @@ func (h *handler) configuratorFormsSave(w http.ResponseWriter, r *http.Request) 
 	// После сохранения — редирект на редактор с флагами, чтобы избежать
 	// повторного submit при F5 и подсветить статус.
 	target := fmt.Sprintf("/bases/%s/configurator/forms/edit?entity=%s&name=%s", b.ID, entity, name)
+	if from := strings.TrimSpace(r.FormValue("from")); from != "" {
+		target += "&from=" + from
+	}
 	if saveErr != nil {
 		target += "&err=" + saveErr.Error()
 	} else {
@@ -503,6 +511,10 @@ func (h *handler) configuratorFormsDelete(w http.ResponseWriter, r *http.Request
 		target += "?err=" + delErr.Error()
 	} else {
 		target += "?saved=Удалена форма " + entity + "." + name
+	}
+	// Сохранить узел-источник, чтобы back-link на списке форм вёл обратно (follow-up #164).
+	if from := strings.TrimSpace(r.FormValue("from")); from != "" {
+		target += "&from=" + from
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }

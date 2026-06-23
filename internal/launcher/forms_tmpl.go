@@ -92,7 +92,7 @@ table tr:hover{background:#f4f6fb}
 {{define "forms-header"}}
 <header>
   <h1>◇ Управляемые формы</h1>
-  <a href="/bases/{{.Base.ID}}/configurator">← В конфигуратор</a>
+  <a href="/bases/{{.Base.ID}}/configurator{{if .FormEditFrom}}?tab=tree&select={{.FormEditFrom}}{{else if .EditingForm}}?tab=tree&select=e-{{.EditingForm.Entity}}{{end}}">← В конфигуратор</a>
   <span class="crumbs">
     <a href="/bases/{{.Base.ID}}/configurator/forms">Все формы</a>
     {{if .EditingForm}}/ <a href="/bases/{{.Base.ID}}/configurator/forms/edit?entity={{.EditingForm.Entity}}&name={{.EditingForm.Name}}">{{.EditingForm.Entity}}.{{.EditingForm.Name}}</a>{{end}}
@@ -129,7 +129,7 @@ const tplFormsList = `
       <td>{{if .Kind}}{{.Kind}}{{else}}—{{end}}</td>
       <td>{{if .HasOS}}есть{{else}}—{{end}}</td>
       <td style="text-align:right">
-        <a class="btn" href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}">Редактировать</a>
+        <a class="btn" href="/bases/{{$.Base.ID}}/configurator/forms/edit?entity={{.Entity}}&name={{.Name}}&from=e-{{.Entity}}">Редактировать</a>
       </td>
     </tr>
     {{end}}
@@ -254,6 +254,7 @@ const tplFormsEditor = `
 <form id="save-form" action="/bases/{{.Base.ID}}/configurator/forms/save" method="POST">
 <input type="hidden" name="entity" value="{{.EditingForm.Entity}}">
 <input type="hidden" name="name" value="{{.EditingForm.Name}}">
+<input type="hidden" name="from" value="{{.FormEditFrom}}">
 <input type="hidden" name="yaml" id="yaml-hidden">
 <input type="hidden" name="os" id="os-hidden">
 </form>
@@ -269,6 +270,7 @@ const tplFormsEditor = `
   <form action="/bases/{{.Base.ID}}/configurator/forms/delete" method="POST" style="display:inline" onsubmit="return confirm('Удалить эту форму вместе с модулем и ресурсами?')">
     <input type="hidden" name="entity" value="{{.EditingForm.Entity}}">
     <input type="hidden" name="name" value="{{.EditingForm.Name}}">
+    <input type="hidden" name="from" value="{{.FormEditFrom}}">
     <button class="btn btn-danger" type="submit">Удалить</button>
   </form>
   <span class="editor-meta">{{.EditingForm.Entity}}.{{.EditingForm.Name}}{{if .EditingForm.Kind}} · {{.EditingForm.Kind}}{{end}}</span>
