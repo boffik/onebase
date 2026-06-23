@@ -154,6 +154,24 @@ func TestApplyEditOp_Delete(t *testing.T) {
 	}
 }
 
+// insert контейнера (группа) даёт явный пустой children в YAML и узел-container
+// в модели — чтобы внутрь сразу можно было ронять поля (follow-up #164, слайс C).
+func TestApplyEditOp_InsertContainer(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "insert", Parent: "", Index: 1, Kind: "ГруппаФормы", Name: "Группа2", TitleRU: "Реквизиты",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp insert container: %v", err)
+	}
+	if !strings.Contains(res.YAML, "children: []") {
+		t.Errorf("у новой группы нет явного пустого children:\n%s", res.YAML)
+	}
+	info, ok := res.Model[res.SelectedID]
+	if !ok || !info.Container {
+		t.Errorf("новый узел не container: id=%q info=%+v", res.SelectedID, info)
+	}
+}
+
 // move через эндпоинт меняет порядок соседей. Индекс — как его шлёт клиент при
 // «↓ Ниже» (finalIdx+1 = srcIdx+2 из-за компенсации сдвига в Move), follow-up
 // #164 слайс B2.

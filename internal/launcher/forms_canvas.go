@@ -53,6 +53,15 @@ func renderDropZone(buf *bytes.Buffer, parentID string, index int) {
 		html.EscapeString(parentID), index)
 }
 
+// renderPageDropZone — точка приёма страницы в набор СтраницыФормы: вставка
+// kind:Страница в контейнер pagesID на позицию index. Отдельный класс
+// fc-drop-page принимает только структурные элементы (страницы), чтобы реквизит
+// не попадал прямым ребёнком в Pages (follow-up #164, слайс C).
+func renderPageDropZone(buf *bytes.Buffer, pagesID string, index int) {
+	fmt.Fprintf(buf, `<div class="fc-drop-page" data-parent="%s" data-index="%d">+ страница</div>`,
+		html.EscapeString(pagesID), index)
+}
+
 // elWrapClass собирает классы обёртки элемента, добавляя fc-selected выбранному.
 func elWrapClass(base, nodeID, selectedID string) string {
 	cls := "fc-el " + base
@@ -81,7 +90,8 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 	case metadata.FormElementPages:
 		fmt.Fprintf(buf, `<div class="%s" data-node-id="%s" data-kind="%s">`,
 			elWrapClass("fc-pages", id, selectedID), id, kind)
-		for _, p := range en.Children {
+		for i, p := range en.Children {
+			renderPageDropZone(buf, id, i)
 			if p == nil || p.El == nil {
 				continue
 			}
@@ -91,6 +101,7 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 			renderCanvasChildren(buf, p.NodeID, p.Children, selectedID)
 			buf.WriteString(`</div>`)
 		}
+		renderPageDropZone(buf, id, len(en.Children))
 		buf.WriteString(`</div>`)
 
 	case metadata.FormElementField, metadata.FormElementDatePicker, metadata.FormElementInputList, metadata.FormElementFormField:

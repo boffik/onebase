@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ivantit66/onebase/internal/formdoc"
+	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Эндпоинт визуальной правки формы (#164, слайс 5).
@@ -105,6 +106,12 @@ func applyEditOp(yamlSrc []byte, req editOpRequest) (editOpResult, error) {
 		}
 		if req.TitleRU != "" {
 			fields["title"] = map[string]string{"ru": req.TitleRU}
+		}
+		// Контейнеры (группа/страницы/страница) создаём с пустым children —
+		// YAML сразу структурно явный, а на холсте внутри появляется drop-зона
+		// (follow-up #164, слайс C).
+		if (&metadata.FormElement{Kind: metadata.FormElementType(req.Kind)}).IsContainer() {
+			fields["children"] = []any{}
 		}
 		newID, err := doc.InsertElement(req.Parent, req.Index, fields)
 		if err != nil {

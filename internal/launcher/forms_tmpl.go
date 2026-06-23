@@ -197,12 +197,14 @@ const tplFormsEditor = `
 .editor-tab{padding:8px 14px;cursor:pointer;font-size:12px;border-bottom:2px solid transparent;color:#64748b}
 .editor-tab.active{color:#1a4a80;border-bottom-color:#1a4a80;background:#fff;font-weight:600}
 /* Палитра реквизитов объекта — перетаскивание/клик вставляет поле (issue #134) */
-.attr-palette{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:8px 12px;margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.attr-palette,.struct-palette{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:8px 12px;margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .attr-palette-label{font-size:12px;color:#64748b;margin-right:4px}
 .attr-chip{display:inline-flex;align-items:center;background:#eef4ff;border:1px solid #c7d8f5;border-radius:14px;padding:3px 10px;font-size:12px;color:#1a4a80;cursor:grab;user-select:none}
 .attr-chip:hover{background:#dce8ff;border-color:#9cbef0}
 .attr-chip:active{cursor:grabbing}
 .attr-chip.dragging{opacity:.4}
+.struct-chip{background:#fef3e8;border-color:#f3d6b3;color:#9a5b1a}
+.struct-chip:hover{background:#fde9d0;border-color:#e8c191}
 #yaml-editor.attr-drop-target{outline:2px dashed #1a4a80;outline-offset:-2px}
 /* Визуальный конструктор форм (#164): холст, drop-зоны, панель свойств */
 .rp-tabs{display:flex;gap:2px}
@@ -214,6 +216,8 @@ const tplFormsEditor = `
 .fc-children{display:flex;flex-direction:column;gap:1px;min-height:6px}
 .fc-drop{height:6px;border-radius:4px;transition:background .1s,height .1s}
 .fc-drop.fc-drop-over{background:#1a4a80;height:14px}
+.fc-drop-page{font-size:11px;color:#b08442;border:1px dashed #d8c4a0;border-radius:5px;padding:2px 6px;margin:3px 0;text-align:center;background:#fffdf8;transition:background .1s}
+.fc-drop-page.fc-drop-over{background:#fde9c8;color:#9a5b1a;border-color:#e0b87a}
 .fc-el{border:1px solid transparent;border-radius:6px;padding:3px 5px;cursor:pointer}
 .fc-el.fc-selected{outline:2px solid #1a4a80;background:#eef4ff}
 .fc-pick:hover{background:#f5f8ff}
@@ -285,6 +289,14 @@ const tplFormsEditor = `
   {{end}}
 </div>
 {{end}}
+
+<div class="struct-palette" id="struct-palette">
+  <span class="attr-palette-label">Структура (перетащите на холст):</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="ГруппаФормы" data-name="Группа" data-title="Группа" title="Группа полей">＋ Группа</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="СтраницыФормы" data-name="Страницы" title="Набор страниц-закладок">＋ Страницы</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Страница (перетащите в набор страниц)">＋ Страница</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="Надпись" data-name="Надпись" data-title="Надпись" title="Текстовая надпись">＋ Надпись</span>
+</div>
 
 <div class="editor-grid">
   <div class="editor-pane">
@@ -488,6 +500,28 @@ function insertFieldFromChip(chip) {
   });
 })();
 
+// Палитра структурных элементов (#164, слайс C): тащит kind на холст СВОИМ mime
+// text/onebase-struct, чтобы не пересекаться с реквизитами (text/onebase-attr).
+(function () {
+  var pal = document.getElementById('struct-palette');
+  if (!pal) return;
+  pal.addEventListener('dragstart', function (e) {
+    var chip = e.target.closest ? e.target.closest('.struct-chip') : null;
+    if (!chip) return;
+    chip.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/onebase-struct', JSON.stringify({
+      kind: chip.getAttribute('data-kind'),
+      name: chip.getAttribute('data-name') || '',
+      title: chip.getAttribute('data-title') || ''
+    }));
+  });
+  pal.addEventListener('dragend', function (e) {
+    var chip = e.target.closest ? e.target.closest('.struct-chip') : null;
+    if (chip) chip.classList.remove('dragging');
+  });
+})();
+
 // setGridFlag — переключатель SlickGrid (план 48). Проставляет/снимает
 // use_grid: true у всех элементов kind: ТабличнаяЧасть в YAML формы.
 // Делаем построчно, без YAML-парсера: сначала убираем все строки use_grid,
@@ -657,25 +691,40 @@ function renderCanvasHTML(html) {
     selectNode(el.getAttribute('data-node-id'));
   });
   host.addEventListener('dragover', function (e) {
-    var dz = e.target.closest ? e.target.closest('.fc-drop') : null;
-    if (!dz || (e.dataTransfer.types || []).indexOf('text/onebase-attr') < 0) return;
+    var dz = e.target.closest ? e.target.closest('.fc-drop, .fc-drop-page') : null;
+    if (!dz) return;
+    var types = e.dataTransfer.types || [];
+    var hasStruct = types.indexOf('text/onebase-struct') >= 0;
+    var hasAttr = types.indexOf('text/onebase-attr') >= 0;
+    if (!hasStruct && !hasAttr) return;
+    if (dz.classList.contains('fc-drop-page') && !hasStruct) return; // page-зоны — только структура
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
     dz.classList.add('fc-drop-over');
   });
   host.addEventListener('dragleave', function (e) {
-    var dz = e.target.closest ? e.target.closest('.fc-drop') : null;
+    var dz = e.target.closest ? e.target.closest('.fc-drop, .fc-drop-page') : null;
     if (dz) dz.classList.remove('fc-drop-over');
   });
   host.addEventListener('drop', function (e) {
-    var dz = e.target.closest ? e.target.closest('.fc-drop') : null;
+    var dz = e.target.closest ? e.target.closest('.fc-drop, .fc-drop-page') : null;
     if (!dz) return;
     dz.classList.remove('fc-drop-over');
+    var parent = dz.getAttribute('data-parent'), index = dz.getAttribute('data-index');
+    // Структурный элемент (группа/страницы/страница/надпись) — свой mime.
+    var sraw = e.dataTransfer.getData('text/onebase-struct');
+    if (sraw) {
+      e.preventDefault();
+      var s; try { s = JSON.parse(sraw); } catch (_) { return; }
+      editOp({ op: 'insert', parent: parent, index: index, kind: s.kind, name: s.name || '', title_ru: s.title || '' }, true);
+      return;
+    }
+    if (dz.classList.contains('fc-drop-page')) return; // реквизиты в Pages напрямую не кладём
     var raw = e.dataTransfer.getData('text/onebase-attr');
     if (!raw) return;
     e.preventDefault();
     var d; try { d = JSON.parse(raw); } catch (_) { return; }
     editOp({
-      op: 'insert', parent: dz.getAttribute('data-parent'), index: dz.getAttribute('data-index'),
+      op: 'insert', parent: parent, index: index,
       kind: 'ПолеВвода', name: 'Поле' + d.attr, data_path: 'Объект.' + d.attr, title_ru: d.title || d.attr
     }, true);
   });

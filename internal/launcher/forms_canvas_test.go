@@ -154,3 +154,39 @@ func TestRenderFormCanvas_FieldDetails(t *testing.T) {
 		t.Errorf("плейсхолдер не из последнего сегмента data_path:\n%s", out)
 	}
 }
+
+// Холст набора СтраницыФормы несёт drop-зоны уровня страниц (fc-drop-page) для
+// добавления новой страницы: N+1 зон, адресованных в контейнер Pages (follow-up
+// #164, слайс C).
+func TestRenderFormCanvas_PageDropZones(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Звонок
+elements:
+  - kind: СтраницыФормы
+    name: Страницы1
+    children:
+      - kind: Страница
+        name: Стр1
+        children:
+          - kind: ПолеВвода
+            name: П1
+            data_path: Объект.Поле
+`
+	doc, err := formdoc.Load([]byte(src))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out, err := renderFormCanvas(doc, "")
+	if err != nil {
+		t.Fatalf("renderFormCanvas: %v", err)
+	}
+	if !strings.Contains(out, `class="fc-drop-page" data-parent="elements.0" data-index="0"`) {
+		t.Errorf("нет drop-зоны страниц перед первой страницей:\n%s", out)
+	}
+	if !strings.Contains(out, `class="fc-drop-page" data-parent="elements.0" data-index="1"`) {
+		t.Errorf("нет drop-зоны страниц после последней страницы:\n%s", out)
+	}
+}
