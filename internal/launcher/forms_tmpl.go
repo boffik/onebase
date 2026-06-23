@@ -247,6 +247,7 @@ const tplFormsEditor = `
 .fc-label{color:#475569}
 .fc-btn button{padding:5px 10px;border:1px solid #d0d7e3;border-radius:5px;background:#f8fafc;pointer-events:none}
 .fc-table .fc-tp{background:#fef9c3;color:#92400e;padding:6px 8px;border-radius:6px;font-size:12px}
+.fc-pic{background:#eef2ff;color:#3730a3;border:1px dashed #c7d2fe;border-radius:6px;padding:10px;text-align:center;font-size:12px}
 .fc-cols{display:flex;flex-wrap:wrap;gap:4px;padding:4px 2px 0}
 .fc-col{font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:2px 7px;color:#475569}
 .fc-col.fc-selected{outline:2px solid #1a4a80;background:#eef4ff}
@@ -262,7 +263,7 @@ const tplFormsEditor = `
 .prop-panel h4 .prop-kind{color:#94a3b8;font-weight:400;margin-left:6px}
 .prop-row{margin-bottom:8px}
 .prop-row>label{display:block;color:#64748b;margin-bottom:2px}
-.prop-row input[type=text]{width:100%;padding:5px 8px;border:1px solid #d0d7e3;border-radius:5px;font-size:12px}
+.prop-row input[type=text],.prop-row input[type=number]{width:100%;padding:5px 8px;border:1px solid #d0d7e3;border-radius:5px;font-size:12px}
 .prop-row.prop-check{display:flex;align-items:center;gap:6px}
 .prop-row.prop-check>label{margin:0}
 .prop-actions{margin-top:12px;border-top:1px solid #eef0f5;padding-top:10px}
@@ -303,7 +304,7 @@ const tplFormsEditor = `
 <div class="attr-palette" id="attr-palette">
   <span class="attr-palette-label">Реквизиты объекта (клик или перетащите в YAML, чтобы добавить поле):</span>
   {{range .EditingFormAttrs}}
-  <span class="attr-chip" draggable="true" data-attr="{{.Name}}" data-title="{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}" onclick="insertFieldFromChip(this)" title="Вставить поле для «{{.Name}}»">{{.Name}}</span>
+  <span class="attr-chip" draggable="true" data-attr="{{.Name}}" data-type="{{.Type}}" data-title="{{if .Title}}{{.Title}}{{else}}{{.Name}}{{end}}" onclick="insertFieldFromChip(this)" title="Вставить поле для «{{.Name}}»">{{.Name}}</span>
   {{end}}
 </div>
 {{end}}
@@ -314,6 +315,9 @@ const tplFormsEditor = `
   <span class="attr-chip struct-chip" draggable="true" data-kind="СтраницыФормы" data-name="Страницы" title="Набор вкладок: бросьте на холст, затем добавляйте вкладки кнопкой «+ страница» внутри">＋ Страницы (набор)</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Вкладка набора: кликните «+ страница» в наборе или перетащите этот чип на «+ страница»">＋ Страница (вкладка)</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Надпись" data-name="Надпись" data-title="Надпись" title="Текстовая надпись">＋ Надпись</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="Кнопка" data-name="Кнопка" data-title="Кнопка" title="Кнопка (обработчик нажатия — отдельным шагом)">＋ Кнопка</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="ПолеКартинки" data-name="Картинка" data-title="Картинка" title="Поле картинки (путь укажите в свойствах)">＋ Картинка</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="КоманднаяПанель" data-name="КоманднаяПанель" title="Командная панель (контейнер для кнопок)">＋ Команд. панель</span>
 </div>
 
 {{if .EditingFormTableParts}}
@@ -499,7 +503,7 @@ function insertFieldFromChip(chip) {
     chip.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('text/onebase-attr',
-      JSON.stringify({ attr: chip.getAttribute('data-attr'), title: chip.getAttribute('data-title') }));
+      JSON.stringify({ attr: chip.getAttribute('data-attr'), title: chip.getAttribute('data-title'), type: chip.getAttribute('data-type') || '' }));
   });
   pal.addEventListener('dragend', function (e) {
     var chip = e.target.closest ? e.target.closest('.attr-chip') : null;
@@ -824,9 +828,17 @@ function renderCanvasHTML(html) {
     var d; try { d = JSON.parse(raw); } catch (_) { return; }
     editOp({
       op: 'insert', parent: parent, index: index,
-      kind: 'ПолеВвода', name: 'Поле' + d.attr, data_path: 'Объект.' + d.attr, title_ru: d.title || d.attr
+      kind: fieldKind(d.type), name: 'Поле' + d.attr, data_path: 'Объект.' + d.attr, title_ru: d.title || d.attr
     }, true);
   });
+  // «Умный» выбор элемента по типу реквизита: bool → Флажок, date → ПолеДаты,
+  // остальное (в т.ч. enum/ссылка — они сами рисуются выпадающим списком) → ПолеВвода.
+  function fieldKind(type) {
+    var t = (type || '').toLowerCase();
+    if (t === 'bool') return 'Флажок';
+    if (t === 'date') return 'ПолеДаты';
+    return 'ПолеВвода';
+  }
 })();
 
 function selectNode(nodeId) {
@@ -854,13 +866,24 @@ function renderProps() {
   h.appendChild(sk); panel.appendChild(h);
   addTextProp(panel, 'Заголовок (ru)', 'title.ru', info.titleRu || '');
   addTextProp(panel, 'Имя', 'name', info.name || '');
-  if (!info.container) {
+  if (info.kind === 'ПолеКартинки') {
+    addTextProp(panel, 'Картинка (путь)', 'picture', info.picture || '');
+    addNumProp(panel, 'Ширина, px', 'width', info.width);
+    addNumProp(panel, 'Высота, px', 'height', info.height);
+  } else if (!info.container) {
     addTextProp(panel, 'Поле данных (data_path)', 'data_path', info.dataPath || '');
     addTextProp(panel, 'Подсказка', 'hint', info.hint || '');
     addCheckProp(panel, 'Обязательное', 'required', info.required);
     addCheckProp(panel, 'Только чтение', 'readonly', info.readonly);
+    if (info.kind === 'ПолеВвода') {
+      addTextProp(panel, 'Маска ввода', 'mask', info.mask || '');
+      addCheckRaw(panel, 'Файловое поле', info.fileType, function (ch) { setProp('type', ch ? 'file' : ''); });
+    }
   }
-  if (info.kind === 'ТабличнаяЧасть') addColumnsEditor(panel);
+  if (info.kind === 'ТабличнаяЧасть') {
+    addCheckRaw(panel, 'Простая таблица (без SlickGrid)', info.noGrid, function (ch) { setProp('no_grid', ch ? 'true' : ''); });
+    addColumnsEditor(panel);
+  }
   addElementActions(panel, info);
 }
 // Кнопки порядка и удаления элемента (follow-up #164, слайсы B1/B2): «выше/ниже»
@@ -985,11 +1008,23 @@ function addTextProp(panel, label, key, val) {
   row.appendChild(inp); panel.appendChild(row);
 }
 function addCheckProp(panel, label, key, checked) {
+  addCheckRaw(panel, label, checked, function (ch) { setProp(key, ch ? 'true' : ''); });
+}
+// addCheckRaw — чекбокс с произвольным обработчиком (для type=file, no_grid и т.п.,
+// где значение не «true»/«»).
+function addCheckRaw(panel, label, checked, onChange) {
   var row = document.createElement('div'); row.className = 'prop-row prop-check';
   var inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!checked;
-  inp.addEventListener('change', function () { setProp(key, inp.checked ? 'true' : ''); });
+  inp.addEventListener('change', function () { onChange(inp.checked); });
   var l = document.createElement('label'); l.textContent = label;
   row.appendChild(inp); row.appendChild(l); panel.appendChild(row);
+}
+function addNumProp(panel, label, key, val) {
+  var row = document.createElement('div'); row.className = 'prop-row';
+  var l = document.createElement('label'); l.textContent = label; row.appendChild(l);
+  var inp = document.createElement('input'); inp.type = 'number'; inp.value = val || 0;
+  inp.addEventListener('change', function () { setProp(key, inp.value); });
+  row.appendChild(inp); panel.appendChild(row);
 }
 function setProp(key, value) {
   if (!_selected) return;

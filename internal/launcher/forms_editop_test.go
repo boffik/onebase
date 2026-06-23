@@ -226,6 +226,35 @@ elements:
 	}
 }
 
+// Числовое свойство (width) пишется в YAML числом, а не строкой — иначе декод
+// FormElement.Width упал бы (follow-up #164, batch A).
+func TestApplyEditOp_NumericProp(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Счёт
+elements:
+  - kind: ПолеКартинки
+    name: Лого
+`
+	res, err := applyEditOp([]byte(src), editOpRequest{
+		Op: "setProp", Node: "elements.0", Key: "width", Value: "120",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp setProp width: %v", err)
+	}
+	if !strings.Contains(res.YAML, "width: 120") {
+		t.Errorf("width должен быть числом 120:\n%s", res.YAML)
+	}
+	if strings.Contains(res.YAML, `width: "120"`) {
+		t.Errorf("width записан строкой:\n%s", res.YAML)
+	}
+	if info := res.Model["elements.0"]; info.Width != 120 {
+		t.Errorf("в модели width=%d, ожидался 120", info.Width)
+	}
+}
+
 // move через эндпоинт меняет порядок соседей. Индекс — как его шлёт клиент при
 // «↓ Ниже» (finalIdx+1 = srcIdx+2 из-за компенсации сдвига в Move), follow-up
 // #164 слайс B2.

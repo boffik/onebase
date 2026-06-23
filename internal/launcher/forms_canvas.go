@@ -148,6 +148,10 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><button type="button" disabled>%s</button></div>`,
 			elWrapClass("fc-btn", id, selectedID), id, kind, title)
 
+	case metadata.FormElementPicture:
+		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><div class="fc-pic">&#x1F5BC; %s</div></div>`,
+			elWrapClass("fc-pic-wrap", id, selectedID), id, kind, title)
+
 	case metadata.FormElementTable:
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><div class="fc-tp">▦ %s</div></div>`,
 			elWrapClass("fc-table", id, selectedID), id, kind, title)
@@ -189,6 +193,13 @@ type canvasElementInfo struct {
 	ReadOnly  bool   `json:"readonly"`
 	Hint      string `json:"hint"`
 	Container bool   `json:"container"`
+	// Свойства batch A (выводятся в панель только там, где влияют на рантайм).
+	Mask     string `json:"mask"`     // ПолеВвода: маска ввода (pattern)
+	FileType bool   `json:"fileType"` // ПолеВвода: Type == "file" (файловое поле)
+	Picture  string `json:"picture"`  // ПолеКартинки: путь к картинке
+	Width    int    `json:"width"`    // ПолеКартинки: ширина
+	Height   int    `json:"height"`   // ПолеКартинки: высота
+	NoGrid   bool   `json:"noGrid"`   // ТабличнаяЧасть: простая таблица вместо SlickGrid
 }
 
 // canvasModel разворачивает дерево формы в плоскую карту node-id → редактируемые
@@ -212,6 +223,12 @@ func canvasModel(doc *formdoc.Doc) (map[string]canvasElementInfo, error) {
 				ReadOnly:  el.ReadOnly,
 				Hint:      el.Hint,
 				Container: el.IsContainer(),
+				Mask:      el.Mask,
+				FileType:  el.Type == "file",
+				Picture:   el.Picture,
+				Width:     el.Width,
+				Height:    el.Height,
+				NoGrid:    el.NoGrid,
 			}
 			if el.TitleMap != nil {
 				info.TitleRU = el.TitleMap["ru"]

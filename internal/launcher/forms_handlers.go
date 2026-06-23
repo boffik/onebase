@@ -309,7 +309,8 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 // обработки/отчёта), из которого строится заготовка новой формы.
 type formScaffoldAttr struct {
 	Name  string `json:"name"`
-	Title string `json:"title"` // синоним/подпись; пустой → подставляется Name
+	Title string `json:"title"`          // синоним/подпись; пустой → подставляется Name
+	Type  string `json:"type,omitempty"` // тип поля (string/date/bool/reference:…/enum:…) — для «умного» дропа реквизита
 }
 
 // objectScaffoldAttrs возвращает реквизиты объекта <entity> для заготовки новой
@@ -325,7 +326,7 @@ func objectScaffoldAttrs(proj *project.Project, entity string) []formScaffoldAtt
 		if strings.EqualFold(e.Name, entity) {
 			attrs := make([]formScaffoldAttr, 0, len(e.Fields))
 			for _, f := range e.Fields {
-				attrs = append(attrs, formScaffoldAttr{Name: f.Name, Title: f.Title})
+				attrs = append(attrs, formScaffoldAttr{Name: f.Name, Title: f.Title, Type: string(f.Type)})
 			}
 			return attrs
 		}

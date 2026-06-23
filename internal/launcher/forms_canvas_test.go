@@ -296,3 +296,55 @@ elements:
 		t.Errorf("не-страница в наборе не отрисована своим рендером:\n%s", out)
 	}
 }
+
+// batch A: ПолеКартинки рисуется своим элементом (не «unknown»), а свойства
+// mask/picture/width/no_grid попадают в модель панели свойств (follow-up #164).
+func TestRenderFormCanvas_BatchAProps(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Счёт
+elements:
+  - kind: ПолеВвода
+    name: ПолеНомер
+    data_path: Объект.Номер
+    mask: "999-999"
+  - kind: ПолеКартинки
+    name: Лого
+    picture: logo.png
+    width: 80
+  - kind: ТабличнаяЧасть
+    name: ТабТовары
+    data_path: Объект.Товары
+    no_grid: true
+    children: []
+`
+	doc, err := formdoc.Load([]byte(src))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out, err := renderFormCanvas(doc, "")
+	if err != nil {
+		t.Fatalf("renderFormCanvas: %v", err)
+	}
+	if strings.Contains(out, "fc-unknown") {
+		t.Errorf("ПолеКартинки рисуется как неизвестный элемент:\n%s", out)
+	}
+	if !strings.Contains(out, "fc-pic") {
+		t.Errorf("нет рендера картинки:\n%s", out)
+	}
+	model, err := canvasModel(doc)
+	if err != nil {
+		t.Fatalf("canvasModel: %v", err)
+	}
+	if model["elements.0"].Mask != "999-999" {
+		t.Errorf("mask не в модели: %+v", model["elements.0"])
+	}
+	if model["elements.1"].Picture != "logo.png" || model["elements.1"].Width != 80 {
+		t.Errorf("picture/width не в модели: %+v", model["elements.1"])
+	}
+	if !model["elements.2"].NoGrid {
+		t.Errorf("no_grid не в модели: %+v", model["elements.2"])
+	}
+}

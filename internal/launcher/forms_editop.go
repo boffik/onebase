@@ -50,6 +50,10 @@ var boolProps = map[string]bool{
 	"visible": true, "enabled": true, "no_grid": true,
 }
 
+// numProps — целочисленные свойства: пишем в YAML числом, а не строкой (иначе
+// декод FormElement.Width/Height упадёт). Пустая строка → 0.
+var numProps = map[string]bool{"width": true, "height": true}
+
 // coercePropValue приводит сырое строковое значение свойства к типу: bool для
 // чекбокс-свойств, иначе — строка как есть.
 func coercePropValue(key, raw string) any {
@@ -64,6 +68,10 @@ func coercePropValue(key, raw string) any {
 		default:
 			return false
 		}
+	}
+	if numProps[leaf] {
+		n, _ := strconv.Atoi(strings.TrimSpace(raw))
+		return n
 	}
 	return raw
 }

@@ -393,8 +393,9 @@ func TestFormsEditor_AttrPalette(t *testing.T) {
 			t.Errorf("в редакторе формы нет %q", want)
 		}
 	}
-	// У реквизита без Title подпись чипа = его имя (data-title=Name).
-	if !strings.Contains(html, `data-attr="Наименование" data-title="Наименование"`) {
+	// У реквизита без Title подпись чипа = его имя (data-title=Name). data-type
+	// пустой (в тесте тип не задан) — но присутствует между data-attr и data-title.
+	if !strings.Contains(html, `data-attr="Наименование" data-type="" data-title="Наименование"`) {
 		t.Errorf("ожидался data-title=Name для реквизита без синонима")
 	}
 }
