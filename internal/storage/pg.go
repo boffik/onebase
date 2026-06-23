@@ -21,6 +21,10 @@ type DB struct {
 	dialect  Dialect
 }
 
+func pgQuoteIdent(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
 func Connect(ctx context.Context, dsn string) (*DB, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {

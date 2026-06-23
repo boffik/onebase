@@ -143,13 +143,18 @@ func (db *DB) MigrateInfoRegisters(ctx context.Context, regs []*metadata.InfoReg
 // правильным PK, копируя данные. Безопасно если в существующих строках
 // нет дубликатов по новому ключу — иначе INSERT упадёт с UNIQUE constraint,
 // и пользователь должен будет разобраться с дубликатами.
-//
-// Реализация SQLite-only — PostgreSQL поддерживает ALTER TABLE для PK
-// напрямую (но в onebase это пока не используется).
 func (db *DB) fixInfoRegPK(ctx context.Context, ir *metadata.InfoRegister) error {
-	if db.dialect.Name() != "sqlite" {
-		return nil // PG: ALTER TABLE сам разрулит, но это другой код-путь
+	switch db.dialect.Name() {
+	case "sqlite":
+		return db.fixInfoRegPKSQLite(ctx, ir)
+	case "postgres":
+		return db.fixInfoRegPKPostgres(ctx, ir)
+	default:
+		return nil
 	}
+}
+
+func (db *DB) fixInfoRegPKSQLite(ctx context.Context, ir *metadata.InfoRegister) error {
 	table := metadata.InfoRegTableName(ir.Name)
 
 	// Снимаем фактический PK.
@@ -270,6 +275,125 @@ func tableColumnNames(ctx context.Context, db *DB, table string) ([]string, erro
 		out = append(out, name)
 	}
 	return out, rows.Err()
+}
+
+func (db *DB) fixInfoRegPKPostgres(ctx context.Context, ir *metadata.InfoRegister) error {
+	table := metadata.InfoRegTableName(ir.Name)
+	expected := pkCols(ir)
+	actual, _, err := db.pgPrimaryKey(ctx, table)
+	if err != nil {
+		return err
+	}
+	if stringSlicesEqual(actual, expected) {
+		return nil
+	}
+
+	return db.WithTx(ctx, func(txCtx context.Context) error {
+		actual, constraint, err := db.pgPrimaryKey(txCtx, table)
+		if err != nil {
+			return err
+		}
+		if stringSlicesEqual(actual, expected) {
+			return nil
+		}
+		if len(expected) > 0 {
+			if err := db.pgEnsurePKColumnsUsable(txCtx, table, expected); err != nil {
+				return err
+			}
+		}
+		if constraint != "" {
+			if _, err := db.Exec(txCtx, "ALTER TABLE "+pgQuoteIdent(table)+" DROP CONSTRAINT "+pgQuoteIdent(constraint)); err != nil {
+				return err
+			}
+		}
+		if len(expected) == 0 {
+			return nil
+		}
+		for _, col := range expected {
+			if _, err := db.Exec(txCtx, "ALTER TABLE "+pgQuoteIdent(table)+" ALTER COLUMN "+pgQuoteIdent(col)+" SET NOT NULL"); err != nil {
+				return err
+			}
+		}
+		_, err = db.Exec(txCtx, "ALTER TABLE "+pgQuoteIdent(table)+" ADD CONSTRAINT "+
+			pgQuoteIdent(table+"_pkey")+" PRIMARY KEY ("+pgIdentList(expected)+")")
+		return err
+	})
+}
+
+func (db *DB) pgPrimaryKey(ctx context.Context, table string) ([]string, string, error) {
+	rows, err := db.Query(ctx, `
+		SELECT c.conname, a.attname
+		FROM pg_constraint c
+		JOIN pg_class t ON t.oid = c.conrelid
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON TRUE
+		JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+		WHERE c.contype = 'p' AND n.nspname = 'public' AND t.relname = $1
+		ORDER BY k.ord`, table)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	var cols []string
+	var constraint string
+	for rows.Next() {
+		var name, col string
+		if err := rows.Scan(&name, &col); err != nil {
+			return nil, "", err
+		}
+		if constraint == "" {
+			constraint = name
+		}
+		cols = append(cols, col)
+	}
+	return cols, constraint, rows.Err()
+}
+
+func (db *DB) pgEnsurePKColumnsUsable(ctx context.Context, table string, cols []string) error {
+	qtable := pgQuoteIdent(table)
+	nullChecks := make([]string, len(cols))
+	for i, col := range cols {
+		nullChecks[i] = pgQuoteIdent(col) + " IS NULL"
+	}
+	var hasNull bool
+	if err := db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM "+qtable+" WHERE "+strings.Join(nullChecks, " OR ")+")").Scan(&hasNull); err != nil {
+		return err
+	}
+	if hasNull {
+		return i18nerr.Errorf("existing rows contain NULL in new primary key columns (%s)", strings.Join(cols, ", "))
+	}
+
+	pkColsSQL := pgIdentList(cols)
+	var hasDuplicates bool
+	dupSQL := "SELECT EXISTS (SELECT 1 FROM (SELECT " + pkColsSQL + " FROM " + qtable +
+		" GROUP BY " + pkColsSQL + " HAVING COUNT(*) > 1 LIMIT 1) d)"
+	if err := db.QueryRow(ctx, dupSQL).Scan(&hasDuplicates); err != nil {
+		return err
+	}
+	if hasDuplicates {
+		return i18nerr.Errorf("existing rows contain duplicates by new primary key (%s)", strings.Join(cols, ", "))
+	}
+	return nil
+}
+
+func pgIdentList(cols []string) string {
+	out := make([]string, len(cols))
+	for i, col := range cols {
+		out[i] = pgQuoteIdent(col)
+	}
+	return strings.Join(out, ", ")
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Migrate applies CREATE TABLE and ADD COLUMN IF NOT EXISTS for all entities.

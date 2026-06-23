@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/pdfimport"
 )
 
@@ -98,31 +99,26 @@ func (h *handler) configuratorImportPDFLayout(w http.ResponseWriter, r *http.Req
 			return
 		}
 		defer db.Close()
-		var exists bool
-		if rows, qerr := db.Query(r.Context(), `SELECT 1 FROM _onebase_config WHERE path=$1`, relPath); qerr == nil {
-			exists = rows.Next()
-			rows.Close()
-		}
-		if exists {
+		repo := configdb.New(db)
+		if _, ok, _ := repo.ReadFile(r.Context(), relPath); ok {
 			h.layoutCreateError(w, r, b, lang, tr(lang, "Макет уже существует"))
 			return
 		}
-		if _, werr := db.Exec(r.Context(), `
-			INSERT INTO _onebase_config (path, content, updated_at)
-			VALUES ($1, $2, CURRENT_TIMESTAMP)
-			ON CONFLICT (path) DO NOTHING
-		`, relPath, src); werr != nil {
+		if werr := repo.SaveFile(r.Context(), relPath, src); werr != nil {
 			h.layoutCreateError(w, r, b, lang, tr(lang, "Ошибка создания макета")+": "+werr.Error())
 			return
 		}
 	} else {
-		dir := filepath.Join(b.Path, "printforms")
-		os.MkdirAll(dir, 0o755)
-		fullPath := filepath.Join(dir, filename)
+		fullPath, jerr := configdb.SafeJoin(b.Path, relPath)
+		if jerr != nil {
+			h.layoutCreateError(w, r, b, lang, tr(lang, "Ошибка создания макета")+": "+jerr.Error())
+			return
+		}
 		if _, statErr := os.Stat(fullPath); statErr == nil {
 			h.layoutCreateError(w, r, b, lang, tr(lang, "Макет уже существует"))
 			return
 		}
+		os.MkdirAll(filepath.Dir(fullPath), 0o755)
 		if werr := os.WriteFile(fullPath, src, 0o644); werr != nil {
 			h.layoutCreateError(w, r, b, lang, tr(lang, "Ошибка создания макета")+": "+werr.Error())
 			return

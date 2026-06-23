@@ -15,14 +15,15 @@ func TestSafeColor(t *testing.T) {
 		{"#f00", "#f00"},
 		{"#aabbccdd", "#aabbccdd"},
 		{"red", "red"},
-		{"dark-blue", "dark-blue"},
+		{"darkblue", "darkblue"},
 		{"AliceBlue", "AliceBlue"},
+		{"rgba(0,0,0,0)", "rgba(0,0,0,0)"},
 		// инъекции — должны быть отброшены
 		{`red"><script>`, ""},
 		{`#fff" style="x:y`, ""},
 		{"red; color:red", ""},
 		{"url(evil)", ""},
-		{"rgba(0,0,0,0)", ""},
+		{"dark-blue", ""},
 	}
 	for _, c := range cases {
 		got := safeColor(c.in)

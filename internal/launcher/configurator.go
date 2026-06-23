@@ -1530,6 +1530,12 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 	entityName := r.FormValue("entity")
 	moduleType := r.FormValue("module_type")
 	source := r.FormValue("source")
+	if !validObjectName(entityName) {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя объекта")
+		renderCfg(w, r, data)
+		return
+	}
 
 	var filename string
 	switch moduleType {
@@ -1548,16 +1554,10 @@ func (h *handler) configuratorSaveModule(w http.ResponseWriter, r *http.Request)
 			saveErr = err
 		} else {
 			defer db.Close()
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, "src/"+filename, []byte(source))
+			saveErr = cfgUpsert(r.Context(), db, "src/"+filename, []byte(source))
 		}
 	} else {
-		srcDir := filepath.Join(b.Path, "src")
-		os.MkdirAll(srcDir, 0o755)
-		saveErr = os.WriteFile(filepath.Join(srcDir, filename), []byte(source), 0o644)
+		saveErr = h.writeConfigFileRaw(r.Context(), b, "src/"+filename, []byte(source))
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -1743,12 +1743,7 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(ctx, `
-		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, CURRENT_TIMESTAMP)
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-	`, targetPath, out)
-	return err
+	return cfgUpsert(ctx, db, targetPath, out)
 }
 
 func (h *handler) configuratorSaveForm(w http.ResponseWriter, r *http.Request) {
@@ -2455,12 +2450,7 @@ func (h *handler) saveRegisterFieldsToDB(ctx context.Context, b *Base, regName s
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(ctx, `
-		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, CURRENT_TIMESTAMP)
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-	`, targetPath, out)
-	return err
+	return cfgUpsert(ctx, db, targetPath, out)
 }
 
 func (h *handler) configuratorSaveRegisterFields(w http.ResponseWriter, r *http.Request) {
@@ -2563,16 +2553,10 @@ func (h *handler) configuratorNewObject(w http.ResponseWriter, r *http.Request) 
 			repo := configdb.New(db)
 			repo.EnsureSchema(r.Context())
 			path := subdir + "/" + filename
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, path, []byte(content))
+			saveErr = cfgUpsert(r.Context(), db, path, []byte(content))
 		}
 	} else {
-		dir := filepath.Join(b.Path, subdir)
-		os.MkdirAll(dir, 0o755)
-		saveErr = os.WriteFile(filepath.Join(dir, filename), []byte(content), 0o644)
+		saveErr = h.writeConfigFileRaw(r.Context(), b, subdir+"/"+filename, []byte(content))
 	}
 
 	if saveErr != nil {
@@ -2714,11 +2698,7 @@ func (h *handler) configuratorSaveEnum(w http.ResponseWriter, r *http.Request) {
 		} else {
 			defer db.Close()
 			path := "enums/" + nameToFilename(enumName) + ".yaml"
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, path, out)
+			saveErr = cfgUpsert(r.Context(), db, path, out)
 		}
 	} else {
 		dir := filepath.Join(b.Path, "enums")
@@ -2836,11 +2816,7 @@ func (h *handler) configuratorSaveConstant(w http.ResponseWriter, r *http.Reques
 			rows.Close()
 			if targetPath != "" {
 				if out, err := updateConstantsFile(targetContent); err == nil {
-					_, saveErr = db.Exec(r.Context(), `
-						INSERT INTO _onebase_config (path, content, updated_at)
-						VALUES ($1, $2, CURRENT_TIMESTAMP)
-						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-					`, targetPath, out)
+					saveErr = cfgUpsert(r.Context(), db, targetPath, out)
 				}
 			}
 		}
@@ -3020,11 +2996,7 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 			rows.Close()
 			if targetPath != "" {
 				if out, err := updateReportFile(targetContent); err == nil {
-					_, saveErr = db.Exec(r.Context(), `
-						INSERT INTO _onebase_config (path, content, updated_at)
-						VALUES ($1, $2, CURRENT_TIMESTAMP)
-						ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-					`, targetPath, out)
+					saveErr = cfgUpsert(r.Context(), db, targetPath, out)
 				}
 			}
 		}
@@ -3053,9 +3025,7 @@ func (h *handler) configuratorSaveReport(w http.ResponseWriter, r *http.Request)
 
 	// Save chart .rep.os source if provided
 	if chartSource != "" && b.ConfigSource == "file" {
-		os.MkdirAll(filepath.Join(b.Path, "src"), 0o755)
-		repOSPath := filepath.Join(b.Path, "src", repName+".rep.os")
-		saveErr = os.WriteFile(repOSPath, []byte(chartSource), 0o644)
+		saveErr = h.writeConfigFileRaw(r.Context(), b, "src/"+repName+".rep.os", []byte(chartSource))
 	}
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if saveErr != nil {
@@ -3079,6 +3049,12 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 	r.ParseForm()
 	moduleName := r.FormValue("module_name")
 	source := r.FormValue("source")
+	if !validObjectName(moduleName) {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя модуля")
+		renderCfg(w, r, data)
+		return
+	}
 
 	filename := moduleNameToFilename(moduleName)
 
@@ -3089,16 +3065,10 @@ func (h *handler) configuratorSaveCommonModule(w http.ResponseWriter, r *http.Re
 			saveErr = err
 		} else {
 			defer db.Close()
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, "src/"+filename, []byte(source))
+			saveErr = cfgUpsert(r.Context(), db, "src/"+filename, []byte(source))
 		}
 	} else {
-		srcDir := filepath.Join(b.Path, "src")
-		os.MkdirAll(srcDir, 0o755)
-		saveErr = os.WriteFile(filepath.Join(srcDir, filename), []byte(source), 0o644)
+		saveErr = h.writeConfigFileRaw(r.Context(), b, "src/"+filename, []byte(source))
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -3133,6 +3103,12 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 	procName := r.FormValue("processor_name")
 	title := strings.TrimSpace(r.FormValue("title"))
 	source := r.FormValue("source")
+	if !validObjectName(procName) {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя обработки")
+		renderCfg(w, r, data)
+		return
+	}
 
 	type saveParam struct {
 		Name   string            `yaml:"name"`
@@ -3289,38 +3265,22 @@ func (h *handler) configuratorSaveProcessor(w http.ResponseWriter, r *http.Reque
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			var existingYAML []byte
-			db.QueryRow(r.Context(),
-				`SELECT content FROM _onebase_config WHERE path=$1`, yamlFilename).Scan(&existingYAML)
+			existingYAML, _, _ := configdb.New(db).ReadFile(r.Context(), yamlFilename)
 			yamlData := buildYAML(existingYAML)
-			if _, err := db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, yamlFilename, yamlData); err != nil {
+			if err := saveConfigFiles(r, h, b, []configFileEntry{
+				{relPath: yamlFilename, content: yamlData},
+				{relPath: srcFilename, content: []byte(source)},
+			}); err != nil {
 				saveErr = err
-			}
-			if saveErr == nil {
-				_, saveErr = db.Exec(r.Context(), `
-					INSERT INTO _onebase_config (path, content, updated_at)
-					VALUES ($1, $2, CURRENT_TIMESTAMP)
-					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-				`, srcFilename, []byte(source))
 			}
 		}
 	} else {
-		procDir := filepath.Join(b.Path, "processors")
-		os.MkdirAll(procDir, 0o755)
-		existingYAML, _ := os.ReadFile(filepath.Join(b.Path, yamlFilename))
+		existingYAML, _ := h.readConfigFileRaw(r.Context(), b, yamlFilename)
 		yamlData := buildYAML(existingYAML)
-		if err := os.WriteFile(filepath.Join(b.Path, yamlFilename), yamlData, 0o644); err != nil {
-			saveErr = err
-		}
-		if saveErr == nil {
-			srcDir := filepath.Join(b.Path, "src")
-			os.MkdirAll(srcDir, 0o755)
-			saveErr = os.WriteFile(filepath.Join(b.Path, srcFilename), []byte(source), 0o644)
-		}
+		saveErr = saveConfigFiles(r, h, b, []configFileEntry{
+			{relPath: yamlFilename, content: yamlData},
+			{relPath: srcFilename, content: []byte(source)},
+		})
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -3354,10 +3314,17 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 	r.ParseForm()
 	filename := strings.TrimSpace(r.FormValue("printform_filename"))
 	source := r.FormValue("source")
+	relPath := "printforms/" + filename
 
 	if filename == "" {
 		data := h.loadCfgData(r.Context(), b, "tree")
 		data.Error = tr(lang, "Имя файла печатной формы не указано")
+		renderCfg(w, r, data)
+		return
+	}
+	if err := configdb.ValidatePath(relPath); err != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя файла печатной формы") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
 	}
@@ -3369,16 +3336,10 @@ func (h *handler) configuratorSavePrintForm(w http.ResponseWriter, r *http.Reque
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, "printforms/"+filename, []byte(source))
+			saveErr = cfgUpsert(r.Context(), db, relPath, []byte(source))
 		}
 	} else {
-		pfDir := filepath.Join(b.Path, "printforms")
-		os.MkdirAll(pfDir, 0o755)
-		saveErr = os.WriteFile(filepath.Join(pfDir, filename), []byte(source), 0o644)
+		saveErr = h.writeConfigFileRaw(r.Context(), b, relPath, []byte(source))
 	}
 
 	var hdr struct {
@@ -3424,6 +3385,13 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 	runes := []rune(name)
 	runes[0] = unicode.ToLower(runes[0])
 	filename := string(runes) + ".yaml"
+	relPath := "printforms/" + filename
+	if err := configdb.ValidatePath(relPath); err != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Недопустимое имя файла печатной формы") + ": " + err.Error()
+		renderCfg(w, r, data)
+		return
+	}
 
 	source := fmt.Sprintf("name: %s\ndocument: %s\ntitle: \"{{Номер}} от {{Дата | date}}\"\n\nheader: |\n  ## %s\n\ntable:\n  source: Товары\n  columns:\n    - field: \"@row\"\n      label: \"№\"\n      width: 36px\n      align: center\n", name, document, name)
 
@@ -3434,18 +3402,14 @@ func (h *handler) configuratorNewPrintForm(w http.ResponseWriter, r *http.Reques
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, "printforms/"+filename, []byte(source))
+			saveErr = cfgUpsert(r.Context(), db, relPath, []byte(source))
 		}
 	} else {
-		pfDir := filepath.Join(b.Path, "printforms")
-		os.MkdirAll(pfDir, 0o755)
-		fullPath := filepath.Join(pfDir, filename)
-		if _, statErr := os.Stat(fullPath); os.IsNotExist(statErr) {
-			saveErr = os.WriteFile(fullPath, []byte(source), 0o644)
+		fullPath, jerr := configdb.SafeJoin(b.Path, relPath)
+		if jerr != nil {
+			saveErr = jerr
+		} else if _, statErr := os.Stat(fullPath); os.IsNotExist(statErr) {
+			saveErr = h.writeConfigFileRaw(r.Context(), b, relPath, []byte(source))
 		}
 	}
 
@@ -3474,8 +3438,13 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "layout name required", 400)
 		return
 	}
+	if !validLayoutName(layoutName) {
+		http.Error(w, "bad layout name", http.StatusBadRequest)
+		return
+	}
 
 	filename := layoutName + ".layout.yaml"
+	relPath := "printforms/" + filename
 
 	var saveErr error
 	if b.ConfigSource == "database" {
@@ -3484,11 +3453,7 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, "printforms/"+filename, []byte(source))
+			saveErr = cfgUpsert(r.Context(), db, relPath, []byte(source))
 		}
 	} else {
 		pfDir := filepath.Join(b.Path, "printforms")
@@ -3514,9 +3479,13 @@ func (h *handler) configuratorSaveLayout(w http.ResponseWriter, r *http.Request)
 			})
 		}
 		if layoutPath == "" {
-			layoutPath = filepath.Join(pfDir, filename)
+			layoutPath, saveErr = configdb.SafeJoin(b.Path, relPath)
 		}
-		saveErr = os.WriteFile(layoutPath, []byte(source), 0o644)
+		if saveErr != nil {
+			// keep saveErr for the common response below
+		} else {
+			saveErr = os.WriteFile(layoutPath, []byte(source), 0o644)
+		}
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -3760,6 +3729,7 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Handle uploaded logo file
+	var logoSaveErr error
 	file, header, ferr := r.FormFile("app_logo_file")
 	if ferr == nil {
 		defer file.Close()
@@ -3787,18 +3757,21 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 		// Save logo file
 		if b.ConfigSource == "database" {
 			db, cerr := OpenDB(r.Context(), b)
-			if cerr == nil {
+			if cerr != nil {
+				logoSaveErr = cerr
+			} else {
 				defer db.Close()
-				db.Exec(r.Context(), `
-					INSERT INTO _onebase_config (path, content, updated_at)
-					VALUES ($1, $2, CURRENT_TIMESTAMP)
-					ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-				`, logoPath, logoData)
+				logoSaveErr = cfgUpsert(r.Context(), db, logoPath, logoData)
 			}
 		} else {
-			os.MkdirAll(filepath.Join(b.Path, "config"), 0o755)
-			os.WriteFile(filepath.Join(b.Path, logoPath), logoData, 0o644)
+			logoSaveErr = h.writeConfigFileRaw(r.Context(), b, logoPath, logoData)
 		}
+	}
+	if logoSaveErr != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Ошибка сохранения логотипа") + ": " + logoSaveErr.Error()
+		renderCfg(w, r, data)
+		return
 	}
 
 	// Remove old logo file if changed
@@ -3807,10 +3780,22 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 			db, cerr := OpenDB(r.Context(), b)
 			if cerr == nil {
 				defer db.Close()
-				db.Exec(r.Context(), `DELETE FROM _onebase_config WHERE path = $1`, existingLogo)
+				if err := configdb.New(db).DeleteFile(r.Context(), existingLogo); err != nil {
+					data := h.loadCfgData(r.Context(), b, "tree")
+					data.Error = tr(lang, "Ошибка удаления логотипа") + ": " + err.Error()
+					renderCfg(w, r, data)
+					return
+				}
 			}
 		} else {
-			os.Remove(filepath.Join(b.Path, existingLogo))
+			full, err := configdb.SafeJoin(b.Path, existingLogo)
+			if err != nil {
+				data := h.loadCfgData(r.Context(), b, "tree")
+				data.Error = tr(lang, "Ошибка удаления логотипа") + ": " + err.Error()
+				renderCfg(w, r, data)
+				return
+			}
+			os.Remove(full)
 		}
 	}
 
@@ -3835,16 +3820,10 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 			saveErr = cerr
 		} else {
 			defer db.Close()
-			_, saveErr = db.Exec(r.Context(), `
-				INSERT INTO _onebase_config (path, content, updated_at)
-				VALUES ($1, $2, CURRENT_TIMESTAMP)
-				ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-			`, "config/app.yaml", out)
+			saveErr = cfgUpsert(r.Context(), db, "config/app.yaml", out)
 		}
 	} else {
-		dir := filepath.Join(b.Path, "config")
-		os.MkdirAll(dir, 0o755)
-		saveErr = os.WriteFile(filepath.Join(dir, "app.yaml"), out, 0o644)
+		saveErr = h.writeConfigFileRaw(r.Context(), b, "config/app.yaml", out)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")
@@ -3948,12 +3927,7 @@ func (h *handler) saveInfoRegToDB(ctx context.Context, b *Base, reg saveInfoReg,
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(ctx, `
-		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, CURRENT_TIMESTAMP)
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-	`, targetPath, out)
-	return err
+	return cfgUpsert(ctx, db, targetPath, out)
 }
 
 func (h *handler) configuratorSaveInfoRegFields(w http.ResponseWriter, r *http.Request) {
@@ -4080,12 +4054,7 @@ func (h *handler) saveAccountRegToDB(ctx context.Context, b *Base, reg saveAccou
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(ctx, `
-		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, CURRENT_TIMESTAMP)
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-	`, targetPath, out)
-	return err
+	return cfgUpsert(ctx, db, targetPath, out)
 }
 
 func (h *handler) configuratorSaveAccountRegister(w http.ResponseWriter, r *http.Request) {
@@ -4263,12 +4232,7 @@ func (h *handler) savePredefinedToDB(ctx context.Context, b *Base, entityName st
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(ctx, `
-		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES ($1, $2, CURRENT_TIMESTAMP)
-		ON CONFLICT (path) DO UPDATE SET content=EXCLUDED.content, updated_at=CURRENT_TIMESTAMP
-	`, targetPath, out)
-	return err
+	return cfgUpsert(ctx, db, targetPath, out)
 }
 
 // ── one-time code proxy ──────────────────────────────────────────────────────

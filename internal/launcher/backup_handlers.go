@@ -658,12 +658,15 @@ func (h *handler) backupFullImport(w http.ResponseWriter, r *http.Request) {
 				configErr = repo.ImportFromDir(r.Context(), configDir)
 			}
 		} else {
-			filepath.WalkDir(configDir, func(path string, d os.DirEntry, err error) error {
+			configErr = filepath.WalkDir(configDir, func(path string, d os.DirEntry, err error) error {
 				if err != nil || d.IsDir() {
 					return nil
 				}
 				rel, _ := filepath.Rel(configDir, path)
-				dst := filepath.Join(b.Path, rel)
+				dst, jerr := configdb.SafeJoin(b.Path, filepath.ToSlash(rel))
+				if jerr != nil {
+					return jerr
+				}
 				os.MkdirAll(filepath.Dir(dst), 0o755)
 				content, err := os.ReadFile(path)
 				if err != nil {

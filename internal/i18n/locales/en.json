@@ -955,5 +955,12 @@
   "Переводы": "Translations",
   "Показать/скрыть поля переводов у всех объектов": "Show/hide translation fields for all objects",
   "Рабочее место кассира (РМК)": "Cashier workstation (POS)",
-  "Настройки агента оборудования": "Equipment agent settings"
+  "Настройки агента оборудования": "Equipment agent settings",
+  "existing rows contain NULL in new primary key columns (%s)": "Existing rows contain NULL in new primary key columns (%s)",
+  "existing rows contain duplicates by new primary key (%s)": "Existing rows contain duplicates by the new primary key (%s)",
+  "Недопустимое имя модуля": "Invalid module name",
+  "Недопустимое имя обработки": "Invalid processor name",
+  "Недопустимое имя файла печатной формы": "Invalid print form file name",
+  "Ошибка сохранения логотипа": "Logo save error",
+  "Ошибка удаления логотипа": "Logo delete error"
 }
