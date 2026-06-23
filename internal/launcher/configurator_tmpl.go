@@ -420,10 +420,13 @@ function T(k){ return (window.__cfgI18n[k] || k); }
 <script>
 (function(){
   var ICONS = {{lucideIconsJSON}};
+  function normalizeIconName(v){
+    return String(v || '').trim().toLowerCase().replace(/[ _-]+/g, '-').replace(/^-+|-+$/g, '');
+  }
   function setPreview(inp){
     var box = inp.parentNode && inp.parentNode.querySelector('.icon-preview');
     if(!box) return;
-    var key = (inp.value || '').trim().toLowerCase();
+    var key = normalizeIconName(inp.value);
     box.innerHTML = key ? (ICONS[key] || ICONS.square || '') : '';
   }
   function wireAll(){

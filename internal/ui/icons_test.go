@@ -58,7 +58,7 @@ func TestLucideIcon_UnknownFallsBackToSquare(t *testing.T) {
 
 func TestLucideIcon_CaseAndTrim(t *testing.T) {
 	want := LucideIcon("shopping-cart")
-	for _, in := range []string{"Shopping-Cart", "  shopping-cart  ", "SHOPPING-CART"} {
+	for _, in := range []string{"Shopping-Cart", "  shopping-cart  ", "SHOPPING-CART", "Shopping Cart", "shopping_cart"} {
 		if got := LucideIcon(in); got != want {
 			t.Errorf("LucideIcon(%q) не совпал с каноничным", in)
 		}

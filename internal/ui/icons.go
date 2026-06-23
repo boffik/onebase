@@ -47,7 +47,7 @@ const lucideFallback = "square"
 // подставляется: оно лишь ключ в карте, поэтому XSS через значение icon невозможен.
 // Используется в funcMap шаблонов ui (навигация) и launcher (превью в конфигураторе).
 func LucideIcon(name string) template.HTML {
-	key := strings.ToLower(strings.TrimSpace(name))
+	key := NormalizeIconName(name)
 	if key == "" {
 		return ""
 	}
