@@ -1,5 +1,6 @@
 name: Закупки
 title: Закупки
+icon: truck
 order: 10
 contents:
   documents: [ПоступлениеТоваров, ЗаказПоставщику]

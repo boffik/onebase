@@ -25,6 +25,7 @@ import (
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/ui"
 	"github.com/ivantit66/onebase/internal/version"
 	"gopkg.in/yaml.v3"
 )
@@ -3599,7 +3600,7 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 
 	subName := strings.TrimSpace(r.FormValue("subsystem_name"))
 	title := r.FormValue("title")
-	icon := r.FormValue("icon")
+	icon := ui.NormalizeIconName(r.FormValue("icon"))
 	orderStr := r.FormValue("order")
 	var order int
 	if orderStr != "" {

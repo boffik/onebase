@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/ivantit66/onebase/internal/ui"
 )
 
 var launcherBundle *i18n.Bundle
@@ -36,6 +37,11 @@ var cfgTmpl = template.Must(template.New("cfg").Funcs(template.FuncMap{
 	"lower":  strings.ToLower,
 	"join":   strings.Join,
 	"printf": fmt.Sprintf,
+	// Иконки навигации (план 72): рендер инлайн-SVG Lucide, список имён и JSON для
+	// живого превью в конфигураторе. Один источник — internal/ui (карта lucideIcons).
+	"lucideIcon":      ui.LucideIcon,
+	"lucideNames":     ui.LucideNames,
+	"lucideIconsJSON": ui.LucideIconsJSON,
 	"js": func(v any) template.JS {
 		// json.Marshal экранирует <, >, & в \uXXXX; возвращаем template.JS,
 		// чтобы html/template не экранировал повторно (двойное экранирование).
@@ -401,6 +407,38 @@ function T(k){ return (window.__cfgI18n[k] || k); }
   <div style="margin:0 10px 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="cfggen-send" type="button" style="background:#ea580c;color:#fff;border:none;border-radius:8px;padding:6px 16px;cursor:pointer;font-size:13px">Сгенерировать</button><button id="cfggen-apply" type="button" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 16px;cursor:pointer;font-size:13px;display:none">Применить</button><span id="cfggen-msg" style="font-size:11px"></span></div>
   <div id="cfggen-out" style="flex:1;overflow:auto;margin:0 10px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px"></div>
 </div>
+<!-- План 72: подсказка имён иконок (datalist) и живое превью рядом с полем «Иконка». -->
+<datalist id="lucide-icons">{{range lucideNames}}<option value="{{.}}"></option>{{end}}</datalist>
+<style>
+.icon-field{display:flex;align-items:center;gap:8px}
+.icon-field input{flex:1}
+.icon-preview{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border:1px solid #e2e8f0;border-radius:6px;color:#334155;font-size:20px;background:#fff}
+.icon-preview:empty{opacity:.35}
+.icon-help{font-weight:400;font-size:11px;color:#7c3aed;text-decoration:none;margin-left:6px}
+.icon-help:hover{text-decoration:underline}
+</style>
+<script>
+(function(){
+  var ICONS = {{lucideIconsJSON}};
+  function setPreview(inp){
+    var box = inp.parentNode && inp.parentNode.querySelector('.icon-preview');
+    if(!box) return;
+    var key = (inp.value || '').trim().toLowerCase();
+    box.innerHTML = key ? (ICONS[key] || ICONS.square || '') : '';
+  }
+  function wireAll(){
+    var list = document.querySelectorAll('input[data-icon-preview]');
+    for(var i=0;i<list.length;i++){
+      var inp = list[i];
+      if(inp.__iconWired) continue;
+      inp.__iconWired = true;
+      inp.addEventListener('input', (function(el){ return function(){ setPreview(el); }; })(inp));
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wireAll);
+  else wireAll();
+})();
+</script>
 </body></html>
 {{end}}`
 
@@ -1593,8 +1631,11 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
       {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" $sub.Titles)}}{{end}}
       <div class="fg" style="margin-top:8px">
-        <label>{{t $.Lang "Иконка"}}</label>
-        <input type="text" name="icon" value="{{$sub.Icon}}" placeholder="shopping-cart">
+        <label>{{t $.Lang "Иконка"}} <a href="https://lucide.dev/icons" target="_blank" rel="noopener" class="icon-help">lucide.dev ↗</a></label>
+        <div class="icon-field">
+          <input type="text" name="icon" value="{{$sub.Icon}}" placeholder="shopping-cart" list="lucide-icons" data-icon-preview>
+          <span class="icon-preview" aria-hidden="true">{{lucideIcon $sub.Icon}}</span>
+        </div>
       </div>
       <div class="fg" style="margin-top:8px">
         <label>{{t $.Lang "Порядок"}}</label>
@@ -1736,8 +1777,11 @@ const cfgTabTree = `{{define "tab-tree"}}
       </div>
       {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .Titles)}}{{end}}
       <div class="fg">
-        <label>{{t $.Lang "Иконка"}}</label>
-        <input type="text" name="icon" value="{{.Icon}}" placeholder="layout-dashboard">
+        <label>{{t $.Lang "Иконка"}} <a href="https://lucide.dev/icons" target="_blank" rel="noopener" class="icon-help">lucide.dev ↗</a></label>
+        <div class="icon-field">
+          <input type="text" name="icon" value="{{.Icon}}" placeholder="layout-dashboard" list="lucide-icons" data-icon-preview>
+          <span class="icon-preview" aria-hidden="true">{{lucideIcon .Icon}}</span>
+        </div>
       </div>
       <div class="fg">
         <label>{{t $.Lang "Роли"}} <span style="color:#94a3b8;font-weight:400">({{t $.Lang "через запятую; пусто — всем"}})</span></label>
