@@ -233,3 +233,36 @@ elements:
 		t.Errorf("выбранная колонка не подсвечена:\n%s", out)
 	}
 }
+
+// Отдельная Страница (вне набора СтраницыФормы) рисуется как страница со своей
+// зоной для детей, а не как «неизвестный» элемент (follow-up #164).
+func TestRenderFormCanvas_StandalonePage(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Звонок
+elements:
+  - kind: Страница
+    name: Стр1
+    title:
+      ru: Основное
+`
+	doc, err := formdoc.Load([]byte(src))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out, err := renderFormCanvas(doc, "")
+	if err != nil {
+		t.Fatalf("renderFormCanvas: %v", err)
+	}
+	if strings.Contains(out, "fc-unknown") {
+		t.Errorf("отдельная страница рисуется как неизвестный элемент:\n%s", out)
+	}
+	if !strings.Contains(out, "fc-page") {
+		t.Errorf("нет класса fc-page:\n%s", out)
+	}
+	if !strings.Contains(out, `data-parent="elements.0"`) {
+		t.Errorf("нет drop-зоны для детей страницы:\n%s", out)
+	}
+}

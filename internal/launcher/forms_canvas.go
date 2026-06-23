@@ -104,6 +104,15 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 		renderPageDropZone(buf, id, len(en.Children))
 		buf.WriteString(`</div>`)
 
+	case metadata.FormElementPage:
+		// Отдельная страница (вне набора СтраницыФормы — редкий случай) рисуется
+		// как блок-вкладка со своими детьми, а не как «неизвестный» элемент.
+		// Страницы внутри СтраницыФормы рендерит ветка Pages выше.
+		fmt.Fprintf(buf, `<div class="%s" data-node-id="%s" data-kind="%s"><div class="fc-tab fc-pick">%s</div>`,
+			elWrapClass("fc-page", id, selectedID), id, kind, title)
+		renderCanvasChildren(buf, id, en.Children, selectedID)
+		buf.WriteString(`</div>`)
+
 	case metadata.FormElementField, metadata.FormElementDatePicker, metadata.FormElementInputList, metadata.FormElementFormField:
 		req := ""
 		if el.Required {
