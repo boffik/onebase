@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 )
@@ -238,14 +239,17 @@ func canonicalizeFields(obj *runtime.Object, entity *metadata.Entity) {
 }
 
 // derefFields возвращает ссылочные значения шапки к UUID-строкам перед записью.
-// runPreSaveFormHooks обогащает ссылки до *Ref ради хуков; здесь возвращаем их
-// обратно, чтобы Save получил те же UUID-строки, что и без хуков.
+// runPreSaveFormHooks обогащает ссылки до *interpreter.Ref ради хуков; здесь
+// возвращаем их обратно, чтобы Save получил те же UUID-строки, что и без хуков.
+// Assertion сужен именно к *interpreter.Ref (а не к интерфейсу GetRefUUID),
+// иначе случайно попавший в шапку *runtime.Object (тоже реализующий GetRefUUID
+// → o.ID.String()) молча превратился бы в UUID-строку и исказил поле.
 func derefFields(obj *runtime.Object) {
 	if obj == nil {
 		return
 	}
 	for k, v := range obj.Fields {
-		if rl, ok := v.(interface{ GetRefUUID() string }); ok {
+		if rl, ok := v.(*interpreter.Ref); ok {
 			obj.Fields[k] = rl.GetRefUUID()
 		}
 	}
