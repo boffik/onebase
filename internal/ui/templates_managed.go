@@ -44,6 +44,13 @@ const tplManagedForm = `
       {{end}}
     {{end}}
   </div>
+{{else if eq (str $el.Kind) "Страница"}}
+  {{/* Отдельная страница вне набора СтраницыФормы (её можно добавить на холсте) —
+       рендерим как именованный блок с детьми, а не «рендеринг не реализован». */}}
+  <fieldset class="form-group-box" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    {{if $el.TitleMap}}<legend style="font-weight:600;color:#475569;padding:0 6px;font-size:13px">{{fieldTitleRU $el.TitleMap $el.Name}}</legend>{{end}}
+    {{range $el.Children}}{{template "managed-element" (dict "El" . "Ctx" $ctx)}}{{end}}
+  </fieldset>
 {{else if eq (str $el.Kind) "ПолеВвода"}}
   {{$fn := dpField $el.DataPath}}
   {{$f := fieldByName $ctx.Entity $fn}}

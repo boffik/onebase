@@ -1363,6 +1363,14 @@ func renderPreviewElement(buf *bytes.Buffer, el *metadata.FormElement, tabsCount
 			pageIdx++
 		}
 		buf.WriteString(`</div></div>`)
+	case metadata.FormElementPage:
+		// Отдельная страница вне набора СтраницыФормы (её можно бросить на холст) —
+		// рисуем именованным блоком с детьми, а не «предпросмотр не реализован».
+		fmt.Fprintf(buf, `<fieldset><legend>%s</legend>`, html.EscapeString(title))
+		for _, c := range el.Children {
+			renderPreviewElement(buf, c, tabsCounter)
+		}
+		buf.WriteString(`</fieldset>`)
 	case metadata.FormElementField:
 		req := ""
 		if el.Required {

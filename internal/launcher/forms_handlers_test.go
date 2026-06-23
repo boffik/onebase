@@ -148,6 +148,39 @@ func TestRenderManagedFormPreview(t *testing.T) {
 	}
 }
 
+// Отдельная Страница (вне набора СтраницыФормы — её можно бросить на холст)
+// рисуется в предпросмотре именованным блоком со своими детьми, а не сообщением
+// «предпросмотр не реализован» (баг живого теста после batch B/C, #164).
+func TestRenderManagedFormPreview_StandalonePage(t *testing.T) {
+	fm := &metadata.FormModule{
+		EntityName: "Заказ",
+		Elements: []*metadata.FormElement{
+			{
+				Kind:     metadata.FormElementPage,
+				Name:     "Товары",
+				TitleMap: map[string]string{"ru": "Товары"},
+				Children: []*metadata.FormElement{
+					{
+						Kind:     metadata.FormElementField,
+						Name:     "ПолеКомментарий",
+						TitleMap: map[string]string{"ru": "Комментарий"},
+						DataPath: "Объект.Комментарий",
+					},
+				},
+			},
+		},
+	}
+	html := renderManagedFormPreview(fm)
+	if strings.Contains(html, "предпросмотр не реализован") {
+		t.Errorf("отдельная страница даёт «предпросмотр не реализован»:\n%s", html)
+	}
+	for _, s := range []string{"<legend>Товары</legend>", "Комментарий"} {
+		if !strings.Contains(html, s) {
+			t.Errorf("preview отдельной страницы не содержит %q:\n%s", s, html)
+		}
+	}
+}
+
 // previewErrorHTML экранирует сообщение и возвращает валидный HTML.
 func TestPreviewErrorHTML(t *testing.T) {
 	html := previewErrorHTML("parse yaml: line 5: bad <token>")
