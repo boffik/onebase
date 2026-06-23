@@ -246,6 +246,23 @@ func TestApplyEditOp_Move(t *testing.T) {
 	}
 }
 
+// move между контейнерами (drag-перенос на холсте): поле уходит из группы на
+// верхний уровень; модель отражает новое расположение (follow-up #164).
+func TestApplyEditOp_MoveCrossContainer(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "move", Node: "elements.0.children.0", Parent: "", Index: 1,
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp move cross-container: %v", err)
+	}
+	if _, ok := res.Model["elements.1"]; !ok {
+		t.Errorf("перенесённое поле не появилось на верхнем уровне")
+	}
+	if _, ok := res.Model["elements.0.children.1"]; ok {
+		t.Errorf("в группе должно остаться одно поле, а есть children.1")
+	}
+}
+
 // Невалидный YAML, неизвестная операция и устаревший node-id — штатные ошибки,
 // без паники (план 71: баннер/конфликт на клиенте).
 func TestApplyEditOp_Errors(t *testing.T) {

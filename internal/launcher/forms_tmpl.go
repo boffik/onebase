@@ -232,6 +232,8 @@ const tplFormsEditor = `
 .fc-drop-page.fc-drop-over{background:#fde9c8;color:#9a5b1a;border-color:#e0b87a}
 .fc-el{border:1px solid transparent;border-radius:6px;padding:3px 5px;cursor:pointer}
 .fc-el.fc-selected{outline:2px solid #1a4a80;background:#eef4ff}
+.fc-dragging{opacity:.4}
+[data-node-id]{cursor:grab}
 .fc-pick:hover{background:#f5f8ff}
 .fc-group{border:1px solid #e2e8f0;padding:5px 9px;margin:1px 0}
 .fc-group>legend{font-weight:600;color:#475569;padding:0 5px;font-size:12px}
@@ -728,6 +730,8 @@ function renderCanvasHTML(html) {
   var wrap = document.createElement('div');
   wrap.innerHTML = html;
   while (wrap.firstChild) host.appendChild(wrap.firstChild);
+  // Элементы холста перетаскиваемы — для переноса в другой контейнер (op:move).
+  host.querySelectorAll('[data-node-id]').forEach(function (el) { el.draggable = true; });
 }
 
 // Делегирование на холсте: клик — выбор элемента; drop реквизита на зону — вставка.
@@ -740,6 +744,19 @@ function renderCanvasHTML(html) {
     e.stopPropagation();
     selectNode(el.getAttribute('data-node-id'));
   });
+  // Перетаскивание элемента холста — для переноса в другой контейнер. Свой mime
+  // text/onebase-node, чтобы не путать с палитрами (attr/struct/tablepart).
+  host.addEventListener('dragstart', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-node-id]') : null;
+    if (!el || !host.contains(el)) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/onebase-node', el.getAttribute('data-node-id'));
+    el.classList.add('fc-dragging');
+  });
+  host.addEventListener('dragend', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-node-id]') : null;
+    if (el) el.classList.remove('fc-dragging');
+  });
   host.addEventListener('dragover', function (e) {
     var dz = e.target.closest ? e.target.closest('.fc-drop, .fc-drop-page') : null;
     if (!dz) return;
@@ -747,9 +764,10 @@ function renderCanvasHTML(html) {
     var hasStruct = types.indexOf('text/onebase-struct') >= 0;
     var hasAttr = types.indexOf('text/onebase-attr') >= 0;
     var hasTP = types.indexOf('text/onebase-tablepart') >= 0;
-    if (!hasStruct && !hasAttr && !hasTP) return;
-    if (dz.classList.contains('fc-drop-page') && !hasStruct) return; // page-зоны — только структура
-    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+    var hasNode = types.indexOf('text/onebase-node') >= 0;
+    if (!hasStruct && !hasAttr && !hasTP && !hasNode) return;
+    if (dz.classList.contains('fc-drop-page') && !hasStruct) return; // page-зоны — только новая страница
+    e.preventDefault(); e.dataTransfer.dropEffect = hasNode ? 'move' : 'copy';
     dz.classList.add('fc-drop-over');
   });
   host.addEventListener('dragleave', function (e) {
@@ -761,6 +779,16 @@ function renderCanvasHTML(html) {
     if (!dz) return;
     dz.classList.remove('fc-drop-over');
     var parent = dz.getAttribute('data-parent'), index = dz.getAttribute('data-index');
+    // Перенос существующего узла холста (op:move). Только обычные зоны (.fc-drop):
+    // страницы переставляются ↑/↓. Запрет переноса в себя/в собственного потомка.
+    var node = e.dataTransfer.getData('text/onebase-node');
+    if (node) {
+      e.preventDefault();
+      if (dz.classList.contains('fc-drop-page')) return;
+      if (parent === node || parent.indexOf(node + '.') === 0) return;
+      editOp({ op: 'move', node: node, parent: parent, index: index }, true);
+      return;
+    }
     // Структурный элемент (группа/страницы/страница/надпись) — свой mime.
     var sraw = e.dataTransfer.getData('text/onebase-struct');
     if (sraw) {
