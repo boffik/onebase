@@ -415,6 +415,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		NewLLMFunctions(nil),
 		NewServiceFunctions(),
 		NewEquipmentFunctions(),
+		NewNotifyFunctions(nil),
 	}
 	for _, m := range factoryMaps {
 		for k := range m {
