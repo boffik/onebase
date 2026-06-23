@@ -1289,7 +1289,12 @@ legend{font-weight:600;color:#475569;padding:0 6px;font-size:12px}
 .hint{display:block;color:#94a3b8;font-size:11px;margin-top:3px}
 .deco{padding:6px 0;color:#475569;font-size:13px}
 .btn{padding:6px 12px;border:1px solid #d0d7e3;background:#f8fafc;border-radius:5px;cursor:pointer;margin-right:4px;font-size:12px}
-.tp-stub{background:#fef9c3;padding:8px;border-radius:6px;font-size:11px;color:#92400e;margin:6px 0}
+.tp-prev{margin:8px 0}
+.tp-prev-hd{font-size:12px;font-weight:600;color:#475569;margin-bottom:4px}
+.tp-prev-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tp-prev-tbl th,.tp-prev-tbl td{border:1px solid #e2e8f0;padding:5px 8px;text-align:left}
+.tp-prev-tbl th{background:#f8fafc;color:#475569;font-weight:600}
+.tp-prev-tbl td{height:24px}
 .unknown{background:#fef2f2;padding:8px;border-radius:6px;font-size:11px;color:#991b1b;margin:6px 0}
 </style></head><body>`)
 
@@ -1431,12 +1436,34 @@ func renderPreviewElement(buf *bytes.Buffer, el *metadata.FormElement, tabsCount
 	case metadata.FormElementPicture:
 		fmt.Fprintf(buf, `<div class="hint">[Картинка: %s]</div>`, html.EscapeString(el.Name))
 	case metadata.FormElementTable, metadata.FormElementTablePart:
-		mode := "обычная таблица"
-		if el.UseGrid {
-			mode = "SlickGrid (Excel-навигация)"
+		// Колонки, выбранные в конструкторе (дочерние kind:Колонка), рисуем
+		// реальной таблицей-каркасом с парой пустых строк. Без явных колонок —
+		// подсказка (в рантайме они подставятся из метаданных автоматически).
+		var cols []*metadata.FormElement
+		for _, c := range el.Children {
+			if c != nil && c.Kind == metadata.FormElementColumn {
+				cols = append(cols, c)
+			}
 		}
-		fmt.Fprintf(buf, `<div class="tp-stub">Табличная часть «%s» — %s. Предпросмотр упрощённый.</div>`,
-			html.EscapeString(title), mode)
+		fmt.Fprintf(buf, `<div class="tp-prev"><div class="tp-prev-hd">▦ %s</div>`, html.EscapeString(title))
+		if len(cols) == 0 {
+			buf.WriteString(`<div class="hint">Колонки не выбраны — отметьте состав в свойствах табличной части (в рантайме иначе показываются все поля).</div>`)
+		} else {
+			buf.WriteString(`<table class="tp-prev-tbl"><thead><tr>`)
+			for _, c := range cols {
+				fmt.Fprintf(buf, `<th>%s</th>`, html.EscapeString(columnLabel(c)))
+			}
+			buf.WriteString(`</tr></thead><tbody>`)
+			for r := 0; r < 2; r++ {
+				buf.WriteString(`<tr>`)
+				for range cols {
+					buf.WriteString(`<td></td>`)
+				}
+				buf.WriteString(`</tr>`)
+			}
+			buf.WriteString(`</tbody></table>`)
+		}
+		buf.WriteString(`</div>`)
 	case metadata.FormElementCommandBar:
 		// командная панель — обычно рендерится в toolbar над формой;
 		// в preview просто рисуем кнопки в ряд.

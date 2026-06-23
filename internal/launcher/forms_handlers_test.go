@@ -181,6 +181,51 @@ func TestRenderManagedFormPreview_StandalonePage(t *testing.T) {
 	}
 }
 
+// Предпросмотр табличной части с выбранными колонками рисует реальную таблицу с
+// заголовками колонок, а не строку-заглушку (обратная связь по живому тесту #164).
+func TestRenderManagedFormPreview_TablePartColumns(t *testing.T) {
+	fm := &metadata.FormModule{
+		EntityName: "Заказ",
+		Elements: []*metadata.FormElement{
+			{
+				Kind: metadata.FormElementTablePart, Name: "ТабТовары",
+				TitleMap: map[string]string{"ru": "Товары"},
+				DataPath: "Объект.Товары",
+				Children: []*metadata.FormElement{
+					{Kind: metadata.FormElementColumn, Name: "КолНоменклатура",
+						TitleMap: map[string]string{"ru": "Номенклатура"}, DataPath: "Объект.Товары.Номенклатура"},
+					{Kind: metadata.FormElementColumn, Name: "КолКоличество",
+						TitleMap: map[string]string{"ru": "Количество"}, DataPath: "Объект.Товары.Количество"},
+				},
+			},
+		},
+	}
+	html := renderManagedFormPreview(fm)
+	if strings.Contains(html, "Предпросмотр упрощённый") {
+		t.Errorf("табличная часть осталась строкой-заглушкой:\n%s", html)
+	}
+	for _, s := range []string{"tp-prev-tbl", "<th>Номенклатура</th>", "<th>Количество</th>"} {
+		if !strings.Contains(html, s) {
+			t.Errorf("в предпросмотре ТЧ нет %q:\n%s", s, html)
+		}
+	}
+}
+
+// Табличная часть без выбранных колонок — подсказка, не таблица и не заглушка.
+func TestRenderManagedFormPreview_TablePartNoColumns(t *testing.T) {
+	fm := &metadata.FormModule{
+		EntityName: "Заказ",
+		Elements: []*metadata.FormElement{
+			{Kind: metadata.FormElementTablePart, Name: "ТабТовары",
+				TitleMap: map[string]string{"ru": "Товары"}, DataPath: "Объект.Товары"},
+		},
+	}
+	html := renderManagedFormPreview(fm)
+	if !strings.Contains(html, "Колонки не выбраны") {
+		t.Errorf("нет подсказки про невыбранные колонки:\n%s", html)
+	}
+}
+
 // previewErrorHTML экранирует сообщение и возвращает валидный HTML.
 func TestPreviewErrorHTML(t *testing.T) {
 	html := previewErrorHTML("parse yaml: line 5: bad <token>")
