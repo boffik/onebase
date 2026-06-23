@@ -140,6 +140,19 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><input type="checkbox" disabled> <span>%s</span></div>`,
 			elWrapClass("fc-check", id, selectedID), id, kind, title)
 
+	case metadata.FormElementSwitch:
+		// Переключатель: набор radio (или список) по Options/перечислению. Выбор
+		// кликом по обёртке; значения и представление правятся в панели свойств.
+		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s"><label>%s</label><div class="fc-switch">`,
+			elWrapClass("fc-field", id, selectedID), id, kind, title)
+		if len(el.Options) == 0 {
+			buf.WriteString(`<span class="fc-cols-empty">значения по перечислению (или задайте в свойствах)</span>`)
+		}
+		for _, o := range el.Options {
+			fmt.Fprintf(buf, `<label class="fc-opt"><input type="radio" disabled> %s</label>`, html.EscapeString(o.Label()))
+		}
+		buf.WriteString(`</div></div>`)
+
 	case metadata.FormElementLabel:
 		fmt.Fprintf(buf, `<div class="%s fc-pick" data-node-id="%s" data-kind="%s">%s</div>`,
 			elWrapClass("fc-label", id, selectedID), id, kind, title)
@@ -200,6 +213,17 @@ type canvasElementInfo struct {
 	Width    int    `json:"width"`    // ПолеКартинки: ширина
 	Height   int    `json:"height"`   // ПолеКартинки: высота
 	NoGrid   bool   `json:"noGrid"`   // ТабличнаяЧасть: простая таблица вместо SlickGrid
+	// События элемента (batch B1): имя события → имя процедуры в .form.os.
+	Events map[string]string `json:"events"`
+	// Набор значений Переключателя/ПолеСписка (batch C1).
+	Options []canvasOption `json:"options"`
+	View    string         `json:"view"` // radio|select
+}
+
+// canvasOption — значение набора Переключателя для редактора опций (C1).
+type canvasOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 // canvasModel разворачивает дерево формы в плоскую карту node-id → редактируемые
@@ -229,9 +253,19 @@ func canvasModel(doc *formdoc.Doc) (map[string]canvasElementInfo, error) {
 				Width:     el.Width,
 				Height:    el.Height,
 				NoGrid:    el.NoGrid,
+				View:      el.View,
 			}
 			if el.TitleMap != nil {
 				info.TitleRU = el.TitleMap["ru"]
+			}
+			if len(el.Handlers) > 0 {
+				info.Events = make(map[string]string, len(el.Handlers))
+				for k, v := range el.Handlers {
+					info.Events[string(k)] = v
+				}
+			}
+			for _, o := range el.Options {
+				info.Options = append(info.Options, canvasOption{Value: o.ValueStr(), Label: o.Label()})
 			}
 			m[en.NodeID] = info
 			walk(en.Children)

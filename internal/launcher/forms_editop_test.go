@@ -338,6 +338,131 @@ func TestApplyEditOp_Render(t *testing.T) {
 	}
 }
 
+// setProp события элемента: events.Нажатие пишется как вложенный ключ events:,
+// модель отдаёт его в Events; delProp убирает (follow-up #164 batch B1).
+func TestApplyEditOp_ElementEvents(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Звонок
+elements:
+  - kind: Кнопка
+    name: КнопкаОК
+`
+	res, err := applyEditOp([]byte(src), editOpRequest{
+		Op: "setProp", Node: "elements.0", Key: "events.Нажатие", Value: "Обработать",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp setProp event: %v", err)
+	}
+	if !strings.Contains(res.YAML, "events:") || !strings.Contains(res.YAML, "Нажатие: Обработать") {
+		t.Errorf("событие не записано в YAML:\n%s", res.YAML)
+	}
+	if res.Model["elements.0"].Events["Нажатие"] != "Обработать" {
+		t.Errorf("событие не в модели: %+v", res.Model["elements.0"])
+	}
+	// delProp убирает обработчик.
+	res2, err := applyEditOp([]byte(res.YAML), editOpRequest{
+		Op: "delProp", Node: "elements.0", Key: "events.Нажатие",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp delProp: %v", err)
+	}
+	if strings.Contains(res2.YAML, "Нажатие: Обработать") {
+		t.Errorf("событие не удалено:\n%s", res2.YAML)
+	}
+}
+
+// setOptions набора значений Переключателя: число пишется числом, представление
+// попадает в модель и на холст (follow-up #164 batch C1).
+func TestApplyEditOp_SetOptions(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заказ
+elements:
+  - kind: Переключатель
+    name: Приоритет
+    data_path: Объект.Приоритет
+`
+	res, err := applyEditOp([]byte(src), editOpRequest{
+		Op: "setOptions", Node: "elements.0",
+		Options: `[{"value":"1","label":"Низкий"},{"value":"2","label":"Высокий"}]`,
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp setOptions: %v", err)
+	}
+	if !strings.Contains(res.YAML, "value: 1") || strings.Contains(res.YAML, `value: "1"`) {
+		t.Errorf("числовое значение опции должно быть числом:\n%s", res.YAML)
+	}
+	info := res.Model["elements.0"]
+	if len(info.Options) != 2 || info.Options[1].Label != "Высокий" || info.Options[1].Value != "2" {
+		t.Errorf("опции не в модели: %+v", info.Options)
+	}
+	if !strings.Contains(res.CanvasHTML, "Высокий") {
+		t.Errorf("опции не отрисованы на холсте:\n%s", res.CanvasHTML)
+	}
+}
+
+// Свойства формы (псевдо-узел "form"): title.ru и kind правятся внутри блока
+// form:, события формы — на верхнем уровне; всё адресуется node="form"
+// (follow-up #164 batch B2).
+func TestApplyEditOp_FormProps(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "setProp", Node: "form", Key: "title.ru", Value: "Карточка звонка",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp form title: %v", err)
+	}
+	if res.Form.TitleRU != "Карточка звонка" {
+		t.Errorf("form.titleRu = %q", res.Form.TitleRU)
+	}
+	// kind правится внутри form:.
+	res, err = applyEditOp([]byte(res.YAML), editOpRequest{
+		Op: "setProp", Node: "form", Key: "kind", Value: "list",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp form kind: %v", err)
+	}
+	if res.Form.Kind != "list" {
+		t.Errorf("form.kind = %q", res.Form.Kind)
+	}
+	// Событие формы уходит на верхний уровень (рядом с form/elements), не внутрь form.
+	res, err = applyEditOp([]byte(res.YAML), editOpRequest{
+		Op: "setProp", Node: "form", Key: "events.ПриОткрытии", Value: "ПриОткрытииФормы",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp form event: %v", err)
+	}
+	if res.Form.Events["ПриОткрытии"] != "ПриОткрытииФормы" {
+		t.Errorf("form.events = %v", res.Form.Events)
+	}
+	iEvents := strings.Index(res.YAML, "\nevents:")
+	iElements := strings.Index(res.YAML, "\nelements:")
+	if iEvents < 0 || iElements < 0 {
+		t.Fatalf("нет блоков events/elements верхнего уровня:\n%s", res.YAML)
+	}
+}
+
+// Штатное действие формы: actions.delete.visible=false пишется булевым скаляром
+// на верхний уровень, модель отдаёт actions.delete=false (follow-up #164 B3).
+func TestApplyEditOp_FormActionVisible(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "setProp", Node: "form", Key: "actions.delete.visible", Value: "false",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp form action: %v", err)
+	}
+	if !strings.Contains(res.YAML, "visible: false") {
+		t.Errorf("visible должен быть булевым скаляром:\n%s", res.YAML)
+	}
+	if v, ok := res.Form.Actions["delete"]; !ok || v {
+		t.Errorf("form.actions[delete] = %v (ok=%v), ожидалось false", v, ok)
+	}
+}
+
 // Round-trip эндпоинта сохраняет ручной комментарий пользователя — ключевое
 // требование #164 (правка свойства не затирает аннотации).
 func TestApplyEditOp_PreservesComments(t *testing.T) {

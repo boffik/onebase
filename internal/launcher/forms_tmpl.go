@@ -252,6 +252,8 @@ const tplFormsEditor = `
 .fc-col{font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:2px 7px;color:#475569}
 .fc-col.fc-selected{outline:2px solid #1a4a80;background:#eef4ff}
 .fc-cols-empty{font-size:11px;color:#94a3b8;font-style:italic}
+.fc-switch{display:flex;flex-wrap:wrap;gap:10px;padding:2px 0}
+.fc-opt{font-size:12px;color:#475569;display:inline-flex;align-items:center;gap:4px;pointer-events:none}
 .fc-unknown{background:#fef2f2;color:#991b1b;font-size:12px}
 .fc-kind{color:#94a3b8;font-size:11px}
 #canvas-host.fc-canvas-disabled{opacity:.5;pointer-events:none}
@@ -263,9 +265,14 @@ const tplFormsEditor = `
 .prop-panel h4 .prop-kind{color:#94a3b8;font-weight:400;margin-left:6px}
 .prop-row{margin-bottom:8px}
 .prop-row>label{display:block;color:#64748b;margin-bottom:2px}
-.prop-row input[type=text],.prop-row input[type=number]{width:100%;padding:5px 8px;border:1px solid #d0d7e3;border-radius:5px;font-size:12px}
+.prop-row input[type=text],.prop-row input[type=number],.prop-row select{width:100%;padding:5px 8px;border:1px solid #d0d7e3;border-radius:5px;font-size:12px;background:#fff}
 .prop-row.prop-check{display:flex;align-items:center;gap:6px}
 .prop-row.prop-check>label{margin:0}
+.prop-row.prop-section{font-weight:600;color:#1a4a80;border-top:1px solid #eef0f5;padding-top:8px;margin-top:10px}
+.prop-hint{font-size:11px;color:#94a3b8;margin-bottom:6px}
+.prop-row.prop-opt{display:flex;gap:4px;align-items:center}
+.prop-row.prop-opt input{flex:1}
+.prop-row.prop-opt .btn{padding:2px 8px}
 .prop-actions{margin-top:12px;border-top:1px solid #eef0f5;padding-top:10px}
 </style>
 <body>
@@ -317,6 +324,7 @@ const tplFormsEditor = `
   <span class="attr-chip struct-chip" draggable="true" data-kind="Надпись" data-name="Надпись" data-title="Надпись" title="Текстовая надпись">＋ Надпись</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Кнопка" data-name="Кнопка" data-title="Кнопка" title="Кнопка (обработчик нажатия — отдельным шагом)">＋ Кнопка</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="ПолеКартинки" data-name="Картинка" data-title="Картинка" title="Поле картинки (путь укажите в свойствах)">＋ Картинка</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="Переключатель" data-name="Переключатель" data-title="Переключатель" title="Переключатель значений (radio/список): задайте поле и значения в свойствах">＋ Переключатель</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="КоманднаяПанель" data-name="КоманднаяПанель" title="Командная панель (контейнер для кнопок)">＋ Команд. панель</span>
 </div>
 
@@ -350,6 +358,7 @@ const tplFormsEditor = `
         <span class="rp-tab active" data-rp="design" onclick="switchRightPane('design')">Конструктор</span>
         <span class="rp-tab" data-rp="preview" onclick="switchRightPane('preview')">Просмотр</span>
       </div>
+      <button class="btn" onclick="selectNode('form')" style="padding:3px 8px;font-size:11px" title="Свойства формы: заголовок, вид, события, действия">Свойства формы</button>
       <button class="btn" onclick="reloadCanvas()" style="padding:3px 8px;font-size:11px">Обновить</button>
     </div>
     <div class="editor-pane-body">
@@ -424,6 +433,22 @@ if (typeof require === 'undefined') {
 function getYAML() { return window.yamlEditor ? window.yamlEditor.getValue() : (window._yamlTA ? window._yamlTA.value : ''); }
 function getOS()   { return window.osEditor ? window.osEditor.getValue() : (window._osTA ? window._osTA.value : ''); }
 function setYAML(v) { if (window.yamlEditor) window.yamlEditor.setValue(v); else if (window._yamlTA) window._yamlTA.value = v; }
+function setOS(v)  { if (window.osEditor) window.osEditor.setValue(v); else if (window._osTA) window._osTA.value = v; }
+
+// osProcedures — имена процедур из модуля .form.os (для привязки событий, B1).
+function osProcedures() {
+  var src = getOS() || '', re = /Процедура\s+([A-Za-zА-Яа-яЁё0-9_]+)\s*\(/g, m, out = [];
+  while ((m = re.exec(src)) !== null) out.push(m[1]);
+  return out;
+}
+// ensureProcedure — дописывает пустую процедуру в .form.os, если её ещё нет
+// (кнопка «Создать обработчик…», B1). Сохранится вместе с формой.
+function ensureProcedure(name) {
+  if (osProcedures().indexOf(name) >= 0) return;
+  var src = getOS();
+  if (src && !/\n$/.test(src)) src += '\n';
+  setOS(src + '\nПроцедура ' + name + '()\n\t\nКонецПроцедуры\n');
+}
 
 // ── Палитра реквизитов: вставка поля ПолеВвода по клику/дропу (issue #134) ──
 function _attrFieldSnippet(attr, title, base) {
@@ -671,8 +696,9 @@ var _entity = {{jsString .EditingForm.Entity}};
 var _tablePartsList = {{jsonObj .EditingFormTableParts}};
 var _tableParts = {};
 (_tablePartsList || []).forEach(function (tp) { _tableParts[tp.name] = tp.columns || []; });
-var _selected = '';   // node-id выбранного элемента
+var _selected = '';   // node-id выбранного элемента ("form" = свойства формы)
 var _model = {};      // node-id → свойства (для панели свойств)
+var _form = {};       // корневые свойства формы (titleRu/kind/events/actions)
 var _rightPane = 'design';
 var _syncing = false; // защита от рекурсии setYAML → reloadCanvas
 
@@ -705,6 +731,7 @@ function editOp(params, mutating) {
       banner.classList.remove('active');
       host.classList.remove('fc-canvas-disabled');
       _model = resp.model || {};
+      _form = resp.form || {};
       _selected = resp.selectedId || '';
       renderCanvasHTML(resp.canvasHtml || '');
       if (mutating && typeof resp.yaml === 'string') {
@@ -752,7 +779,13 @@ function renderCanvasHTML(html) {
       return;
     }
     var el = e.target.closest ? e.target.closest('[data-node-id]') : null;
-    if (!el || !host.contains(el)) return;
+    if (!el || !host.contains(el)) {
+      // Клик по пустому месту холста (не по элементу и не по drop-зоне) —
+      // открыть свойства формы (B2). Drop-зоны игнорируем, чтобы не сбивать выбор.
+      var dz = e.target.closest ? e.target.closest('.fc-drop, .fc-drop-page') : null;
+      if (!dz) selectNode('form');
+      return;
+    }
     e.stopPropagation();
     selectNode(el.getAttribute('data-node-id'));
   });
@@ -854,6 +887,7 @@ function selectNode(nodeId) {
 function renderProps() {
   var panel = document.getElementById('prop-panel');
   panel.innerHTML = '';
+  if (_selected === 'form') { renderFormProps(panel); return; }
   var info = _model[_selected];
   if (!info) {
     var em = document.createElement('div'); em.className = 'prop-empty';
@@ -884,7 +918,136 @@ function renderProps() {
     addCheckRaw(panel, 'Простая таблица (без SlickGrid)', info.noGrid, function (ch) { setProp('no_grid', ch ? 'true' : ''); });
     addColumnsEditor(panel);
   }
+  if (info.kind === 'Переключатель') { addOptionsEditor(panel, info); }
+  addEventsSection(panel, info);
   addElementActions(panel, info);
+}
+
+// ── Свойства формы (batch B2/B3) ────────────────────────────────────────────
+// Корневой псевдо-узел "form": заголовок и вид формы (внутри form:), события и
+// штатные действия формы (верхний уровень). Все правки уходят как node="form" —
+// сервер сам направляет ключ в нужный блок (см. setFormProp).
+function renderFormProps(panel) {
+  var f = _form || {};
+  var h = document.createElement('h4'); h.textContent = 'Форма';
+  var sk = document.createElement('span'); sk.className = 'prop-kind'; sk.textContent = f.kind || ''; h.appendChild(sk);
+  panel.appendChild(h);
+  addTextProp(panel, 'Заголовок (ru)', 'title.ru', f.titleRu || '');
+  // Вид формы.
+  var krow = document.createElement('div'); krow.className = 'prop-row';
+  var kl = document.createElement('label'); kl.textContent = 'Вид формы'; krow.appendChild(kl);
+  var ksel = document.createElement('select');
+  ['object', 'list', 'choice', 'folder', 'custom'].forEach(function (k) { ksel.appendChild(new Option(k, k)); });
+  ksel.value = f.kind || 'custom';
+  ksel.addEventListener('change', function () { setProp('kind', ksel.value); });
+  krow.appendChild(ksel); panel.appendChild(krow);
+  // События формы и штатные действия.
+  addEventsRows(panel, formEvents(), f.events || {}, 'Форма');
+  addFormActionsSection(panel, f);
+}
+// Штатные действия формы (B3). Рантайм читает только actions.delete.visible —
+// показываем галочку для кнопки «Удалить»; снятие пишет visible:false.
+function addFormActionsSection(panel, f) {
+  var hd = document.createElement('div'); hd.className = 'prop-row prop-section'; hd.textContent = 'Штатные действия';
+  panel.appendChild(hd);
+  var acts = f.actions || {};
+  var delVisible = !(acts.delete === false);
+  addCheckRaw(panel, 'Показывать кнопку «Удалить»', delVisible, function (ch) {
+    setProp('actions.delete.visible', ch ? 'true' : 'false');
+  });
+}
+
+// ── События элемента/формы (batch B1) ───────────────────────────────────────
+// applicableEvents — какие события показывать для элемента данного вида.
+function applicableEvents(kind) {
+  switch (kind) {
+    case 'Кнопка': case 'КнопкаКП': return ['Нажатие'];
+    case 'ПолеВвода': case 'Флажок': case 'ПолеДаты': case 'Переключатель':
+    case 'ПолеСписка': case 'ТабличнаяЧасть': return ['ПриИзменении'];
+    default: return [];
+  }
+}
+// formEvents — события уровня формы (подмножество частых из form_module.go).
+function formEvents() {
+  return ['ПриОткрытии', 'ПриСоздании', 'ПередЗаписью', 'ПриЗаписи', 'ПослеЗаписи', 'ПередЗакрытием'];
+}
+function addEventsSection(panel, info) {
+  addEventsRows(panel, applicableEvents(info.kind), info.events || {}, info.name || info.kind);
+}
+// addEventsRows строит по <select> на каждое событие: «— нет —» + процедуры из
+// .form.os + «Создать обработчик…». Текущая привязка = cur[событие]. Запись —
+// setProp events.<событие>; снятие — delProp; создание дописывает процедуру.
+function addEventsRows(panel, evs, cur, defPrefix) {
+  if (!evs.length) return;
+  var hd = document.createElement('div'); hd.className = 'prop-row prop-section'; hd.textContent = 'События';
+  panel.appendChild(hd);
+  var procs = osProcedures();
+  var CREATE = '@create';
+  evs.forEach(function (ev) {
+    var row = document.createElement('div'); row.className = 'prop-row';
+    var l = document.createElement('label'); l.textContent = ev; row.appendChild(l);
+    var sel = document.createElement('select');
+    sel.appendChild(new Option('— нет —', ''));
+    procs.forEach(function (p) { sel.appendChild(new Option(p, p)); });
+    sel.appendChild(new Option('Создать обработчик…', CREATE));
+    sel.value = cur[ev] || '';
+    sel.addEventListener('change', function () {
+      var v = sel.value;
+      if (v === CREATE) {
+        var name = window.prompt('Имя процедуры-обработчика:', (defPrefix || '') + ev);
+        if (!name) { sel.value = cur[ev] || ''; return; }
+        ensureProcedure(name);
+        setProp('events.' + ev, name);
+      } else if (v === '') {
+        editOp({ op: 'delProp', node: _selected, key: 'events.' + ev }, true);
+      } else {
+        setProp('events.' + ev, v);
+      }
+    });
+    row.appendChild(sel); panel.appendChild(row);
+  });
+}
+
+// ── Редактор набора значений Переключателя (batch C1) ───────────────────────
+// Для enum-поля значения подставляются рантаймом автоматически — редактор нужен
+// для произвольных (в т.ч. числовых) наборов. Опции пишутся целиком op:setOptions.
+function addOptionsEditor(panel, info) {
+  var vrow = document.createElement('div'); vrow.className = 'prop-row';
+  var vl = document.createElement('label'); vl.textContent = 'Представление'; vrow.appendChild(vl);
+  var vsel = document.createElement('select');
+  vsel.appendChild(new Option('Переключатель (radio)', 'radio'));
+  vsel.appendChild(new Option('Список (select)', 'select'));
+  vsel.value = (info.view === 'select') ? 'select' : 'radio';
+  vsel.addEventListener('change', function () {
+    if (vsel.value === 'select') setProp('view', 'select');
+    else editOp({ op: 'delProp', node: _selected, key: 'view' }, true);
+  });
+  vrow.appendChild(vsel); panel.appendChild(vrow);
+
+  var hd = document.createElement('div'); hd.className = 'prop-row prop-section'; hd.textContent = 'Значения';
+  panel.appendChild(hd);
+  var note = document.createElement('div'); note.className = 'prop-hint';
+  note.textContent = 'Для поля-перечисления значения подставляются автоматически; здесь задаются произвольные наборы.';
+  panel.appendChild(note);
+  var opts = (info.options || []).map(function (o) { return { value: o.value, label: o.label }; });
+  var nodeAtEdit = _selected;
+  function commit() { editOp({ op: 'setOptions', node: nodeAtEdit, options: JSON.stringify(opts) }, true); }
+  var listWrap = document.createElement('div'); panel.appendChild(listWrap);
+  function redraw() {
+    listWrap.innerHTML = '';
+    opts.forEach(function (o, i) {
+      var row = document.createElement('div'); row.className = 'prop-row prop-opt';
+      var vi = document.createElement('input'); vi.type = 'text'; vi.placeholder = 'значение'; vi.value = o.value;
+      vi.addEventListener('change', function () { opts[i].value = vi.value; commit(); });
+      var li = document.createElement('input'); li.type = 'text'; li.placeholder = 'представление'; li.value = o.label;
+      li.addEventListener('change', function () { opts[i].label = li.value; commit(); });
+      var rm = mkBtn('×', function () { opts.splice(i, 1); commit(); }); rm.className = 'btn btn-danger';
+      row.appendChild(vi); row.appendChild(li); row.appendChild(rm); listWrap.appendChild(row);
+    });
+    var add = mkBtn('+ значение', function () { opts.push({ value: '', label: '' }); redraw(); });
+    listWrap.appendChild(add);
+  }
+  redraw();
 }
 // Кнопки порядка и удаления элемента (follow-up #164, слайсы B1/B2): «выше/ниже»
 // переставляют узел в соседний индекс того же родителя; «удалить» вырезает узел
