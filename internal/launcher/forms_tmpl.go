@@ -261,9 +261,10 @@ const tplFormsEditor = `
 #canvas-host.fc-canvas-disabled{opacity:.5;pointer-events:none}
 .fc-banner{background:#fee2e2;color:#dc2626;padding:6px 10px;border-radius:6px;font-size:12px;margin-bottom:8px;display:none}
 .fc-banner.active{display:block}
-.prop-panel{border-top:1px solid #eef0f5;background:#fafbff;max-height:44%;overflow:auto;padding:10px 12px;font-size:12px}
+.prop-panel{border-top:1px solid #eef0f5;background:#fafbff;max-height:44%;overflow:hidden;padding:0;font-size:12px;display:flex;flex-direction:column}
 .prop-panel .prop-empty{color:#94a3b8}
-.prop-tabs{display:flex;gap:2px;border-bottom:1px solid #e2e8f0;margin-bottom:8px;position:sticky;top:0;background:#fafbff}
+.prop-tabs{display:flex;gap:2px;border-bottom:1px solid #e2e8f0;padding:8px 12px 0;background:#fafbff;flex:0 0 auto}
+#prop-body{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 12px}
 .prop-tab{padding:4px 12px;font-size:12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;user-select:none}
 .prop-tab:hover{color:#1a4a80}
 .prop-tab.active{color:#1a4a80;border-bottom-color:#1a4a80;font-weight:600}
