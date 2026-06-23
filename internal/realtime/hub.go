@@ -58,6 +58,13 @@ func (h *Hub) Subscribe(userID, login string, roles []string) (id string, ch <-c
 	return id, s.ch, func() { h.unsubscribe(id) }
 }
 
+// SubscriberCount возвращает число активных подписчиков (для тестов и метрик).
+func (h *Hub) SubscriberCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs)
+}
+
 func (h *Hub) unsubscribe(id string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

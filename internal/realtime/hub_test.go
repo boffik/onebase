@@ -108,6 +108,21 @@ func TestHub_Cancel_StopsDelivery(t *testing.T) {
 	}
 }
 
+func TestHub_SubscriberCount(t *testing.T) {
+	h := NewHub()
+	if got := h.SubscriberCount(); got != 0 {
+		t.Fatalf("пустая шина: ожидалось 0, получено %d", got)
+	}
+	_, _, cancel := h.Subscribe("u1", "ivan", nil)
+	if got := h.SubscriberCount(); got != 1 {
+		t.Fatalf("после подписки: ожидалось 1, получено %d", got)
+	}
+	cancel()
+	if got := h.SubscriberCount(); got != 0 {
+		t.Fatalf("после отписки: ожидалось 0, получено %d", got)
+	}
+}
+
 func TestHub_Publish_NonBlockingWhenBufferFull(t *testing.T) {
 	h := NewHub()
 	// Подписчик не читает канал. Публикуем больше, чем буфер: лишние кадры

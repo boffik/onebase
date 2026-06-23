@@ -797,6 +797,39 @@ window.onebaseDevice={
 };
 </script>
 </head><body>
+<script>
+/* План 74: real-time-шина уведомлений сервер->браузер.
+   Любая страница слушает window-событие 'onebase:<имя>'. Событие
+   "уведомление" со строкой показывается тостом без дополнительного кода. */
+(function(){
+  if(window.__obEventsInit)return; window.__obEventsInit=true;
+  function toast(text){
+    var box=document.getElementById('ob-toasts');
+    if(!box){box=document.createElement('div');box.id='ob-toasts';
+      box.style.cssText='position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:360px';
+      (document.body||document.documentElement).appendChild(box);}
+    var el=document.createElement('div');
+    el.style.cssText='background:#1f2937;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.25);font-size:14px;line-height:1.35;opacity:0;transition:opacity .2s';
+    el.textContent=text; box.appendChild(el);
+    requestAnimationFrame(function(){el.style.opacity='1';});
+    setTimeout(function(){el.style.opacity='0';setTimeout(function(){el.remove();},250);},6000);
+  }
+  function connect(){
+    if(typeof EventSource==='undefined')return;
+    var es=new EventSource('/ui/events'); window.__obEvents=es;
+    es.onmessage=function(ev){
+      var msg; try{msg=JSON.parse(ev.data);}catch(e){return;}
+      if(!msg||!msg.name)return;
+      window.dispatchEvent(new CustomEvent('onebase:'+msg.name,{detail:msg.data}));
+      if(msg.name==='уведомление'||msg.name==='notify'){
+        toast(typeof msg.data==='string'?msg.data:JSON.stringify(msg.data));
+      }
+    };
+    es.onerror=function(){}; /* EventSource переподключается сам */
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',connect);else connect();
+})();
+</script>
 {{end}}
 `
 

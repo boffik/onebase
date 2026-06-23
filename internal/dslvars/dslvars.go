@@ -39,6 +39,10 @@ type Common struct {
 	// nil → команды ЗАПРЕЩЕНЫ (secure by default, в отличие от NetGuard): exec —
 	// исполнение кода на сервере, разрешается только явной настройкой базы.
 	ExecGuard func() error
+	// Notifier публикует уведомления в real-time-шину «сервер → браузер»
+	// (план 74). nil → функции ОтправитьУведомление/PublishNotification
+	// остаются тихим no-op (фоновые задания/тесты без подключённой шины).
+	Notifier interpreter.Notifier
 }
 
 // Build возвращает map с пересечением DSL-переменных, общих для UI и scheduler.
@@ -93,6 +97,12 @@ func (c Common) Build() map[string]any {
 	// к локальным устройствам напрямую (драйверы в internal/equipment). Без этой
 	// инжекции ПодключитьОборудование не определена в рантайме конфигурации.
 	for k, v := range interpreter.NewEquipmentFunctions() {
+		vars[k] = v
+	}
+
+	// Уведомления в реальном времени (план 74): ОтправитьУведомление публикует
+	// событие в шину сервер→браузер. c.Notifier == nil → тихий no-op.
+	for k, v := range interpreter.NewNotifyFunctions(c.Notifier) {
 		vars[k] = v
 	}
 

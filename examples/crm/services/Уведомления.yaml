@@ -1,0 +1,8 @@
+name: Уведомления
+title: Демо real-time уведомлений (план 74)
+root_url: notify
+auth: none
+templates:
+  - template: /broadcast
+    methods:
+      POST: Рассылка
