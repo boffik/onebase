@@ -228,7 +228,7 @@ events) либо отдельным полем ответа.
   предлагать Переключатель как альтернативу ПолеВвода (или просто отдельный чип).
 - Панель свойств: редактор опций — список (value+label), add/remove/reorder; кнопка
   «Заполнить из перечисления» (для enum-поля, тянет EnumOptions). Хранение: опции —
-  НЕ children, поэтому новый op `setOptions` (node + JSON массив) → 
+  НЕ children, поэтому новый op `setOptions` (node + JSON массив) →
   `func (d *Doc) SetOptions(nodeID string, opts []FormOption) error` пишет узел
   `options:` целиком (build sequence). View — `<select> radio|select`.
 
