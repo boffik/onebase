@@ -154,6 +154,26 @@ func TestApplyEditOp_Delete(t *testing.T) {
 	}
 }
 
+// move через эндпоинт меняет порядок соседей. Индекс — как его шлёт клиент при
+// «↓ Ниже» (finalIdx+1 = srcIdx+2 из-за компенсации сдвига в Move), follow-up
+// #164 слайс B2.
+func TestApplyEditOp_Move(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "move", Node: "elements.0.children.0", Parent: "elements.0", Index: 2,
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp move: %v", err)
+	}
+	iDate := strings.Index(res.YAML, "ПолеДата")
+	iNum := strings.Index(res.YAML, "ПолеНомер")
+	if iDate < 0 || iNum < 0 || iDate > iNum {
+		t.Errorf("порядок не изменился — ПолеДата должно стоять раньше ПолеНомер:\n%s", res.YAML)
+	}
+	if res.SelectedID != "" {
+		t.Errorf("после move сервер сбрасывает выделение, got %q", res.SelectedID)
+	}
+}
+
 // Невалидный YAML, неизвестная операция и устаревший node-id — штатные ошибки,
 // без паники (план 71: баннер/конфликт на клиенте).
 func TestApplyEditOp_Errors(t *testing.T) {

@@ -712,16 +712,58 @@ function renderProps() {
     addCheckProp(panel, 'Обязательное', 'required', info.required);
     addCheckProp(panel, 'Только чтение', 'readonly', info.readonly);
   }
-  addDeleteAction(panel, info);
+  addElementActions(panel, info);
 }
-// Кнопка удаления элемента (follow-up #164, слайс B1). Контейнер удаляется
-// вместе с детьми — спрашиваем подтверждение с явным предупреждением.
-function addDeleteAction(panel, info) {
+// Кнопки порядка и удаления элемента (follow-up #164, слайсы B1/B2): «выше/ниже»
+// переставляют узел в соседний индекс того же родителя; «удалить» вырезает узел
+// (контейнер — вместе с детьми, с подтверждением).
+function addElementActions(panel, info) {
   var row = document.createElement('div'); row.className = 'prop-row prop-actions';
-  var del = document.createElement('button');
-  del.type = 'button'; del.className = 'btn btn-danger'; del.textContent = 'Удалить элемент';
-  del.addEventListener('click', deleteSelected);
-  row.appendChild(del); panel.appendChild(row);
+  row.appendChild(mkBtn('↑ Выше', function () { moveSelected(-1); }));
+  row.appendChild(mkBtn('↓ Ниже', function () { moveSelected(1); }));
+  var del = mkBtn('Удалить элемент', deleteSelected);
+  del.className = 'btn btn-danger';
+  row.appendChild(del);
+  panel.appendChild(row);
+}
+function mkBtn(label, onClick) {
+  var b = document.createElement('button');
+  b.type = 'button'; b.className = 'btn'; b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+// nodeAddr раскладывает node-id на родительский элемент-контейнер и индекс в
+// его sequence. "elements.2" → {parent:"", index:2}; "elements.0.children.1" →
+// {parent:"elements.0", index:1}. seqPath — путь самого sequence (для проверки
+// соседей по _model). null для неструктурных адресов (напр. колонок ТЧ).
+function nodeAddr(nodeId) {
+  var dot = nodeId.lastIndexOf('.');
+  if (dot < 0) return null;
+  var idx = parseInt(nodeId.slice(dot + 1), 10);
+  if (isNaN(idx)) return null;
+  var seqPath = nodeId.slice(0, dot);
+  var parent;
+  if (seqPath === 'elements') parent = '';
+  else if (seqPath.slice(-9) === '.children') parent = seqPath.slice(0, -9);
+  else return null;
+  return { parent: parent, index: idx, seqPath: seqPath };
+}
+function moveSelected(delta) {
+  if (!_selected) return;
+  var a = nodeAddr(_selected);
+  if (!a) return;
+  var finalIdx = a.index + delta;
+  if (finalIdx < 0) return;
+  // Вниз и уже последний — соседа нет, выходим.
+  if (delta > 0 && !_model[a.seqPath + '.' + finalIdx]) return;
+  // Сервер компенсирует сдвиг после удаления при переносе вперёд в том же
+  // контейнере (см. formdoc.Move): чтобы оказаться на finalIdx, при движении
+  // вниз передаём finalIdx+1, при движении вверх — finalIdx как есть.
+  var serverIdx = delta > 0 ? finalIdx + 1 : finalIdx;
+  var newId = a.seqPath + '.' + finalIdx;
+  editOp({ op: 'move', node: _selected, parent: a.parent, index: serverIdx }, true).then(function (resp) {
+    if (resp && resp.ok) selectNode(newId); // удержать выделение на переехавшем узле
+  });
 }
 function deleteSelected() {
   if (!_selected) return;
