@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/page"
+	"github.com/ivantit66/onebase/internal/ui"
 )
 
 // ── Страницы в конфигураторе (план 66, доработка 2) ──────────────────────────
@@ -51,7 +52,7 @@ func (h *handler) configuratorSavePage(w http.ResponseWriter, r *http.Request) {
 	pg := &page.Page{
 		Name:   name,
 		Title:  strings.TrimSpace(r.FormValue("title")),
-		Icon:   strings.TrimSpace(r.FormValue("icon")),
+		Icon:   ui.NormalizeIconName(r.FormValue("icon")),
 		Roles:  splitConfigList(r.FormValue("roles")),
 		Params: splitConfigList(r.FormValue("params")),
 	}

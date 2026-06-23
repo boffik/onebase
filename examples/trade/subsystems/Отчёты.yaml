@@ -1,5 +1,6 @@
 name: Отчёты
 title: Отчёты
+icon: chart-column
 order: 40
 contents:
   pages: [Панель]

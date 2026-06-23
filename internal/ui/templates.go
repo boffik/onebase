@@ -28,6 +28,8 @@ var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
 		return fmt.Sprintf("%v", v)
 	},
 	"add": func(a, b int) int { return a + b },
+	// lucideIcon рендерит инлайн-SVG иконки навигации по имени Lucide (план 72).
+	"lucideIcon": LucideIcon,
 	"t": func(lang, key string) string {
 		if globalBundle != nil {
 			return globalBundle.T(lang, key)
@@ -579,6 +581,8 @@ details[open] summary::before{content:"▼ "}
 .subsys-bar a{display:inline-block;padding:7px 18px;color:#94a3b8;text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid transparent;transition:color .15s}
 .subsys-bar a:hover{color:#e2e8f0;background:rgba(255,255,255,.04)}
 .subsys-bar a.active{color:#7dd3fc;border-bottom-color:#3b82f6}
+.subsys-bar a .ob-icon{width:15px;height:15px;vertical-align:-3px;margin-right:6px;opacity:.85}
+.subsys-bar a:hover .ob-icon,.subsys-bar a.active .ob-icon{opacity:1}
 .breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b;margin-bottom:12px;max-width:1400px;flex-wrap:wrap}
 .breadcrumb a{color:#3b82f6;text-decoration:none}.breadcrumb a:hover{text-decoration:underline}
 .breadcrumb span{color:#94a3b8;padding:0 2px}
@@ -850,7 +854,7 @@ const tplNav = `
 {{if .Subsystems}}
 <nav class="subsys-bar">
   <a href="/ui/" class="{{if not .CurrentSubsystem}}active{{end}}">{{t $.Lang "Главная"}}</a>
-  {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{.DisplayName $.Lang}}</a>{{end}}
+  {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{lucideIcon .Icon}}{{.DisplayName $.Lang}}</a>{{end}}
 </nav>
 {{end}}
 <div class="app-body">
