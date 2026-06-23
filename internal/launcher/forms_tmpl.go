@@ -190,6 +190,8 @@ const tplFormsEditor = `
 {{template "forms-head" .}}
 <style>
 .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:calc(100vh - 230px);min-height:480px}
+.editor-grid.left-collapsed{grid-template-columns:1fr}
+.editor-grid.left-collapsed .editor-pane.left{display:none}
 .editor-pane{display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
 .editor-pane-hd{padding:8px 12px;background:#f8fafc;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #eef0f5;display:flex;justify-content:space-between;align-items:center}
 .editor-pane-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
@@ -261,6 +263,10 @@ const tplFormsEditor = `
 .fc-banner.active{display:block}
 .prop-panel{border-top:1px solid #eef0f5;background:#fafbff;max-height:44%;overflow:auto;padding:10px 12px;font-size:12px}
 .prop-panel .prop-empty{color:#94a3b8}
+.prop-tabs{display:flex;gap:2px;border-bottom:1px solid #e2e8f0;margin-bottom:8px;position:sticky;top:0;background:#fafbff}
+.prop-tab{padding:4px 12px;font-size:12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;user-select:none}
+.prop-tab:hover{color:#1a4a80}
+.prop-tab.active{color:#1a4a80;border-bottom-color:#1a4a80;font-weight:600}
 .prop-panel h4{margin:0 0 8px;font-size:12px;color:#1a4a80}
 .prop-panel h4 .prop-kind{color:#94a3b8;font-weight:400;margin-left:6px}
 .prop-row{margin-bottom:8px}
@@ -292,12 +298,7 @@ const tplFormsEditor = `
 
 <div class="editor-tools">
   <button class="btn btn-primary" onclick="saveForm()">Сохранить</button>
-  <button class="btn btn-success" onclick="refreshPreview()">Просмотр</button>
   <button class="btn" onclick="validateForm()">Проверить</button>
-  <label style="display:inline-flex;align-items:center;gap:5px;margin-left:6px;font-size:12px;color:#475569;cursor:pointer"
-         title="Включает SlickGrid (Excel-навигация с клавиатуры, выравнивание чисел) для всех табличных частей формы. В YAML проставляется use_grid: true.">
-    <input type="checkbox" id="grid-toggle" onchange="setGridFlag(this.checked)"> Табличные части: SlickGrid
-  </label>
   <form action="/bases/{{.Base.ID}}/configurator/forms/delete" method="POST" style="display:inline" onsubmit="return confirm('Удалить эту форму вместе с модулем и ресурсами?')">
     <input type="hidden" name="entity" value="{{.EditingForm.Entity}}">
     <input type="hidden" name="name" value="{{.EditingForm.Name}}">
@@ -319,8 +320,8 @@ const tplFormsEditor = `
 <div class="struct-palette" id="struct-palette">
   <span class="attr-palette-label">Структура (перетащите на холст):</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="ГруппаФормы" data-name="Группа" data-title="Группа" title="Группа полей">＋ Группа</span>
-  <span class="attr-chip struct-chip" draggable="true" data-kind="СтраницыФормы" data-name="Страницы" title="Набор вкладок: бросьте на холст, затем добавляйте вкладки кнопкой «+ страница» внутри">＋ Страницы (набор)</span>
-  <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Вкладка набора: кликните «+ страница» в наборе или перетащите этот чип на «+ страница»">＋ Страница (вкладка)</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="СтраницыФормы" data-name="Страницы" title="Набор вкладок: бросьте на холст — появится набор с одной готовой вкладкой; ещё вкладки добавляйте кнопкой «+ страница» внутри">＋ Страницы (набор)</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Вкладка: бросьте на «+ страница» внутри набора — добавится вкладка; на обычное место холста — обернётся в новый набор вкладок">＋ Страница (вкладка)</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Надпись" data-name="Надпись" data-title="Надпись" title="Текстовая надпись">＋ Надпись</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Кнопка" data-name="Кнопка" data-title="Кнопка" title="Кнопка (обработчик нажатия — отдельным шагом)">＋ Кнопка</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="ПолеКартинки" data-name="Картинка" data-title="Картинка" title="Поле картинки (путь укажите в свойствах)">＋ Картинка</span>
@@ -338,7 +339,7 @@ const tplFormsEditor = `
 {{end}}
 
 <div class="editor-grid">
-  <div class="editor-pane">
+  <div class="editor-pane left">
     <div class="editor-pane-hd">
       YAML
       <span style="color:#94a3b8;font-weight:400">{{.EditingForm.YAMLPath}}</span>
@@ -358,8 +359,8 @@ const tplFormsEditor = `
         <span class="rp-tab active" data-rp="design" onclick="switchRightPane('design')">Конструктор</span>
         <span class="rp-tab" data-rp="preview" onclick="switchRightPane('preview')">Просмотр</span>
       </div>
-      <button class="btn" onclick="selectNode('form')" style="padding:3px 8px;font-size:11px" title="Свойства формы: заголовок, вид, события, действия">Свойства формы</button>
-      <button class="btn" onclick="reloadCanvas()" style="padding:3px 8px;font-size:11px">Обновить</button>
+      <button class="btn" id="toggle-left-btn" onclick="toggleLeftPane()" style="padding:3px 8px;font-size:11px" title="Свернуть/развернуть редактор кода (YAML и модуль)">⮜ Свернуть код</button>
+      <button class="btn" onclick="reloadCanvas()" style="padding:3px 8px;font-size:11px" title="Пере-синхронизировать холст с YAML">Обновить</button>
     </div>
     <div class="editor-pane-body">
       <div id="design-wrap">
@@ -368,7 +369,13 @@ const tplFormsEditor = `
           <div class="empty" style="padding:18px">Загрузка холста…</div>
         </div>
         <div class="prop-panel" id="prop-panel">
-          <div class="prop-empty">Выберите элемент на холсте, чтобы изменить его свойства. Перетащите реквизит из палитры на холст, чтобы добавить поле.</div>
+          <div class="prop-tabs">
+            <span class="prop-tab active" data-pt="element" onclick="switchPropTab('element')">Элемент</span>
+            <span class="prop-tab" data-pt="form" onclick="switchPropTab('form')" title="Свойства формы: заголовок, вид, события, действия">Форма</span>
+          </div>
+          <div id="prop-body">
+            <div class="prop-empty">Выберите элемент на холсте, чтобы изменить его свойства. Перетащите реквизит из палитры на холст, чтобы добавить поле.</div>
+          </div>
         </div>
       </div>
       <iframe id="preview-frame" sandbox="allow-same-origin allow-scripts" style="display:none;flex:1;border:none"></iframe>
@@ -599,37 +606,6 @@ function insertFieldFromChip(chip) {
   });
 })();
 
-// setGridFlag — переключатель SlickGrid (план 48). Проставляет/снимает
-// use_grid: true у всех элементов kind: ТабличнаяЧасть в YAML формы.
-// Делаем построчно, без YAML-парсера: сначала убираем все строки use_grid,
-// затем при включении вставляем флаг сразу после строки "- kind: ТабличнаяЧасть"
-// с тем же отступом, что у kind. Идемпотентно. Ограничение: kind должен быть
-// первым ключом элемента списка (как во всех примерах).
-function setGridFlag(enable) {
-  var lines = getYAML().split('\n');
-  var out = [];
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i];
-    if (/^\s*use_grid\s*:/.test(line)) continue; // снять существующие
-    out.push(line);
-    var m = line.match(/^(\s*)-\s+kind\s*:\s*(?:ТабличнаяЧасть|TablePart)\s*$/);
-    if (enable && m) {
-      var keyIndent = m[1].length + 2; // ключи-братья выровнены по kind (после "- ")
-      out.push(new Array(keyIndent + 1).join(' ') + 'use_grid: true');
-    }
-  }
-  setYAML(out.join('\n'));
-  refreshPreview();
-}
-
-// syncGridToggle — отражает текущее состояние YAML в чекбоксе (отмечен, если
-// хоть одна ТЧ уже с use_grid: true). Вызывается после рендера превью.
-function syncGridToggle() {
-  var cb = document.getElementById('grid-toggle');
-  if (!cb) return;
-  cb.checked = /^\s*use_grid\s*:\s*true\s*$/m.test(getYAML());
-}
-
 function switchTab(name) {
   document.querySelectorAll('.editor-tab').forEach(function (el) { el.classList.toggle('active', el.dataset.tab === name); });
   document.getElementById('yaml-editor').style.display = name === 'yaml' ? '' : 'none';
@@ -645,7 +621,6 @@ function saveForm() {
 }
 
 function refreshPreview() {
-  syncGridToggle();
   var body = new URLSearchParams();
   body.append('yaml', getYAML());
   body.append('entity', '{{.EditingForm.Entity}}');
@@ -696,7 +671,8 @@ var _entity = {{jsString .EditingForm.Entity}};
 var _tablePartsList = {{jsonObj .EditingFormTableParts}};
 var _tableParts = {};
 (_tablePartsList || []).forEach(function (tp) { _tableParts[tp.name] = tp.columns || []; });
-var _selected = '';   // node-id выбранного элемента ("form" = свойства формы)
+var _selected = '';   // текущая цель правки: node-id элемента ИЛИ "form"
+var _lastEl = '';     // последний выбранный элемент (для закладки «Элемент»)
 var _model = {};      // node-id → свойства (для панели свойств)
 var _form = {};       // корневые свойства формы (titleRu/kind/events/actions)
 var _rightPane = 'design';
@@ -733,6 +709,7 @@ function editOp(params, mutating) {
       _model = resp.model || {};
       _form = resp.form || {};
       _selected = resp.selectedId || '';
+      if (_selected && _selected !== 'form') _lastEl = _selected; // запоминаем элемент для закладки «Элемент»
       renderCanvasHTML(resp.canvasHtml || '');
       if (mutating && typeof resp.yaml === 'string') {
         _syncing = true; setYAML(resp.yaml); _syncing = false;
@@ -751,6 +728,27 @@ function editOp(params, mutating) {
 function reloadCanvas() {
   if (_rightPane !== 'design') return Promise.resolve();
   return editOp({ op: 'render', node: _selected }, false);
+}
+
+// syncFromYAML — живая синхронизация после правки YAML: на закладке «Конструктор»
+// перерисовываем холст, на «Просмотр» — обновляем предпросмотр (раньше для этого
+// была отдельная кнопка «Просмотр» в шапке).
+function syncFromYAML() {
+  if (_rightPane === 'preview') refreshPreview();
+  else reloadCanvas();
+}
+
+// insertPagesSet — вставляет набор СтраницыФормы с одной готовой вкладкой, чтобы
+// добавленная страница сразу была закладкой (а не висячей страницей). Двумя
+// шагами: сначала набор-контейнер, затем страница в него (id набора = selectedId).
+function insertPagesSet(parent, index) {
+  return editOp({ op: 'insert', parent: parent, index: index, kind: 'СтраницыФормы', name: 'Страницы', title_ru: '' }, true)
+    .then(function (r) {
+      if (r && r.ok && r.selectedId) {
+        return editOp({ op: 'insert', parent: r.selectedId, index: 0, kind: 'Страница', name: 'Страница', title_ru: 'Страница' }, true);
+      }
+      return r;
+    });
 }
 
 function renderCanvasHTML(html) {
@@ -839,9 +837,16 @@ function renderCanvasHTML(html) {
     if (sraw) {
       e.preventDefault();
       var s; try { s = JSON.parse(sraw); } catch (_) { return; }
-      // В набор страниц (зона «+ страница») кладём только Страницу, иначе там
-      // оказался бы вложенный набор/группа — не вкладка.
-      if (dz.classList.contains('fc-drop-page') && s.kind !== 'Страница') return;
+      if (dz.classList.contains('fc-drop-page')) {
+        // Зона «+ страница» внутри набора — кладём только вкладку.
+        if (s.kind !== 'Страница') return;
+        editOp({ op: 'insert', parent: parent, index: index, kind: 'Страница', name: s.name || 'Страница', title_ru: s.title || 'Страница' }, true);
+        return;
+      }
+      // Обычная зона: и «Страницы (набор)», и одиночная «Страница» дают готовый
+      // набор с одной вкладкой — чтобы это всегда была закладка, а не висячая
+      // страница (issue #164, обратная связь по живому тесту).
+      if (s.kind === 'СтраницыФормы' || s.kind === 'Страница') { insertPagesSet(parent, index); return; }
       editOp({ op: 'insert', parent: parent, index: index, kind: s.kind, name: s.name || '', title_ru: s.title || '' }, true);
       return;
     }
@@ -876,16 +881,36 @@ function renderCanvasHTML(html) {
 
 function selectNode(nodeId) {
   _selected = nodeId;
+  if (nodeId && nodeId !== 'form') _lastEl = nodeId; // запоминаем для закладки «Элемент»
   document.querySelectorAll('#canvas-host .fc-selected').forEach(function (el) { el.classList.remove('fc-selected'); });
   var el = document.querySelector('#canvas-host [data-node-id="' + nodeId + '"]');
   if (el) el.classList.add('fc-selected');
   renderProps();
 }
 
-// renderProps строит панель свойств выбранного элемента из _model. Обработчики
-// вешаются через addEventListener (без inline-onchange — без проблем экранирования).
+// switchPropTab — закладки панели свойств «Элемент | Форма» (вместо отдельной
+// кнопки «Свойства формы»). «Форма» выбирает корневые свойства; «Элемент» —
+// возвращает к последнему выбранному элементу.
+function switchPropTab(which) {
+  if (which === 'form') { if (_selected !== 'form') selectNode('form'); else renderProps(); }
+  else { selectNode(_lastEl || ''); }
+}
+// toggleLeftPane — свернуть/развернуть левый блок (YAML + модуль), отдав место холсту.
+function toggleLeftPane() {
+  var grid = document.querySelector('.editor-grid');
+  var collapsed = grid.classList.toggle('left-collapsed');
+  var btn = document.getElementById('toggle-left-btn');
+  if (btn) btn.textContent = collapsed ? '⮞ Показать код' : '⮜ Свернуть код';
+  if (window.yamlEditor) window.yamlEditor.layout();
+  if (window.osEditor) window.osEditor.layout();
+}
+
+// renderProps строит панель свойств в #prop-body из _model (или свойства формы).
+// Закладки «Элемент | Форма» статичны; активная выводится из _selected.
 function renderProps() {
-  var panel = document.getElementById('prop-panel');
+  var tab = (_selected === 'form') ? 'form' : 'element';
+  document.querySelectorAll('#prop-panel .prop-tab').forEach(function (t) { t.classList.toggle('active', t.dataset.pt === tab); });
+  var panel = document.getElementById('prop-body');
   panel.innerHTML = '';
   if (_selected === 'form') { renderFormProps(panel); return; }
   var info = _model[_selected];
@@ -1203,7 +1228,7 @@ function hookYamlChange() {
   window.yamlEditor.onDidChangeModelContent(function () {
     if (_syncing) return;
     clearTimeout(_yamlChangeTimer);
-    _yamlChangeTimer = setTimeout(reloadCanvas, 400);
+    _yamlChangeTimer = setTimeout(syncFromYAML, 400);
   });
 }
 
@@ -1213,7 +1238,7 @@ if (window._yamlTA) {
   window._yamlTA.addEventListener('input', function () {
     if (_syncing) return;
     clearTimeout(_yamlChangeTimer);
-    _yamlChangeTimer = setTimeout(reloadCanvas, 400);
+    _yamlChangeTimer = setTimeout(syncFromYAML, 400);
   });
   reloadCanvas();
 }

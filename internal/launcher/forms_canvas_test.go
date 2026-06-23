@@ -161,12 +161,23 @@ func TestFormsEditor_Part2Controls(t *testing.T) {
 		"function addOptionsEditor", // C1 набор значений
 		"op: 'delProp'",            // снятие события / view
 		"op: 'setOptions'",         // запись набора
-		"selectNode('form')",       // кнопка «Свойства формы»
+		"selectNode('form')",       // закладка «Форма» / клик по пустому холсту
 		`data-kind="Переключатель"`, // палитра C1
 		"function ensureProcedure", // «Создать обработчик…»
+		// UX-доводка: закладки панели свойств, сворачивание кода, авто-вкладка.
+		`data-pt="form"`,            // закладка «Форма» в панели свойств
+		"function switchPropTab",    // переключение «Элемент | Форма»
+		"function toggleLeftPane",   // свернуть/развернуть редактор кода
+		"function insertPagesSet",   // одиночная страница → набор с вкладкой
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("в странице редактора нет %q", want)
+		}
+	}
+	// Вычищенные элементы шапки не должны возвращаться.
+	for _, gone := range []string{"grid-toggle", "setGridFlag", `onclick="refreshPreview()"`} {
+		if strings.Contains(page, gone) {
+			t.Errorf("в странице редактора остался убранный элемент %q", gone)
 		}
 	}
 }
