@@ -215,3 +215,16 @@ func (d *Doc) Move(nodeID, newParentID string, index int) error {
 	insertIntoSeq(dstSeq, index, node)
 	return nil
 }
+
+// DeleteElement вырезает элемент nodeID из его родительского контейнера. Узел
+// удаляется целиком — контейнер (группа/страница) уходит вместе со всеми детьми.
+// Хирургическая правка: комментарии и порядок соседних элементов не затрагиваются
+// (follow-up #164, слайс B1).
+func (d *Doc) DeleteElement(nodeID string) error {
+	seq, idx, _, err := d.locate(nodeID)
+	if err != nil {
+		return err
+	}
+	seq.Content = append(seq.Content[:idx], seq.Content[idx+1:]...)
+	return nil
+}

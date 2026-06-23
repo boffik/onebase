@@ -143,3 +143,60 @@ func TestMove_ChildToTopLevel(t *testing.T) {
 		t.Errorf("Bytes после Move: %v", err)
 	}
 }
+
+// DeleteElement вырезает узел из родительского контейнера; сосед и его
+// inline-комментарий сохраняются, round-trip остаётся валидным (follow-up #164).
+func TestDeleteElement_RemovesNodeKeepsSiblings(t *testing.T) {
+	doc, err := Load([]byte(elemSample))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := doc.DeleteElement("elements.0.children.0"); err != nil {
+		t.Fatalf("DeleteElement: %v", err)
+	}
+	els, _ := doc.Elements()
+	if len(els[0].Children) != 1 {
+		t.Fatalf("ожидался 1 ребёнок после удаления, получено %d", len(els[0].Children))
+	}
+	if els[0].Children[0].El.DataPath != "Объект.Дата" {
+		t.Errorf("остался не тот ребёнок: %+v", els[0].Children[0].El)
+	}
+	out, err := doc.Bytes()
+	if err != nil {
+		t.Fatalf("Bytes: %v", err)
+	}
+	got := string(out)
+	if strings.Contains(got, "Объект.Номер") {
+		t.Errorf("удалённый элемент остался в YAML:\n%s", got)
+	}
+	if !strings.Contains(got, "# дата звонка") {
+		t.Errorf("потерян inline-комментарий соседа:\n%s", got)
+	}
+}
+
+// DeleteElement контейнера удаляет его целиком вместе с детьми.
+func TestDeleteElement_ContainerWithChildren(t *testing.T) {
+	doc, _ := Load([]byte(elemSample))
+	if err := doc.DeleteElement("elements.0"); err != nil {
+		t.Fatalf("DeleteElement: %v", err)
+	}
+	els, _ := doc.Elements()
+	if len(els) != 0 {
+		t.Fatalf("ожидалось 0 верхних элементов, получено %d", len(els))
+	}
+	out, _ := doc.Bytes()
+	if strings.Contains(string(out), "ПолеНомер") || strings.Contains(string(out), "Группа1") {
+		t.Errorf("дети удалённого контейнера остались в YAML:\n%s", out)
+	}
+}
+
+// DeleteElement по индексу вне диапазона и по node-id без родителя — ошибка.
+func TestDeleteElement_Errors(t *testing.T) {
+	doc, _ := Load([]byte(elemSample))
+	if err := doc.DeleteElement("elements.5"); err == nil {
+		t.Error("ожидалась ошибка для индекса вне диапазона")
+	}
+	if err := doc.DeleteElement("elements"); err == nil {
+		t.Error("ожидалась ошибка для node-id без родителя")
+	}
+}

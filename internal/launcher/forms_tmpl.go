@@ -243,6 +243,7 @@ const tplFormsEditor = `
 .prop-row input[type=text]{width:100%;padding:5px 8px;border:1px solid #d0d7e3;border-radius:5px;font-size:12px}
 .prop-row.prop-check{display:flex;align-items:center;gap:6px}
 .prop-row.prop-check>label{margin:0}
+.prop-actions{margin-top:12px;border-top:1px solid #eef0f5;padding-top:10px}
 </style>
 <body>
 {{template "forms-header" .}}
@@ -711,6 +712,26 @@ function renderProps() {
     addCheckProp(panel, 'Обязательное', 'required', info.required);
     addCheckProp(panel, 'Только чтение', 'readonly', info.readonly);
   }
+  addDeleteAction(panel, info);
+}
+// Кнопка удаления элемента (follow-up #164, слайс B1). Контейнер удаляется
+// вместе с детьми — спрашиваем подтверждение с явным предупреждением.
+function addDeleteAction(panel, info) {
+  var row = document.createElement('div'); row.className = 'prop-row prop-actions';
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'btn btn-danger'; del.textContent = 'Удалить элемент';
+  del.addEventListener('click', deleteSelected);
+  row.appendChild(del); panel.appendChild(row);
+}
+function deleteSelected() {
+  if (!_selected) return;
+  var info = _model[_selected] || {};
+  var label = info.name || info.kind || 'элемент';
+  var msg = info.container
+    ? 'Удалить «' + label + '» вместе со вложенными элементами?'
+    : 'Удалить «' + label + '»?';
+  if (!window.confirm(msg)) return;
+  editOp({ op: 'delete', node: _selected }, true);
 }
 function addTextProp(panel, label, key, val) {
   var row = document.createElement('div'); row.className = 'prop-row';

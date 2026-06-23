@@ -22,7 +22,7 @@ import (
 
 // editOpRequest — разобранная команда правки формы.
 type editOpRequest struct {
-	Op       string // setProp | insert | move
+	Op       string // render | setProp | insert | move | delete
 	Node     string // node-id цели (setProp, move)
 	Key      string // setProp: имя свойства (может быть вложенным, "title.ru")
 	Value    string // setProp: значение (сырое; bool-свойства приводятся)
@@ -117,6 +117,17 @@ func applyEditOp(yamlSrc []byte, req editOpRequest) (editOpResult, error) {
 			return editOpResult{}, err
 		}
 		// Индексы после переноса смещаются — клиент перезапрашивает выделение.
+		selected = ""
+
+	case "delete":
+		if strings.TrimSpace(req.Node) == "" {
+			return editOpResult{}, fmt.Errorf("delete: пустой node")
+		}
+		if err := doc.DeleteElement(req.Node); err != nil {
+			return editOpResult{}, err
+		}
+		// Узел удалён вместе с поддеревом — выделение сбрасывается, индексы
+		// соседей сместились (клиент пере-рендерит холст без выделения).
 		selected = ""
 
 	default:

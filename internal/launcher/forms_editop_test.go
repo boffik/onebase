@@ -129,6 +129,31 @@ func TestApplyEditOp_Insert(t *testing.T) {
 	}
 }
 
+// delete через эндпоинт: узел вместе с поддеревом исчезает из YAML и модели,
+// выделение сбрасывается (follow-up #164, слайс B1).
+func TestApplyEditOp_Delete(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op:   "delete",
+		Node: "elements.0.children.0",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp delete: %v", err)
+	}
+	if res.SelectedID != "" {
+		t.Errorf("после удаления выделение должно сброситься, got %q", res.SelectedID)
+	}
+	if strings.Contains(res.YAML, "Объект.Номер") || strings.Contains(res.YAML, "ПолеНомер") {
+		t.Errorf("удалённый узел остался в YAML:\n%s", res.YAML)
+	}
+	// Удалённого data_path нет ни в одном узле модели (бывший сосед сдвинулся
+	// на тот же node-id, но это уже другой элемент).
+	for id, info := range res.Model {
+		if info.DataPath == "Объект.Номер" {
+			t.Errorf("узел %q в модели всё ещё несёт удалённый data_path", id)
+		}
+	}
+}
+
 // Невалидный YAML, неизвестная операция и устаревший node-id — штатные ошибки,
 // без паники (план 71: баннер/конфликт на клиенте).
 func TestApplyEditOp_Errors(t *testing.T) {
@@ -141,6 +166,8 @@ func TestApplyEditOp_Errors(t *testing.T) {
 		{"неизвестная операция", canvasSample, editOpRequest{Op: "frobnicate"}},
 		{"устаревший узел", canvasSample, editOpRequest{Op: "setProp", Node: "elements.7", Key: "name", Value: "x"}},
 		{"insert без kind", canvasSample, editOpRequest{Op: "insert", Parent: "elements.0", Index: 0}},
+		{"delete без node", canvasSample, editOpRequest{Op: "delete"}},
+		{"delete устаревшего узла", canvasSample, editOpRequest{Op: "delete", Node: "elements.7"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
