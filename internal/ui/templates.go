@@ -16,412 +16,421 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// globalBundle is set by Server at init time so the template FuncMap can access it.
-var globalBundle *i18n.Bundle
+var tmpl = template.Must(newTemplate(nil))
 
-var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
-	"lower": strings.ToLower,
-	"str": func(v any) string {
-		if v == nil {
-			return ""
-		}
-		return fmt.Sprintf("%v", v)
-	},
-	"add": func(a, b int) int { return a + b },
-	// lucideIcon рендерит инлайн-SVG иконки навигации по имени Lucide (план 72).
-	"lucideIcon": LucideIcon,
-	"t": func(lang, key string) string {
-		if globalBundle != nil {
-			return globalBundle.T(lang, key)
-		}
-		return key
-	},
-	// refID extracts UUID from a *Ref (implements GetRefUUID), otherwise returns fmt.Sprintf.
-	// Used in TP row templates so the "selected" comparison works after enrichTPRowsWithRefs.
-	"refID": func(v any) string {
-		if v == nil {
-			return ""
-		}
-		type uuidGetter interface{ GetRefUUID() string }
-		if rp, ok := v.(uuidGetter); ok {
-			return rp.GetRefUUID()
-		}
-		return fmt.Sprintf("%v", v)
-	},
-	"isRef":  func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
-	"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
-	"enumLabel": func(labels map[string]map[string]string, field, value string) string {
-		if m, ok := labels[field]; ok {
-			if lbl, ok := m[value]; ok && lbl != "" {
-				return lbl
+func newTemplate(bundle *i18n.Bundle) (*template.Template, error) {
+	return template.New("root").Funcs(templateFuncs(bundle)).Parse(templateSource())
+}
+
+func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
+	return template.FuncMap{
+		"lower": strings.ToLower,
+		"str": func(v any) string {
+			if v == nil {
+				return ""
 			}
-		}
-		return value
-	},
-	"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
-	"isImage":    func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeImage) },
-	// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
-	// Quill (vendor-ассеты + init) грузятся на форме только при true, чтобы не
-	// тянуть редактор на формы без richtext-полей.
-	"entityHasRichText": func(e *metadata.Entity) bool {
-		if e == nil {
-			return false
-		}
-		for _, f := range e.Fields {
-			if metadata.IsRichText(f.Type) {
-				return true
+			return fmt.Sprintf("%v", v)
+		},
+		"add": func(a, b int) int { return a + b },
+		// lucideIcon рендерит инлайн-SVG иконки навигации по имени Lucide (план 72).
+		"lucideIcon": LucideIcon,
+		"t": func(lang, key string) string {
+			if bundle != nil {
+				return bundle.T(lang, key)
 			}
-		}
-		return false
-	},
-	// richPlain — текстовая проекция richtext-значения для ячейки списка
-	// (усечённая, чтобы HTML не разъезжал таблицу).
-	"richPlain": func(v any) string {
-		if v == nil {
-			return ""
-		}
-		s := richtext.Plaintext(fmt.Sprintf("%v", v))
-		const maxRunes = 100
-		r := []rune(s)
-		if len(r) > maxRunes {
-			return string(r[:maxRunes]) + "…"
-		}
-		return s
-	},
-	// dpField извлекает имя поля из data_path вида "Объект.Контрагент"
-	// (план 37, managed-формы). Если префикса нет — возвращает строку как есть.
-	"dpField": func(s string) string {
-		if i := strings.LastIndex(s, "."); i >= 0 {
-			return s[i+1:]
-		}
-		return s
-	},
-	// dpRoot — корневой компонент data_path: "Объект.Товары.Цена" → "Объект".
-	"dpRoot": func(s string) string {
-		if i := strings.Index(s, "."); i >= 0 {
-			return s[:i]
-		}
-		return s
-	},
-	// fieldByName ищет metadata.Field в entity.Fields по имени;
-	// нужен managed-шаблону чтобы определить тип ввода (ref/enum/date/bool).
-	"fieldByName": func(entity *metadata.Entity, name string) *metadata.Field {
-		if entity == nil {
-			return nil
-		}
-		for i := range entity.Fields {
-			if entity.Fields[i].Name == name {
-				return &entity.Fields[i]
+			return key
+		},
+		// refID extracts UUID from a *Ref (implements GetRefUUID), otherwise returns fmt.Sprintf.
+		// Used in TP row templates so the "selected" comparison works after enrichTPRowsWithRefs.
+		"refID": func(v any) string {
+			if v == nil {
+				return ""
 			}
-		}
-		return nil
-	},
-	// fieldTitleRU достаёт ru-вариант из map[string]string или возвращает fallback.
-	"fieldTitleRU": func(m map[string]string, fallback string) string {
-		if v, ok := m["ru"]; ok && v != "" {
-			return v
-		}
-		for _, v := range m {
-			if v != "" {
-				return v
+			type uuidGetter interface{ GetRefUUID() string }
+			if rp, ok := v.(uuidGetter); ok {
+				return rp.GetRefUUID()
 			}
-		}
-		return fallback
-	},
-	// hasChildren — удобство для шаблона: проверка на пустой Children.
-	"hasChildren": func(el *metadata.FormElement) bool {
-		return el != nil && len(el.Children) > 0
-	},
-	// hasHandler — есть ли у элемента обработчик указанного события
-	// (план 37, этап 8). Если есть — шаблон управляемой формы навешивает
-	// onclick/onchange="obFire(...)" вызывающий /ui/{kind}/{entity}/form-event.
-	"hasHandler": func(el *metadata.FormElement, eventName string) bool {
-		if el == nil || el.Handlers == nil {
-			return false
-		}
-		_, ok := el.Handlers[metadata.FormEventType(eventName)]
-		return ok
-	},
-	// hasFormHandler — есть ли у формы (а не элемента) обработчик события.
-	// Используется в managed-шаблоне для авто-вызова ПриОткрытииФормы при
-	// загрузке страницы.
-	"hasFormHandler": func(form *metadata.FormModule, eventName string) bool {
-		if form == nil || form.Handlers == nil {
-			return false
-		}
-		_, ok := form.Handlers[metadata.FormEventType(eventName)]
-		return ok
-	},
-	// deleteHidden — скрыта ли кнопка «Удалить» формы через
-	// actions.delete.visible=false (issue #151). По умолчанию (нет actions
-	// или visible) — false: кнопка показывается по праву CanDelete.
-	"deleteHidden": func(form *metadata.FormModule) bool {
-		if form == nil || form.Actions == nil {
-			return false
-		}
-		a, ok := form.Actions["delete"]
-		if !ok || a == nil || a.Visible == nil {
-			return false
-		}
-		return !*a.Visible
-	},
-	// tablePartByName ищет metadata.TablePart в Entity по имени.
-	// Возвращает указатель на копию (или nil) — нужно managed-шаблону
-	// для рендера ТабличнойЧасти с реальными колонками.
-	"tablePartByName": func(entity *metadata.Entity, name string) *metadata.TablePart {
-		if entity == nil {
-			return nil
-		}
-		for i := range entity.TableParts {
-			if entity.TableParts[i].Name == name {
-				return &entity.TableParts[i]
+			return fmt.Sprintf("%v", v)
+		},
+		"isRef":  func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "reference:") },
+		"isEnum": func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
+		"enumLabel": func(labels map[string]map[string]string, field, value string) string {
+			if m, ok := labels[field]; ok {
+				if lbl, ok := m[value]; ok && lbl != "" {
+					return lbl
+				}
 			}
-		}
-		return nil
-	},
-	// tpCommandButtons возвращает дочерние элементы-кнопки табличной части —
-	// команды ТЧ (план 46). Рендерятся как тулбар над таблицей; кнопка с
-	// обработчиком Нажатие вызывает obFire(name,'Нажатие',{_tp:...}).
-	"tpCommandButtons": func(el *metadata.FormElement) []*metadata.FormElement {
-		if el == nil {
-			return nil
-		}
-		var out []*metadata.FormElement
-		for _, ch := range el.Children {
-			if ch != nil && ch.Kind == metadata.FormElementButton {
-				out = append(out, ch)
-			}
-		}
-		return out
-	},
-	// hasGridTP checks if any TablePart element in the form has use_grid flag (plan 48).
-	// Used to conditionally include SlickGrid CSS/JS.
-	"hasGridTP": func(form *metadata.FormModule) bool {
-		if form == nil {
-			return false
-		}
-		found := false
-		form.Walk(func(el *metadata.FormElement) bool {
-			// SlickGrid включён для ТЧ по умолчанию; no_grid возвращает простую таблицу.
-			if el != nil && el.Kind == metadata.FormElementTablePart && !el.NoGrid {
-				found = true
+			return value
+		},
+		"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
+		"isImage":    func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeImage) },
+		// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
+		// Quill (vendor-ассеты + init) грузятся на форме только при true, чтобы не
+		// тянуть редактор на формы без richtext-полей.
+		"entityHasRichText": func(e *metadata.Entity) bool {
+			if e == nil {
 				return false
 			}
-			return true
-		})
-		return found
-	},
-	// formAttrVT returns ValueTable columns for a form attribute by name.
-	"formAttrVT": func(form *metadata.FormModule, name string) []*metadata.FormAttributeColumn {
-		if form == nil {
+			for _, f := range e.Fields {
+				if metadata.IsRichText(f.Type) {
+					return true
+				}
+			}
+			return false
+		},
+		// richPlain — текстовая проекция richtext-значения для ячейки списка
+		// (усечённая, чтобы HTML не разъезжал таблицу).
+		"richPlain": func(v any) string {
+			if v == nil {
+				return ""
+			}
+			s := richtext.Plaintext(fmt.Sprintf("%v", v))
+			const maxRunes = 100
+			r := []rune(s)
+			if len(r) > maxRunes {
+				return string(r[:maxRunes]) + "…"
+			}
+			return s
+		},
+		// dpField извлекает имя поля из data_path вида "Объект.Контрагент"
+		// (план 37, managed-формы). Если префикса нет — возвращает строку как есть.
+		"dpField": func(s string) string {
+			if i := strings.LastIndex(s, "."); i >= 0 {
+				return s[i+1:]
+			}
+			return s
+		},
+		// dpRoot — корневой компонент data_path: "Объект.Товары.Цена" → "Объект".
+		"dpRoot": func(s string) string {
+			if i := strings.Index(s, "."); i >= 0 {
+				return s[:i]
+			}
+			return s
+		},
+		// fieldByName ищет metadata.Field в entity.Fields по имени;
+		// нужен managed-шаблону чтобы определить тип ввода (ref/enum/date/bool).
+		"fieldByName": func(entity *metadata.Entity, name string) *metadata.Field {
+			if entity == nil {
+				return nil
+			}
+			for i := range entity.Fields {
+				if entity.Fields[i].Name == name {
+					return &entity.Fields[i]
+				}
+			}
 			return nil
-		}
-		for _, attr := range form.Attributes {
-			if attr.Name == name && strings.EqualFold(attr.TypeRef, "ValueTable") {
-				return attr.Columns
+		},
+		// fieldTitleRU достаёт ru-вариант из map[string]string или возвращает fallback.
+		"fieldTitleRU": func(m map[string]string, fallback string) string {
+			if v, ok := m["ru"]; ok && v != "" {
+				return v
 			}
-		}
-		return nil
-	},
+			for _, v := range m {
+				if v != "" {
+					return v
+				}
+			}
+			return fallback
+		},
+		// hasChildren — удобство для шаблона: проверка на пустой Children.
+		"hasChildren": func(el *metadata.FormElement) bool {
+			return el != nil && len(el.Children) > 0
+		},
+		// hasHandler — есть ли у элемента обработчик указанного события
+		// (план 37, этап 8). Если есть — шаблон управляемой формы навешивает
+		// onclick/onchange="obFire(...)" вызывающий /ui/{kind}/{entity}/form-event.
+		"hasHandler": func(el *metadata.FormElement, eventName string) bool {
+			if el == nil || el.Handlers == nil {
+				return false
+			}
+			_, ok := el.Handlers[metadata.FormEventType(eventName)]
+			return ok
+		},
+		// hasFormHandler — есть ли у формы (а не элемента) обработчик события.
+		// Используется в managed-шаблоне для авто-вызова ПриОткрытииФормы при
+		// загрузке страницы.
+		"hasFormHandler": func(form *metadata.FormModule, eventName string) bool {
+			if form == nil || form.Handlers == nil {
+				return false
+			}
+			_, ok := form.Handlers[metadata.FormEventType(eventName)]
+			return ok
+		},
+		// deleteHidden — скрыта ли кнопка «Удалить» формы через
+		// actions.delete.visible=false (issue #151). По умолчанию (нет actions
+		// или visible) — false: кнопка показывается по праву CanDelete.
+		"deleteHidden": func(form *metadata.FormModule) bool {
+			if form == nil || form.Actions == nil {
+				return false
+			}
+			a, ok := form.Actions["delete"]
+			if !ok || a == nil || a.Visible == nil {
+				return false
+			}
+			return !*a.Visible
+		},
+		// tablePartByName ищет metadata.TablePart в Entity по имени.
+		// Возвращает указатель на копию (или nil) — нужно managed-шаблону
+		// для рендера ТабличнойЧасти с реальными колонками.
+		"tablePartByName": func(entity *metadata.Entity, name string) *metadata.TablePart {
+			if entity == nil {
+				return nil
+			}
+			for i := range entity.TableParts {
+				if entity.TableParts[i].Name == name {
+					return &entity.TableParts[i]
+				}
+			}
+			return nil
+		},
+		// tpCommandButtons возвращает дочерние элементы-кнопки табличной части —
+		// команды ТЧ (план 46). Рендерятся как тулбар над таблицей; кнопка с
+		// обработчиком Нажатие вызывает obFire(name,'Нажатие',{_tp:...}).
+		"tpCommandButtons": func(el *metadata.FormElement) []*metadata.FormElement {
+			if el == nil {
+				return nil
+			}
+			var out []*metadata.FormElement
+			for _, ch := range el.Children {
+				if ch != nil && ch.Kind == metadata.FormElementButton {
+					out = append(out, ch)
+				}
+			}
+			return out
+		},
+		// hasGridTP checks if any TablePart element in the form has use_grid flag (plan 48).
+		// Used to conditionally include SlickGrid CSS/JS.
+		"hasGridTP": func(form *metadata.FormModule) bool {
+			if form == nil {
+				return false
+			}
+			found := false
+			form.Walk(func(el *metadata.FormElement) bool {
+				// SlickGrid включён для ТЧ по умолчанию; no_grid возвращает простую таблицу.
+				if el != nil && el.Kind == metadata.FormElementTablePart && !el.NoGrid {
+					found = true
+					return false
+				}
+				return true
+			})
+			return found
+		},
+		// formAttrVT returns ValueTable columns for a form attribute by name.
+		"formAttrVT": func(form *metadata.FormModule, name string) []*metadata.FormAttributeColumn {
+			if form == nil {
+				return nil
+			}
+			for _, attr := range form.Attributes {
+				if attr.Name == name && strings.EqualFold(attr.TypeRef, "ValueTable") {
+					return attr.Columns
+				}
+			}
+			return nil
+		},
 
-	// dict собирает map[string]any из чередующихся ключей и значений —
-	// стандартный приём передать несколько аргументов в подшаблон
-	// (Go template принимает только один параметр).
-	"dict": func(values ...any) (map[string]any, error) {
-		if len(values)%2 != 0 {
-			return nil, fmt.Errorf("dict требует чётное число аргументов")
-		}
-		m := make(map[string]any, len(values)/2)
-		for i := 0; i < len(values); i += 2 {
-			k, ok := values[i].(string)
-			if !ok {
-				return nil, fmt.Errorf("dict: ключ #%d не string", i)
+		// dict собирает map[string]any из чередующихся ключей и значений —
+		// стандартный приём передать несколько аргументов в подшаблон
+		// (Go template принимает только один параметр).
+		"dict": func(values ...any) (map[string]any, error) {
+			if len(values)%2 != 0 {
+				return nil, fmt.Errorf("dict требует чётное число аргументов")
 			}
-			m[k] = values[i+1]
-		}
-		return m, nil
-	},
-	// navLabel вставляет zero-width space на границах слов PascalCase-имени
-	// (перед заглавной после строчной), чтобы длинные имена объектов
-	// переносились по словам в боковой панели, а не обрезались.
-	"navLabel": func(s string) string {
-		const zwsp = '​' // zero-width space — невидимая точка переноса
-		var b strings.Builder
-		var prev rune
-		for i, r := range s {
-			if i > 0 && unicode.IsUpper(r) && !unicode.IsUpper(prev) {
-				b.WriteRune(zwsp)
+			m := make(map[string]any, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				k, ok := values[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: ключ #%d не string", i)
+				}
+				m[k] = values[i+1]
 			}
-			b.WriteRune(r)
-			prev = r
-		}
-		return b.String()
-	},
-	"fmtDate": func(v any) string {
-		fmtT := func(t time.Time) string {
-			lt := t.In(time.Local)
-			h, m, sec := lt.Clock()
-			if h != 0 || m != 0 || sec != 0 {
-				return lt.Format("02.01.2006 15:04:05")
+			return m, nil
+		},
+		// navLabel вставляет zero-width space на границах слов PascalCase-имени
+		// (перед заглавной после строчной), чтобы длинные имена объектов
+		// переносились по словам в боковой панели, а не обрезались.
+		"navLabel": func(s string) string {
+			const zwsp = '​' // zero-width space — невидимая точка переноса
+			var b strings.Builder
+			var prev rune
+			for i, r := range s {
+				if i > 0 && unicode.IsUpper(r) && !unicode.IsUpper(prev) {
+					b.WriteRune(zwsp)
+				}
+				b.WriteRune(r)
+				prev = r
 			}
-			return lt.Format("02.01.2006")
-		}
-		if t, ok := v.(time.Time); ok {
-			return fmtT(t)
-		}
-		if s, ok := v.(string); ok && len(s) >= 10 {
-			// Strip Go monotonic clock suffix " m=+..."
-			if i := strings.Index(s, " m=+"); i >= 0 {
-				s = s[:i]
+			return b.String()
+		},
+		"fmtDate": func(v any) string {
+			fmtT := func(t time.Time) string {
+				lt := t.In(time.Local)
+				h, m, sec := lt.Clock()
+				if h != 0 || m != 0 || sec != 0 {
+					return lt.Format("02.01.2006 15:04:05")
+				}
+				return lt.Format("02.01.2006")
 			}
-			for _, layout := range []string{
-				time.RFC3339, time.RFC3339Nano,
-				"2006-01-02 15:04:05 -0700 MST",
-				"2006-01-02 15:04:05.999999999 -0700 MST",
-				"2006-01-02T15:04:05", "2006-01-02 15:04:05",
-				"2006-01-02T15:04", "2006-01-02",
-			} {
-				if t, err := time.Parse(layout, s); err == nil {
-					return fmtT(t)
+			if t, ok := v.(time.Time); ok {
+				return fmtT(t)
+			}
+			if s, ok := v.(string); ok && len(s) >= 10 {
+				// Strip Go monotonic clock suffix " m=+..."
+				if i := strings.Index(s, " m=+"); i >= 0 {
+					s = s[:i]
+				}
+				for _, layout := range []string{
+					time.RFC3339, time.RFC3339Nano,
+					"2006-01-02 15:04:05 -0700 MST",
+					"2006-01-02 15:04:05.999999999 -0700 MST",
+					"2006-01-02T15:04:05", "2006-01-02 15:04:05",
+					"2006-01-02T15:04", "2006-01-02",
+				} {
+					if t, err := time.Parse(layout, s); err == nil {
+						return fmtT(t)
+					}
+				}
+				if len(s) >= 10 {
+					if t, err := time.ParseInLocation("2006-01-02", s[:10], time.Local); err == nil {
+						return fmtT(t)
+					}
 				}
 			}
-			if len(s) >= 10 {
-				if t, err := time.ParseInLocation("2006-01-02", s[:10], time.Local); err == nil {
-					return fmtT(t)
+			return fmt.Sprintf("%v", v)
+		},
+		"filterVal": func(params storage.ListParams, fieldName string) storage.FilterValue {
+			return filterValue(params, fieldName)
+		},
+		"sortDir": func(params storage.ListParams, fieldName string) string {
+			if params.Sort == fieldName {
+				if strings.ToLower(params.Dir) == "desc" {
+					return "desc"
 				}
+				return "asc"
 			}
-		}
-		return fmt.Sprintf("%v", v)
-	},
-	"filterVal": func(params storage.ListParams, fieldName string) storage.FilterValue {
-		return filterValue(params, fieldName)
-	},
-	"sortDir": func(params storage.ListParams, fieldName string) string {
-		if params.Sort == fieldName {
+			return ""
+		},
+		"sortIcon": func(params storage.ListParams, fieldName string) string {
+			if params.Sort != fieldName {
+				return "⇅"
+			}
 			if strings.ToLower(params.Dir) == "desc" {
+				return "↓"
+			}
+			return "↑"
+		},
+		"nextDir": func(params storage.ListParams, fieldName string) string {
+			if params.Sort == fieldName && strings.ToLower(params.Dir) != "desc" {
 				return "desc"
 			}
 			return "asc"
-		}
-		return ""
-	},
-	"sortIcon": func(params storage.ListParams, fieldName string) string {
-		if params.Sort != fieldName {
-			return "⇅"
-		}
-		if strings.ToLower(params.Dir) == "desc" {
-			return "↓"
-		}
-		return "↑"
-	},
-	"nextDir": func(params storage.ListParams, fieldName string) string {
-		if params.Sort == fieldName && strings.ToLower(params.Dir) != "desc" {
-			return "desc"
-		}
-		return "asc"
-	},
-	"hasFilter": func(params storage.ListParams) bool {
-		return len(params.Filters) > 0
-	},
-	"filterQuery": func(params storage.ListParams) string {
-		var parts []string
-		for k, v := range params.Filters {
-			if v.From != "" {
-				parts = append(parts, "f."+k+".from="+v.From)
-			}
-			if v.To != "" {
-				parts = append(parts, "f."+k+".to="+v.To)
-			}
-			if v.Value != "" {
-				parts = append(parts, "f."+k+"="+v.Value)
-			}
-		}
-		if len(parts) == 0 {
-			return ""
-		}
-		return "&" + strings.Join(parts, "&")
-	},
-	"reportParamQuery": func(params any, values map[string]any) string {
-		type param interface{ GetName() string }
-		// Use reflection-free approach: just iterate over values map
-		parts := []string{}
-		if values != nil {
-			for k, v := range values {
-				if v != nil && fmt.Sprintf("%v", v) != "" {
-					parts = append(parts, k+"="+url.QueryEscape(fmt.Sprintf("%v", v)))
+		},
+		"hasFilter": func(params storage.ListParams) bool {
+			return len(params.Filters) > 0
+		},
+		"filterQuery": func(params storage.ListParams) string {
+			var parts []string
+			for k, v := range params.Filters {
+				if v.From != "" {
+					parts = append(parts, "f."+k+".from="+v.From)
+				}
+				if v.To != "" {
+					parts = append(parts, "f."+k+".to="+v.To)
+				}
+				if v.Value != "" {
+					parts = append(parts, "f."+k+"="+v.Value)
 				}
 			}
-		}
-		if len(parts) == 0 {
-			return ""
-		}
-		return "?" + strings.Join(parts, "&")
-	},
-	// variantQuery дописывает выбранный вариант компоновки (__variant) к уже
-	// собранной query-строке параметров отчёта — чтобы выгрузка в Excel
-	// соответствовала выбранному на форме варианту.
-	"variantQuery": func(existing string, variant any) string {
-		vs, _ := variant.(string)
-		if vs == "" {
-			return existing
-		}
-		sep := "?"
-		if existing != "" {
-			sep = "&"
-		}
-		return existing + sep + "__variant=" + url.QueryEscape(vs)
-	},
-	"mul": func(a, b int) int { return a * b },
-	"int": func(v any) int {
-		switch t := v.(type) {
-		case int:
-			return t
-		case int64:
-			return int(t)
-		case float64:
-			return int(t)
-		case decimal.Decimal:
-			return int(t.IntPart())
-		}
-		return 0
-	},
-	"seq": func(n int) []int {
-		s := make([]int, n)
-		for i := range s {
-			s[i] = i
-		}
-		return s
-	},
-	"rowIdx": func(row map[string]any) int {
-		if v, ok := row["строка"]; ok {
+			if len(parts) == 0 {
+				return ""
+			}
+			return "&" + strings.Join(parts, "&")
+		},
+		"reportParamQuery": func(params any, values map[string]any) string {
+			type param interface{ GetName() string }
+			// Use reflection-free approach: just iterate over values map
+			parts := []string{}
+			if values != nil {
+				for k, v := range values {
+					if v != nil && fmt.Sprintf("%v", v) != "" {
+						parts = append(parts, k+"="+url.QueryEscape(fmt.Sprintf("%v", v)))
+					}
+				}
+			}
+			if len(parts) == 0 {
+				return ""
+			}
+			return "?" + strings.Join(parts, "&")
+		},
+		// variantQuery дописывает выбранный вариант компоновки (__variant) к уже
+		// собранной query-строке параметров отчёта — чтобы выгрузка в Excel
+		// соответствовала выбранному на форме варианту.
+		"variantQuery": func(existing string, variant any) string {
+			vs, _ := variant.(string)
+			if vs == "" {
+				return existing
+			}
+			sep := "?"
+			if existing != "" {
+				sep = "&"
+			}
+			return existing + sep + "__variant=" + url.QueryEscape(vs)
+		},
+		"mul": func(a, b int) int { return a * b },
+		"int": func(v any) int {
 			switch t := v.(type) {
 			case int:
 				return t
-			case int32:
-				return int(t)
 			case int64:
 				return int(t)
+			case float64:
+				return int(t)
+			case decimal.Decimal:
+				return int(t.IntPart())
 			}
-		}
-		return 0
-	},
-	"jsJSON": func(v any) template.JS {
-		b, err := json.Marshal(v)
-		if err != nil {
-			return template.JS("null")
-		}
-		return template.JS(b)
-	},
-	"wcell":       widgetCell,
-	"echartsJSON": echartsJSON,
-	"splitCamel":  splitCamel,
-	"fmtCell":     fmtReportCell,
-	// pageRaw помечает уже санитизированный HTML страницы (план 66) как
-	// безопасный. Источник — только ДобавитьСыройHTML, прошедший sanitizePageHTML.
-	"pageRaw": func(s string) template.HTML { return template.HTML(s) },
-	// pageChart конвертирует чарт-блок страницы в widget.ChartData для echartsJSON.
-	"pageChart": pageChartData,
-}).Parse(tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAgentSettings + tplPOS + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom + tplAppShell))
+			return 0
+		},
+		"seq": func(n int) []int {
+			s := make([]int, n)
+			for i := range s {
+				s[i] = i
+			}
+			return s
+		},
+		"rowIdx": func(row map[string]any) int {
+			if v, ok := row["строка"]; ok {
+				switch t := v.(type) {
+				case int:
+					return t
+				case int32:
+					return int(t)
+				case int64:
+					return int(t)
+				}
+			}
+			return 0
+		},
+		"jsJSON": func(v any) template.JS {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return template.JS("null")
+			}
+			return template.JS(b)
+		},
+		"wcell":       widgetCell,
+		"echartsJSON": echartsJSON,
+		"splitCamel":  splitCamel,
+		"fmtCell":     fmtReportCell,
+		// pageRaw помечает уже санитизированный HTML страницы (план 66) как
+		// безопасный. Источник — только ДобавитьСыройHTML, прошедший sanitizePageHTML.
+		"pageRaw": func(s string) template.HTML { return template.HTML(s) },
+		// pageChart конвертирует чарт-блок страницы в widget.ChartData для echartsJSON.
+		"pageChart": pageChartData,
+	}
+}
+
+func templateSource() string {
+	return tplHead + tplNav + tplIndex + tplList + tplForm + tplManagedForm + tplRegister + tplReport + tplProcessor + tplAgentSettings + tplPOS + tplAbout + tplDeleteMarked + tplInfoReg + tplConstants + tplHistory + tplJournal + tplScheduled + tplAccountReg + tplQueryBuilder + tplAllFunctions + tplQueryConsole + tplCodeConsole + tplGengen + tplForbidden + tplPageCustom + tplAppShell
+}
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>

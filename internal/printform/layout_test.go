@@ -403,3 +403,49 @@ func TestPreviewHTMLEscapesText(t *testing.T) {
 		t.Errorf("unescaped parameter in preview: %s", out)
 	}
 }
+
+func TestPreviewHTMLSanitizesInlineCSS(t *testing.T) {
+	lt := &LayoutTemplate{
+		Columns: []LayoutColumn{{Width: `80px;color:red`}},
+		Areas: []*LayoutArea{
+			{
+				Name: "A",
+				Rows: []LayoutRow{
+					{
+						Height: `30px;background:url(javascript:1)`,
+						Cells: []LayoutCell{
+							{
+								Text:        "X",
+								FontFamily:  `Arial";color:red`,
+								BackColor:   `red;background:url(javascript:1)`,
+								TextColor:   `#fff"`,
+								Align:       `left;position:absolute`,
+								BorderColor: `blue;background:url(javascript:1)`,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	out := lt.PreviewHTML()
+	for _, bad := range []string{
+		"javascript",
+		"background:url",
+		"width:80px;color:red",
+		"height:30px;background",
+		"font-family:Arial&quot;",
+		"text-align:left;position",
+		"background-color:red;background",
+	} {
+		if strings.Contains(out, bad) {
+			t.Fatalf("PreviewHTML leaked unsafe CSS %q:\n%s", bad, out)
+		}
+	}
+	if strings.Contains(out, `color:#fff&quot;`) {
+		t.Fatalf("PreviewHTML leaked unsafe text color:\n%s", out)
+	}
+	if !strings.Contains(out, "border:1px solid #ccc") {
+		t.Fatalf("unsafe border color should fall back to #ccc:\n%s", out)
+	}
+}

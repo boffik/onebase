@@ -2,8 +2,9 @@ package sheet
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/ivantit66/onebase/internal/csssafe"
 )
 
 // HTMLOptions — параметры HTML-рендера табличного документа.
@@ -275,20 +276,11 @@ func escapeHTML(s string) string {
 	return s
 }
 
-// reHexColor принимает #rgb, #rrggbb и #rrggbbaa.
-var reHexColor = regexp.MustCompile(`(?i)^#[0-9a-f]{3}(?:[0-9a-f]{3}(?:[0-9a-f]{2})?)?$`)
-
-// reCSSIdent принимает CSS-идентификаторы (имена цветов: red, dark-blue …).
-var reCSSIdent = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*$`)
-
 // safeColor возвращает значение цвета без изменений, если оно соответствует
-// #hex или CSS-имени цвета (только [a-zA-Z][a-zA-Z0-9-]*). Иначе — "".
+// #hex, rgb()/rgba() или известному CSS-имени цвета. Иначе — "".
 // Цель: не допустить разрыва атрибута style через YAML с кавычками / тегами.
 func safeColor(s string) string {
-	if reHexColor.MatchString(s) || reCSSIdent.MatchString(s) {
-		return s
-	}
-	return ""
+	return csssafe.Color(s)
 }
 
 // pictureHTML рендерит картинку ячейки в <img>, ограниченный размерами ячейки
@@ -309,11 +301,5 @@ func pictureHTML(pic string) string {
 // safeFontFamily вырезает из font-family символы, способные разорвать
 // атрибут style: " ' < > ; (инъекция через YAML).
 func safeFontFamily(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch r {
-		case '"', '\'', '<', '>', ';':
-			return -1
-		}
-		return r
-	}, s)
+	return csssafe.FontFamily(s)
 }

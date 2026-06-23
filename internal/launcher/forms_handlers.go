@@ -462,8 +462,14 @@ func saveManagedForm(r *http.Request, b *Base, entity, name string, yamlBody, os
 		return nil
 	}
 	// FS
-	yp := filepath.Join(b.Path, yamlPath)
-	op := filepath.Join(b.Path, osPath)
+	yp, err := configdb.SafeJoin(b.Path, yamlPath)
+	if err != nil {
+		return err
+	}
+	op, err := configdb.SafeJoin(b.Path, osPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(yp), 0o755); err != nil {
 		return err
 	}

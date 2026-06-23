@@ -50,6 +50,16 @@ type Handlers struct {
 	LoginLimit *LoginLimiter // rate-limit попыток входа (план 53); optional
 }
 
+func setSessionCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "onebase_session",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 // limitExceeded отвечает 429 + Retry-After, если ключ заблокирован лимитером.
 func (h *Handlers) limitExceeded(w http.ResponseWriter, r *http.Request, login string) bool {
 	if h.LoginLimit == nil {
@@ -149,13 +159,7 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		h.Auditor.LogAction(r.Context(), "login", "", "", "", user.ID, user.Login, ip)
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "onebase_session",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSessionCookie(w, token)
 
 	returnURL := r.URL.Query().Get("return")
 	if returnURL == "" || !isLocalURL(returnURL) {
@@ -196,10 +200,15 @@ func (h *Handlers) LoginJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.Auditor != nil {
+		h.Auditor.LogAction(r.Context(), "login", "", "", "", user.ID, user.Login, r.RemoteAddr)
+	}
+
+	setSessionCookie(w, token)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"token": token,
-		"user":  map[string]any{"id": user.ID, "login": user.Login, "is_admin": user.IsAdmin},
+		"ok":   true,
+		"user": map[string]any{"id": user.ID, "login": user.Login, "is_admin": user.IsAdmin},
 	})
 }
 
@@ -256,13 +265,7 @@ func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "onebase_session",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSessionCookie(w, token)
 	http.Redirect(w, r, returnURL, http.StatusFound)
 }
 

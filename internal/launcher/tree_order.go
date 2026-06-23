@@ -107,7 +107,11 @@ func (h *handler) readConfigFileRaw(ctx context.Context, b *Base, relPath string
 		raw, ok, _ := configdb.New(db).ReadFile(ctx, relPath)
 		return raw, ok
 	}
-	raw, err := os.ReadFile(filepath.Join(b.Path, filepath.FromSlash(relPath)))
+	full, err := configdb.SafeJoin(b.Path, relPath)
+	if err != nil {
+		return nil, false
+	}
+	raw, err := os.ReadFile(full)
 	if err != nil {
 		return nil, false
 	}
@@ -115,8 +119,8 @@ func (h *handler) readConfigFileRaw(ctx context.Context, b *Base, relPath string
 }
 
 // writeConfigFileRaw записывает один файл конфигурации в обоих режимах хранения
-// (симметрично readConfigFileRaw). relPath считается уже проверенным
-// (см. safeConfigPath). В file-режиме недостающие подкаталоги создаются.
+// (симметрично readConfigFileRaw). В file-режиме недостающие подкаталоги
+// создаются после проверки, что relPath остаётся внутри директории проекта.
 func (h *handler) writeConfigFileRaw(ctx context.Context, b *Base, relPath string, content []byte) error {
 	if b.ConfigSource == "database" {
 		db, err := OpenDB(ctx, b)
@@ -130,7 +134,10 @@ func (h *handler) writeConfigFileRaw(ctx context.Context, b *Base, relPath strin
 		}
 		return repo.SaveFile(ctx, relPath, content)
 	}
-	full := filepath.Join(b.Path, filepath.FromSlash(relPath))
+	full, err := configdb.SafeJoin(b.Path, relPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return err
 	}

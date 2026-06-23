@@ -5,9 +5,9 @@ import (
 	"html"
 	"html/template"
 	"net/url"
-	"regexp"
 	"strings"
 
+	"github.com/ivantit66/onebase/internal/csssafe"
 	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/report/compose"
 	"github.com/ivantit66/onebase/internal/widget"
@@ -91,52 +91,12 @@ func (h *htmlComposeSink) grand(grand map[string]any) {
 	h.b.WriteString(`</tr>`)
 }
 
-// hexColorRe — hex-цвет CSS: #RGB, #RGBA, #RRGGBB, #RRGGBBAA.
-var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
-
-// rgbColorRe — функциональная запись rgb()/rgba() (только цифры, точки, проценты,
-// запятые и пробелы внутри скобок — без возможности вырваться из значения).
-var rgbColorRe = regexp.MustCompile(`^rgba?\(\s*[0-9.,%\s]+\)$`)
-
-// cssNamedColors — белый список известных CSS-имён цветов (нижний регистр).
-// Произвольное имя не пропускаем: значение уходит в inline-style, поэтому даже
-// при html.EscapeString нежелательно пускать неконтролируемые строки.
-var cssNamedColors = map[string]bool{
-	"black": true, "white": true, "red": true, "green": true, "blue": true,
-	"yellow": true, "orange": true, "purple": true, "gray": true, "grey": true,
-	"silver": true, "maroon": true, "olive": true, "lime": true, "aqua": true,
-	"teal": true, "navy": true, "fuchsia": true, "magenta": true, "cyan": true,
-	"pink": true, "brown": true, "gold": true, "transparent": true,
-	"darkred": true, "darkgreen": true, "darkblue": true, "lightgray": true,
-	"lightgrey": true, "lightblue": true, "lightgreen": true, "lightyellow": true,
-}
-
-// safeColor возвращает цвет, если он проходит белый список (hex, rgb()/rgba()
-// или известное CSS-имя), иначе "". Источник CellStyle.Color/Background теперь
-// пользовательский (__settings → Conditional[].Style), поэтому значение, идущее
-// в inline-CSS, валидируем (issue #16), а не доверяем как раньше (только YAML).
-func safeColor(v string) string {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return ""
-	}
-	switch {
-	case hexColorRe.MatchString(v):
-		return v
-	case rgbColorRe.MatchString(v):
-		return v
-	case cssNamedColors[strings.ToLower(v)]:
-		return v
-	}
-	return ""
-}
-
 func cssOf(s report.CellStyle) string {
 	var p []string
-	if c := safeColor(s.Color); c != "" {
+	if c := csssafe.Color(s.Color); c != "" {
 		p = append(p, "color:"+c)
 	}
-	if c := safeColor(s.Background); c != "" {
+	if c := csssafe.Color(s.Background); c != "" {
 		p = append(p, "background:"+c)
 	}
 	if s.Bold {

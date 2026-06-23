@@ -243,7 +243,10 @@ func saveConfigFiles(r *http.Request, h *handler, b *Base, files []configFileEnt
 // atomicWriteConfigFile пишет файл через temp+rename в том же каталоге, чтобы
 // читатель (--watch) никогда не видел частично записанный файл (эталон — store.save).
 func atomicWriteConfigFile(basePath, relPath string, content []byte) error {
-	full := filepath.Join(basePath, filepath.FromSlash(relPath))
+	full, err := configdb.SafeJoin(basePath, relPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return err
 	}
@@ -279,7 +282,10 @@ func deleteConfigFiles(r *http.Request, h *handler, b *Base, relPaths []string) 
 		})
 	}
 	for _, p := range relPaths {
-		full := filepath.Join(b.Path, filepath.FromSlash(p))
+		full, err := configdb.SafeJoin(b.Path, p)
+		if err != nil {
+			return err
+		}
 		if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 			return err
 		}

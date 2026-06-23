@@ -380,7 +380,11 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 			data["DenyPasswdChange"] = u.DenyPasswdChange
 		}
 	}
-	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
+	t := s.tmpl
+	if t == nil {
+		t = tmpl
+	}
+	if err := t.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, s.errText(r, err), 500)
 	}
 }

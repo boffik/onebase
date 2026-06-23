@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -51,6 +52,9 @@ func (r *Repo) ImportFromDir(ctx context.Context, dir string) error {
 			return err
 		}
 		rel = strings.ReplaceAll(rel, `\`, `/`)
+		if err := ValidatePath(rel); err != nil {
+			return fmt.Errorf("configdb: unsafe import path %q: %w", rel, err)
+		}
 
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -68,6 +72,9 @@ func (r *Repo) ImportFromDir(ctx context.Context, dir string) error {
 
 // SaveFile upserts a single config file entry.
 func (r *Repo) SaveFile(ctx context.Context, path string, content []byte) error {
+	if err := ValidatePath(path); err != nil {
+		return fmt.Errorf("configdb: unsafe path %q: %w", path, err)
+	}
 	d := r.db.Dialect()
 	_, err := r.db.Exec(ctx, fmt.Sprintf(`
 		INSERT INTO _onebase_config (path, content, updated_at)
@@ -81,6 +88,9 @@ func (r *Repo) SaveFile(ctx context.Context, path string, content []byte) error 
 // ReadFile возвращает содержимое одного файла конфигурации. Второе значение
 // false — записи нет (это не ошибка для опциональных файлов вроде tree_order.yaml).
 func (r *Repo) ReadFile(ctx context.Context, path string) ([]byte, bool, error) {
+	if err := ValidatePath(path); err != nil {
+		return nil, false, fmt.Errorf("configdb: unsafe path %q: %w", path, err)
+	}
 	ph := r.db.Dialect().Placeholder(1)
 	var content []byte
 	err := r.db.QueryRow(ctx, `SELECT content FROM _onebase_config WHERE path = `+ph, path).Scan(&content)
@@ -92,6 +102,9 @@ func (r *Repo) ReadFile(ctx context.Context, path string) ([]byte, bool, error) 
 }
 
 func (r *Repo) DeleteFile(ctx context.Context, path string) error {
+	if err := ValidatePath(path); err != nil {
+		return fmt.Errorf("configdb: unsafe path %q: %w", path, err)
+	}
 	_, err := r.db.Exec(ctx, `DELETE FROM _onebase_config WHERE path = `+r.db.Dialect().Placeholder(1), path)
 	return err
 }
@@ -109,7 +122,10 @@ func (r *Repo) ExportToDir(ctx context.Context, dir string) error {
 		if err := rows.Scan(&path, &content); err != nil {
 			return err
 		}
-		osPath := filepath.Join(dir, filepath.FromSlash(path))
+		osPath, err := SafeJoin(dir, path)
+		if err != nil {
+			return fmt.Errorf("configdb: unsafe export path %q: %w", path, err)
+		}
 		if err := os.MkdirAll(filepath.Dir(osPath), 0o755); err != nil {
 			return fmt.Errorf("configdb: mkdir: %w", err)
 		}
@@ -132,6 +148,11 @@ type ConfigFile struct {
 // с указанного префикса. Префикс может быть пустым — тогда возвращается
 // всё содержимое.
 func (r *Repo) ListByPrefix(ctx context.Context, prefix string) ([]ConfigFile, error) {
+	if prefix != "" {
+		if err := ValidatePath(prefix); err != nil {
+			return nil, fmt.Errorf("configdb: unsafe prefix %q: %w", prefix, err)
+		}
+	}
 	ph := r.db.Dialect().Placeholder(1)
 	rows, err := r.db.Query(ctx, `SELECT path, content FROM _onebase_config WHERE path LIKE `+ph+` ORDER BY path`, prefix+"%")
 	if err != nil {
@@ -153,6 +174,74 @@ func (r *Repo) IsEmpty(ctx context.Context) (bool, error) {
 	var count int
 	err := r.db.QueryRow(ctx, `SELECT count(*) FROM _onebase_config`).Scan(&count)
 	return count == 0, err
+}
+
+var winReservedNames = map[string]bool{
+	"con": true, "prn": true, "aux": true, "nul": true,
+	"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,
+	"com6": true, "com7": true, "com8": true, "com9": true,
+	"lpt1": true, "lpt2": true, "lpt3": true, "lpt4": true, "lpt5": true,
+	"lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
+}
+
+// ValidatePath checks a slash-separated relative path before it is persisted in
+// _onebase_config or resolved against a file-backed project directory.
+func ValidatePath(rel string) error {
+	if strings.TrimSpace(rel) == "" {
+		return fmt.Errorf("empty path")
+	}
+	if path.IsAbs(rel) || filepath.IsAbs(rel) {
+		return fmt.Errorf("absolute path")
+	}
+	if strings.ContainsRune(rel, '\\') || strings.ContainsRune(rel, 0) {
+		return fmt.Errorf("invalid path separator or NUL")
+	}
+	if rel != path.Clean(rel) {
+		return fmt.Errorf("unclean path")
+	}
+	parts := strings.Split(rel, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("invalid path segment %q", part)
+		}
+		if strings.ContainsAny(part, `:*?"<>|`) {
+			return fmt.Errorf("invalid file name %q", part)
+		}
+		for _, r := range part {
+			if r < 0x20 || r == 0x7f {
+				return fmt.Errorf("control character in file name %q", part)
+			}
+		}
+		stem := strings.ToLower(strings.TrimSuffix(part, path.Ext(part)))
+		if winReservedNames[stem] {
+			return fmt.Errorf("reserved file name %q", part)
+		}
+	}
+	return nil
+}
+
+// SafeJoin validates rel and resolves it under base, rejecting paths that would
+// escape base after filepath cleaning.
+func SafeJoin(base, rel string) (string, error) {
+	if err := ValidatePath(rel); err != nil {
+		return "", err
+	}
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return "", err
+	}
+	targetAbs, err := filepath.Abs(filepath.Join(baseAbs, filepath.FromSlash(rel)))
+	if err != nil {
+		return "", err
+	}
+	back, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return "", err
+	}
+	if back == "." || back == ".." || strings.HasPrefix(back, ".."+string(filepath.Separator)) || filepath.IsAbs(back) {
+		return "", fmt.Errorf("path escapes base")
+	}
+	return targetAbs, nil
 }
 
 // MigrateContent fixes known content issues in stored YAML files.

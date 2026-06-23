@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"html/template"
 	"net/http"
 	"sort"
 	"strings"
@@ -75,6 +76,7 @@ type Server struct {
 	extforms         *extform.Repo          // внешний контур: печатные формы из БД
 	extreports       *extform.ReportRepo    // внешний контур: отчёты из БД
 	extprocessors    *extform.ProcessorRepo // внешний контур: обработки из БД
+	tmpl             *template.Template
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -86,7 +88,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if loginLimit == nil {
 		loginLimit = auth.NewLoginLimiter(5, time.Minute)
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store)}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle))}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,
@@ -119,7 +121,6 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		}
 		return nil
 	}
-	globalBundle = cfg.Bundle
 	if sched != nil {
 		sched.SetMessageSink(func(userID, text string) { s.messages.Push(userID, text) })
 	}

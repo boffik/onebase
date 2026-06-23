@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ivantit66/onebase/internal/csssafe"
 	"github.com/ivantit66/onebase/internal/sheet"
 	"gopkg.in/yaml.v3"
 )
@@ -255,6 +256,7 @@ func FindLayoutFile(osPath string) string {
 
 // borderCSS returns the CSS border declaration for the given preset.
 func borderCSS(preset, color string) string {
+	color = csssafe.Color(color)
 	if color == "" {
 		color = "#ccc"
 	}
@@ -286,8 +288,8 @@ func (lt *LayoutTemplate) PreviewHTML() string {
 		if len(lt.Columns) > 0 {
 			sb.WriteString("<colgroup>")
 			for _, c := range lt.Columns {
-				if c.Width != "" {
-					sb.WriteString(fmt.Sprintf(`<col style="width:%s">`, html.EscapeString(c.Width)))
+				if width := csssafe.Length(c.Width); width != "" {
+					sb.WriteString(fmt.Sprintf(`<col style="width:%s">`, html.EscapeString(width)))
 				} else {
 					sb.WriteString("<col>")
 				}
@@ -295,8 +297,8 @@ func (lt *LayoutTemplate) PreviewHTML() string {
 			sb.WriteString("</colgroup>")
 		}
 		for _, row := range area.Rows {
-			if row.Height != "" {
-				sb.WriteString(fmt.Sprintf(`<tr style="height:%s">`, html.EscapeString(row.Height)))
+			if height := csssafe.Length(row.Height); height != "" {
+				sb.WriteString(fmt.Sprintf(`<tr style="height:%s">`, html.EscapeString(height)))
 			} else {
 				sb.WriteString("<tr>")
 			}
@@ -312,17 +314,17 @@ func (lt *LayoutTemplate) PreviewHTML() string {
 				if cell.FontSize > 0 {
 					style += fmt.Sprintf("font-size:%dpt;", cell.FontSize)
 				}
-				if cell.FontFamily != "" {
-					style += "font-family:" + cell.FontFamily + ";"
+				if family := csssafe.FontFamily(cell.FontFamily); family != "" {
+					style += "font-family:" + family + ";"
 				}
-				if cell.BackColor != "" {
-					style += "background-color:" + cell.BackColor + ";"
+				if color := csssafe.Color(cell.BackColor); color != "" {
+					style += "background-color:" + color + ";"
 				}
-				if cell.TextColor != "" {
-					style += "color:" + cell.TextColor + ";"
+				if color := csssafe.Color(cell.TextColor); color != "" {
+					style += "color:" + color + ";"
 				}
-				if cell.Align != "" {
-					style += "text-align:" + cell.Align + ";"
+				if align := csssafe.TextAlign(cell.Align); align != "" {
+					style += "text-align:" + align + ";"
 				}
 				if cell.VAlign != "" {
 					switch strings.ToLower(cell.VAlign) {

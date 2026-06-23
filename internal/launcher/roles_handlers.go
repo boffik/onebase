@@ -564,7 +564,10 @@ func (h *handler) saveConfigFile(ctx context.Context, b *Base, relPath string, c
 		defer db.Close()
 		return configdb.New(db).SaveFile(ctx, relPath, content)
 	}
-	full := filepath.Join(b.Path, filepath.FromSlash(relPath))
+	full, err := configdb.SafeJoin(b.Path, relPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return err
 	}
@@ -580,7 +583,10 @@ func (h *handler) deleteConfigFile(ctx context.Context, b *Base, relPath string)
 		defer db.Close()
 		return configdb.New(db).DeleteFile(ctx, relPath)
 	}
-	full := filepath.Join(b.Path, filepath.FromSlash(relPath))
+	full, err := configdb.SafeJoin(b.Path, relPath)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 		return err
 	}
