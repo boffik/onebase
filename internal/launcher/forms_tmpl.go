@@ -31,6 +31,16 @@ var formsTmpl = template.Must(template.New("forms").Funcs(template.FuncMap{
 		b, _ := json.Marshal(s)
 		return template.JS(b)
 	},
+	// jsonObj — встраивание произвольного значения как JS-литерала (объект/массив)
+	// через json.Marshal. nil/ошибка → "null". Помечается template.JS, чтобы
+	// html/template не экранировал готовый JSON (для _tableParts в конструкторе).
+	"jsonObj": func(v any) template.JS {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return template.JS("null")
+		}
+		return template.JS(b)
+	},
 }).Parse(tplFormsBase + tplFormsList + tplFormsEditor))
 
 // renderFormsEditor — рендер страницы редактора одной формы.
@@ -651,6 +661,10 @@ function validateForm() {
 // selectedId, model}. Monaco и холст синхронизируются от одного ответа.
 var _editOpURL = '/bases/{{.Base.ID}}/configurator/forms/edit-op';
 var _entity = {{jsString .EditingForm.Entity}};
+// Состав табличных частей объекта (имя ТЧ → колонки) для редактора колонок (D2).
+var _tablePartsList = {{jsonObj .EditingFormTableParts}};
+var _tableParts = {};
+(_tablePartsList || []).forEach(function (tp) { _tableParts[tp.name] = tp.columns || []; });
 var _selected = '';   // node-id выбранного элемента
 var _model = {};      // node-id → свойства (для панели свойств)
 var _rightPane = 'design';
@@ -807,6 +821,7 @@ function renderProps() {
     addCheckProp(panel, 'Обязательное', 'required', info.required);
     addCheckProp(panel, 'Только чтение', 'readonly', info.readonly);
   }
+  if (info.kind === 'ТабличнаяЧасть') addColumnsEditor(panel);
   addElementActions(panel, info);
 }
 // Кнопки порядка и удаления элемента (follow-up #164, слайсы B1/B2): «выше/ниже»
@@ -869,6 +884,59 @@ function deleteSelected() {
     : 'Удалить «' + label + '»?';
   if (!window.confirm(msg)) return;
   editOp({ op: 'delete', node: _selected }, true);
+}
+
+// ── Редактор состава колонок ТЧ (#164, слайс D2) ────────────────────────────
+// data_path выбранной ТЧ "Объект.Товары" → имя ТЧ "Товары" (ключ _tableParts).
+function tablePartName() {
+  var dp = (_model[_selected] || {}).dataPath || '';
+  var i = dp.lastIndexOf('.');
+  return i >= 0 ? dp.slice(i + 1) : dp;
+}
+// Уже добавленные колонки ТЧ tpNodeId: поле (последний сегмент data_path) → node-id.
+function presentColumns(tpNodeId) {
+  var map = {}, prefix = tpNodeId + '.children.';
+  Object.keys(_model).forEach(function (id) {
+    if (id.indexOf(prefix) !== 0) return;
+    var inf = _model[id];
+    if ((inf.kind || '') !== 'Колонка') return;
+    var dp = inf.dataPath || '', j = dp.lastIndexOf('.');
+    var seg = j >= 0 ? dp.slice(j + 1) : dp;
+    if (seg) map[seg] = id;
+  });
+  return map;
+}
+function addColumnsEditor(panel) {
+  var tp = tablePartName();
+  var cols = _tableParts[tp] || [];
+  var present = presentColumns(_selected);
+  var hd = document.createElement('div'); hd.className = 'prop-row';
+  var l = document.createElement('label'); l.textContent = 'Колонки (показывать):';
+  hd.appendChild(l); panel.appendChild(hd);
+  if (!cols.length) {
+    var note = document.createElement('div'); note.className = 'prop-empty';
+    note.textContent = 'Состав колонок неизвестен (метаданные ТЧ не загружены).';
+    panel.appendChild(note); return;
+  }
+  cols.forEach(function (c) {
+    var row = document.createElement('div'); row.className = 'prop-row prop-check';
+    var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!present[c.name];
+    cb.addEventListener('change', function () { toggleColumn(tp, c, cb.checked, present[c.name]); });
+    var lab = document.createElement('label'); lab.textContent = c.title || c.name;
+    row.appendChild(cb); row.appendChild(lab); panel.appendChild(row);
+  });
+}
+// Включение колонки → insert kind:Колонка в конец ТЧ; выключение → delete её узла.
+// Выделение удерживаем на ТЧ, чтобы можно было щёлкать чекбоксы подряд.
+function toggleColumn(tp, col, on, existingId) {
+  var tpId = _selected, p;
+  if (on) {
+    p = editOp({ op: 'insert', parent: tpId, index: 9999, kind: 'Колонка',
+      name: 'Кол' + col.name, data_path: 'Объект.' + tp + '.' + col.name, title_ru: col.title || '' }, true);
+  } else if (existingId) {
+    p = editOp({ op: 'delete', node: existingId }, true);
+  } else { return; }
+  p.then(function (resp) { if (resp && resp.ok) selectNode(tpId); });
 }
 function addTextProp(panel, label, key, val) {
   var row = document.createElement('div'); row.className = 'prop-row';

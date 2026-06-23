@@ -192,6 +192,40 @@ func TestApplyEditOp_InsertTablePart(t *testing.T) {
 	}
 }
 
+// toggle колонки ТЧ (включение): insert kind:Колонка в children ТЧ даёт колонку
+// с data_path, видимую в модели и на холсте (follow-up #164, слайс D2).
+func TestApplyEditOp_InsertColumn(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заказ
+elements:
+  - kind: ТабличнаяЧасть
+    name: ТабТовары
+    data_path: Объект.Товары
+    children: []
+`
+	res, err := applyEditOp([]byte(src), editOpRequest{
+		Op: "insert", Parent: "elements.0", Index: 0, Kind: "Колонка",
+		Name: "КолНоменклатура", DataPath: "Объект.Товары.Номенклатура",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp insert column: %v", err)
+	}
+	for _, want := range []string{"kind: Колонка", "data_path: Объект.Товары.Номенклатура"} {
+		if !strings.Contains(res.YAML, want) {
+			t.Errorf("YAML без %q:\n%s", want, res.YAML)
+		}
+	}
+	if res.SelectedID != "elements.0.children.0" {
+		t.Errorf("selectedId = %q, ожидался elements.0.children.0", res.SelectedID)
+	}
+	if !strings.Contains(res.CanvasHTML, `data-node-id="elements.0.children.0"`) {
+		t.Errorf("колонка не отрисована на холсте:\n%s", res.CanvasHTML)
+	}
+}
+
 // move через эндпоинт меняет порядок соседей. Индекс — как его шлёт клиент при
 // «↓ Ниже» (finalIdx+1 = srcIdx+2 из-за компенсации сдвига в Move), follow-up
 // #164 слайс B2.

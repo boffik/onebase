@@ -419,6 +419,29 @@ func TestFormsEditor_TablePartPalette(t *testing.T) {
 	}
 }
 
+// Редактор встраивает состав колонок ТЧ как JSON (_tablePartsList) — источник
+// данных для редактора колонок D2 (follow-up #164).
+func TestFormsEditor_EmbedsTablePartColumns(t *testing.T) {
+	data := &configuratorData{
+		Base:        &Base{ID: "b"},
+		EditingForm: &cfgManagedForm{Entity: "Заказ", Name: "ФормаОбъекта", Kind: "object", YAML: "schema: onebase.form/v1\n"},
+		EditingFormTableParts: []formTablePart{
+			{Name: "Товары", Columns: []formScaffoldAttr{{Name: "Номенклатура", Title: "Ном."}}},
+		},
+	}
+	var buf bytes.Buffer
+	if err := formsTmpl.ExecuteTemplate(&buf, "forms-editor", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "_tablePartsList =") {
+		t.Error("нет встроенного списка табличных частей")
+	}
+	if !strings.Contains(out, `"name":"Товары"`) || !strings.Contains(out, `"name":"Номенклатура"`) {
+		t.Errorf("в _tablePartsList нет состава колонок:\n%s", extractContext(out, "_tablePartsList", 220))
+	}
+}
+
 // Без реквизитов (например, объект не найден) палитра не рендерится.
 func TestFormsEditor_AttrPalette_EmptyHidden(t *testing.T) {
 	data := &configuratorData{
