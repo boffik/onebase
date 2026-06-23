@@ -46,7 +46,7 @@ var categoryNodePrefix = map[string]string{
 	"Перечисления":         "en-",
 	"Регистры накопления":  "r-",
 	"Регистры сведений":    "ir-",
-	"Регистры бухгалтерии":  "ar-",
+	"Регистры бухгалтерии": "ar-",
 	"Отчёты":               "rep-",
 	"Обработки":            "proc-",
 	"Страницы":             "page-",
@@ -366,6 +366,10 @@ func (h *handler) configuratorFileRaw(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad path", http.StatusBadRequest)
 			return
 		}
+		if !realPathInsideBase(abs, b.Path) {
+			http.Error(w, "bad path", http.StatusBadRequest)
+			return
+		}
 		content, err = os.ReadFile(abs)
 		if err != nil {
 			http.NotFound(w, r)
@@ -375,4 +379,20 @@ func (h *handler) configuratorFileRaw(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Write(content)
+}
+
+func realPathInsideBase(path, base string) bool {
+	baseReal, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return false
+	}
+	pathReal, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(baseReal, pathReal)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != ".." && !filepath.IsAbs(rel))
 }

@@ -2,9 +2,15 @@ package launcher
 
 import (
 	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/project"
@@ -137,5 +143,41 @@ func TestTabFiles_Render(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("tab-files не содержит %q", want)
 		}
+	}
+}
+
+func TestConfiguratorFileRawRejectsSymlinkOutside(t *testing.T) {
+	root := t.TempDir()
+	cfgDir := filepath.Join(root, "cfg")
+	if err := os.MkdirAll(filepath.Join(cfgDir, "catalogs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(root, "secret.yaml")
+	if err := os.WriteFile(secret, []byte("secret: outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(cfgDir, "catalogs", "leak.yaml")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Skipf("symlink недоступен в окружении теста: %v", err)
+	}
+
+	st := newTestStore(t)
+	if err := st.Add(&Base{ID: "base", Name: "Base", ConfigSource: "file", Path: cfgDir}); err != nil {
+		t.Fatal(err)
+	}
+	h := &handler{store: st}
+	req := httptest.NewRequest(http.MethodGet, "/bases/base/configurator/file?path=catalogs/leak.yaml", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "base")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rec := httptest.NewRecorder()
+
+	h.configuratorFileRaw(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("symlink outside должен отклоняться 400, got %d body=%q", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "secret: outside") {
+		t.Fatalf("raw viewer отдал содержимое внешнего файла: %q", rec.Body.String())
 	}
 }
