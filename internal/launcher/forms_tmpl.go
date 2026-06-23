@@ -311,8 +311,8 @@ const tplFormsEditor = `
 <div class="struct-palette" id="struct-palette">
   <span class="attr-palette-label">Структура (перетащите на холст):</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="ГруппаФормы" data-name="Группа" data-title="Группа" title="Группа полей">＋ Группа</span>
-  <span class="attr-chip struct-chip" draggable="true" data-kind="СтраницыФормы" data-name="Страницы" title="Набор страниц-закладок">＋ Страницы</span>
-  <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Страница (перетащите в набор страниц)">＋ Страница</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="СтраницыФормы" data-name="Страницы" title="Набор вкладок: бросьте на холст, затем добавляйте вкладки кнопкой «+ страница» внутри">＋ Страницы (набор)</span>
+  <span class="attr-chip struct-chip" draggable="true" data-kind="Страница" data-name="Страница" data-title="Страница" title="Вкладка набора: кликните «+ страница» в наборе или перетащите этот чип на «+ страница»">＋ Страница (вкладка)</span>
   <span class="attr-chip struct-chip" draggable="true" data-kind="Надпись" data-name="Надпись" data-title="Надпись" title="Текстовая надпись">＋ Надпись</span>
 </div>
 
@@ -739,6 +739,14 @@ function renderCanvasHTML(html) {
   var host = document.getElementById('canvas-host');
   if (!host) return;
   host.addEventListener('click', function (e) {
+    // Клик по «+ страница» добавляет вкладку в набор (так нагляднее, чем drag).
+    var pz = e.target.closest ? e.target.closest('.fc-drop-page') : null;
+    if (pz && host.contains(pz)) {
+      e.stopPropagation();
+      editOp({ op: 'insert', parent: pz.getAttribute('data-parent'), index: pz.getAttribute('data-index'),
+        kind: 'Страница', name: 'Страница', title_ru: 'Страница' }, true);
+      return;
+    }
     var el = e.target.closest ? e.target.closest('[data-node-id]') : null;
     if (!el || !host.contains(el)) return;
     e.stopPropagation();
@@ -794,6 +802,9 @@ function renderCanvasHTML(html) {
     if (sraw) {
       e.preventDefault();
       var s; try { s = JSON.parse(sraw); } catch (_) { return; }
+      // В набор страниц (зона «+ страница») кладём только Страницу, иначе там
+      // оказался бы вложенный набор/группа — не вкладка.
+      if (dz.classList.contains('fc-drop-page') && s.kind !== 'Страница') return;
       editOp({ op: 'insert', parent: parent, index: index, kind: s.kind, name: s.name || '', title_ru: s.title || '' }, true);
       return;
     }

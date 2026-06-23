@@ -266,3 +266,33 @@ elements:
 		t.Errorf("нет drop-зоны для детей страницы:\n%s", out)
 	}
 }
+
+// Не-Страница, затесавшаяся в набор СтраницыФормы, рисуется своим рендером
+// (видно ошибку структуры), а не маскируется под вкладку (follow-up #164).
+func TestRenderFormCanvas_NonPageInsidePages(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Звонок
+elements:
+  - kind: СтраницыФормы
+    name: Страницы
+    children:
+      - kind: ГруппаФормы
+        name: ЧужаяГруппа
+        children: []
+`
+	doc, err := formdoc.Load([]byte(src))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out, err := renderFormCanvas(doc, "")
+	if err != nil {
+		t.Fatalf("renderFormCanvas: %v", err)
+	}
+	// Группа отрисована своим рендером (fieldset fc-group), а не как fc-page.
+	if !strings.Contains(out, "fc-group") {
+		t.Errorf("не-страница в наборе не отрисована своим рендером:\n%s", out)
+	}
+}

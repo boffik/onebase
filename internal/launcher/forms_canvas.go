@@ -95,6 +95,13 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 			if p == nil || p.El == nil {
 				continue
 			}
+			if p.El.Kind != metadata.FormElementPage {
+				// В набор страниц затесался не-Страница (ошибка структуры, напр.
+				// случайно брошенный СтраницыФормы) — рисуем обычным рендером,
+				// чтобы было видно, что это не вкладка, а не маскировать под неё.
+				renderCanvasElement(buf, p, selectedID)
+				continue
+			}
 			ptitle := html.EscapeString(canvasTitle(p.El.Name, p.El.TitleMap, p.El.Title))
 			fmt.Fprintf(buf, `<div class="%s" data-node-id="%s" data-kind="%s"><div class="fc-tab fc-pick">%s</div>`,
 				elWrapClass("fc-page", p.NodeID, selectedID), p.NodeID, html.EscapeString(string(p.El.Kind)), ptitle)
