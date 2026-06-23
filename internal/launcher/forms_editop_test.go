@@ -1,9 +1,66 @@
 package launcher
 
 import (
+	"context"
+	"encoding/json"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
+
+// HTTP-уровень: маршрут /forms/edit-op доходит до handler'а, парсит форму,
+// применяет команду и отдаёт JSON — закрывает интеграционный разрыв поверх
+// юнит-тестов applyEditOp.
+func TestConfiguratorFormsEditOp_HTTP(t *testing.T) {
+	s := &Store{path: filepath.Join(t.TempDir(), "ibases.yaml")}
+	b := &Base{Path: t.TempDir(), ConfigSource: "file"}
+	if err := s.Add(b); err != nil {
+		t.Fatalf("Add base: %v", err)
+	}
+	h := &handler{store: s}
+
+	form := url.Values{}
+	form.Set("op", "insert")
+	form.Set("parent", "elements.0")
+	form.Set("index", "0")
+	form.Set("kind", "ПолеВвода")
+	form.Set("name", "ПолеТест")
+	form.Set("data_path", "Объект.Тест")
+	form.Set("yaml", canvasSample)
+
+	req := httptest.NewRequest("POST", "/bases/"+b.ID+"/configurator/forms/edit-op", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", b.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	h.configuratorFormsEditOp(rr, req)
+
+	if rr.Code != 200 {
+		t.Fatalf("статус %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp editOpResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("разбор JSON: %v; тело=%s", err, rr.Body.String())
+	}
+	if !resp.OK {
+		t.Fatalf("ok=false, errors=%v", resp.Errors)
+	}
+	if !strings.Contains(resp.YAML, "ПолеТест") {
+		t.Errorf("в YAML нет нового поля:\n%s", resp.YAML)
+	}
+	if resp.SelectedID != "elements.0.children.0" {
+		t.Errorf("selectedId = %q", resp.SelectedID)
+	}
+	if _, ok := resp.Model["elements.0.children.0"]; !ok {
+		t.Errorf("в модели нет нового узла: %v", resp.Model)
+	}
+}
 
 // setProp через эндпоинт: значение пишется в YAML, выделение остаётся на узле,
 // холст пере-рендерен с тем же node-id.
