@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -42,6 +43,11 @@ func TestMatchCatalogByField(t *testing.T) {
 	write("ООО Дубль-1", "5009999999") // дубль …
 	write("ООО Дубль-2", "5009999999") // … того же ИНН
 	write("ООО Дубль-3", "5009999999") // … трижды
+	for i := 0; i < 5; i++ {
+		write(fmt.Sprintf("ООО Пятёрка-%d", i+1), "7770001111") // пять дублей
+	}
+	write("ООО Пара-1", "3332221111") // два дубля
+	write("ООО Пара-2", "3332221111")
 
 	t.Run("НеНайдено", func(t *testing.T) {
 		id, _, count, err := db.MatchCatalogByField(ctx, entity, "ИНН", "0000000000")
@@ -76,6 +82,32 @@ func TestMatchCatalogByField(t *testing.T) {
 		}
 		if count != 3 {
 			t.Errorf("count=%d, want 3 (точное число дублей)", count)
+		}
+		if id != "" {
+			t.Errorf("id=%q, ожидался пустой при неоднозначности", id)
+		}
+	})
+
+	t.Run("НайденоНесколько_пять_точныйСчёт", func(t *testing.T) {
+		id, _, count, err := db.MatchCatalogByField(ctx, entity, "ИНН", "7770001111")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 5 {
+			t.Errorf("count=%d, want 5 — точный счёт не должен кэпиться (различаем 0/1/несколько, но Количество отдаём точно)", count)
+		}
+		if id != "" {
+			t.Errorf("id=%q, ожидался пустой при неоднозначности", id)
+		}
+	})
+
+	t.Run("НайденоНесколько_два_граница", func(t *testing.T) {
+		id, _, count, err := db.MatchCatalogByField(ctx, entity, "ИНН", "3332221111")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 2 {
+			t.Errorf("count=%d, want 2 (граница «несколько»)", count)
 		}
 		if id != "" {
 			t.Errorf("id=%q, ожидался пустой при неоднозначности", id)

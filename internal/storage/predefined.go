@@ -320,8 +320,10 @@ func (db *DB) FindCatalogByField(ctx context.Context, entity *metadata.Entity, f
 // MatchCatalogByField ищет записи справочника/документа по точному совпадению
 // реквизита для сценария safe-match (0 / 1 / несколько). Возвращает количество
 // совпадений и — только когда оно ровно одно — id и представление найденной
-// записи. Для «несколько» количество точное (отдельный COUNT), чтобы прикладной
-// код мог сообщить число дублей. fieldName сопоставляется без учёта регистра.
+// записи. Количество всегда точное (чтобы прикладной код сообщал число дублей):
+// один запрос, где LIMIT 1 берёт id/представление, а вложенный COUNT(*) считает
+// все совпадения (1 round-trip и 1 сканирование вместо прежних двух).
+// fieldName сопоставляется без учёта регистра.
 func (db *DB) MatchCatalogByField(ctx context.Context, entity *metadata.Entity, fieldName, value string) (string, string, int, error) {
 	var field *metadata.Field
 	for i := range entity.Fields {
@@ -336,46 +338,36 @@ func (db *DB) MatchCatalogByField(ctx context.Context, entity *metadata.Entity, 
 	col := metadata.ColumnName(*field)
 	table := metadata.TableName(entity.Name)
 	d := db.dialect
-	// LIMIT 2 различает 0 / 1 / «несколько» одним запросом; точный счёт для
-	// «несколько» добираем отдельным COUNT (редкий неоднозначный случай).
+	// Один запрос: LIMIT 1 берёт id/представление первой записи, а вложенный
+	// COUNT(*) считает ВСЕ совпадения (точное число для отчёта о дублях). 0
+	// совпадений — основная выборка пуста (rows.Next()==false), COUNT не нужен.
+	// Два плейсхолдера (а не повтор одного) — универсально для PostgreSQL ($1/$2)
+	// и SQLite (?, ?).
 	rows, err := db.Query(ctx,
-		fmt.Sprintf(`SELECT id, %s FROM %s WHERE %s = %s LIMIT 2`, col, table, col, d.Placeholder(1)),
-		value,
+		fmt.Sprintf(`SELECT id, %s, (SELECT COUNT(*) FROM %s WHERE %s = %s) FROM %s WHERE %s = %s LIMIT 1`,
+			col, table, col, d.Placeholder(1), table, col, d.Placeholder(2)),
+		value, value,
 	)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("match %s.%s: %w", entity.Name, fieldName, err)
 	}
+	if !rows.Next() {
+		rows.Close()
+		return "", "", 0, nil // 0 совпадений
+	}
 	var idStr, display string
-	n := 0
-	for rows.Next() {
-		n++
-		if n == 1 {
-			if err := rows.Scan(&idStr, &display); err != nil {
-				rows.Close()
-				return "", "", 0, fmt.Errorf("match %s.%s scan: %w", entity.Name, fieldName, err)
-			}
-			continue
-		}
-		break // достаточно знать, что совпадений больше одного
+	cnt := 0
+	if err := rows.Scan(&idStr, &display, &cnt); err != nil {
+		rows.Close()
+		return "", "", 0, fmt.Errorf("match %s.%s scan: %w", entity.Name, fieldName, err)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return "", "", 0, fmt.Errorf("match %s.%s rows: %w", entity.Name, fieldName, err)
 	}
-	rows.Close() // освобождаем соединение/транзакцию перед COUNT
-
-	switch n {
-	case 0:
-		return "", "", 0, nil
-	case 1:
+	rows.Close()
+	if cnt == 1 {
 		return idStr, display, 1, nil
 	}
-	cnt := 0
-	if err := db.QueryRow(ctx,
-		fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s = %s`, table, col, d.Placeholder(1)),
-		value,
-	).Scan(&cnt); err != nil {
-		return "", "", 0, fmt.Errorf("match %s.%s count: %w", entity.Name, fieldName, err)
-	}
-	return "", "", cnt, nil
+	return "", "", cnt, nil // cnt > 1 — несколько; точное число, id не отдаём (неоднозначно)
 }
