@@ -1,5 +1,17 @@
 # План 74: AI-инструменты разработчика — довести до сильного продукта
 
+**Статус:** ✅ Реализован. В коде есть `onebase describe`
+`schemaVersion: 2` с режимами `--full/--compact`, структурированные объекты,
+`onebase examples`, `fmt`, `schema`, `query`, `eval`, `widget/report explain`,
+`impact`, `onebase mcp` и расширенный генератор конфигуратора с file-level
+staging для YAML/`.os`/форм. Дополнительно `check` отдаёт machine-readable
+`code/suggestedFix`, генератор умеет форматировать staging и прогонять запросы,
+а UI генерации поддерживает выбор файлов, inline edit и pre-apply `check` gate.
+Настройки ИИ включают `ai.daily_token_cap` и `ai.max_tool_rounds`. Финальный
+срез закрыл refactoring helpers, graph-based `impact`, MCP-интеграцию для
+рефакторинга/версий конфигурации, tool trace генерации и rollback-путь через
+снимки `_config_versions`.
+
 Дата анализа: 2026-06-24.
 
 ## Контекст
@@ -39,10 +51,72 @@
 - Добавлена команда `onebase examples [kind]` с canonical YAML/DSL snippets для
   справочников, документов, регистров, отчётов, виджетов, форм, сервисов, ролей,
   запросов и проведения.
-- Документация ИИ-настроек синхронизирована с текущей формой UI и фактом, что генератор
-  каркаса сейчас создаёт YAML-метаданные, а не `.os` код.
+- Добавлены headless-команды `onebase fmt`, `schema`, `query`, `eval`,
+  `widget explain`, `report explain` и `impact`.
+- Добавлен `onebase mcp` stdio server: resources `ai-guide`/`describe`/`schema`/
+  source tree и read-only tools поверх CLI; mutating tools включаются только
+  через `--allow-write`.
+- Генератор конфигуратора расширен: `создать_файл`, `прочитать_файл`,
+  `список_объектов`, `проверить_конфигурацию(full=true)` и `объяснить_impact`;
+  apply whitelist теперь допускает `.os` и managed forms.
+- Документация ИИ-настроек синхронизирована с текущей формой UI; генератор
+  перешёл от YAML-каркаса к file-level staging для вертикальных срезов.
+
+## Выполнено во втором safety-срезе
+
+Дата реализации: 2026-06-24.
+
+- Вынесен общий `internal/configfmt` canonical YAML writer; CLI `onebase fmt`
+  и генератор используют один и тот же форматтер.
+- `configcheck.Issue` получил `code` и `suggestedFix`; `onebase check --json`,
+  MCP и AI-генератор больше не зависят только от текста ошибки.
+- В генератор добавлены tools `форматировать` и `прогнать_запрос`, чтобы модель
+  могла стабилизировать YAML и проверять отчёты/виджеты на staging-схеме.
+- Панель генерации показывает old/new side-by-side, позволяет снять отдельные
+  файлы с применения и отредактировать `newContent` перед apply.
+- `ai-apply` перед записью собирает staging и запускает `onebase check`; если
+  исходная конфигурация была зелёной, а diff делает её красной, файлы не пишутся.
+- В форму ИИ добавлены `ai.daily_token_cap` и `ai.max_tool_rounds`; второй лимит
+  реально управляет числом tool-use раундов вместо жёсткой константы.
+
+## Выполнено в финальном срезе
+
+Дата реализации: 2026-06-24.
+
+- Добавлен `onebase refactor rename-object/rename-field`: по умолчанию команда
+  строит patch preview, а запись требует `--write`, запускает `check` и откатывает
+  файловые изменения при красном результате.
+- `onebase impact` усилен семантическим анализом проекта: ссылки метаданных,
+  `based_on`, определения полей, compiled query sources виджетов/отчётов,
+  `summary` и `migrationNotes`.
+- MCP получил read-only tools `refactor_preview`, `config_versions`,
+  `config_diff`; mutating `refactor_write` и `config_rollback` доступны только
+  при явном `--allow-write`.
+- Добавлен headless rollback path: `onebase config versions/diff/rollback` поверх
+  `_config_versions`.
+- `ai-apply` для database-backed конфигураций создаёт снимок до и после успешного
+  применения, а ответ возвращает `beforeVersion/afterVersion`.
+- История и UI генерации показывают tool trace, чтобы пользователь видел,
+  какие инструменты запускала модель и чем они закончились.
+- Добавлены golden-сценарии генератора без сетевых вызовов: документ с табличной
+  частью, регистр и проведение; отчёт + виджет с `прогнать_запрос`; managed form
+  с `.form.yaml` и обработчиком `.form.os`.
+- История ИИ в конфигураторе разбирает audit summary на отдельные блоки:
+  ответ модели, tool trace с `ok/error` статусами и список изменённых объектов.
+- MCP write surface переведён на least-privilege флаги: `--allow-fmt-write`,
+  `--allow-refactor-write`, `--allow-config-rollback`, `--allow-procrun`;
+  `--allow-write` оставлен как совместимый broad-mode.
+- Добавлена документация `docs/mcp.md` с настройкой stdio MCP-сервера, режимами
+  read-only/write и безопасным агентным workflow.
 
 ## Что мешает сейчас
+
+Исторический список ниже оставлен как исходный анализ и чек-лист приёмки плана.
+Пункты из него, относящиеся к `describe`, `fmt`, `schema`, headless feedback,
+генератору 2.0, MCP, `impact`, refactoring helpers, golden-сценариям генерации,
+history/rollback/tool trace и policy-настройкам команд с записью, закрыты в
+срезах выше. Дальше остаётся только обычная продуктовая эволюция за пределами
+этого плана.
 
 ### 1. `describe` слабее реальных знаний платформы
 
@@ -389,7 +463,7 @@ Tools:
 3. [x] Добавить `source` для файловых YAML-объектов через map path -> object.
 4. [x] Исправить `docs/features.md`: настройки ИИ уже формовые, генератор пока не генерирует
    `.os` код.
-5. [ ] Добавить UI-настройку `ai.daily_token_cap` и `ai.max_tool_rounds` в форму ИИ.
+5. [x] Добавить UI-настройку `ai.daily_token_cap` и `ai.max_tool_rounds` в форму ИИ.
 6. [x] Добавить `onebase examples <kind>` как низкорисковую команду с canonical snippets.
 
 ## Риски
@@ -419,6 +493,14 @@ go test ./internal/cli ./internal/launcher ./internal/llm ./internal/aicontext .
 go run ./cmd/onebase examples --list
 go run ./cmd/onebase examples document
 go run ./cmd/onebase describe --project examples/minimal
+```
+
+Результат: PASS.
+
+После финального среза дополнительно проверено:
+
+```bash
+go test ./... -count=1
 ```
 
 Результат: PASS.

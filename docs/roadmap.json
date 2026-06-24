@@ -4,28 +4,28 @@
     {
       "id": "visual-form-designer",
       "plan": "Plans/71-visual-form-designer.md",
-      "status": "in_progress",
-      "bucket": "now",
-      "progress": 75,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "Формы и интерфейс", "en": "Forms & UI" },
       "title": { "ru": "Визуальный конструктор форм", "en": "Visual form designer" },
       "summary": {
-        "ru": "Редактор управляемых форм с предпросмотром, свойствами элементов, событиями и табличными частями без ручной правки YAML.",
-        "en": "Managed form editor with preview, element properties, events, and table parts without hand-editing YAML."
+        "ru": "Реализован редактор управляемых форм: холст, свойства, события, группы/страницы, табличные части и синхронизация с YAML.",
+        "en": "Implemented managed form editor: canvas, properties, events, groups/pages, table parts, and YAML synchronization."
       },
       "feature": "Визуальный конструктор управляемых форм"
     },
     {
       "id": "ai-dev-tools-next",
       "plan": "Plans/74-ai-dev-tools-next.md",
-      "status": "in_progress",
-      "bucket": "now",
-      "progress": 35,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "ИИ", "en": "AI" },
       "title": { "ru": "AI-инструменты разработчика 2.0", "en": "AI developer tools 2.0" },
       "summary": {
-        "ru": "Машинные контракты, headless-проверки, генерация рабочих feature slices и интеграция через MCP для внешних агентов.",
-        "en": "Machine-readable contracts, headless checks, working feature-slice generation, and MCP integration for external agents."
+        "ru": "AI-инструменты разработчика 2.0 закрыты: describe/schema/fmt/query/eval/explain/MCP, генератор с file-level staging и pre-apply gate, refactor helpers, graph-impact, tool trace и rollback через снимки конфигурации.",
+        "en": "AI developer tools 2.0 are complete: describe/schema/fmt/query/eval/explain/MCP, generator file-level staging with a pre-apply gate, refactor helpers, graph impact, tool trace, and rollback via configuration snapshots."
       },
       "feature": "ИИ-помощник в конфигураторе"
     },
@@ -38,22 +38,23 @@
       "track": { "ru": "Экосистема", "en": "Ecosystem" },
       "title": { "ru": "Версионирование конфигураций и marketplace", "en": "Configuration versioning and marketplace" },
       "summary": {
-        "ru": "История изменений конфигурации в базе, diff/rollback и будущая установка типовых решений из каталога.",
-        "en": "Configuration history in the database, diff/rollback, and future installation of templates from a catalog."
+        "ru": "Ядро истории в БД готово: `_config_versions`, снимки, diff, rollback и release-снимок при deploy. UI истории и marketplace ещё впереди.",
+        "en": "Database history core is done: `_config_versions`, snapshots, diff, rollback, and release snapshots on deploy. History UI and marketplace are still ahead."
       }
     },
     {
       "id": "auto-backup",
       "plan": "Plans/28-auto-backup.md",
-      "status": "in_progress",
-      "bucket": "now",
-      "progress": 35,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "Администрирование", "en": "Administration" },
       "title": { "ru": "Автобэкап с ротацией", "en": "Scheduled backups with rotation" },
       "summary": {
-        "ru": "Расписание резервного копирования баз, хранение последних снимков и понятное управление из интерфейса.",
-        "en": "Scheduled database backups, retention of recent snapshots, and clear administration from the UI."
-      }
+        "ru": "Реализованы `backup:` в `app.yaml`, системное задание `AutoBackup`, `keep_last`, атомарные PostgreSQL/SQLite-дампы и список бэкапов в UI.",
+        "en": "Implemented `backup:` in `app.yaml`, the `AutoBackup` system job, `keep_last`, atomic PostgreSQL/SQLite dumps, and backup listing in the UI."
+      },
+      "feature": "Автоматический бэкап по расписанию"
     },
     {
       "id": "techdebt-observability",
@@ -64,8 +65,8 @@
       "track": { "ru": "Качество", "en": "Quality" },
       "title": { "ru": "CI, наблюдаемость и техдолг", "en": "CI, observability, and tech debt" },
       "summary": {
-        "ru": "Race/coverage, метрики, RBAC-проверки, единое логирование и чистка инфраструктурного долга перед ростом платформы.",
-        "en": "Race/coverage checks, metrics, RBAC hardening, consistent logging, and infrastructure cleanup before the platform grows further."
+        "ru": "Уже есть CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория и `/metrics`; slog-миграция и `onebase lint` ещё не закрыты.",
+        "en": "CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, and `/metrics` are in place; slog migration and `onebase lint` remain."
       }
     },
     {
@@ -90,21 +91,21 @@
       "track": { "ru": "Мобильность", "en": "Mobile" },
       "title": { "ru": "Публикация PWA в сторах", "en": "PWA store packaging" },
       "summary": {
-        "ru": "TWA/Capacitor-обёртка для публикации мобильного интерфейса OneBase в Google Play и App Store.",
-        "en": "TWA/Capacitor wrapper for publishing the OneBase mobile UI to Google Play and the App Store."
+        "ru": "Сама PWA уже реализована в плане 45; TWA/Capacitor-обёртки, assetlinks и публикация в сторах пока не начинались.",
+        "en": "The PWA itself is already implemented in plan 45; TWA/Capacitor wrappers, assetlinks, and store publication have not started yet."
       }
     },
     {
       "id": "dsl-real-world",
       "plan": "Plans/34-dsl-real-world.md",
-      "status": "planned",
+      "status": "in_progress",
       "bucket": "next",
-      "progress": 0,
+      "progress": 45,
       "track": { "ru": "DSL", "en": "DSL" },
       "title": { "ru": "DSL для реальных конфигураций", "en": "DSL for real-world configurations" },
       "summary": {
-        "ru": "Добивка языка под практические сценарии: общие модули, ссылочные поля, функции дат и серверные хуки.",
-        "en": "Language improvements for practical apps: common modules, reference fields, date functions, and server hooks."
+        "ru": "Реально есть `ИначеЕсли`, `Пустая`/`ПустаяСсылка` и функции дат. Общие модули, автодоступ к полям ссылок и хуки записи объектов ещё не закрыты.",
+        "en": "`ElseIf`, `IsBlank`/`IsEmptyRef`, and date functions are implemented. Common modules, automatic reference dereferencing, and object write hooks remain."
       }
     },
     {
@@ -180,15 +181,16 @@
     {
       "id": "one-c-converter",
       "plan": "Plans/37-managed-forms-1c-converter.md",
-      "status": "planned",
-      "bucket": "later",
-      "progress": 20,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "Миграция", "en": "Migration" },
       "title": { "ru": "Конвертер управляемых форм 1С", "en": "1C managed forms converter" },
       "summary": {
-        "ru": "Двусторонний обмен Form.xml/Module.bsl с формами OneBase и визуальным редактором.",
-        "en": "Round-trip exchange between 1C Form.xml/Module.bsl and OneBase forms with the visual editor."
-      }
+        "ru": "Реализованы `.form.yaml`, импорт/экспорт Form.xml + Module.bsl + Items, CLI `convert-from-1c`/`convert-to-1c`/`validate`, UI импорт и round-trip тесты.",
+        "en": "Implemented `.form.yaml`, Form.xml + Module.bsl + Items import/export, CLI `convert-from-1c`/`convert-to-1c`/`validate`, UI import, and round-trip tests."
+      },
+      "feature": "Конвертер управляемых форм Enterprise-системы"
     }
   ]
 }
