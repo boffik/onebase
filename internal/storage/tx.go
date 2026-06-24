@@ -9,6 +9,11 @@ import (
 
 type txKey struct{}
 
+// HasTx reports whether ctx already carries an active storage transaction.
+func HasTx(ctx context.Context) bool {
+	return ctx.Value(txKey{}) != nil
+}
+
 // WithTx runs fn inside a transaction. On fn error the transaction is rolled
 // back; on success it is committed.
 func (db *DB) WithTx(ctx context.Context, fn func(context.Context) error) (err error) {
