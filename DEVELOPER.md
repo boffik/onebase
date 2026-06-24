@@ -2110,3 +2110,34 @@ onebase restore --db <dsn> --file ./backups/backup_mydb_2026-05-07_10-30.sql.gz
 | `onebase init --template <name> <dir>` | Создать проект из шаблона |
 | `onebase init --list-templates` | Список встроенных шаблонов |
 | `onebase convert --dir <1c-xml-dir> --out <dir>` | Конвертировать конфигурацию из 1С |
+| `onebase describe --project <dir>` | Выгрузить машинный JSON-контракт конфигурации (`schemaVersion: 2`) |
+| `onebase examples [kind]` | Показать canonical YAML/DSL-фрагмент для объекта, запроса или проведения |
+
+---
+
+## CLI-контракт для ИИ-инструментов
+
+Для внешних агентов, IDE-интеграций и отладки генерации используйте связку:
+
+```bash
+onebase ai-guide --project <dir>          # человеко- и agent-readable справочник
+onebase describe --project <dir>          # полный JSON-контракт конфигурации
+onebase examples --list                   # доступные canonical snippets
+onebase examples document                 # пример YAML документа
+onebase check --project <dir>             # validation gate после правок
+```
+
+`onebase describe` возвращает `schemaVersion: 2` и рассчитан на машинное потребление.
+В контракт входят:
+
+- справочники, документы, регистры, регистры сведений, планы счетов и регистры бухгалтерии;
+- отчёты, обработки, виджеты, журналы, подсистемы, страницы, HTTP-сервисы, регламентные задания;
+- RBAC-роли из `roles/*.yaml`;
+- формы, события форм, параметры, табличные части и source `{file,line}`;
+- модули DSL и процедуры с параметрами, `export`-флагом и source location;
+- `builtins` и полный `language` из `internal/dsl/langref`.
+
+`onebase examples [kind]` нужен как низкорисковая подсказка формата. Поддерживаемые `kind`:
+`catalog`, `document`, `register`, `inforeg`, `enum`, `processor`, `report`, `widget`,
+`form`, `page`, `service`, `role`, `query`, `posting`. Русские алиасы вроде
+`справочник`, `документ`, `запрос`, `роль` тоже поддерживаются.
