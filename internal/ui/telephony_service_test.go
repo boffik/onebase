@@ -251,3 +251,44 @@ func TestTelephony_OriginateURL(t *testing.T) {
 		t.Fatalf("URL originate неверный:\n got=%s\nwant=%s", got, want)
 	}
 }
+
+// Панель формируется целиком: ПриФормировании наполняет построитель блоками
+// (KPI, таблица клиентов с засеянным клиентом, журнал с сортировкой УБЫВ, список
+// ссылок). Проверяем блоки напрямую — без шаблонов/HTTP, — что заодно
+// подтверждает: все запросы страницы (вкл. УБЫВ) и вызовы модуля выполнились.
+func TestTelephony_PanelRenders(t *testing.T) {
+	s, ctx, _ := newCallcenterServer(t)
+	proc := s.reg.GetPageProcedure("Телефония", "ПриФормировании")
+	if proc == nil {
+		t.Fatal("ПриФормировании не найдена в Телефония.page.os")
+	}
+	builder := interpreter.NewPageBuilder()
+	params := interpreter.NewStringMap(map[string]string{})
+	vars := s.buildDSLVars(ctx, nil)
+	vars["Страница"] = builder
+	vars["Параметры"] = params
+	if _, err := s.interp.Call(proc, builder, []any{builder, params}, vars); err != nil {
+		t.Fatalf("ПриФормировании: %v", err)
+	}
+
+	var hasKPI, hasClient, hasJournal, hasLinks bool
+	for _, b := range builder.Blocks() {
+		switch {
+		case b.Kind == "kpi" && strings.Contains(b.Label, "Звонков"):
+			hasKPI = true
+		case b.Kind == "table" && b.Title == "Клиенты":
+			for _, row := range b.Rows {
+				if strings.Contains(row.Cells["Наименование"].Text, "Ромашка") {
+					hasClient = true
+				}
+			}
+		case b.Kind == "table" && b.Title == "Последние звонки":
+			hasJournal = true
+		case b.Kind == "list" && b.Title == "Быстрые ссылки":
+			hasLinks = true
+		}
+	}
+	if !hasKPI || !hasClient || !hasJournal || !hasLinks {
+		t.Fatalf("панель неполна: kpi=%v client=%v journal=%v links=%v", hasKPI, hasClient, hasJournal, hasLinks)
+	}
+}
