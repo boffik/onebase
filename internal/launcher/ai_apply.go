@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ivantit66/onebase/internal/configdb"
 )
 
 // applyableSubdirs — подкаталоги метаданных, куда разрешено применять
@@ -93,13 +94,16 @@ func (h *handler) cfgAIApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	applied := 0
+	files := make([]configFileEntry, 0, len(req.Changes))
 	for _, ch := range req.Changes {
-		if err := h.writeConfigFileRaw(r.Context(), b, ch.Path, []byte(ch.NewContent)); err != nil {
-			writeJSON(w, 200, map[string]any{"error": "не удалось записать " + ch.Path + ": " + err.Error(), "applied": applied})
-			return
-		}
-		applied++
+		files = append(files, configFileEntry{relPath: ch.Path, content: []byte(ch.NewContent)})
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "applied": applied})
+	if err := saveConfigFilesWithVersion(r, h, b, files, configdb.VersionOptions{
+		AuthorLogin: cfgLogin(r.Context()),
+		Message:     fmt.Sprintf("ai apply %d files", len(files)),
+	}); err != nil {
+		writeJSON(w, 200, map[string]any{"error": "не удалось применить изменения: " + err.Error(), "applied": 0})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "applied": len(req.Changes)})
 }
