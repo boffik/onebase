@@ -258,6 +258,10 @@ func (s *Server) resolveServiceAuth(svc *httpservice.Service, w http.ResponseWri
 	case "token":
 		// Постоянный секрет в заголовке — простой режим для вебхуков
 		// (поглощено из плана 58). Сравнение constant-time.
+		if strings.TrimSpace(svc.Secret) == "" {
+			writeServiceError(w, http.StatusUnauthorized, "секрет сервиса не задан")
+			return nil, false
+		}
 		got := r.Header.Get("X-Webhook-Token")
 		if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(svc.Secret)) != 1 {
 			writeServiceError(w, http.StatusUnauthorized, "неверный токен")
@@ -268,6 +272,10 @@ func (s *Server) resolveServiceAuth(svc *httpservice.Service, w http.ResponseWri
 	case "hmac":
 		// Подпись тела — формат платёжек/Telegram: X-Webhook-Signature =
 		// hex(HMAC-SHA256(тело, secret)); допускается префикс "sha256=".
+		if strings.TrimSpace(svc.Secret) == "" {
+			writeServiceError(w, http.StatusUnauthorized, "секрет сервиса не задан")
+			return nil, false
+		}
 		mac := hmac.New(sha256.New, []byte(svc.Secret))
 		mac.Write(body)
 		want := hex.EncodeToString(mac.Sum(nil))

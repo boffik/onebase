@@ -97,6 +97,21 @@ func TestService_TokenAuth(t *testing.T) {
 	}
 }
 
+func TestService_TokenAuthEmptyRuntimeSecretFailsClosed(t *testing.T) {
+	s := newSecuredServiceServer(t, &httpservice.Service{
+		Name: "T", RootURL: "t", Auth: "token", Secret: "",
+		Templates: []httpservice.URLTemplate{{Template: "/", Methods: map[string]string{"GET": "Корень"}}},
+	})
+
+	r := httptest.NewRequest("GET", "/hs/t/", nil)
+	r.Header.Set("X-Webhook-Token", "")
+	w := httptest.NewRecorder()
+	s.serviceDispatch(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("пустой runtime secret должен fail-closed, получен %d (%s)", w.Code, w.Body.String())
+	}
+}
+
 func TestService_HMACAuth(t *testing.T) {
 	s := newSecuredServiceServer(t, &httpservice.Service{
 		Name: "H", RootURL: "h", Auth: "hmac", Secret: "s3cret",
@@ -121,6 +136,24 @@ func TestService_HMACAuth(t *testing.T) {
 	s.serviceDispatch(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("с верной подписью ожидался 200, получен %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestService_HMACAuthEmptyRuntimeSecretFailsClosed(t *testing.T) {
+	s := newSecuredServiceServer(t, &httpservice.Service{
+		Name: "H", RootURL: "h", Auth: "hmac", Secret: "",
+		Templates: []httpservice.URLTemplate{{Template: "/", Methods: map[string]string{"POST": "Эхо"}}},
+	})
+	body := `{"x":1}`
+	mac := hmac.New(sha256.New, nil)
+	mac.Write([]byte(body))
+
+	r := httptest.NewRequest("POST", "/hs/h/", strings.NewReader(body))
+	r.Header.Set("X-Webhook-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	w := httptest.NewRecorder()
+	s.serviceDispatch(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("пустой runtime secret должен fail-closed, получен %d (%s)", w.Code, w.Body.String())
 	}
 }
 
