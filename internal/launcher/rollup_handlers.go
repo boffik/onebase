@@ -44,6 +44,22 @@ func (h *handler) cfgAdminRollup(w http.ResponseWriter, r *http.Request) {
 		regRows = `<div style="color:#999;font-size:12px">В конфигурации нет регистров накопления.</div>`
 	}
 
+	// Чек-лист регистров бухгалтерии (по умолчанию включены).
+	accBlock := ""
+	if len(proj.AccountRegisters) > 0 {
+		accRows := ""
+		for _, ar := range proj.AccountRegisters {
+			accRows += fmt.Sprintf(
+				`<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0">
+				   <input type="checkbox" class="rb-areg" value="%s" checked> %s</label>`,
+				escHTML(ar.Name), escHTML(ar.DisplayName(lang)))
+		}
+		accBlock = `
+	  <div style="font-size:13px;font-weight:600;margin:12px 0 4px">Регистры бухгалтерии</div>
+	  <div style="font-size:11px;color:#888;margin-bottom:6px">Опорные остатки вводятся проводками через вспомогательный счёт («000» или настройка базы).</div>
+	  <div style="max-height:160px;overflow:auto;border:1px solid #e2e8f0;border-radius:4px;padding:6px 10px;background:#fff">` + accRows + `</div>`
+	}
+
 	html := `<div style="padding:16px;max-width:680px">
 	<h3 style="margin:0 0 6px;font-size:15px">Свёртка базы</h3>
 	<p style="font-size:12px;color:#666;margin:0 0 14px">
@@ -64,7 +80,7 @@ func (h *handler) cfgAdminRollup(w http.ResponseWriter, r *http.Request) {
 	  <div style="font-size:13px;font-weight:600;margin:6px 0 4px">Регистры накопления</div>
 	  <div style="font-size:11px;color:#888;margin-bottom:6px">Снимите оборотные регистры — их нельзя сворачивать в остаток.</div>
 	  <div style="max-height:200px;overflow:auto;border:1px solid #e2e8f0;border-radius:4px;padding:6px 10px;background:#fff">` + regRows + `</div>
-
+` + accBlock + `
 	  <label style="font-size:13px;display:flex;align-items:center;gap:8px;margin-top:12px">
 	    <input type="checkbox" id="rb-deldocs" checked> Удалить документы до даты свёртки
 	  </label>
@@ -108,11 +124,13 @@ if(typeof cfgConfirm!=='function'){window.cfgConfirm=function(text,onOk){
 function rollupBody(){
   var regs=[];
   document.querySelectorAll('.rb-reg:checked').forEach(function(c){regs.push(c.value)});
-  return {date:document.getElementById('rb-date').value,registers:regs,deleteDocuments:document.getElementById('rb-deldocs').checked};
+  var aregs=[];
+  document.querySelectorAll('.rb-areg:checked').forEach(function(c){aregs.push(c.value)});
+  return {date:document.getElementById('rb-date').value,registers:regs,accountRegisters:aregs,deleteDocuments:document.getElementById('rb-deldocs').checked};
 }
 function rollupValidate(b){
   if(!b.date){cfgInfo('Укажите дату свёртки');return false}
-  if(b.registers.length===0){cfgInfo('Выберите хотя бы один регистр');return false}
+  if(b.registers.length===0 && b.accountRegisters.length===0){cfgInfo('Выберите хотя бы один регистр');return false}
   return true;
 }
 function rollupRenderReport(d){
@@ -120,11 +138,15 @@ function rollupRenderReport(d){
   (d.registers||[]).forEach(function(r){
     rows+='<tr><td style="padding:4px 8px">'+r.name+'</td><td style="padding:4px 8px;text-align:right">'+r.folded+'</td><td style="padding:4px 8px;text-align:right">'+r.opening+'</td></tr>';
   });
+  (d.accountRegisters||[]).forEach(function(r){
+    var last = r.note ? '<td colspan="2" style="padding:4px 8px;color:#b45309">'+r.note+'</td>' : '<td style="padding:4px 8px;text-align:right">'+r.folded+'</td><td style="padding:4px 8px;text-align:right">'+r.opening+'</td>';
+    rows+='<tr><td style="padding:4px 8px">'+r.name+' <span style="color:#888;font-size:11px">(бух)</span></td>'+last+'</tr>';
+  });
   var docs = d.keepDocs ? 'снять проведение (не удалять)' : ('к удалению: '+d.deletedDocs);
   if(!d.keepDocs && d.danglingRefs>0){docs+=' · ⚠ повиснет ссылок: '+d.danglingRefs}
   return '<div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">'+
     '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
-    '<tr style="background:#f1f5f9"><th style="text-align:left;padding:5px 8px">Регистр</th><th style="text-align:right;padding:5px 8px">Свернуть движений</th><th style="text-align:right;padding:5px 8px">Опорных остатков</th></tr>'+
+    '<tr style="background:#f1f5f9"><th style="text-align:left;padding:5px 8px">Регистр</th><th style="text-align:right;padding:5px 8px">Свернуть движений</th><th style="text-align:right;padding:5px 8px">Опорных</th></tr>'+
     rows+'</table>'+
     '<div style="padding:6px 8px;font-size:12px;background:#fafafa;border-top:1px solid #eee">Дата свёртки: <b>'+d.cutoff+'</b> · Документы: '+docs+'</div></div>';
 }
@@ -163,9 +185,10 @@ document.addEventListener('change',function(e){
 
 // rollupReqBody — тело запросов предпросмотра/запуска свёртки.
 type rollupReqBody struct {
-	Date            string   `json:"date"`
-	Registers       []string `json:"registers"`
-	DeleteDocuments bool     `json:"deleteDocuments"`
+	Date             string   `json:"date"`
+	Registers        []string `json:"registers"`
+	AccountRegisters []string `json:"accountRegisters"`
+	DeleteDocuments  bool     `json:"deleteDocuments"`
 }
 
 // cfgAdminRollupPreview — предпросмотр свёртки (ничего не записывает).
@@ -195,7 +218,7 @@ func (h *handler) rollupExec(w http.ResponseWriter, r *http.Request, run bool) {
 		writeJSON(w, 400, map[string]any{"error": "укажите дату свёртки"})
 		return
 	}
-	if len(req.Registers) == 0 {
+	if len(req.Registers) == 0 && len(req.AccountRegisters) == 0 {
 		writeJSON(w, 400, map[string]any{"error": "выберите хотя бы один регистр"})
 		return
 	}
@@ -212,15 +235,16 @@ func (h *handler) rollupExec(w http.ResponseWriter, r *http.Request, run bool) {
 	defer proj.Close()
 
 	opts := storage.RollupOptions{
-		Date:            date,
-		Registers:       req.Registers,
-		DeleteDocuments: req.DeleteDocuments,
+		Date:             date,
+		Registers:        req.Registers,
+		AccountRegisters: req.AccountRegisters,
+		DeleteDocuments:  req.DeleteDocuments,
 	}
 	var rep storage.RollupReport
 	if run {
-		rep, err = db.Rollup(r.Context(), proj.Registers, proj.Entities, opts)
+		rep, err = db.Rollup(r.Context(), proj.Registers, proj.Entities, proj.AccountRegisters, opts)
 	} else {
-		rep, err = db.RollupPreview(r.Context(), proj.Registers, proj.Entities, opts)
+		rep, err = db.RollupPreview(r.Context(), proj.Registers, proj.Entities, proj.AccountRegisters, opts)
 	}
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
@@ -237,12 +261,19 @@ func rollupReportJSON(rep storage.RollupReport, keepDocs bool) map[string]any {
 			"name": r.Name, "folded": r.FoldedMovements, "opening": r.OpeningRows,
 		})
 	}
+	accRegs := make([]map[string]any, 0, len(rep.AccountRegisters))
+	for _, r := range rep.AccountRegisters {
+		accRegs = append(accRegs, map[string]any{
+			"name": r.Name, "folded": r.FoldedMovements, "opening": r.OpeningRows, "note": r.Note,
+		})
+	}
 	return map[string]any{
-		"ok":           true,
-		"cutoff":       rep.Cutoff.Format("02.01.2006"),
-		"registers":    regs,
-		"deletedDocs":  rep.DeletedDocs,
-		"danglingRefs": rep.DanglingRefs,
-		"keepDocs":     keepDocs,
+		"ok":               true,
+		"cutoff":           rep.Cutoff.Format("02.01.2006"),
+		"registers":        regs,
+		"accountRegisters": accRegs,
+		"deletedDocs":      rep.DeletedDocs,
+		"danglingRefs":     rep.DanglingRefs,
+		"keepDocs":         keepDocs,
 	}
 }

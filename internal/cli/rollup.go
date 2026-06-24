@@ -33,7 +33,8 @@ var rollupCmd = &cobra.Command{
 func init() {
 	addBaseFlags(rollupCmd)
 	rollupCmd.Flags().String("date", "", "дата свёртки ГГГГ-ММ-ДД (обязательно)")
-	rollupCmd.Flags().String("registers", "", "регистры накопления через запятую (по умолчанию — все)")
+	rollupCmd.Flags().String("registers", "", "регистры накопления через запятую (по умолчанию — все балансовые)")
+	rollupCmd.Flags().String("aux-account", "", "код вспомогательного счёта для свёртки бухрегистра (иначе берётся «000»)")
 	rollupCmd.Flags().Bool("dry-run", false, "только показать, что будет сделано")
 	rollupCmd.Flags().Bool("keep-documents", false, "не удалять документы до даты, а снять с них проведение")
 	rollupCmd.Flags().Bool("yes", false, "не запрашивать подтверждение")
@@ -74,17 +75,28 @@ func runRollup(cmd *cobra.Command, _ []string) error {
 	defer proj.Close()
 
 	regNames := selectedRegisterNames(proj.Registers, regsArg)
-	if len(regNames) == 0 {
-		return fmt.Errorf("нет регистров накопления для свёртки")
+	accNames := make([]string, 0, len(proj.AccountRegisters))
+	for _, ar := range proj.AccountRegisters {
+		accNames = append(accNames, ar.Name)
+	}
+	if len(regNames) == 0 && len(accNames) == 0 {
+		return fmt.Errorf("нет регистров для свёртки")
+	}
+
+	if aux, _ := cmd.Flags().GetString("aux-account"); strings.TrimSpace(aux) != "" {
+		if err := db.SaveRollupAuxAccount(ctx, aux); err != nil {
+			return fmt.Errorf("сохранение вспомогательного счёта: %w", err)
+		}
 	}
 
 	opts := storage.RollupOptions{
-		Date:            date,
-		Registers:       regNames,
-		DeleteDocuments: !keepDocs,
+		Date:             date,
+		Registers:        regNames,
+		AccountRegisters: accNames,
+		DeleteDocuments:  !keepDocs,
 	}
 
-	prev, err := db.RollupPreview(ctx, proj.Registers, proj.Entities, opts)
+	prev, err := db.RollupPreview(ctx, proj.Registers, proj.Entities, proj.AccountRegisters, opts)
 	if err != nil {
 		return fmt.Errorf("предпросмотр свёртки: %w", err)
 	}
@@ -108,7 +120,7 @@ func runRollup(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	rep, err := db.Rollup(ctx, proj.Registers, proj.Entities, opts)
+	rep, err := db.Rollup(ctx, proj.Registers, proj.Entities, proj.AccountRegisters, opts)
 	if err != nil {
 		return fmt.Errorf("свёртка: %w", err)
 	}
@@ -144,6 +156,14 @@ func printRollupReport(w io.Writer, rep storage.RollupReport, keepDocs bool) {
 	for _, r := range rep.Registers {
 		fmt.Fprintf(w, "  %-32s движений: %6d  опорных остатков: %5d\n",
 			r.Name, r.FoldedMovements, r.OpeningRows)
+	}
+	for _, r := range rep.AccountRegisters {
+		if r.Note != "" {
+			fmt.Fprintf(w, "  %-32s движений: %6d  — %s\n", r.Name, r.FoldedMovements, r.Note)
+		} else {
+			fmt.Fprintf(w, "  %-32s движений: %6d  опорных проводок: %5d\n",
+				r.Name, r.FoldedMovements, r.OpeningRows)
+		}
 	}
 	if keepDocs {
 		fmt.Fprintln(w, "  Документы: снять проведение (не удалять)")

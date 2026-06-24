@@ -92,7 +92,7 @@ func TestRollup_FoldsAccumulationRegister(t *testing.T) {
 		t.Fatalf("исходный остаток неверен: %v", before)
 	}
 
-	prev, err := db.RollupPreview(ctx, []*metadata.Register{reg}, nil, opts)
+	prev, err := db.RollupPreview(ctx, []*metadata.Register{reg}, nil, nil, opts)
 	if err != nil {
 		t.Fatalf("RollupPreview: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestRollup_FoldsAccumulationRegister(t *testing.T) {
 		t.Fatalf("предпросмотр неверен: %+v", prev.Registers)
 	}
 
-	rep, err := db.Rollup(ctx, []*metadata.Register{reg}, nil, opts)
+	rep, err := db.Rollup(ctx, []*metadata.Register{reg}, nil, nil, opts)
 	if err != nil {
 		t.Fatalf("Rollup: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestRollup_FoldsAccumulationRegister(t *testing.T) {
 	}
 
 	// Идемпотентность: повтор на ту же дату ничего не меняет.
-	if _, err := db.Rollup(ctx, []*metadata.Register{reg}, nil, opts); err != nil {
+	if _, err := db.Rollup(ctx, []*metadata.Register{reg}, nil, nil, opts); err != nil {
 		t.Fatalf("повторная свёртка: %v", err)
 	}
 	after2 := balMap(t, ctx, db, reg, "Товар", "Количество")
@@ -204,7 +204,7 @@ func TestRollup_KeepDocumentsAndLock(t *testing.T) {
 	newID := mkDoc("2025-06-20")
 	cutoff := mustDate(t, "2025-03-01")
 
-	rep, err := db.Rollup(ctx, nil, []*metadata.Entity{doc}, RollupOptions{Date: cutoff, DeleteDocuments: false})
+	rep, err := db.Rollup(ctx, nil, []*metadata.Entity{doc}, nil, RollupOptions{Date: cutoff, DeleteDocuments: false})
 	if err != nil {
 		t.Fatalf("Rollup keep: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestRollup_DeleteDocuments(t *testing.T) {
 	mkDoc("2025-06-20")
 	cutoff := mustDate(t, "2025-03-01")
 
-	rep, err := db.Rollup(ctx, nil, []*metadata.Entity{doc}, RollupOptions{Date: cutoff, DeleteDocuments: true})
+	rep, err := db.Rollup(ctx, nil, []*metadata.Entity{doc}, nil, RollupOptions{Date: cutoff, DeleteDocuments: true})
 	if err != nil {
 		t.Fatalf("Rollup delete: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestRollup_DanglingRefsPreview(t *testing.T) {
 	}
 
 	cutoff := mustDate(t, "2025-03-01")
-	prev, err := db.RollupPreview(ctx, nil, []*metadata.Entity{order, pay}, RollupOptions{Date: cutoff, DeleteDocuments: true})
+	prev, err := db.RollupPreview(ctx, nil, []*metadata.Entity{order, pay}, nil, RollupOptions{Date: cutoff, DeleteDocuments: true})
 	if err != nil {
 		t.Fatalf("RollupPreview: %v", err)
 	}
@@ -291,5 +291,127 @@ func TestRollup_DanglingRefsPreview(t *testing.T) {
 	}
 	if prev.DanglingRefs != 1 {
 		t.Errorf("DanglingRefs=%d, ждали 1", prev.DanglingRefs)
+	}
+}
+
+// TestRollup_FoldsAccountRegister — свёртка бухрегистра: опорные проводки через
+// вспомогательный счёт «000»; остатки счетов (активного и пассивного) не
+// меняются, вспомогательный счёт нетит в ноль.
+func TestRollup_FoldsAccountRegister(t *testing.T) {
+	ctx, db := rollupTestDB(t)
+	if err := db.EnsureAccountsTable(ctx); err != nil {
+		t.Fatalf("EnsureAccountsTable: %v", err)
+	}
+	chart := &metadata.ChartOfAccounts{Name: "Основной", Accounts: []metadata.Account{
+		{Code: "000", Name: "Вспомогательный", Kind: "active_passive"},
+		{Code: "41", Name: "Товары", Kind: "active"},
+		{Code: "60", Name: "Поставщики", Kind: "passive"},
+	}}
+	if err := db.SyncAccounts(ctx, []*metadata.ChartOfAccounts{chart}); err != nil {
+		t.Fatalf("SyncAccounts: %v", err)
+	}
+	ar := &metadata.AccountRegister{
+		Name: "Хозрасчетный", Accounts: "Основной",
+		Resources: []metadata.Field{{Name: "Сумма", Type: metadata.FieldTypeNumber}},
+	}
+	if err := db.MigrateAccountRegisters(ctx, []*metadata.AccountRegister{ar}); err != nil {
+		t.Fatalf("MigrateAccountRegisters: %v", err)
+	}
+
+	post := func(date string, sum float64) {
+		d := mustDate(t, date)
+		rows := []map[string]any{{"счётдт": "41", "счёткт": "60", "Сумма": sum}}
+		if err := db.WriteAccountMovements(ctx, ar.Name, "Поступление", uuid.New(), rows, ar, &d); err != nil {
+			t.Fatalf("WriteAccountMovements: %v", err)
+		}
+	}
+	post("2025-01-10", 1000) // < cutoff
+	post("2025-02-15", 500)  // < cutoff
+	post("2025-06-20", 200)  // >= cutoff
+	cutoff := mustDate(t, "2025-03-01")
+
+	// Сырой остаток Дт−Кт счёта по всем движениям.
+	bal := func(code string) float64 {
+		rows, err := db.AccountBalances(ctx, ar.Name, "Основной", mustDate(t, "2025-12-31"), ar.Resources, nil)
+		if err != nil {
+			t.Fatalf("AccountBalances: %v", err)
+		}
+		for _, b := range rows {
+			if c, _ := b["code"].(string); c == code {
+				return toFloat(b["сумма_дт"]) - toFloat(b["сумма_кт"])
+			}
+		}
+		return 0
+	}
+	before41, before60 := bal("41"), bal("60") // 1700, -1700
+
+	rep, err := db.Rollup(ctx, nil, nil, []*metadata.AccountRegister{ar},
+		RollupOptions{Date: cutoff, AccountRegisters: []string{"Хозрасчетный"}})
+	if err != nil {
+		t.Fatalf("Rollup: %v", err)
+	}
+	if len(rep.AccountRegisters) != 1 || rep.AccountRegisters[0].Note != "" {
+		t.Fatalf("отчёт бухрегистра: %+v", rep.AccountRegisters)
+	}
+	if rep.AccountRegisters[0].FoldedMovements != 2 || rep.AccountRegisters[0].OpeningRows != 2 {
+		t.Fatalf("свёрнуто/опорных: %+v", rep.AccountRegisters[0])
+	}
+
+	if bal("41") != before41 || bal("60") != before60 {
+		t.Errorf("остатки изменились: 41 %v→%v, 60 %v→%v", before41, bal("41"), before60, bal("60"))
+	}
+	if a := bal("000"); absFloat(a) > 1e-6 {
+		t.Errorf("вспомогательный счёт не обнулился: %v", a)
+	}
+
+	table := metadata.AccountRegTableName(ar.Name)
+	var foldedLeft, opening int
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&foldedLeft)
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE регистратор_тип = ?", RollupRecorderType).Scan(&opening)
+	if foldedLeft != 0 {
+		t.Errorf("проводки до даты остались: %d", foldedLeft)
+	}
+	if opening != 2 {
+		t.Errorf("опорных проводок=%d, ждали 2", opening)
+	}
+}
+
+// TestRollup_AccountRegister_NoAuxAccount — нет вспомогательного счёта → бухрегистр
+// пропускается с пометкой, движения не трогаются.
+func TestRollup_AccountRegister_NoAuxAccount(t *testing.T) {
+	ctx, db := rollupTestDB(t)
+	if err := db.EnsureAccountsTable(ctx); err != nil {
+		t.Fatalf("EnsureAccountsTable: %v", err)
+	}
+	chart := &metadata.ChartOfAccounts{Name: "ПС", Accounts: []metadata.Account{
+		{Code: "41", Name: "Товары", Kind: "active"},
+		{Code: "60", Name: "Поставщики", Kind: "passive"},
+	}}
+	if err := db.SyncAccounts(ctx, []*metadata.ChartOfAccounts{chart}); err != nil {
+		t.Fatalf("SyncAccounts: %v", err)
+	}
+	ar := &metadata.AccountRegister{Name: "БезВспом", Accounts: "ПС",
+		Resources: []metadata.Field{{Name: "Сумма", Type: metadata.FieldTypeNumber}}}
+	if err := db.MigrateAccountRegisters(ctx, []*metadata.AccountRegister{ar}); err != nil {
+		t.Fatalf("MigrateAccountRegisters: %v", err)
+	}
+	d := mustDate(t, "2025-01-10")
+	if err := db.WriteAccountMovements(ctx, ar.Name, "Док", uuid.New(),
+		[]map[string]any{{"счётдт": "41", "счёткт": "60", "Сумма": 100}}, ar, &d); err != nil {
+		t.Fatalf("WriteAccountMovements: %v", err)
+	}
+
+	rep, err := db.Rollup(ctx, nil, nil, []*metadata.AccountRegister{ar},
+		RollupOptions{Date: mustDate(t, "2025-03-01"), AccountRegisters: []string{"БезВспом"}})
+	if err != nil {
+		t.Fatalf("Rollup: %v", err)
+	}
+	if len(rep.AccountRegisters) != 1 || rep.AccountRegisters[0].Note == "" {
+		t.Fatalf("ожидалась пометка о пропуске: %+v", rep.AccountRegisters)
+	}
+	var left int
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.AccountRegTableName(ar.Name)).Scan(&left)
+	if left != 1 {
+		t.Errorf("движения тронуты при пропуске: осталось %d, ждали 1", left)
 	}
 }
