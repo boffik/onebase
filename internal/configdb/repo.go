@@ -31,7 +31,7 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("configdb: create table: %w", err)
 	}
-	return nil
+	return r.EnsureVersionSchema(ctx)
 }
 
 func (r *Repo) ImportFromDir(ctx context.Context, dir string) error {
@@ -75,14 +75,23 @@ func (r *Repo) SaveFile(ctx context.Context, path string, content []byte) error 
 	if err := ValidatePath(path); err != nil {
 		return fmt.Errorf("configdb: unsafe path %q: %w", path, err)
 	}
-	d := r.db.Dialect()
-	_, err := r.db.Exec(ctx, fmt.Sprintf(`
-		INSERT INTO _onebase_config (path, content, updated_at)
-		VALUES (%s, %s, %s)
-		ON CONFLICT (path) DO UPDATE SET content = EXCLUDED.content, updated_at = %s`,
-		d.Placeholder(1), d.Placeholder(2), d.Now(), d.Now()),
-		path, content)
-	return err
+	save := func(txCtx context.Context) error {
+		d := r.db.Dialect()
+		if _, err := r.db.Exec(txCtx, fmt.Sprintf(`
+			INSERT INTO _onebase_config (path, content, updated_at)
+			VALUES (%s, %s, %s)
+			ON CONFLICT (path) DO UPDATE SET content = EXCLUDED.content, updated_at = %s`,
+			d.Placeholder(1), d.Placeholder(2), d.Now(), d.Now()),
+			path, content); err != nil {
+			return err
+		}
+		_, err := r.CreateVersion(txCtx, VersionOptions{Message: "save " + path})
+		return err
+	}
+	if storage.HasTx(ctx) {
+		return save(ctx)
+	}
+	return r.db.WithTx(ctx, save)
 }
 
 // ReadFile возвращает содержимое одного файла конфигурации. Второе значение
@@ -105,8 +114,21 @@ func (r *Repo) DeleteFile(ctx context.Context, path string) error {
 	if err := ValidatePath(path); err != nil {
 		return fmt.Errorf("configdb: unsafe path %q: %w", path, err)
 	}
-	_, err := r.db.Exec(ctx, `DELETE FROM _onebase_config WHERE path = `+r.db.Dialect().Placeholder(1), path)
-	return err
+	del := func(txCtx context.Context) error {
+		tag, err := r.db.Exec(txCtx, `DELETE FROM _onebase_config WHERE path = `+r.db.Dialect().Placeholder(1), path)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected == 0 {
+			return nil
+		}
+		_, err = r.CreateVersion(txCtx, VersionOptions{Message: "delete " + path})
+		return err
+	}
+	if storage.HasTx(ctx) {
+		return del(ctx)
+	}
+	return r.db.WithTx(ctx, del)
 }
 
 func (r *Repo) ExportToDir(ctx context.Context, dir string) error {
