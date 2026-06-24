@@ -172,6 +172,32 @@ func TestRepoVersions_DeleteFilesCreatesSingleVersion(t *testing.T) {
 	}
 }
 
+func TestRepoVersions_ListVersionsSortsParsedTime(t *testing.T) {
+	_, db, ctx := newSQLiteRepo(t)
+	_, err := db.Exec(ctx, `
+		INSERT INTO _config_versions (id, created_at, message, snapshot)
+		VALUES (?, ?, ?, ?)`,
+		"older", "2026-06-24T21:39:07.393Z", "older", []byte("x"))
+	if err != nil {
+		t.Fatalf("insert older: %v", err)
+	}
+	_, err = db.Exec(ctx, `
+		INSERT INTO _config_versions (id, created_at, message, snapshot)
+		VALUES (?, ?, ?, ?)`,
+		"newer", "2026-06-24T21:39:07.393848Z", "newer", []byte("x"))
+	if err != nil {
+		t.Fatalf("insert newer: %v", err)
+	}
+	repo := configdb.New(db)
+	versions, err := repo.ListVersions(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListVersions: %v", err)
+	}
+	if len(versions) != 2 || versions[0].Message != "newer" || versions[1].Message != "older" {
+		t.Fatalf("versions = %+v, want parsed timestamp order", versions)
+	}
+}
+
 func TestRepoVersions_ApplyFilesCreatesSingleVersion(t *testing.T) {
 	repo, _, ctx := newSQLiteRepo(t)
 	if err := repo.SaveFiles(ctx, []configdb.ConfigFile{

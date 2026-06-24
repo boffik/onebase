@@ -29,6 +29,9 @@ type VersionOptions struct {
 	Message     string
 }
 
+// versionTimeLayout keeps SQLite TEXT timestamps lexicographically sortable.
+const versionTimeLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
 // DiffKind describes how a file differs between two versions.
 type DiffKind string
 
@@ -93,7 +96,7 @@ func (r *Repo) CreateVersion(ctx context.Context, opts VersionOptions) (*Version
 		INSERT INTO _config_versions (id, created_at, author_id, author_login, message, snapshot)
 		VALUES (%s, %s, %s, %s, %s, %s)`,
 		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6)),
-		v.ID, v.CreatedAt.Format(time.RFC3339Nano), emptyToNil(v.AuthorID), emptyToNil(v.AuthorLogin), v.Message, snapshot)
+		v.ID, v.CreatedAt.Format(versionTimeLayout), emptyToNil(v.AuthorID), emptyToNil(v.AuthorLogin), v.Message, snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("configdb: create version: %w", err)
 	}
@@ -102,13 +105,7 @@ func (r *Repo) CreateVersion(ctx context.Context, opts VersionOptions) (*Version
 
 // ListVersions returns newest versions first. limit <= 0 means no explicit limit.
 func (r *Repo) ListVersions(ctx context.Context, limit int) ([]Version, error) {
-	q := `SELECT id, created_at, author_id, author_login, message FROM _config_versions ORDER BY created_at DESC`
-	var args []any
-	if limit > 0 {
-		q += ` LIMIT ` + r.db.Dialect().Placeholder(1)
-		args = append(args, limit)
-	}
-	rows, err := r.db.Query(ctx, q, args...)
+	rows, err := r.db.Query(ctx, `SELECT id, created_at, author_id, author_login, message FROM _config_versions`)
 	if err != nil {
 		return nil, fmt.Errorf("configdb: list versions: %w", err)
 	}
@@ -121,7 +118,19 @@ func (r *Repo) ListVersions(ctx context.Context, limit int) ([]Version, error) {
 		}
 		out = append(out, v)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID > out[j].ID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 // GetVersion returns version metadata and its decoded files.
