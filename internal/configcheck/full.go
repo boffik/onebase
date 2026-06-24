@@ -10,12 +10,29 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
+// Options tunes the complete configuration validation.
+type Options struct {
+	// Lint enables advisory checks that report warnings only. These checks are
+	// intentionally separate from the default validation path so `onebase check`
+	// remains a strict correctness gate while `onebase check --lint` can surface
+	// maintainability smells.
+	Lint bool
+}
+
 // RunFull performs the complete configuration validation used by both
 // `onebase check` and the web configurator "check all" endpoint.
 func RunFull(dir string) Result {
+	return RunFullWithOptions(dir, Options{})
+}
+
+// RunFullWithOptions is RunFull plus opt-in advisory lint warnings.
+func RunFullWithOptions(dir string, opts Options) Result {
 	dirIssues, dirWarnings := CheckDir(dir)
 	issues := dirIssues
 	warnings := dirWarnings
+	if opts.Lint {
+		warnings = append(warnings, CheckLintYAML(dir)...)
+	}
 
 	if proj, err := project.Load(dir); err == nil {
 		issues = append(issues, CheckQueries(proj)...)
@@ -26,6 +43,9 @@ func RunFull(dir string) Result {
 		issues = append(issues, CheckHTTPServices(proj)...)
 		issues = append(issues, CheckPages(proj)...)
 		issues = append(issues, CheckNameCollisions(proj)...)
+		if opts.Lint {
+			warnings = append(warnings, CheckLintProject(dir, proj, roles)...)
+		}
 		if db, closeDB, derr := BuildSchemaDB(proj); derr == nil {
 			validate := func(sql string) error { return db.ValidateQuery(context.Background(), sql) }
 			issues = append(issues, CheckQueriesExecutable(proj, validate)...)

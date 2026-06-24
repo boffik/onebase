@@ -28,9 +28,9 @@
 3. **План 60A:** версионирование конфигурации в БД без marketplace. История,
    diff и rollback особенно важны после визуального конструктора форм и
    веб-конфигуратора.
-4. **План 56 остаток:** `onebase lint` и точечный `slog`. `onebase lint` даёт
-   больше прикладной пользы, чем большая миграция логирования, потому что будет
-   ловить мусор в конфигурациях после AI/converter/form-designer сценариев.
+4. **План 56 остаток:** точечный `slog`. `onebase lint` уже добавлен поверх
+   `check` и ловит мусор в конфигурациях после AI/converter/form-designer
+   сценариев.
 
 Ниже по очереди: `55` этап 3 (inline-JS из `ui/templates.go`) делать при следующей
 работе с этим фронтом; `26` REST API v2 — при конкретном интеграционном
@@ -149,7 +149,7 @@
 | 53 | [53-web-security-hardening.md](53-web-security-hardening.md) | Web-безопасность: токен сессии вне URL/логов, rate-limit логина, CSRF + security-заголовки, bind на 127.0.0.1 | 4–4.5 дня | ✅ Реализовано |
 | 54 | [54-ai-assistant-security-audit.md](54-ai-assistant-security-audit.md) | Безопасность/аудит ИИ: журнал обращений, rate-limit чата, суточный потолок токенов | 3.5 дня | ✅ Этапы 1–3 (объектный RBAC `ai.data_scope` + журнал + лимиты) |
 | 55 | [55-monolith-split-embed-frontend.md](55-monolith-split-embed-frontend.md) | Раскол монолитов (`handlers.go`, `configurator_tmpl.go`) + фронт в `go:embed` | 4–5 дней | 🟡 Этап 1 (handlers.go); фронт в go:embed — нет |
-| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | 🟡 Этапы 1, 2, 3 (RBAC вложений), 4 + `/metrics`; slog-миграция и `onebase lint` — нет |
+| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | 🟡 Этапы 1, 2, 3 (RBAC вложений), 4, 6 + `/metrics`; slog-миграция — нет |
 | 62 | [62-network-safety-switch.md](62-network-safety-switch.md) | Предохранитель сети: галочка `net.enabled` лочит хуки/HTTP/сервисы/email; сброс при restore | 0.5 дня | ✅ Реализовано |
 | 67 | [67-exec-command.md](67-exec-command.md) | Выполнение команд ОС из DSL (`ВыполнитьКоманду`) за флагом `AllowExec` (выкл. по умолчанию, без shell, таймаут, аудит) | 1–1.5 дня | ✅ Реализовано |
 
