@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/realtime"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -77,6 +78,7 @@ type Server struct {
 	extreports       *extform.ReportRepo    // внешний контур: отчёты из БД
 	extprocessors    *extform.ProcessorRepo // внешний контур: обработки из БД
 	tmpl             *template.Template
+	hub              *realtime.Hub // real-time-шина уведомлений сервер→браузер (план 74)
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -88,7 +90,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if loginLimit == nil {
 		loginLimit = auth.NewLoginLimiter(5, time.Minute)
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle))}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub()}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,
@@ -172,6 +174,10 @@ func (s *Server) Mount(r chi.Router) {
 	// PRG-редиректом возвращает на саму страницу. Статический «page» в приоритете
 	// над catch-all {kind}/{entity}.
 	r.Post("/ui/page/{name}/action/{action}", s.pageAction)
+
+	// SSE-поток уведомлений сервер→браузер (план 74). Регистрируем ДО catch-all
+	// {kind}/{entity}, чтобы «events» не матчился как вид объекта.
+	r.Get("/ui/events", s.eventsStream)
 
 	r.Get("/ui/{kind}/{entity}", s.list)
 	r.Get("/ui/{kind}/{entity}/new", s.form)

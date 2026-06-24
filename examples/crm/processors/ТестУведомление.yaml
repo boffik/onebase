@@ -1,0 +1,7 @@
+name: ТестУведомление
+title: Тест real-time уведомления
+params:
+  - name: Текст
+    type: string
+    label: Текст уведомления
+    default: Привет из onebase!
