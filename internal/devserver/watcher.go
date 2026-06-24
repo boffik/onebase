@@ -2,13 +2,18 @@ package devserver
 
 import (
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 )
+
+func watcherLog() *slog.Logger {
+	return oblog.Component("devserver.watcher")
+}
 
 // Watch watches dir and all its subdirectories, calling onChange after a
 // debounce period. fsnotify is not recursive, so every subdirectory is added
@@ -55,7 +60,7 @@ func Watch(dir string, onChange func()) error {
 				if !ok {
 					return
 				}
-				log.Println("watcher error:", err)
+				watcherLog().Warn("watcher error", "err", err)
 			case <-debounce.C:
 				onChange()
 			}

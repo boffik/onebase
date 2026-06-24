@@ -59,14 +59,14 @@
     {
       "id": "techdebt-observability",
       "plan": "Plans/56-techdebt-ci-observability.md",
-      "status": "in_progress",
-      "bucket": "now",
-      "progress": 80,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "Качество", "en": "Quality" },
       "title": { "ru": "CI, наблюдаемость и техдолг", "en": "CI, observability, and tech debt" },
       "summary": {
-        "ru": "Уже есть CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория, `/metrics` и `onebase lint`; slog-миграция ещё не закрыта.",
-        "en": "CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, `/metrics`, and `onebase lint` are in place; slog migration remains."
+        "ru": "Реализованы CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория, `/metrics`, структурные `slog`-логи с редактированием секретов и `onebase lint`.",
+        "en": "Implemented CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, `/metrics`, structured `slog` logs with secret redaction, and `onebase lint`."
       }
     },
     {

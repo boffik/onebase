@@ -19,6 +19,7 @@ import (
 	"github.com/ivantit66/onebase/internal/extform"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/launcher"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -57,6 +58,7 @@ func init() {
 }
 
 func runServer(cmd *cobra.Command, _ []string) error {
+	runLog := oblog.Component("cli.run")
 	baseID, _ := cmd.Flags().GetString("id")
 
 	var dir, dsn, configSource, sqlitePath, dbType string
@@ -194,7 +196,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("extform schema: %w", err)
 	}
 	if extForms, extLayouts, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "external print forms:", err)
+		runLog.Warn("external print forms load failed", "err", err)
 	} else {
 		reg.SetExternalPrintForms(extForms)
 		reg.SetExternalLayoutForms(extLayouts)
@@ -204,7 +206,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("extform reports schema: %w", err)
 	}
 	if extReps, err := extRepRepo.LoadEnabledReports(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "external reports:", err)
+		runLog.Warn("external reports load failed", "err", err)
 	} else {
 		reg.SetExternalReports(extReps)
 	}
@@ -213,7 +215,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("extform processors schema: %w", err)
 	}
 	if extProcs, extPrograms, err := extProcRepo.LoadEnabled(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "external processors:", err)
+		runLog.Warn("external processors load failed", "err", err)
 	} else {
 		reg.SetExternalProcessors(extProcs, extPrograms)
 	}
@@ -225,7 +227,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	// это способ донести конфиг без утечки ключа в выгрузку.
 	if appCfg != nil && appCfg.LLM != nil {
 		if err := db.SaveLLMConfig(ctx, *appCfg.LLM); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: применение llm-конфига из app.yaml: %v\n", err)
+			runLog.Warn("apply app llm config failed", "err", err)
 		}
 	}
 	uiCfg := ui.Config{
@@ -251,7 +253,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 
 	bundle, err := i18n.Load(i18n.EmbeddedLocales, filepath.Join(proj.Dir, "locales"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: i18n load: %v\n", err)
+		runLog.Warn("i18n load failed", "err", err)
 	}
 	uiCfg.Bundle = bundle
 
@@ -336,7 +338,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 			_, err := backup.DemoReset(ctx, dbRef, backupPath)
 			return err
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: demo reset job: %v\n", err)
+			runLog.Warn("demo reset job registration failed", "err", err)
 		}
 	}
 
@@ -348,7 +350,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 			ProjectDir: dir,
 		}
 		if err := backup.RegisterAutoBackup(appCfg.Backup, target, sched); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: auto backup job: %v\n", err)
+			runLog.Warn("auto backup job registration failed", "err", err)
 		}
 	}
 
@@ -408,7 +410,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		reload := func() {
 			newProj, err := project.Load(dir)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "[watch] reload error:", err)
+				runLog.Warn("watch reload failed", "err", err)
 				return
 			}
 			reg.Load(runtime.LoadOptions{
@@ -438,7 +440,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 			fmt.Fprintln(os.Stdout, "[watch] метаданные перезагружены")
 		}
 		if err := devserver.Watch(dir, reload); err != nil {
-			fmt.Fprintln(os.Stderr, "[watch] init failed:", err)
+			runLog.Warn("watch init failed", "err", err)
 		} else {
 			fmt.Fprintf(os.Stdout, "[watch] отслеживаем %s — изменения .yaml/.os подхватятся без рестарта\n", dir)
 		}
@@ -453,7 +455,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Fprintln(os.Stderr, "server error:", err)
+			runLog.Error("server failed", "err", err)
 		}
 	}()
 	<-quit

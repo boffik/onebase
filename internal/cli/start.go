@@ -5,8 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/launcher"
+	oblog "github.com/ivantit66/onebase/internal/logging"
+	"github.com/spf13/cobra"
 )
 
 var startCmd = &cobra.Command{
@@ -16,6 +17,7 @@ var startCmd = &cobra.Command{
 }
 
 func runStart(_ *cobra.Command, _ []string) error {
+	startLog := oblog.Component("cli.start")
 	store, err := launcher.NewStore()
 	if err != nil {
 		return fmt.Errorf("start: store: %w", err)
@@ -30,7 +32,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			fmt.Fprintln(os.Stderr, "launcher server:", err)
+			startLog.Error("launcher server failed", "err", err)
 		}
 	}()
 

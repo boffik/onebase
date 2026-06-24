@@ -19,6 +19,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/extform"
 	"github.com/ivantit66/onebase/internal/i18n"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -43,6 +44,7 @@ func init() {
 }
 
 func runDev(cmd *cobra.Command, _ []string) error {
+	devLog := oblog.Component("cli.dev")
 	dir, _ := cmd.Flags().GetString("project")
 	dsn := dsnFromFlags(cmd)
 	port, _ := cmd.Flags().GetInt("port")
@@ -90,7 +92,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		if configSource == "database" {
 			cfgRepo := configdb.New(db)
 			if err := cfgRepo.EnsureSchema(ctx); err != nil {
-				fmt.Fprintln(os.Stderr, "[dev] configdb error:", err)
+				devLog.Warn("configdb schema failed", "err", err)
 				return
 			}
 			proj, lerr = project.LoadFromDB(ctx, cfgRepo)
@@ -99,38 +101,38 @@ func runDev(cmd *cobra.Command, _ []string) error {
 			watchDir = dir
 		}
 		if lerr != nil {
-			fmt.Fprintln(os.Stderr, "[dev] project error:", lerr)
+			devLog.Warn("project load failed", "err", lerr)
 			return
 		}
 		defer proj.Close()
 		appCfg, _ = project.LoadConfig(proj.Dir)
 
 		if err := db.Migrate(ctx, proj.Entities); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] migrate error:", err)
+			devLog.Warn("migrate failed", "err", err)
 			return
 		}
 		if err := db.MigrateRegisters(ctx, proj.Registers); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] migrate registers error:", err)
+			devLog.Warn("migrate registers failed", "err", err)
 			return
 		}
 		if err := db.MigrateInfoRegisters(ctx, proj.InfoRegisters); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] migrate info registers error:", err)
+			devLog.Warn("migrate info registers failed", "err", err)
 			return
 		}
 		if err := db.MigrateConstants(ctx, proj.Constants); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] migrate constants error:", err)
+			devLog.Warn("migrate constants failed", "err", err)
 			return
 		}
 		if err := db.EnsureAccountsTable(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] accounts table error:", err)
+			devLog.Warn("accounts table ensure failed", "err", err)
 			return
 		}
 		if err := db.SyncAccounts(ctx, proj.ChartsOfAccounts); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] sync accounts error:", err)
+			devLog.Warn("sync accounts failed", "err", err)
 			return
 		}
 		if err := db.MigrateAccountRegisters(ctx, proj.AccountRegisters); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] migrate account registers error:", err)
+			devLog.Warn("migrate account registers failed", "err", err)
 			return
 		}
 		if roles, err2 := auth.LoadRolesYAML(proj.Dir + "/roles"); err2 == nil && len(roles) > 0 {
@@ -164,38 +166,38 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		// Внешний контур: печатные формы и отчёты из БД (вне конфигурации проекта).
 		extRepo := extform.New(db)
 		if err := extRepo.EnsureSchema(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] extform schema error:", err)
+			devLog.Warn("extform schema failed", "err", err)
 		} else if extForms, extLayouts, err := extRepo.LoadEnabledPrintForms(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] external print forms:", err)
+			devLog.Warn("external print forms load failed", "err", err)
 		} else {
 			reg.SetExternalPrintForms(extForms)
 			reg.SetExternalLayoutForms(extLayouts)
 		}
 		extRepRepo := extform.NewReports(db)
 		if err := extRepRepo.EnsureSchema(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] extform reports schema error:", err)
+			devLog.Warn("extform reports schema failed", "err", err)
 		} else if extReps, err := extRepRepo.LoadEnabledReports(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] external reports:", err)
+			devLog.Warn("external reports load failed", "err", err)
 		} else {
 			reg.SetExternalReports(extReps)
 		}
 		extProcRepo := extform.NewProcessors(db)
 		if err := extProcRepo.EnsureSchema(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] extform processors schema error:", err)
+			devLog.Warn("extform processors schema failed", "err", err)
 		} else if extProcs, extPrograms, err := extProcRepo.LoadEnabled(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "[dev] external processors:", err)
+			devLog.Warn("external processors load failed", "err", err)
 		} else {
 			reg.SetExternalProcessors(extProcs, extPrograms)
 		}
 		if loadErr := sched.Reload(proj.ScheduledJobs); loadErr != nil {
-			fmt.Fprintln(os.Stderr, "[dev] scheduler reload error:", loadErr)
+			devLog.Warn("scheduler reload failed", "err", loadErr)
 		}
 		if appCfg != nil && appCfg.Backup != nil {
 			if err := backup.RegisterAutoBackup(appCfg.Backup, backup.AutoTarget{
 				DSN:        dsn,
 				ProjectDir: dir,
 			}, sched); err != nil {
-				fmt.Fprintln(os.Stderr, "[dev] auto backup error:", err)
+				devLog.Warn("auto backup job registration failed", "err", err)
 			}
 		}
 		fmt.Fprintln(os.Stdout, "[dev] reloaded")
@@ -234,7 +236,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	}
 	bundle, err2 := i18n.Load(i18n.EmbeddedLocales, filepath.Join(dir, "locales"))
 	if err2 != nil {
-		fmt.Fprintf(os.Stderr, "warning: i18n load: %v\n", err2)
+		devLog.Warn("i18n load failed", "err", err2)
 	}
 	uiCfg.Bundle = bundle
 	// dev-сервер — всегда loopback (план 53: secure-by-default bind)
@@ -249,7 +251,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	go func() {
 		defer wg.Done()
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Fprintln(os.Stderr, "server error:", err)
+			devLog.Error("server failed", "err", err)
 		}
 	}()
 

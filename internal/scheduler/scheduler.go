@@ -13,6 +13,7 @@ import (
 
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/dslvars"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -43,7 +44,7 @@ func New(db *storage.DB, reg *runtime.Registry, interp *interpreter.Interpreter)
 		db:     db,
 		reg:    reg,
 		interp: interp,
-		log:    slog.Default(),
+		log:    oblog.Component("scheduler"),
 	}
 }
 
