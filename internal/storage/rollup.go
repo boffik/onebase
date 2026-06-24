@@ -35,6 +35,13 @@ type RollupOptions struct {
 	// AccountRegisters — имена регистров бухгалтерии (акк_*) к свёртке. Опорные
 	// остатки вводятся проводками через вспомогательный счёт (см. resolveAuxAccount).
 	AccountRegisters []string
+	// InfoRegisters — имена периодических регистров сведений (инфо_*) к обрезке.
+	// Для каждой комбинации измерений оставляется последний срез до D, более
+	// ранние удаляются. Операция НЕСТАНДАРТНА для 1С (свёртка обычно не трогает
+	// регистры сведений) и ломает СрезПервых/историю срезов до D — поэтому
+	// включается только явным перечислением регистров. Непериодические
+	// пропускаются.
+	InfoRegisters []string
 }
 
 // RollupRegReport — итог свёртки по одному регистру.
@@ -51,8 +58,9 @@ type RollupReport struct {
 	Preview          bool
 	Registers        []RollupRegReport // регистры накопления
 	AccountRegisters []RollupRegReport // регистры бухгалтерии (акк_*)
+	InfoRegisters    []RollupRegReport // регистры сведений (инфо_*): обрезка периодических
 	DeletedDocs      int               // документов: удалено (run) или под удаление (preview); 0 при keep-режиме
-	DanglingRefs     int               // ссылок на удаляемые документы из других записей (только preview, delete-режим)
+	DanglingRefs     int               // ссылок на удаляемые документы из сохраняемых записей (delete-режим)
 }
 
 // EnsureRollupTable создаёт служебный журнал свёрток _rollup. Времена хранятся
@@ -97,7 +105,7 @@ func selectRollupRegs(all []*metadata.Register, names []string) []*metadata.Regi
 
 // RollupPreview считает, что сделает свёртка, ничего не записывая (для UI-мастера
 // и CLI --dry-run).
-func (db *DB) RollupPreview(ctx context.Context, regs []*metadata.Register, ents []*metadata.Entity, accountRegs []*metadata.AccountRegister, opts RollupOptions) (RollupReport, error) {
+func (db *DB) RollupPreview(ctx context.Context, regs []*metadata.Register, ents []*metadata.Entity, accountRegs []*metadata.AccountRegister, infoRegs []*metadata.InfoRegister, opts RollupOptions) (RollupReport, error) {
 	cutoff := dayStart(opts.Date)
 	rep := RollupReport{Cutoff: cutoff, Preview: true}
 	for _, reg := range selectRollupRegs(regs, opts.Registers) {
@@ -120,6 +128,13 @@ func (db *DB) RollupPreview(ctx context.Context, regs []*metadata.Register, ents
 		}
 		rep.AccountRegisters = append(rep.AccountRegisters, r)
 	}
+	for _, ir := range selectRollupInfoRegs(infoRegs, opts.InfoRegisters) {
+		r, err := db.infoRegTrimReport(ctx, ir, cutoff)
+		if err != nil {
+			return rep, err
+		}
+		rep.InfoRegisters = append(rep.InfoRegisters, r)
+	}
 	if opts.DeleteDocuments {
 		n, err := db.countDocumentsBefore(ctx, ents, cutoff)
 		if err != nil {
@@ -135,10 +150,12 @@ func (db *DB) RollupPreview(ctx context.Context, regs []*metadata.Register, ents
 	return rep, nil
 }
 
-// countDanglingRefs оценивает, сколько ссылок повиснет при удалении документов до
-// cutoff: считает записи (в шапках и ТЧ любых сущностей), чьё ссылочное поле
-// указывает на удаляемый документ. Сигнал для предупреждения; слегка завышает
-// (учитывает и ссылки от других удаляемых документов), что безопасно.
+// countDanglingRefs считает, сколько ссылок повиснет при удалении документов до
+// cutoff: записи, которые СОХРАНЯТСЯ после свёртки, но чьё ссылочное поле
+// указывает на удаляемый документ (дата < cutoff). Точный счёт (а не оценка):
+// источник-документ с датой < cutoff сам удаляется, поэтому его ссылки не висят
+// и не учитываются; строки ТЧ удаляются каскадом вместе с шапкой. Используется и
+// для отчёта-предупреждения, и для жёсткого гейта в Rollup.
 func (db *DB) countDanglingRefs(ctx context.Context, ents []*metadata.Entity, cutoff time.Time) (int, error) {
 	d := db.dialect
 	docDateCol := make(map[string]string)
@@ -153,31 +170,53 @@ func (db *DB) countDanglingRefs(ctx context.Context, ents []*metadata.Entity, cu
 		return 0, nil
 	}
 	total := 0
-	scan := func(refEntity, table, col string) error {
-		dateCol, ok := docDateCol[refEntity]
+	// count: COUNT(*) по from, где refExpr указывает на удаляемый документ
+	// refTarget; survFilter (если задан) ограничивает счёт сохраняемыми
+	// источниками (дата источника >= cutoff).
+	count := func(from, refExpr, refTarget, survFilter string) {
+		dateCol, ok := docDateCol[refTarget]
 		if !ok {
-			return nil // ссылка не на удаляемый по дате документ
+			return // ссылка не на удаляемый по дате документ
 		}
-		var n int
+		args := []any{cutoff}
 		q := fmt.Sprintf(
 			"SELECT COUNT(*) FROM %s WHERE %s IN (SELECT id FROM %s WHERE %s < %s)",
-			table, col, metadata.TableName(refEntity), dateCol, d.Placeholder(1))
-		if err := db.QueryRow(ctx, q, cutoff).Scan(&n); err != nil {
-			return nil // нет колонки/таблицы — пропускаем, это лишь оценка
+			from, refExpr, metadata.TableName(refTarget), dateCol, d.Placeholder(1))
+		if survFilter != "" {
+			q += fmt.Sprintf(" AND %s >= %s", survFilter, d.Placeholder(2))
+			args = append(args, cutoff)
+		}
+		var n int
+		if err := db.QueryRow(ctx, q, args...).Scan(&n); err != nil {
+			return // нет колонки/таблицы — пропускаем
 		}
 		total += n
-		return nil
 	}
 	for _, e := range ents {
+		etable := metadata.TableName(e.Name)
+		// Шапка сохраняется, если это не удаляемый по дате документ.
+		headSurv := ""
+		if dc, ok := docDateCol[e.Name]; ok {
+			headSurv = dc
+		}
 		for _, f := range e.Fields {
 			if f.RefEntity != "" {
-				scan(f.RefEntity, metadata.TableName(e.Name), metadata.ColumnName(f))
+				count(etable, metadata.ColumnName(f), f.RefEntity, headSurv)
 			}
 		}
+		// Строки ТЧ удаляются каскадом с шапкой (parent_id ON DELETE CASCADE) —
+		// выживают вместе с родителем, поэтому к датируемому документу-источнику
+		// присоединяем шапку и фильтруем по её дате.
 		for _, tp := range e.TableParts {
+			tptable := metadata.TablePartTableName(e.Name, tp.Name)
+			from, refPrefix, survFilter := tptable, "", ""
+			if dc, ok := docDateCol[e.Name]; ok {
+				from = tptable + " tp JOIN " + etable + " e ON tp.parent_id = e.id"
+				refPrefix, survFilter = "tp.", "e."+dc
+			}
 			for _, f := range tp.Fields {
 				if f.RefEntity != "" {
-					scan(f.RefEntity, metadata.TablePartTableName(e.Name, tp.Name), metadata.ColumnName(f))
+					count(from, refPrefix+metadata.ColumnName(f), f.RefEntity, survFilter)
 				}
 			}
 		}
@@ -187,16 +226,38 @@ func (db *DB) countDanglingRefs(ctx context.Context, ents []*metadata.Entity, cu
 
 // Rollup выполняет свёртку базы в одной транзакции с пост-чеком «остатки до ==
 // остатки после»: при расхождении — откат и ошибка.
-func (db *DB) Rollup(ctx context.Context, regs []*metadata.Register, ents []*metadata.Entity, accountRegs []*metadata.AccountRegister, opts RollupOptions) (RollupReport, error) {
+func (db *DB) Rollup(ctx context.Context, regs []*metadata.Register, ents []*metadata.Entity, accountRegs []*metadata.AccountRegister, infoRegs []*metadata.InfoRegister, opts RollupOptions) (RollupReport, error) {
 	if err := db.EnsureRollupTable(ctx); err != nil {
 		return RollupReport{}, err
 	}
 	cutoff := dayStart(opts.Date)
 	included := selectRollupRegs(regs, opts.Registers)
 	includedAcc := selectRollupAccountRegs(accountRegs, opts.AccountRegisters)
+	includedInfo := selectRollupInfoRegs(infoRegs, opts.InfoRegisters)
 	rep := RollupReport{Cutoff: cutoff}
 
 	err := db.WithTx(ctx, func(ctx context.Context) error {
+		if opts.DeleteDocuments {
+			// Жёсткий гейт по повисшим ссылкам: отказываем, если на удаляемые
+			// документы ссылаются СОХРАНЯЕМЫЕ записи (иначе ссылки повиснут).
+			// Безопасный выход — режим «оставить документы» (keep).
+			dangling, err := db.countDanglingRefs(ctx, ents, cutoff)
+			if err != nil {
+				return err
+			}
+			if dangling > 0 {
+				return fmt.Errorf("свёртка отменена: на удаляемые документы ссылается %d сохраняемых записей — ссылки повиснут; "+
+					"снимите «Удалить документы» (режим keep) или устраните ссылки", dangling)
+			}
+			// Откладываем проверку FK до коммита: документы удаляются массово и в
+			// произвольном порядке (документ может ссылаться на другой удаляемый
+			// документ — порядок удаления тогда не важен). На коммите FK всё равно
+			// проверяются — это аппаратный дубль гейта на уровне БД.
+			if err := db.deferFKChecks(ctx); err != nil {
+				return err
+			}
+		}
+
 		// Снимок остатков ДО (полные, без фильтра) — для пост-чека.
 		before := make(map[string][]map[string]any, len(included))
 		for _, reg := range included {
@@ -256,6 +317,15 @@ func (db *DB) Rollup(ctx context.Context, regs []*metadata.Register, ents []*met
 				return err
 			}
 			rep.AccountRegisters = append(rep.AccountRegisters, r)
+		}
+
+		// Регистры сведений: обрезка периодических (оставить последний срез до D).
+		for _, ir := range includedInfo {
+			r, err := db.trimInfoReg(ctx, ir, cutoff)
+			if err != nil {
+				return err
+			}
+			rep.InfoRegisters = append(rep.InfoRegisters, r)
 		}
 
 		// Документы: удалить или снять проведение.
@@ -388,6 +458,20 @@ func balancesEqual(before, after []map[string]any, reg *metadata.Register) bool 
 		}
 	}
 	return true
+}
+
+// deferFKChecks откладывает проверку внешних ключей до коммита текущей
+// транзакции, чтобы массовое удаление документов не упиралось в порядок удаления
+// (документ, на который ссылается другой удаляемый документ). SQLite умеет
+// PRAGMA defer_foreign_keys (сбрасывается на коммите). На PostgreSQL наши FK не
+// объявлены DEFERRABLE — там порядок удаления решает orderByDependency при
+// миграции, а гейт countDanglingRefs защищает от висячих ссылок; поэтому no-op.
+func (db *DB) deferFKChecks(ctx context.Context) error {
+	if db.dialect.Name() != "sqlite" {
+		return nil
+	}
+	_, err := db.Exec(ctx, "PRAGMA defer_foreign_keys=ON")
+	return err
 }
 
 // applyRollupDocPolicy удаляет (или снимает проведение) документы с датой < cutoff.
@@ -731,6 +815,132 @@ func accountBalancesEqual(before, after []map[string]any, ar *metadata.AccountRe
 		}
 	}
 	return true
+}
+
+// ── Обрезка периодических регистров сведений (план 74, опционально) ───────────
+//
+// Нестандартно для 1С: свёртка обычно не трогает регистры сведений. Обрезка
+// оставляет по одному (последнему) срезу до даты свёртки на каждую комбинацию
+// измерений, удаляя более раннюю историю. СрезПоследних на любую дату >= cutoff
+// не меняется; СрезПервых и историю срезов до cutoff обрезка ломает — поэтому
+// включается только явным перечислением регистров.
+
+// selectRollupInfoRegs отбирает регистры сведений по именам (как selectRollupRegs).
+func selectRollupInfoRegs(all []*metadata.InfoRegister, names []string) []*metadata.InfoRegister {
+	want := make(map[string]bool, len(names))
+	for _, n := range names {
+		want[strings.ToLower(n)] = true
+	}
+	var out []*metadata.InfoRegister
+	for _, ir := range all {
+		if want[strings.ToLower(ir.Name)] {
+			out = append(out, ir)
+		}
+	}
+	return out
+}
+
+// infoTrimCounts считает по периодическому регистру: сколько строк до cutoff
+// будет удалено (toTrim) и сколько срезов останется (kept — по одному на
+// комбинацию измерений). kept = число различных комбинаций измерений среди строк
+// с period < cutoff; toTrim = всего таких строк − kept.
+func (db *DB) infoTrimCounts(ctx context.Context, ir *metadata.InfoRegister, cutoff time.Time) (toTrim, kept int, err error) {
+	d := db.dialect
+	table := metadata.InfoRegTableName(ir.Name)
+	var total int
+	if err = db.QueryRow(ctx, fmt.Sprintf(
+		"SELECT COUNT(*) FROM %s WHERE period < %s", table, d.Placeholder(1)), cutoff).Scan(&total); err != nil {
+		return 0, 0, err
+	}
+	if total == 0 {
+		return 0, 0, nil
+	}
+	if len(ir.Dimensions) == 0 {
+		return total - 1, 1, nil // одна «серия» — остаётся последний срез
+	}
+	if err = db.QueryRow(ctx, fmt.Sprintf(
+		"SELECT COUNT(*) FROM (SELECT DISTINCT %s FROM %s WHERE period < %s) t",
+		strings.Join(infoDimCols(ir), ", "), table, d.Placeholder(1)), cutoff).Scan(&kept); err != nil {
+		return 0, 0, err
+	}
+	return total - kept, kept, nil
+}
+
+// infoDimCols — имена колонок измерений регистра сведений.
+func infoDimCols(ir *metadata.InfoRegister) []string {
+	cols := make([]string, 0, len(ir.Dimensions))
+	for _, f := range ir.Dimensions {
+		cols = append(cols, metadata.ColumnName(f))
+	}
+	return cols
+}
+
+// infoRegTrimReport — предпросмотр обрезки одного регистра сведений (без записи).
+func (db *DB) infoRegTrimReport(ctx context.Context, ir *metadata.InfoRegister, cutoff time.Time) (RollupRegReport, error) {
+	rep := RollupRegReport{Name: ir.Name}
+	if !ir.Periodic {
+		rep.Note = "пропущен: непериодический регистр сведений не обрезается"
+		return rep, nil
+	}
+	toTrim, kept, err := db.infoTrimCounts(ctx, ir, cutoff)
+	if err != nil {
+		return rep, err
+	}
+	rep.FoldedMovements, rep.OpeningRows = toTrim, kept
+	return rep, nil
+}
+
+// trimInfoReg обрезает один периодический регистр сведений: для каждой комбинации
+// измерений оставляет запись с наибольшим period < cutoff, удаляя более ранние;
+// записи с period >= cutoff не трогаются. Пост-чек: после обрезки на каждую
+// комбинацию приходится не более одной строки до cutoff, а их общее число равно
+// зафиксированному kept — иначе ошибка и откат всей транзакции.
+func (db *DB) trimInfoReg(ctx context.Context, ir *metadata.InfoRegister, cutoff time.Time) (RollupRegReport, error) {
+	rep, err := db.infoRegTrimReport(ctx, ir, cutoff)
+	if err != nil || rep.Note != "" {
+		return rep, err // непериодический — пропуск, либо ошибка
+	}
+	kept := rep.OpeningRows
+	d := db.dialect
+	table := metadata.InfoRegTableName(ir.Name)
+
+	// Удаляем строки до cutoff, для которых в той же комбинации измерений есть
+	// более поздняя строка (тоже до cutoff) — то есть всё, кроме последнего среза.
+	// Сравнение измерений NULL-safe (поле могло быть добавлено миграцией).
+	exists := fmt.Sprintf(
+		"SELECT 1 FROM %s t2 WHERE t2.period < %s AND t2.period > %s.period",
+		table, d.Placeholder(2), table)
+	for _, f := range ir.Dimensions {
+		col := metadata.ColumnName(f)
+		exists += fmt.Sprintf(" AND (t2.%s = %s.%s OR (t2.%s IS NULL AND %s.%s IS NULL))",
+			col, table, col, col, table, col)
+	}
+	del := fmt.Sprintf("DELETE FROM %s WHERE period < %s AND EXISTS (%s)", table, d.Placeholder(1), exists)
+	if _, err := db.Exec(ctx, del, cutoff, cutoff); err != nil {
+		return rep, fmt.Errorf("обрезка регистра сведений %s: %w", ir.Name, err)
+	}
+
+	// Пост-чек: до cutoff осталось ровно kept строк (по одной на комбинацию).
+	var after int
+	if err := db.QueryRow(ctx, fmt.Sprintf(
+		"SELECT COUNT(*) FROM %s WHERE period < %s", table, d.Placeholder(1)), cutoff).Scan(&after); err != nil {
+		return rep, err
+	}
+	if after != kept {
+		return rep, fmt.Errorf("обрезка регистра сведений %s: осталось %d срезов до даты, ожидалось %d — откат", ir.Name, after, kept)
+	}
+	if len(ir.Dimensions) > 0 {
+		var dup int
+		if err := db.QueryRow(ctx, fmt.Sprintf(
+			"SELECT COUNT(*) FROM (SELECT 1 FROM %s WHERE period < %s GROUP BY %s HAVING COUNT(*) > 1) t",
+			table, d.Placeholder(1), strings.Join(infoDimCols(ir), ", ")), cutoff).Scan(&dup); err != nil {
+			return rep, err
+		}
+		if dup > 0 {
+			return rep, fmt.Errorf("обрезка регистра сведений %s: остались дубли срезов до даты — откат", ir.Name)
+		}
+	}
+	return rep, nil
 }
 
 // ── Дата запрета проведения (план 74) ────────────────────────────────────────

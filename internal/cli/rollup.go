@@ -37,6 +37,7 @@ func init() {
 	rollupCmd.Flags().String("aux-account", "", "код вспомогательного счёта для свёртки бухрегистра (иначе берётся «000»)")
 	rollupCmd.Flags().Bool("dry-run", false, "только показать, что будет сделано")
 	rollupCmd.Flags().Bool("keep-documents", false, "не удалять документы до даты, а снять с них проведение")
+	rollupCmd.Flags().Bool("trim-info-registers", false, "обрезать периодические регистры сведений (оставить последний срез до даты; нестандартно для 1С)")
 	rollupCmd.Flags().Bool("yes", false, "не запрашивать подтверждение")
 	rootCmd.AddCommand(rollupCmd)
 }
@@ -52,6 +53,7 @@ func runRollup(cmd *cobra.Command, _ []string) error {
 	}
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	keepDocs, _ := cmd.Flags().GetBool("keep-documents")
+	trimInfo, _ := cmd.Flags().GetBool("trim-info-registers")
 	assumeYes, _ := cmd.Flags().GetBool("yes")
 	regsArg, _ := cmd.Flags().GetString("registers")
 
@@ -79,7 +81,16 @@ func runRollup(cmd *cobra.Command, _ []string) error {
 	for _, ar := range proj.AccountRegisters {
 		accNames = append(accNames, ar.Name)
 	}
-	if len(regNames) == 0 && len(accNames) == 0 {
+	// Обрезка регистров сведений — только по явному флагу: все периодические.
+	var infoNames []string
+	if trimInfo {
+		for _, ir := range proj.InfoRegisters {
+			if ir.Periodic {
+				infoNames = append(infoNames, ir.Name)
+			}
+		}
+	}
+	if len(regNames) == 0 && len(accNames) == 0 && len(infoNames) == 0 {
 		return fmt.Errorf("нет регистров для свёртки")
 	}
 
@@ -93,10 +104,11 @@ func runRollup(cmd *cobra.Command, _ []string) error {
 		Date:             date,
 		Registers:        regNames,
 		AccountRegisters: accNames,
+		InfoRegisters:    infoNames,
 		DeleteDocuments:  !keepDocs,
 	}
 
-	prev, err := db.RollupPreview(ctx, proj.Registers, proj.Entities, proj.AccountRegisters, opts)
+	prev, err := db.RollupPreview(ctx, proj.Registers, proj.Entities, proj.AccountRegisters, proj.InfoRegisters, opts)
 	if err != nil {
 		return fmt.Errorf("предпросмотр свёртки: %w", err)
 	}
@@ -120,7 +132,7 @@ func runRollup(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	rep, err := db.Rollup(ctx, proj.Registers, proj.Entities, proj.AccountRegisters, opts)
+	rep, err := db.Rollup(ctx, proj.Registers, proj.Entities, proj.AccountRegisters, proj.InfoRegisters, opts)
 	if err != nil {
 		return fmt.Errorf("свёртка: %w", err)
 	}
@@ -165,12 +177,20 @@ func printRollupReport(w io.Writer, rep storage.RollupReport, keepDocs bool) {
 				r.Name, r.FoldedMovements, r.OpeningRows)
 		}
 	}
+	for _, r := range rep.InfoRegisters {
+		if r.Note != "" {
+			fmt.Fprintf(w, "  %-32s — %s\n", r.Name, r.Note)
+		} else {
+			fmt.Fprintf(w, "  %-32s обрезано строк: %6d  срезов оставлено: %5d\n",
+				r.Name, r.FoldedMovements, r.OpeningRows)
+		}
+	}
 	if keepDocs {
 		fmt.Fprintln(w, "  Документы: снять проведение (не удалять)")
 	} else {
 		fmt.Fprintf(w, "  Документы к удалению: %d\n", rep.DeletedDocs)
 		if rep.DanglingRefs > 0 {
-			fmt.Fprintf(w, "  ⚠ повиснет ссылок на удаляемые документы: %d\n", rep.DanglingRefs)
+			fmt.Fprintf(w, "  ⚠ на удаляемые документы ссылается сохраняемых записей: %d — свёртка будет отменена (используйте --keep-documents)\n", rep.DanglingRefs)
 		}
 	}
 }
