@@ -2,15 +2,19 @@ package launcher
 
 import (
 	"bytes"
+	"context"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/dsl/loader"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // listManagedFormsFromFS должен возвращать nil/nil для проектов без forms/.
@@ -80,6 +84,45 @@ form:
 	}
 	if !strings.Contains(obj.YAML, "ФормаОбъекта") {
 		t.Errorf("YAML не содержит имя формы: %q", obj.YAML)
+	}
+}
+
+func TestDeleteManagedFormDBKeepsSimilarName(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "forms.db")
+	db, err := storage.ConnectSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	repo := configdb.New(db)
+	if err := repo.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveFiles(ctx, []configdb.ConfigFile{
+		{Path: "forms/заказ/main.form.yaml", Content: []byte("form:\n  name: main\n")},
+		{Path: "forms/заказ/main.form.os", Content: []byte("Процедура X()\nКонецПроцедуры\n")},
+		{Path: "forms/заказ/main/_resources/a.bin", Content: []byte("res")},
+		{Path: "forms/заказ/main2.form.yaml", Content: []byte("form:\n  name: main2\n")},
+	}, configdb.VersionOptions{Message: "seed"}); err != nil {
+		t.Fatal(err)
+	}
+
+	base := &Base{ConfigSource: "database", DBType: "sqlite", DBPath: dbPath}
+	req := httptest.NewRequest("POST", "/forms/delete", nil)
+	t.Cleanup(CloseAuthPools)
+	if err := deleteManagedForm(req, base, "Заказ", "main"); err != nil {
+		t.Fatalf("deleteManagedForm: %v", err)
+	}
+
+	for _, p := range []string{"forms/заказ/main.form.yaml", "forms/заказ/main.form.os", "forms/заказ/main/_resources/a.bin"} {
+		if _, ok, err := repo.ReadFile(ctx, p); err != nil || ok {
+			t.Fatalf("%s should be deleted: ok=%v err=%v", p, ok, err)
+		}
+	}
+	if content, ok, err := repo.ReadFile(ctx, "forms/заказ/main2.form.yaml"); err != nil || !ok || !strings.Contains(string(content), "main2") {
+		t.Fatalf("similar form main2 should stay: ok=%v err=%v content=%q", ok, err, content)
 	}
 }
 
@@ -450,7 +493,7 @@ func TestFormsEditor_AttrPalette(t *testing.T) {
 			YAML: "schema: onebase.form/v1\n",
 		},
 		EditingFormAttrs: []formScaffoldAttr{
-			{Name: "Наименование"},                 // Title пуст → подпись = Name
+			{Name: "Наименование"},                  // Title пуст → подпись = Name
 			{Name: "ИНН", Title: "ИНН контрагента"}, // Title задан
 		},
 	}

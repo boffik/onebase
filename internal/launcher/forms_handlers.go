@@ -567,14 +567,21 @@ func deleteManagedForm(r *http.Request, b *Base, entity, name string) error {
 		}
 		defer db.Close()
 		repo := configdb.New(db)
-		prefix := fmt.Sprintf("forms/%s/%s", strings.ToLower(entity), strings.ToLower(name))
-		files, err := repo.ListByPrefix(r.Context(), prefix)
+		entityLower := strings.ToLower(entity)
+		nameLower := strings.ToLower(name)
+		resourceDir := fmt.Sprintf("forms/%s/%s/_resources", entityLower, nameLower)
+		files, err := repo.ListByPrefix(r.Context(), resourceDir)
 		if err != nil {
 			return err
 		}
-		paths := make([]string, 0, len(files))
+		paths := []string{
+			fmt.Sprintf("forms/%s/%s.form.yaml", entityLower, nameLower),
+			fmt.Sprintf("forms/%s/%s.form.os", entityLower, nameLower),
+		}
 		for _, f := range files {
-			paths = append(paths, f.Path)
+			if f.Path == resourceDir || strings.HasPrefix(f.Path, resourceDir+"/") {
+				paths = append(paths, f.Path)
+			}
 		}
 		return repo.DeleteFiles(r.Context(), paths, configdb.VersionOptions{
 			AuthorLogin: cfgLogin(r.Context()),
