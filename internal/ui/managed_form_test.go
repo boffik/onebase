@@ -104,8 +104,8 @@ func TestPageManagedForm_Renders(t *testing.T) {
 
 	expects := []string{
 		"◇ managed",
-		"Контрагент",  // DisplayName
-		"Реквизиты",   // legend группы
+		"Контрагент",   // DisplayName
+		"Реквизиты",    // legend группы
 		"Наименование", // label поля
 		"Активен",      // label чекбокса
 		"type=\"checkbox\"",
@@ -115,6 +115,56 @@ func TestPageManagedForm_Renders(t *testing.T) {
 	for _, e := range expects {
 		if !strings.Contains(html, e) {
 			t.Errorf("в HTML не найдено %q", e)
+		}
+	}
+}
+
+// ГруппаФормы с orientation: horizontal раскладывает дочерние реквизиты в ряд
+// в runtime managed-форме (#205).
+func TestPageManagedForm_GroupHorizontalOrientation(t *testing.T) {
+	form := &metadata.FormModule{
+		Name: "ФормаОбъекта", Kind: "object", EntityName: "Контрагент",
+		LayoutKind: metadata.FormLayoutManaged,
+		Elements: []*metadata.FormElement{
+			{
+				Kind:        metadata.FormElementGroupBox,
+				Name:        "Реквизиты",
+				Orientation: "horizontal",
+				TitleMap:    map[string]string{"ru": "Реквизиты"},
+				Children: []*metadata.FormElement{
+					{Kind: metadata.FormElementField, Name: "ПолеНаименование", DataPath: "Объект.Наименование"},
+					{Kind: metadata.FormElementField, Name: "ПолеКод", DataPath: "Объект.Код"},
+				},
+			},
+		},
+	}
+	ent := &metadata.Entity{
+		Name: "Контрагент", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Код", Type: metadata.FieldTypeString},
+		},
+		Forms: []*metadata.FormModule{form},
+	}
+	data := map[string]any{
+		"Entity": ent, "Form": form, "IsNew": true,
+		"Values":     map[string]string{"Наименование": "", "Код": ""},
+		"RefOptions": map[string]any{}, "EnumOptions": map[string]any{},
+		"TPRefOptions": map[string]any{}, "User": nil, "Lang": "ru",
+	}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "page-managed-form", data); err != nil {
+		t.Fatalf("ExecuteTemplate: %v", err)
+	}
+	html := buf.String()
+	for _, want := range []string{
+		"managed-group-horizontal",
+		"managed-group-body",
+		"name=\"Наименование\"",
+		"name=\"Код\"",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("в HTML нет %q:\n%s", want, html)
 		}
 	}
 }

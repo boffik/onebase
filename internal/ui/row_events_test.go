@@ -48,6 +48,62 @@ func TestHandleManagedFormEvent_RowAddedFires(t *testing.T) {
 	}
 }
 
+// ПриИзменении табличной части получает контекст изменённой ячейки: имя ТЧ,
+// номер строки, колонку и текущую строку как DSL-объект (#205).
+func TestHandleManagedFormEvent_TablePartChangeContext(t *testing.T) {
+	srv, ent := setupManagedEventsServer(t, `
+Процедура ТоварыПриИзменении()
+	Сообщить(ИмяТабличнойЧасти);
+	Сообщить(ТекущаяКолонка);
+	Сообщить(НомерСтроки);
+	Сообщить(ТекущаяСтрока.Цена);
+КонецПроцедуры
+`, nil,
+		[]*metadata.FormElement{
+			{
+				Kind:     metadata.FormElementTablePart,
+				Name:     "ЭлементТовары",
+				DataPath: "Объект.Товары",
+				Handlers: map[metadata.FormEventType]string{
+					metadata.FormEventOnChange: "ТоварыПриИзменении",
+				},
+			},
+		})
+	ent.TableParts = []metadata.TablePart{{
+		Name: "Товары",
+		Fields: []metadata.Field{
+			{Name: "Количество", Type: metadata.FieldTypeNumber},
+			{Name: "Цена", Type: metadata.FieldTypeNumber},
+		},
+	}}
+
+	body := url.Values{}
+	body.Set("_element", "ЭлементТовары")
+	body.Set("_event", string(metadata.FormEventOnChange))
+	body.Set("_kind", "object")
+	body.Set("_tp", "Товары")
+	body.Set("_tp_row", "1")
+	body.Set("_tp_row_number", "2")
+	body.Set("_tp_col", "Цена")
+	body.Set("_tp_col_index", "1")
+	body.Set("tp_json.Товары", `[{"Количество":1,"Цена":10},{"Количество":2,"Цена":20}]`)
+
+	rec := executeFormEvent(t, srv, ent, body)
+	resp := decodeFormEventResponse(t, rec.Body.Bytes())
+	if !resp.OK {
+		t.Fatalf("ожидался ok=true, error=%q", resp.Error)
+	}
+	want := []string{"Товары", "Цена", "2", "20"}
+	if len(resp.Messages) != len(want) {
+		t.Fatalf("messages=%v, ожидалось %v", resp.Messages, want)
+	}
+	for i := range want {
+		if resp.Messages[i] != want[i] {
+			t.Errorf("messages[%d]=%q, ожидалось %q (все messages=%v)", i, resp.Messages[i], want[i], resp.Messages)
+		}
+	}
+}
+
 // При объявленных ПриДобавленииСтроки/ПриУдаленииСтроки рендер грида проставляет
 // флаги data-sg-rowadd/data-sg-rowdel — без них фронтенд не дёргает событие.
 func TestManagedFormGridRowEventAttrs(t *testing.T) {
@@ -106,5 +162,8 @@ func TestManagedFormGridRowEventAttrs(t *testing.T) {
 	}
 	if !strings.Contains(html, `data-sg-rowdel="1"`) {
 		t.Error("нет data-sg-rowdel при объявленном ПриУдаленииСтроки")
+	}
+	if !strings.Contains(html, "gridCellEventParams") || !strings.Contains(html, "_tp_col") || !strings.Contains(html, "_tp_row_number") {
+		t.Error("рендер грида не содержит передачу контекста изменённой ячейки")
 	}
 }
