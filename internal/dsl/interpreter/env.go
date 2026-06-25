@@ -104,13 +104,6 @@ func (e *env) get(name string) (any, bool) {
 
 func (e *env) set(name string, v any) {
 	name = strings.ToLower(name)
-	// Если переменная уже объявлена в родительском scope — обновляем там.
-	if _, ok := e.vars[name]; !ok && e.parent != nil {
-		if e.parent.has(name) {
-			e.parent.set(name, v)
-			return
-		}
-	}
 	e.vars[name] = v
 }
 
@@ -140,15 +133,4 @@ func publishTemp(e *env, vals map[string]any) func() {
 			}
 		}
 	}
-}
-
-func (e *env) has(name string) bool {
-	name = strings.ToLower(name)
-	if _, ok := e.vars[name]; ok {
-		return true
-	}
-	if e.parent != nil {
-		return e.parent.has(name)
-	}
-	return false
 }
