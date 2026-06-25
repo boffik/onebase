@@ -24,21 +24,21 @@ func TestAppShell_Render(t *testing.T) {
 	}
 	html := buf.String()
 	for _, want := range []string{
-		`id="ob-tabstrip"`,           // полоса вкладок
-		`id="ob-tabbody"`,            // область фреймов
-		`class="ob-shell-main"`,      // контент вместо <main>
-		`window.obOpenTab=openTab`,   // движок вкладок
-		`'obTabs'`,                   // ключ sessionStorage для restore
-		`source==='obOpenTab'`,       // приём запросов из iframe
-		`<header class="topbar">`,    // переиспользован nav (хром оболочки)
-		`ob-tab-dup`,                 // кнопка «новый экземпляр» (#130)
-		`{allowDup:true}`,            // дубликат = новый экземпляр
-		`source==='obDirty'`,         // фаза 3: приём флага несохранённых правок
-		`tabByWindow`,                // маршрутизация по окну-источнику
-		`beforeunload`,               // предупреждение при уходе со страницы
-		`ob-tabmenu`,                 // фаза 4: контекст-меню вкладки
-		`Закрыть другие`,             // пункт контекст-меню
-		`scrollIntoView`,             // автоскролл активной вкладки
+		`id="ob-tabstrip"`,         // полоса вкладок
+		`id="ob-tabbody"`,          // область фреймов
+		`class="ob-shell-main"`,    // контент вместо <main>
+		`window.obOpenTab=openTab`, // движок вкладок
+		`'obTabs'`,                 // ключ sessionStorage для restore
+		`source==='obOpenTab'`,     // приём запросов из iframe
+		`<header class="topbar">`,  // переиспользован nav (хром оболочки)
+		`ob-tab-dup`,               // кнопка «новый экземпляр» (#130)
+		`{allowDup:true}`,          // дубликат = новый экземпляр
+		`source==='obDirty'`,       // фаза 3: приём флага несохранённых правок
+		`tabByWindow`,              // маршрутизация по окну-источнику
+		`beforeunload`,             // предупреждение при уходе со страницы
+		`ob-tabmenu`,               // фаза 4: контекст-меню вкладки
+		`Закрыть другие`,           // пункт контекст-меню
+		`scrollIntoView`,           // автоскролл активной вкладки
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("оболочка вкладок не содержит %q", want)
@@ -58,11 +58,12 @@ func TestHead_EmbeddedChromeHidden(t *testing.T) {
 	for _, want := range []string{
 		`window.__obEmbedded = (window.self !== window.top)`,
 		`ob-embedded`,
-		`.ob-embedded .topbar,.ob-embedded .subsys-bar{display:none`,
-		`obOpenableForm`,                  // фаза 2: перехват открытия форм во вкладку
-		`source: 'obOpenTab'`,             // постит запрос родителю-оболочке
+		`.ob-embedded .topbar,.ob-embedded .subsys-bar,.ob-embedded #ob-nav{display:none`,
+		`obOpenableForm`,                           // фаза 2: перехват открытия форм во вкладку
+		`window.obOpenInShell`,                     // общий helper для ссылок и JS-открытий списков
+		`source: 'obOpenTab'`,                      // постит запрос родителю-оболочке
 		`window.parent && window.parent.obOpenTab`, // guard: только если родитель — оболочка
-		`source: 'obDirty'`,               // фаза 3: трекер несохранённых правок
+		`source: 'obDirty'`,                        // фаза 3: трекер несохранённых правок
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("head не содержит embedded-логику %q", want)

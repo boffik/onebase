@@ -469,21 +469,22 @@ if (window.__obEmbedded) {
     if (/^\/ui\/[^\/?#]+\/[^\/?#]+\/[^\/?#]+/.test(href)) return true;      // {kind}/{entity}/{id|new}
     return false;
   };
+  window.obOpenInShell = function (href, title, allowDup) {
+    if (!obOpenableForm(href)) return false;
+    var shell = null;
+    try { if (window.parent && window.parent.obOpenTab) shell = window.parent; } catch (_) {}
+    if (!shell) return false;
+    try { shell.postMessage({ source: 'obOpenTab', url: href, title: title || 'Форма', allowDup: !!allowDup }, '*'); } catch (_) {}
+    return true;
+  };
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest('a[href]') : null;
     if (!a || a.target === '_blank') return;
     var href = a.getAttribute('href') || '';
-    if (!obOpenableForm(href)) return;
-    // Дивертим во вкладку только если родитель — действительно оболочка
-    // (есть obOpenTab). Иначе (напр. picker-модал на обычной странице) —
-    // обычная навигация внутри фрейма.
-    var shell = null;
-    try { if (window.parent && window.parent.obOpenTab) shell = window.parent; } catch (_) {}
-    if (!shell) return;
-    e.preventDefault();
     var title = (a.getAttribute('title') || a.textContent || '').replace(/\s+/g, ' ').trim() || 'Форма';
-    try { shell.postMessage({ source: 'obOpenTab', url: href, title: title }, '*'); } catch (_) {}
+    if (!window.obOpenInShell(href, title)) return;
+    e.preventDefault();
   });
   // Фаза 3: сообщаем оболочке о несохранённых правках, чтобы она предупредила при
   // закрытии вкладки/окна (защита от потери ввода).
@@ -501,7 +502,7 @@ if (window.__obEmbedded) {
 }
 </script>
 <style>
-.ob-embedded .topbar,.ob-embedded .subsys-bar{display:none!important}
+.ob-embedded .topbar,.ob-embedded .subsys-bar,.ob-embedded #ob-nav{display:none!important}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-height:100vh;background:#f5f5f5}
 .topbar{background:#1e293b;color:#fff;padding:0 16px;display:flex;align-items:center;height:38px;flex-shrink:0;position:sticky;top:0;z-index:100}
@@ -1405,6 +1406,15 @@ var _isAdmin={{if .IsAdmin}}true{{else}}false{{end}};
 var _canDelete={{if .CanDelete}}true{{else}}false{{end}};
 var _canUnpost={{if .CanUnpost}}true{{else}}false{{end}};
 var _listSel=null;
+function listTitle(){
+  var h=document.querySelector('h2');
+  return h ? h.textContent.replace(/\s+/g,' ').trim() : 'Форма';
+}
+function listOpen(url,title){
+  if(!url)return;
+  try{ if(window.obOpenInShell && window.obOpenInShell(url,title||listTitle()))return; }catch(e){}
+  window.location.href=url;
+}
 function listRowClick(e,tr){
   if(e.target.closest('a,button'))return;
   if(_listSel){_listSel.querySelectorAll('td').forEach(function(td){td.style.background='';});_listSel.classList.remove('tile-selected');}
@@ -1415,7 +1425,7 @@ function listRowClick(e,tr){
 function listRowDblClick(e,tr){
   if(e.target.closest('a,button'))return;
   if(tr.dataset.isFolder==='1'){window.location.href=tr.dataset.folderUrl;}
-  else{window.location.href=tr.dataset.openUrl;}
+  else{listOpen(tr.dataset.openUrl);}
 }
 // Tree view: collapse/expand subtrees
 document.querySelectorAll('.tree-toggle').forEach(function(btn){
@@ -1444,9 +1454,9 @@ function listMenuItems(tr){
   var items=[];
   if(isFolder){
     items.push({label:'{{t $.Lang "▶ Войти в группу"}}',fn:function(){window.location.href=tr.dataset.folderUrl;}});
-    items.push({label:'{{t $.Lang "Редактировать"}}',fn:function(){window.location.href=tr.dataset.openUrl;}});
+    items.push({label:'{{t $.Lang "Редактировать"}}',fn:function(){listOpen(tr.dataset.openUrl);}});
   } else {
-    items.push({label:'{{t $.Lang "Открыть"}}',fn:function(){window.location.href=tr.dataset.openUrl;}});
+    items.push({label:'{{t $.Lang "Открыть"}}',fn:function(){listOpen(tr.dataset.openUrl);}});
   }
   if(_canDelete){
     if(!isPredefined)items.push({label:'{{t $.Lang "Пометить на удаление"}}',danger:true,fn:function(){listSubmit(tr.dataset.markUrl,'Пометить на удаление?');}});

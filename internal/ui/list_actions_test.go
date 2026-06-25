@@ -60,6 +60,49 @@ func TestPageList_HasActionsButton(t *testing.T) {
 	}
 }
 
+func TestPageList_EmbeddedOpenUsesShell(t *testing.T) {
+	ent := &metadata.Entity{
+		Name: "ЗаказПокупателя",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+		},
+	}
+	data := map[string]any{
+		"Entity":           ent,
+		"Rows":             []map[string]any{{"id": "11111111-1111-1111-1111-111111111111", "Номер": "ЗПК-00001"}},
+		"Params":           storage.ListParams{},
+		"RefFilterOptions": map[string]any{},
+		"Lang":             "ru",
+		"Total":            1,
+		"Page":             1,
+		"TotalPages":       1,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "page-list", data); err != nil {
+		t.Fatalf("ExecuteTemplate page-list: %v", err)
+	}
+	html := buf.String()
+
+	for _, want := range []string{
+		`function listOpen(url,title)`,
+		`window.obOpenInShell && window.obOpenInShell(url,title||listTitle())`,
+		`else{listOpen(tr.dataset.openUrl);}`,
+		`fn:function(){listOpen(tr.dataset.openUrl);}`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("список не содержит embedded-open фрагмент %q", want)
+		}
+	}
+	if strings.Contains(html, `window.location.href=tr.dataset.openUrl`) {
+		t.Error("открытие записи из списка по-прежнему заменяет текущий iframe вместо новой вкладки")
+	}
+	if !strings.Contains(html, `window.location.href=tr.dataset.folderUrl`) {
+		t.Error("переход в папку списка должен остаться навигацией внутри текущей вкладки")
+	}
+}
+
 // TestPageList_TilesView — режим «Плитка» (Фаза 1a): при TilesView=true список
 // рендерится карточками (.tile-grid/.tile-card) с теми же data-*, что и строки
 // таблицы (переиспользование обработчиков), а в панели есть переключатель
