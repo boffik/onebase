@@ -193,13 +193,21 @@ const tplFormsEditor = `
 .editor-workspace{flex:1;min-height:0;display:flex;gap:10px}
 .editor-pane{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
 .editor-grid.mode-yaml .editor-pane.right,.editor-grid.mode-os .editor-pane.right{display:none}
-.editor-grid.mode-design .editor-pane.left,.editor-grid.mode-preview .editor-pane.left,.editor-grid.left-collapsed .editor-pane.left{display:none}
+.editor-grid.layout-modern.mode-design .editor-pane.left,.editor-grid.layout-modern.mode-preview .editor-pane.left,.editor-grid.left-collapsed .editor-pane.left{display:none}
 .editor-pane-hd{padding:8px 12px;background:#f8fafc;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #eef0f5;display:flex;justify-content:space-between;align-items:center}
+.pane-hd-title{display:flex;align-items:center;gap:8px;min-width:0}
+.pane-hd-path{color:#94a3b8;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .editor-pane-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
 #yaml-editor,#os-editor{flex:1;min-height:300px}
 #preview-frame{flex:1;border:none;background:#fff}
 .editor-tools{padding:8px 12px;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .editor-meta{margin-left:auto;color:#64748b;font-size:12px}
+.layout-toggle{display:flex;align-items:center;gap:3px;font-size:12px;color:#64748b}
+.layout-toggle-label{margin-right:2px}
+.layout-btn,.source-tab{border:1px solid #d0d7e3;background:#fff;color:#475569;border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer}
+.layout-btn.active,.source-tab.active{background:#eef4ff;border-color:#9cbef0;color:#1a4a80;font-weight:600}
+.source-tabs{display:none;align-items:center;gap:2px}
+.editor-grid.layout-classic .source-tabs{display:flex}
 .warn-panel{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:10px 14px;margin-top:10px;max-height:220px;overflow-y:auto;font-size:12px;display:none}
 .warn-panel.active{display:block}
 .warn-item{padding:4px 0;border-bottom:1px solid #eef0f5}
@@ -230,6 +238,9 @@ const tplFormsEditor = `
 #canvas-host{min-width:0;overflow:auto;padding:12px;background:#fff}
 .prop-splitter{background:#eef2f7;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;cursor:col-resize}
 .prop-splitter:hover,.prop-splitter.dragging{background:#dbeafe;border-color:#bfdbfe}
+.editor-grid.layout-classic .designer-split{grid-template-columns:1fr;grid-template-rows:minmax(240px,1fr) 6px var(--forms-prop-w,280px)}
+.editor-grid.layout-classic .prop-splitter{cursor:row-resize;border-left:0;border-right:0;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0}
+.editor-grid.layout-classic .prop-panel{border-left:0;border-top:1px solid #eef0f5}
 .fc-canvas{font-size:13px;color:#334}
 .fc-children{display:flex;flex-direction:column;gap:1px;min-height:6px}
 .fc-drop{height:6px;border-radius:4px;transition:background .1s,height .1s}
@@ -319,6 +330,11 @@ const tplFormsEditor = `
     <input type="hidden" name="from" value="{{.FormEditFrom}}">
     <button class="btn btn-danger" type="submit">Удалить</button>
   </form>
+  <div class="layout-toggle" id="editor-layout-toggle" aria-label="Вид редактора">
+    <span class="layout-toggle-label">Вид:</span>
+    <button type="button" class="layout-btn active" data-layout="modern" onclick="switchEditorLayout('modern')">Новый</button>
+    <button type="button" class="layout-btn" data-layout="classic" onclick="switchEditorLayout('classic')">Классический</button>
+  </div>
   <span class="editor-meta">{{.EditingForm.Entity}}.{{.EditingForm.Name}}{{if .EditingForm.Kind}} · {{.EditingForm.Kind}}{{end}}</span>
 </div>
 
@@ -352,7 +368,7 @@ const tplFormsEditor = `
 </div>
 {{end}}
 
-<div class="editor-grid mode-design" id="editor-grid">
+<div class="editor-grid layout-modern mode-design" id="editor-grid">
   <div class="editor-tabs" role="tablist" aria-label="Режим редактора формы">
     <button type="button" class="editor-tab" data-mode="yaml" data-tab="yaml" onclick="switchEditorMode('yaml')">YAML</button>
     <button type="button" class="editor-tab" data-mode="os" data-tab="os" onclick="switchEditorMode('os')">Модуль</button>
@@ -362,8 +378,14 @@ const tplFormsEditor = `
   <div class="editor-workspace">
     <div class="editor-pane left">
       <div class="editor-pane-hd">
-        <span>Исходники формы</span>
-        <span style="color:#94a3b8;font-weight:400">{{.EditingForm.YAMLPath}}</span>
+        <div class="pane-hd-title">
+          <span>Исходники формы</span>
+          <div class="source-tabs" aria-label="Исходник">
+            <button type="button" class="source-tab active" data-source="yaml" onclick="switchSourceMode('yaml')">YAML</button>
+            <button type="button" class="source-tab" data-source="os" onclick="switchSourceMode('os')">Модуль</button>
+          </div>
+        </div>
+        <span class="pane-hd-path">{{.EditingForm.YAMLPath}}</span>
       </div>
       <div class="editor-pane-body">
         <div id="yaml-editor"></div>
@@ -627,8 +649,54 @@ function insertFieldFromChip(chip) {
   });
 })();
 
+function normalizeEditorLayout(layout) { return layout === 'classic' ? 'classic' : 'modern'; }
+function isClassicLayout() { return _editorLayout === 'classic'; }
+function propPanelSizeKey() { return isClassicLayout() ? 'onebase.forms.propPanelClassicSize' : 'onebase.forms.propPanelSize'; }
+function applyPropPanelSize() {
+  var root = document.getElementById('design-wrap');
+  if (!root) return;
+  var fallback = isClassicLayout() ? '280px' : '320px';
+  try {
+    root.style.setProperty('--forms-prop-w', localStorage.getItem(propPanelSizeKey()) || fallback);
+  } catch (_) {
+    root.style.setProperty('--forms-prop-w', fallback);
+  }
+}
+function updateSourceEditors() {
+  var src = (_editorMode === 'yaml' || _editorMode === 'os') ? _editorMode : _sourceMode;
+  _sourceMode = src === 'os' ? 'os' : 'yaml';
+  document.getElementById('yaml-editor').style.display = _sourceMode === 'yaml' ? '' : 'none';
+  document.getElementById('os-editor').style.display = _sourceMode === 'os' ? '' : 'none';
+  document.querySelectorAll('.source-tab').forEach(function (el) {
+    el.classList.toggle('active', el.dataset.source === _sourceMode);
+  });
+  if (window.yamlEditor) window.yamlEditor.layout();
+  if (window.osEditor) window.osEditor.layout();
+}
+function applyEditorLayout() {
+  var grid = document.getElementById('editor-grid') || document.querySelector('.editor-grid');
+  if (grid) {
+    grid.classList.toggle('layout-modern', !isClassicLayout());
+    grid.classList.toggle('layout-classic', isClassicLayout());
+  }
+  document.querySelectorAll('.layout-btn').forEach(function (el) {
+    el.classList.toggle('active', el.dataset.layout === _editorLayout);
+  });
+  applyPropPanelSize();
+  updateSourceEditors();
+}
+function switchEditorLayout(layout) {
+  _editorLayout = normalizeEditorLayout(layout);
+  try { localStorage.setItem('onebase.forms.editorLayout', _editorLayout); } catch (_) {}
+  applyEditorLayout();
+}
+function switchSourceMode(mode) {
+  _sourceMode = mode === 'os' ? 'os' : 'yaml';
+  updateSourceEditors();
+}
 function switchEditorMode(mode) {
   _editorMode = mode || 'design';
+  if (_editorMode === 'yaml' || _editorMode === 'os') _sourceMode = _editorMode;
   var grid = document.getElementById('editor-grid') || document.querySelector('.editor-grid');
   if (grid) {
     grid.classList.remove('mode-yaml', 'mode-os', 'mode-design', 'mode-preview', 'left-collapsed');
@@ -637,13 +705,10 @@ function switchEditorMode(mode) {
   document.querySelectorAll('.editor-tab').forEach(function (el) {
     el.classList.toggle('active', el.dataset.mode === _editorMode);
   });
-  document.getElementById('yaml-editor').style.display = _editorMode === 'yaml' ? '' : 'none';
-  document.getElementById('os-editor').style.display = _editorMode === 'os' ? '' : 'none';
+  updateSourceEditors();
   _rightPane = _editorMode === 'preview' ? 'preview' : 'design';
   document.getElementById('design-wrap').style.display = _editorMode === 'design' ? 'flex' : 'none';
   document.getElementById('preview-frame').style.display = _editorMode === 'preview' ? 'block' : 'none';
-  if (window.yamlEditor) window.yamlEditor.layout();
-  if (window.osEditor) window.osEditor.layout();
   if (_editorMode === 'design') reloadCanvas();
   if (_editorMode === 'preview') refreshPreview();
 }
@@ -710,9 +775,13 @@ var _selected = '';   // текущая цель правки: node-id элем�
 var _lastEl = '';     // последний выбранный элемент (для закладки «Элемент»)
 var _model = {};      // node-id → свойства (для панели свойств)
 var _form = {};       // корневые свойства формы (titleRu/kind/events/actions)
+var _editorLayout = 'modern';
 var _editorMode = 'design';
+var _sourceMode = 'yaml';
 var _rightPane = 'design';
 var _syncing = false; // защита от рекурсии setYAML → reloadCanvas
+try { _editorLayout = normalizeEditorLayout(localStorage.getItem('onebase.forms.editorLayout')); } catch (_) {}
+applyEditorLayout();
 
 function switchRightPane(which) {
   switchEditorMode(which === 'preview' ? 'preview' : 'design');
@@ -722,10 +791,7 @@ function initPropSplitter() {
   var root = document.getElementById('design-wrap');
   var split = document.getElementById('prop-splitter');
   if (!root || !split) return;
-  try {
-    var saved = localStorage.getItem('onebase.forms.propPanelSize');
-    if (saved) root.style.setProperty('--forms-prop-w', saved);
-  } catch (_) {}
+  applyPropPanelSize();
   var dragging = false;
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   split.addEventListener('mousedown', function (e) {
@@ -737,13 +803,13 @@ function initPropSplitter() {
   document.addEventListener('mousemove', function (e) {
     if (!dragging) return;
     var rect = root.getBoundingClientRect();
-    var vertical = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+    var vertical = isClassicLayout() || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
     var size = vertical
       ? clamp(rect.bottom - e.clientY, 220, Math.max(260, rect.height - 180))
       : clamp(rect.right - e.clientX, 260, Math.max(320, rect.width * 0.6));
     var value = Math.round(size) + 'px';
     root.style.setProperty('--forms-prop-w', value);
-    try { localStorage.setItem('onebase.forms.propPanelSize', value); } catch (_) {}
+    try { localStorage.setItem(propPanelSizeKey(), value); } catch (_) {}
   });
   document.addEventListener('mouseup', function () {
     if (!dragging) return;
