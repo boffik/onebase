@@ -181,6 +181,69 @@ func TestDefaultParam_StringDefault(t *testing.T) {
 	}
 }
 
+func TestFunctionParamDoesNotOverwriteCallerVariable(t *testing.T) {
+	code := `Функция Тест()
+  Значение = "caller";
+  Результат = Помощник("arg");
+  Возврат Значение + ":" + Результат;
+КонецФункции
+
+Функция Помощник(Значение)
+  Значение = "local";
+  Возврат Значение;
+КонецФункции`
+	l := lexer.New(code, "<test>")
+	p := parser.New(l)
+	prog, _ := p.ParseProgram()
+	main, helper := prog.Procedures[0], prog.Procedures[1]
+	i := New()
+	i.LookupSiblingProc = func(_, name string) *ast.ProcedureDecl {
+		if name == "Помощник" || name == "помощник" {
+			return helper
+		}
+		return nil
+	}
+	var result any
+	if err := i.RunWithResult(main, &MapThis{M: map[string]any{}}, &result); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result != "caller:local" {
+		t.Errorf("expected caller:local, got %v", result)
+	}
+}
+
+func TestFunctionLocalDoesNotOverwriteCallerCollection(t *testing.T) {
+	code := `Функция Тест()
+  Данные = Новый Массив;
+  Данные.Добавить(1);
+  Помощник();
+  Возврат Данные.Количество();
+КонецФункции
+
+Процедура Помощник()
+  Данные = Новый Массив;
+  Данные.Добавить(2);
+КонецПроцедуры`
+	l := lexer.New(code, "<test>")
+	p := parser.New(l)
+	prog, _ := p.ParseProgram()
+	main, helper := prog.Procedures[0], prog.Procedures[1]
+	i := New()
+	i.LookupSiblingProc = func(_, name string) *ast.ProcedureDecl {
+		if name == "Помощник" || name == "помощник" {
+			return helper
+		}
+		return nil
+	}
+	var result any
+	if err := i.RunWithResult(main, &MapThis{M: map[string]any{}}, &result); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !numEq(result, 1) {
+		t.Errorf("expected caller collection count 1, got %v", result)
+	}
+}
+
 // ИначеЕсли тоже должен корректно писать во внешний scope.
 func TestIfElseScope_ElseIfAssignmentPropagates(t *testing.T) {
 	code := `Функция Тест()
