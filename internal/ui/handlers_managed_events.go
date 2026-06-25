@@ -208,6 +208,7 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 		vars["ВыделенныеСтроки"] = sel
 		vars["SelectedRows"] = sel
 	}
+	addTPEventContextVars(r, obj, vars)
 
 	// Выполнение процедуры. Ошибка DSL отдаётся в JSON, не как 500 —
 	// клиент покажет красный баннер и не закроет форму.
@@ -265,6 +266,71 @@ func selectedTPRows(r *http.Request, obj *runtime.Object) *interpreter.Array {
 		return nil
 	}
 	return interpreter.NewArray(items)
+}
+
+// addTPEventContextVars добавляет контекст события табличной части. Для
+// ПриИзменении SlickGrid присылает строку/колонку изменённой ячейки; для
+// команд ТЧ остаётся хотя бы имя табличной части. Имена без параметров
+// сохраняют совместимость существующих обработчиков.
+func addTPEventContextVars(r *http.Request, obj *runtime.Object, vars map[string]any) {
+	tpName := strings.TrimSpace(r.FormValue("_tp"))
+	if tpName == "" {
+		return
+	}
+	vars["ИмяТабличнойЧасти"] = tpName
+	vars["ТекущаяТабличнаяЧасть"] = tpName
+	vars["TablePartName"] = tpName
+
+	if colName := strings.TrimSpace(r.FormValue("_tp_col")); colName != "" {
+		vars["ТекущаяКолонка"] = colName
+		vars["ИмяКолонки"] = colName
+		vars["CurrentColumn"] = colName
+		vars["ColumnName"] = colName
+	}
+	if colIdx, ok := formEventInt(r, "_tp_col_index"); ok {
+		vars["ИндексКолонки"] = float64(colIdx)
+		vars["ColumnIndex"] = float64(colIdx)
+	}
+
+	rowIdx, rowOK := formEventInt(r, "_tp_row")
+	rowNum, rowNumOK := formEventInt(r, "_tp_row_number")
+	if !rowOK && rowNumOK {
+		rowIdx = rowNum - 1
+		rowOK = rowIdx >= 0
+	}
+	if !rowOK || rowIdx < 0 {
+		return
+	}
+	if !rowNumOK {
+		rowNum = rowIdx + 1
+	}
+	vars["ИндексСтроки"] = float64(rowIdx)
+	vars["НомерСтроки"] = float64(rowNum)
+	vars["RowIndex"] = float64(rowIdx)
+	vars["RowNumber"] = float64(rowNum)
+
+	if obj == nil || obj.TablePartRows == nil {
+		return
+	}
+	rows := obj.TablePartRows[tpName]
+	if rowIdx >= len(rows) {
+		return
+	}
+	row := &interpreter.MapThis{M: rows[rowIdx]}
+	vars["ТекущаяСтрока"] = row
+	vars["CurrentRow"] = row
+}
+
+func formEventInt(r *http.Request, key string) (int, bool) {
+	raw := strings.TrimSpace(r.FormValue(key))
+	if raw == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // serializeFieldsForEntity нормализует имена полей к оригинальному регистру

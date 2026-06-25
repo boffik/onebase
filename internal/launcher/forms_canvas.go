@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html"
+	"strings"
 
 	"github.com/ivantit66/onebase/internal/formdoc"
 	"github.com/ivantit66/onebase/internal/metadata"
@@ -82,8 +83,12 @@ func renderCanvasElement(buf *bytes.Buffer, en *formdoc.ElementNode, selectedID 
 
 	switch el.Kind {
 	case metadata.FormElementGroupBox, metadata.FormElementCommandBar:
+		groupClass := "fc-group"
+		if strings.EqualFold(el.Orientation, "horizontal") {
+			groupClass += " fc-group-horizontal"
+		}
 		fmt.Fprintf(buf, `<fieldset class="%s" data-node-id="%s" data-kind="%s"><legend class="fc-pick">%s</legend>`,
-			elWrapClass("fc-group", id, selectedID), id, kind, title)
+			elWrapClass(groupClass, id, selectedID), id, kind, title)
 		renderCanvasChildren(buf, id, en.Children, selectedID)
 		buf.WriteString(`</fieldset>`)
 
@@ -213,6 +218,8 @@ type canvasElementInfo struct {
 	Width    int    `json:"width"`    // ПолеКартинки: ширина
 	Height   int    `json:"height"`   // ПолеКартинки: высота
 	NoGrid   bool   `json:"noGrid"`   // ТабличнаяЧасть: простая таблица вместо SlickGrid
+	// Orientation — раскладка детей контейнера: ""/"vertical" или "horizontal".
+	Orientation string `json:"orientation"`
 	// События элемента (batch B1): имя события → имя процедуры в .form.os.
 	Events map[string]string `json:"events"`
 	// Набор значений Переключателя/ПолеСписка (batch C1).
@@ -239,21 +246,22 @@ func canvasModel(doc *formdoc.Doc) (map[string]canvasElementInfo, error) {
 		for _, en := range ens {
 			el := en.El
 			info := canvasElementInfo{
-				NodeID:    en.NodeID,
-				Kind:      string(el.Kind),
-				Name:      el.Name,
-				DataPath:  el.DataPath,
-				Required:  el.Required,
-				ReadOnly:  el.ReadOnly,
-				Hint:      el.Hint,
-				Container: el.IsContainer(),
-				Mask:      el.Mask,
-				FileType:  el.Type == "file",
-				Picture:   el.Picture,
-				Width:     el.Width,
-				Height:    el.Height,
-				NoGrid:    el.NoGrid,
-				View:      el.View,
+				NodeID:      en.NodeID,
+				Kind:        string(el.Kind),
+				Name:        el.Name,
+				DataPath:    el.DataPath,
+				Required:    el.Required,
+				ReadOnly:    el.ReadOnly,
+				Hint:        el.Hint,
+				Container:   el.IsContainer(),
+				Mask:        el.Mask,
+				FileType:    el.Type == "file",
+				Picture:     el.Picture,
+				Width:       el.Width,
+				Height:      el.Height,
+				NoGrid:      el.NoGrid,
+				Orientation: el.Orientation,
+				View:        el.View,
 			}
 			if el.TitleMap != nil {
 				info.TitleRU = el.TitleMap["ru"]

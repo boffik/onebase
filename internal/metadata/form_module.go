@@ -114,6 +114,7 @@ type FormElement struct {
 	Height          int               `yaml:"height,omitempty"`         // высота
 	HorizontalAlign string            `yaml:"halign,omitempty"`         // left|center|right|stretch
 	VerticalAlign   string            `yaml:"valign,omitempty"`         // top|center|bottom
+	Orientation     string            `yaml:"orientation,omitempty"`    // vertical|horizontal для контейнеров
 	ReadOnly        bool              `yaml:"readonly,omitempty"`       // только чтение
 	UseGrid         bool              `yaml:"use_grid,omitempty"`       // (устар.) SlickGrid теперь включён по умолчанию
 	NoGrid          bool              `yaml:"no_grid,omitempty"`        // отключить SlickGrid у ТЧ (вернуть простую таблицу)

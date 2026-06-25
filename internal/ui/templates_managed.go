@@ -18,9 +18,11 @@ const tplManagedForm = `
 {{define "managed-element"}}
 {{$el := .El}}{{$ctx := .Ctx}}
 {{if eq (str $el.Kind) "ГруппаФормы"}}
-  <fieldset class="form-group-box" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+  <fieldset class="form-group-box{{if eq $el.Orientation "horizontal"}} managed-group-horizontal{{end}}" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
     {{if $el.TitleMap}}<legend style="font-weight:600;color:#475569;padding:0 6px;font-size:13px">{{fieldTitleRU $el.TitleMap $el.Name}}</legend>{{end}}
-    {{range $el.Children}}{{template "managed-element" (dict "El" . "Ctx" $ctx)}}{{end}}
+    <div class="managed-group-body">
+      {{range $el.Children}}{{template "managed-element" (dict "El" . "Ctx" $ctx)}}{{end}}
+    </div>
   </fieldset>
 {{else if eq (str $el.Kind) "СтраницыФормы"}}
   {{/* CSS активной вкладки вынесен в стиль managed-форм (см. в конце шаблона)
@@ -353,6 +355,11 @@ const tplManagedForm = `
 
 {{define "page-managed-form"}}
 {{template "head" .}}{{if not .IsPopup}}{{template "nav" .}}{{end}}
+<style>
+.managed-group-horizontal>.managed-group-body{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.managed-group-horizontal>.managed-group-body>.form-group{flex:1 1 220px;min-width:180px;margin-bottom:0}
+.managed-group-horizontal>.managed-group-body>.form-decoration,.managed-group-horizontal>.managed-group-body>button{flex:0 0 auto}
+</style>
 {{if hasGridTP .Form}}
 <link rel="stylesheet" href="/vendor/slickgrid/slick.grid.css">
 <link rel="stylesheet" href="/vendor/slickgrid/slick-default-theme.css">
@@ -1385,6 +1392,29 @@ function addVtRow(vtName, fields) {
     }
   };
 
+  function gridCellEventParams(tpName, args, columns, dataView) {
+    var rowIndex = -1;
+    if (args && args.item && dataView && typeof dataView.getItems === "function") {
+      var items = dataView.getItems().slice().sort(function(a, b) {
+        return (a._ord || 0) - (b._ord || 0);
+      });
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] && items[i].id === args.item.id) { rowIndex = i; break; }
+      }
+    }
+    if (rowIndex < 0 && args && typeof args.row === "number") rowIndex = args.row;
+    var cellIndex = (args && typeof args.cell === "number") ? args.cell : -1;
+    var colName = "";
+    if (cellIndex >= 0 && columns && columns[cellIndex]) colName = columns[cellIndex].field || columns[cellIndex].id || "";
+    return {
+      _tp: tpName,
+      _tp_row: rowIndex >= 0 ? String(rowIndex) : "",
+      _tp_row_number: rowIndex >= 0 ? String(rowIndex + 1) : "",
+      _tp_col: colName,
+      _tp_col_index: cellIndex >= 0 ? String(cellIndex) : ""
+    };
+  }
+
   // Add empty row to grid
   // obFireRowEvent — серверное событие строки ТЧ (ПриДобавленииСтроки/
   // ПриУдаленииСтроки). Дёргается после добавления/удаления строки, но только
@@ -1627,10 +1657,11 @@ function addVtRow(vtName, fields) {
     if (div.getAttribute("data-sg-recalc") === "1") {
       var elName = div.getAttribute("data-sg-el") || tpName;
       var recalcTimer = null;
-      grid.onCellChange.subscribe(function() {
+      grid.onCellChange.subscribe(function(e, args) {
+        var params = gridCellEventParams(tpName, args, columns, dataView);
         if (recalcTimer) clearTimeout(recalcTimer);
         recalcTimer = setTimeout(function() {
-          if (window.obFire) window.obFire(elName, "ПриИзменении", {_tp: tpName});
+          if (window.obFire) window.obFire(elName, "ПриИзменении", params);
         }, 250);
       });
     }

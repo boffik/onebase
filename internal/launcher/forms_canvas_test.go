@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/formdoc"
+	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 const canvasSample = `schema: onebase.form/v1
@@ -127,8 +128,27 @@ func TestFormsEditor_RendersDesignerScaffold(t *testing.T) {
 	for _, want := range []string{
 		`id="canvas-host"`,
 		`id="prop-panel"`,
+		`id="designer-split"`,
+		`id="prop-splitter"`,
+		`id="editor-layout-toggle"`,
+		`layout-modern`,
+		`layout-classic`,
+		`data-mode="yaml"`,
+		`data-mode="os"`,
+		`data-mode="design"`,
+		`data-mode="preview"`,
+		`data-layout="modern"`,
+		`data-layout="classic"`,
+		`data-source="yaml"`,
+		`data-source="os"`,
 		`data-rp="design"`,
 		`switchRightPane(`,
+		`function switchEditorMode`,
+		`function switchEditorLayout`,
+		`function switchSourceMode`,
+		`onebase.forms.editorLayout`,
+		`onebase.forms.propPanelSize`,
+		`onebase.forms.propPanelClassicSize`,
 		`/configurator/forms/edit-op`,
 		`function reloadCanvas`,
 		`op: 'insert'`,
@@ -156,19 +176,21 @@ func TestFormsEditor_Part2Controls(t *testing.T) {
 	}
 	page := buf.String()
 	for _, want := range []string{
-		"function renderFormProps", // B2 свойства формы
-		"function addEventsRows",   // B1 события
+		"function renderFormProps",  // B2 свойства формы
+		"function addEventsRows",    // B1 события
 		"function addOptionsEditor", // C1 набор значений
-		"op: 'delProp'",            // снятие события / view
-		"op: 'setOptions'",         // запись набора
-		"selectNode('form')",       // закладка «Форма» / клик по пустому холсту
+		"op: 'delProp'",             // снятие события / view
+		"op: 'setOptions'",          // запись набора
+		"selectNode('form')",        // закладка «Форма» / клик по пустому холсту
 		`data-kind="Переключатель"`, // палитра C1
-		"function ensureProcedure", // «Создать обработчик…»
+		"function ensureProcedure",  // «Создать обработчик…»
 		// UX-доводка: закладки панели свойств, сворачивание кода, авто-вкладка.
-		`data-pt="form"`,            // закладка «Форма» в панели свойств
-		"function switchPropTab",    // переключение «Элемент | Форма»
-		"function toggleLeftPane",   // свернуть/развернуть редактор кода
-		"function insertPagesSet",   // одиночная страница → набор с вкладкой
+		`data-pt="form"`,          // закладка «Форма» в панели свойств
+		"function switchPropTab",  // переключение «Элемент | Форма»
+		"function toggleLeftPane", // свернуть/развернуть редактор кода
+		"function insertPagesSet", // одиночная страница → набор с вкладкой
+		"Расположение реквизитов", // #205 orientation для группы
+		"ИмяТабличнойЧасти",       // #205 подсказка в создаваемом обработчике ТЧ
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("в странице редактора нет %q", want)
@@ -463,5 +485,57 @@ elements:
 	}
 	if !model["elements.2"].NoGrid {
 		t.Errorf("no_grid не в модели: %+v", model["elements.2"])
+	}
+}
+
+// Горизонтальное расположение группы проходит через YAML → модель холста →
+// предпросмотр. Само свойство редактируется в панели как orientation: horizontal.
+func TestRenderFormCanvas_GroupHorizontalOrientation(t *testing.T) {
+	src := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Счёт
+elements:
+  - kind: ГруппаФормы
+    name: Реквизиты
+    orientation: horizontal
+    children:
+      - kind: ПолеВвода
+        name: ПолеНомер
+        data_path: Объект.Номер
+`
+	doc, err := formdoc.Load([]byte(src))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out, err := renderFormCanvas(doc, "")
+	if err != nil {
+		t.Fatalf("renderFormCanvas: %v", err)
+	}
+	if !strings.Contains(out, "fc-group-horizontal") {
+		t.Errorf("горизонтальная группа не помечена на холсте:\n%s", out)
+	}
+	model, err := canvasModel(doc)
+	if err != nil {
+		t.Fatalf("canvasModel: %v", err)
+	}
+	if model["elements.0"].Orientation != "horizontal" {
+		t.Errorf("orientation не попал в модель: %+v", model["elements.0"])
+	}
+	preview := renderManagedFormPreview(&metadata.FormModule{
+		Elements: []*metadata.FormElement{{
+			Kind:        metadata.FormElementGroupBox,
+			Name:        "Реквизиты",
+			Orientation: "horizontal",
+			Children: []*metadata.FormElement{{
+				Kind:     metadata.FormElementField,
+				Name:     "ПолеНомер",
+				DataPath: "Объект.Номер",
+			}},
+		}},
+	})
+	if !strings.Contains(preview, "group-horizontal") {
+		t.Errorf("предпросмотр не получил класс горизонтальной группы:\n%s", preview)
 	}
 }
