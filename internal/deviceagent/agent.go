@@ -13,14 +13,19 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/equipment"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 )
+
+func deviceAgentLog() *slog.Logger {
+	return oblog.Component("deviceagent")
+}
 
 // Agent — HTTP-обработчик команд оборудования. Команды защищены общим токеном:
 // без него любая открытая в браузере вкладка могла бы печатать чеки.
@@ -182,7 +187,7 @@ func (a *Agent) print(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	printer, ok := dev.(equipment.ReceiptPrinter)
@@ -210,7 +215,7 @@ func (a *Agent) drawer(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	printer, ok := dev.(equipment.ReceiptPrinter)
@@ -238,7 +243,7 @@ func (a *Agent) display(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	disp, ok := dev.(equipment.CustomerDisplay)
@@ -266,7 +271,7 @@ func (a *Agent) weight(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	scale, ok := dev.(equipment.Scale)
@@ -309,7 +314,7 @@ func (a *Agent) pay(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	terminal, ok := dev.(equipment.PaymentTerminal)
@@ -343,7 +348,7 @@ func (a *Agent) fiscal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	kkt, ok := dev.(equipment.FiscalRegistrar)
@@ -394,7 +399,7 @@ func (a *Agent) events(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := dev.Disconnect(); err != nil {
-			log.Printf("deviceagent: disconnect: %v", err)
+			deviceAgentLog().Warn("device disconnect failed", "err", err)
 		}
 	}()
 	src, ok := dev.(equipment.EventSource)
@@ -486,7 +491,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("deviceagent: encode response: %v", err)
+		deviceAgentLog().Error("encode response failed", "err", err)
 	}
 }
 

@@ -33,13 +33,13 @@
       "id": "config-versioning-marketplace",
       "plan": "Plans/60-config-versioning-marketplace.md",
       "status": "in_progress",
-      "bucket": "now",
-      "progress": 35,
+      "bucket": "next",
+      "progress": 60,
       "track": { "ru": "Экосистема", "en": "Ecosystem" },
       "title": { "ru": "Версионирование конфигураций и marketplace", "en": "Configuration versioning and marketplace" },
       "summary": {
-        "ru": "Ядро истории в БД готово: `_config_versions`, снимки, diff, rollback и release-снимок при deploy. UI истории и marketplace ещё впереди.",
-        "en": "Database history core is done: `_config_versions`, snapshots, diff, rollback, and release snapshots on deploy. History UI and marketplace are still ahead."
+        "ru": "Часть A готова: `_config_versions`, снимки, diff, rollback, UI истории, export ZIP/OBZ и release-снимок при deploy. Marketplace ещё впереди.",
+        "en": "Part A is done: `_config_versions`, snapshots, diff, rollback, history UI, ZIP/OBZ export, and release snapshots on deploy. Marketplace is still ahead."
       }
     },
     {
@@ -59,14 +59,14 @@
     {
       "id": "techdebt-observability",
       "plan": "Plans/56-techdebt-ci-observability.md",
-      "status": "in_progress",
-      "bucket": "now",
-      "progress": 65,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "Качество", "en": "Quality" },
       "title": { "ru": "CI, наблюдаемость и техдолг", "en": "CI, observability, and tech debt" },
       "summary": {
-        "ru": "Уже есть CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория и `/metrics`; slog-миграция и `onebase lint` ещё не закрыты.",
-        "en": "CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, and `/metrics` are in place; slog migration and `onebase lint` remain."
+        "ru": "Реализованы CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория, `/metrics`, структурные `slog`-логи с редактированием секретов и `onebase lint`.",
+        "en": "Implemented CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, `/metrics`, structured `slog` logs with secret redaction, and `onebase lint`."
       }
     },
     {
@@ -99,13 +99,13 @@
       "id": "dsl-real-world",
       "plan": "Plans/34-dsl-real-world.md",
       "status": "in_progress",
-      "bucket": "next",
-      "progress": 45,
+      "bucket": "now",
+      "progress": 75,
       "track": { "ru": "DSL", "en": "DSL" },
       "title": { "ru": "DSL для реальных конфигураций", "en": "DSL for real-world configurations" },
       "summary": {
-        "ru": "Реально есть `ИначеЕсли`, `Пустая`/`ПустаяСсылка` и функции дат. Общие модули, автодоступ к полям ссылок и хуки записи объектов ещё не закрыты.",
-        "en": "`ElseIf`, `IsBlank`/`IsEmptyRef`, and date functions are implemented. Common modules, automatic reference dereferencing, and object write hooks remain."
+        "ru": "Основные пункты закрыты; главный оставшийся разрыв — автодоступ к полям ссылок (`this.X.Y`, `Стр.X.Y`) вместо обходного `ЗначениеРеквизитаОбъекта(...)`.",
+        "en": "Most items are done; the main remaining gap is automatic reference-field dereferencing (`this.X.Y`, `Row.X.Y`) instead of the `ObjectAttributeValue(...)` workaround."
       }
     },
     {

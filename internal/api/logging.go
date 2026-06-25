@@ -5,67 +5,39 @@ package api
 // токенов и одноразовых кодов в логе недопустимы (план 53, анализ §2.2).
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
-	"os"
-	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 )
 
-// sensitiveParams — query-параметры, значения которых вырезаются из лога.
-var sensitiveParams = map[string]bool{
-	"_tk":      true,
-	"token":    true,
-	"code":     true,
-	"api_key":  true,
-	"apikey":   true,
-	"password": true,
-	"secret":   true,
-}
-
-// redactURI заменяет значения чувствительных параметров на ***, сохраняя
-// порядок и кодировку остальных (работает по сырой строке, без перекодирования).
+// redactURI заменяет значения чувствительных параметров на ***, сохраняя порядок
+// и кодировку остальных. Оставлено как локальная обёртка для старых тестов API.
 func redactURI(uri string) string {
-	q := strings.IndexByte(uri, '?')
-	if q < 0 {
-		return uri
-	}
-	path, query := uri[:q], uri[q+1:]
-	parts := strings.Split(query, "&")
-	changed := false
-	for idx, p := range parts {
-		eq := strings.IndexByte(p, '=')
-		if eq < 0 {
-			continue
-		}
-		if sensitiveParams[strings.ToLower(p[:eq])] {
-			parts[idx] = p[:eq] + "=***"
-			changed = true
-		}
-	}
-	if !changed {
-		return uri
-	}
-	return path + "?" + strings.Join(parts, "&")
+	return oblog.RedactURI(uri)
 }
 
-// redactingFormatter оборачивает стандартный LogFormatter chi, подменяя
-// RequestURI на отредактированный перед форматированием строки лога.
-type redactingFormatter struct{ inner middleware.LogFormatter }
-
-func (f redactingFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
-	if red := redactURI(r.RequestURI); red != r.RequestURI {
-		r2 := r.Clone(r.Context())
-		r2.RequestURI = red
-		r = r2
-	}
-	return f.inner.NewLogEntry(r)
-}
-
-// requestLogger — замена middleware.Logger с редактированием секретов.
+// requestLogger logs HTTP requests as structured slog records with redacted URI.
 func requestLogger() func(http.Handler) http.Handler {
-	return middleware.RequestLogger(redactingFormatter{
-		inner: &middleware.DefaultLogFormatter{Logger: log.New(os.Stdout, "", log.LstdFlags)},
-	})
+	logger := oblog.Component("http")
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			defer func() {
+				logger.LogAttrs(r.Context(), slog.LevelInfo, "http request",
+					slog.String("method", r.Method),
+					slog.String("uri", redactURI(r.RequestURI)),
+					slog.Int("status", ww.Status()),
+					slog.Int("bytes", ww.BytesWritten()),
+					slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+					slog.String("remote_addr", r.RemoteAddr),
+					slog.String("request_id", middleware.GetReqID(r.Context())),
+				)
+			}()
+			next.ServeHTTP(ww, r)
+		})
+	}
 }
