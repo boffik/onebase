@@ -21,23 +21,26 @@
 
 ## Текущий приоритет, 2026-06-25
 
-`onebase lint` из плана 56 уже в работе; следующий свободный фокус:
+Источник: [`current-priority-2026-06-25.md`](current-priority-2026-06-25.md).
 
-1. **План 76:** готовность к многопользовательской нагрузке. Первый срез:
+1. **Стабилизационный спринт: lint-clean shipped examples/templates.** Новый
+   `onebase lint` показывает предупреждения в поставляемых конфигурациях; до
+   включения общего lint-gate нужно привести examples/templates к нулю
+   предупреждений или явно поддержать нужные YAML-алиасы.
+2. **План 76:** готовность к многопользовательской нагрузке. Первый срез:
    REST RBAC, лимиты/пагинация REST list, атомарная optimistic locking запись,
    индексы под табличные части/списки и server-side reference picker.
-2. **План 56 / 43.3:** точечный `slog`-контур с request_id, редактированием
-   секретов и slow-operation логами. Делать рядом с планом 76.
-3. **План 26 REST API v2:** после guardrails из плана 76, чтобы v2 сразу
+3. **План 34 F3:** автодоступ к полям ссылок (`this.X.Y`, `Стр.X.Y`). Это
+   закрывает разрыв между ожидаемой 1С-подобной моделью и текущим обходным
+   `ЗначениеРеквизитаОбъекта(...)`.
+4. **План 60B:** marketplace конфигураций. Часть A (история/diff/rollback/UI)
+   уже реализована; marketplace лучше делать после lint-clean examples/templates.
+5. **План 26:** REST API v2 после guardrails из плана 76, чтобы v2 сразу
    наследовал RBAC, токены, пагинацию, OpenAPI и лимиты.
-4. **План 60B:** marketplace конфигураций. Часть A уже закрыта: история, diff,
-   rollback, ZIP/OBZ export; открыт реестр, checksum, `check` в песочнице и
-   установка из лаунчера/CLI.
-5. **DSL follow-up:** автодоступ к полям ссылок (`Контрагент.ИНН`,
-   `Стр.Номенклатура.Единица`) без ручного `ЗначениеРеквизитаОбъекта(...)`.
 
-Не в топе сейчас: `55` этап 3 делать при следующей работе с этим фронтом; `46`
-store wrapper и остатки i18n/PWA — скорее приёмка и маркетинг, чем ядро.
+Ниже по очереди: `55` этап 3 (inline-JS из `ui/templates.go`) делать при
+следующей работе с этим фронтом; `46` store wrapper и остатки i18n/PWA — скорее
+приёмка и маркетинг, чем ядро.
 
 ## Реализованные этапы
 
@@ -133,7 +136,7 @@ store wrapper и остатки i18n/PWA — скорее приёмка и ма
 
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
-| 43 | [43-audit-techdebt.md](43-audit-techdebt.md) | Техдолг по итогам аудита: покрытие непротестированных пакетов, полный graceful shutdown, единый slog, раскол монолитов | 12–18 дней | 🟡 BOM + auth/converter/debugger/processor покрытие и 43.2 graceful shutdown сделаны; остаётся точечный slog и добор покрытия рядом с доменами |
+| 43 | [43-audit-techdebt.md](43-audit-techdebt.md) | Техдолг по итогам аудита: покрытие непротестированных пакетов, полный graceful shutdown, единый slog, раскол монолитов | 12–18 дней | 🟡 CI/race/coverage, `slog`, `onebase lint`, debugger/processor coverage и graceful shutdown закрыты; остаток — точечное покрытие `ui`/`launcher`/`mcp`/`widget` и раскол монолитов |
 
 ### Направление З — ИИ для бизнеса
 
@@ -153,7 +156,7 @@ store wrapper и остатки i18n/PWA — скорее приёмка и ма
 | 53 | [53-web-security-hardening.md](53-web-security-hardening.md) | Web-безопасность: токен сессии вне URL/логов, rate-limit логина, CSRF + security-заголовки, bind на 127.0.0.1 | 4–4.5 дня | ✅ Реализовано |
 | 54 | [54-ai-assistant-security-audit.md](54-ai-assistant-security-audit.md) | Безопасность/аудит ИИ: журнал обращений, rate-limit чата, суточный потолок токенов | 3.5 дня | ✅ Этапы 1–3 (объектный RBAC `ai.data_scope` + журнал + лимиты) |
 | 55 | [55-monolith-split-embed-frontend.md](55-monolith-split-embed-frontend.md) | Раскол монолитов (`handlers.go`, `configurator_tmpl.go`) + фронт в `go:embed` | 4–5 дней | 🟡 Этап 1 (handlers.go); фронт в go:embed — нет |
-| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | 🟡 Этапы 1, 2, 3 (RBAC вложений), 4 + `/metrics`; slog-миграция и `onebase lint` — нет |
+| 56 | [56-techdebt-ci-observability.md](56-techdebt-ci-observability.md) | CI с `-race`/coverage, `golangci-lint`, RBAC вложений, slog + `/metrics`, `onebase lint`, чистка репозитория | 5.5–7.5 дней | ✅ Реализовано |
 | 62 | [62-network-safety-switch.md](62-network-safety-switch.md) | Предохранитель сети: галочка `net.enabled` лочит хуки/HTTP/сервисы/email; сброс при restore | 0.5 дня | ✅ Реализовано |
 | 67 | [67-exec-command.md](67-exec-command.md) | Выполнение команд ОС из DSL (`ВыполнитьКоманду`) за флагом `AllowExec` (выкл. по умолчанию, без shell, таймаут, аудит) | 1–1.5 дня | ✅ Реализовано |
 | 76 | [76-multi-user-scale-readiness.md](76-multi-user-scale-readiness.md) | Готовность к 100+ активным пользователям: REST RBAC, лимиты, индексы, reference picker, атомарная запись, observability и путь к горизонтальному масштабированию | 2–4 недели по этапам | ⬜ Запланировано |
@@ -166,7 +169,7 @@ store wrapper и остатки i18n/PWA — скорее приёмка и ма
 | 59 | [59-report-composition.md](59-report-composition.md) | Лёгкая компоновка отчётов: группировки, итоги, drill-down, графики, условное оформление (+ конструктор в конфигураторе) | 1.5–2 недели | ✅ Реализовано |
 | 68 | [68-report-composition-v2.md](68-report-composition-v2.md) | СКД v2 — развитие компоновки: сворачивание, выравнивание/формат, экспорт в Excel, вычисляемые показатели, расшифровка в документ, pivot, варианты компоновки | 1.5–2 недели | ✅ Этапы A (UX), B (Excel/вычисляемые/расшифровка), C1 (pivot), C2 (варианты) и C3 (рантайм-настройки через план 70) готовы |
 | 70 | [70-report-runtime-settings.md](70-report-runtime-settings.md) | СКД C3 — рантайм-настройки отчёта пользователем: панель группировок/показателей/отборов на форме отчёта, сохранение per-user в `_settings` | 1.5–2 недели | ✅ Реализовано (`compform`, `UserReportSettings`, `_settings`, отборы, UI-панель, Excel) |
-| 60 | [60-config-versioning-marketplace.md](60-config-versioning-marketplace.md) | Версионирование конфигурации в БД (история/diff/откат) + marketplace конфигураций | 2–3 недели | 🟡 Часть A реализована: `_config_versions`, снимки, diff, rollback, UI истории, ZIP/OBZ export; marketplace — нет |
+| 60 | [60-config-versioning-marketplace.md](60-config-versioning-marketplace.md) | Версионирование конфигурации в БД (история/diff/откат) + marketplace конфигураций | 2–3 недели | 🟢 Часть A реализована: `_config_versions`, снимки, diff, rollback, UI истории, export ZIP/OBZ; marketplace — нет |
 | 61 | [61-http-services.md](61-http-services.md) | HTTP-сервисы: публикация REST-эндпоинтов на DSL (/hs/*, OpenAPI/RapiDoc); поглотил план 58 | 1 день | ✅ Реализовано |
 
 ### Направление Д — Торговое оборудование

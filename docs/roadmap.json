@@ -33,13 +33,13 @@
       "id": "config-versioning-marketplace",
       "plan": "Plans/60-config-versioning-marketplace.md",
       "status": "in_progress",
-      "bucket": "now",
+      "bucket": "next",
       "progress": 60,
       "track": { "ru": "Экосистема", "en": "Ecosystem" },
       "title": { "ru": "Версионирование конфигураций и marketplace", "en": "Configuration versioning and marketplace" },
       "summary": {
-        "ru": "Часть A готова: `_config_versions`, снимки, diff, rollback, release-снимки, UI истории, экспорт ZIP и config-only `.obz`. Marketplace ещё впереди.",
-        "en": "Part A is complete: `_config_versions`, snapshots, diff, rollback, release snapshots, history UI, ZIP export, and config-only `.obz`. Marketplace is still ahead."
+        "ru": "Часть A готова: `_config_versions`, снимки, diff, rollback, UI истории, export ZIP/OBZ и release-снимок при deploy. Marketplace ещё впереди.",
+        "en": "Part A is done: `_config_versions`, snapshots, diff, rollback, history UI, ZIP/OBZ export, and release snapshots on deploy. Marketplace is still ahead."
       }
     },
     {
@@ -59,14 +59,14 @@
     {
       "id": "techdebt-observability",
       "plan": "Plans/56-techdebt-ci-observability.md",
-      "status": "in_progress",
-      "bucket": "now",
-      "progress": 65,
+      "status": "done",
+      "bucket": "done",
+      "progress": 100,
       "track": { "ru": "Качество", "en": "Quality" },
       "title": { "ru": "CI, наблюдаемость и техдолг", "en": "CI, observability, and tech debt" },
       "summary": {
-        "ru": "Уже есть CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория и `/metrics`; slog-миграция и `onebase lint` ещё не закрыты.",
-        "en": "CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, and `/metrics` are in place; slog migration and `onebase lint` remain."
+        "ru": "Реализованы CI race/coverage, golangci-lint baseline, RBAC вложений, гигиена репозитория, `/metrics`, структурные `slog`-логи с редактированием секретов и `onebase lint`.",
+        "en": "Implemented CI race/coverage, golangci-lint baseline, attachment RBAC, repository hygiene, `/metrics`, structured `slog` logs with secret redaction, and `onebase lint`."
       }
     },
     {

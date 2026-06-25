@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/ivantit66/onebase/internal/cli"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 )
 
 func main() {
+	oblog.ConfigureDefault()
 	writeStartupLog()
 
 	if len(os.Args) == 1 {
@@ -38,5 +40,5 @@ func writeStartupLog() {
 	fmt.Fprintf(f, "%s  exe=%s  args=%s\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		exe,
-		strings.Join(os.Args[1:], " "))
+		strings.Join(oblog.RedactArgs(os.Args[1:]), " "))
 }

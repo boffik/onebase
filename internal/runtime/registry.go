@@ -2,18 +2,23 @@ package runtime
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/httpservice"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/page"
 	"github.com/ivantit66/onebase/internal/printform"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/report"
 )
+
+func registryLog() *slog.Logger {
+	return oblog.Component("runtime.registry")
+}
 
 type Registry struct {
 	mu              sync.RWMutex
@@ -322,7 +327,10 @@ func (r *Registry) SetExternalPrintForms(forms []*printform.PrintForm) {
 		for _, ef := range list {
 			for _, cf := range cfg {
 				if strings.EqualFold(cf.Name, ef.Name) {
-					log.Printf("extform: внешняя печатная форма %q для %q совпадает по имени с формой конфигурации — основной остаётся форма конфигурации", ef.Name, ef.Document)
+					registryLog().Warn("external print form name collision",
+						"form", ef.Name,
+						"document", ef.Document,
+					)
 				}
 			}
 		}
@@ -387,7 +395,7 @@ func (r *Registry) LoadDSLPrintForms(forms []*printform.DSLPrintForm) {
 	}
 	r.mu.Unlock()
 	for _, w := range warnings {
-		log.Printf("warning: %s", w)
+		registryLog().Warn("print form priority warning", "warning", w)
 	}
 }
 
@@ -451,7 +459,7 @@ func (r *Registry) LoadLayoutForms(forms []*printform.LayoutForm) {
 	}
 	r.mu.Unlock()
 	for _, w := range warnings {
-		log.Printf("warning: %s", w)
+		registryLog().Warn("print form priority warning", "warning", w)
 	}
 }
 
@@ -564,7 +572,11 @@ func legacyRef(pf *printform.PrintForm, external bool) PrintFormRef {
 			Layout:   lt,
 		}
 	} else {
-		log.Printf("warning: конвертация legacy печатной формы %q (%s) не удалась: %v", pf.Name, pf.Document, err)
+		registryLog().Warn("legacy print form conversion failed",
+			"form", pf.Name,
+			"document", pf.Document,
+			"err", err,
+		)
 	}
 	return ref
 }
@@ -655,7 +667,7 @@ func (r *Registry) SetExternalReports(reports []*report.Report) {
 	defer r.mu.Unlock()
 	for name := range m {
 		if existsCI(r.reports, name) {
-			log.Printf("extform: внешний отчёт %q совпадает по имени с отчётом конфигурации — используется отчёт конфигурации", name)
+			registryLog().Warn("external report name collision", "report", name)
 		}
 	}
 	r.extReports = m
@@ -890,7 +902,7 @@ func (r *Registry) SetExternalProcessors(procs []*processor.Processor, programs 
 	defer r.mu.Unlock()
 	for name := range pm {
 		if existsCI(r.processors, name) {
-			log.Printf("extform: внешняя обработка %q совпадает по имени с обработкой конфигурации — используется обработка конфигурации", name)
+			registryLog().Warn("external processor name collision", "processor", name)
 		}
 	}
 	r.extProcessors = pm

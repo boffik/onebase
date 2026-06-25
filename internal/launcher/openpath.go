@@ -2,11 +2,17 @@ package launcher
 
 import (
 	"bytes"
-	"log"
+	"log/slog"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	oblog "github.com/ivantit66/onebase/internal/logging"
 )
+
+func openPathLog() *slog.Logger {
+	return oblog.Component("launcher.openpath")
+}
 
 // OpenPath opens a directory or file in the OS file explorer / default app.
 func OpenPath(path string) error {
@@ -122,9 +128,9 @@ func runPowerShell(script string) (string, error) {
 		// Пишем причину в server log — пользователь видит «ничего», но при репорте
 		// можно понять что именно сломалось (AppLocker, отсутствие WinForms на Server Core, etc).
 		if s := strings.TrimSpace(stderr.String()); s != "" {
-			log.Printf("launcher: powershell dialog failed: %v: %s", err, s)
+			openPathLog().Warn("powershell dialog failed", "err", err, "stderr", s)
 		} else {
-			log.Printf("launcher: powershell dialog failed: %v", err)
+			openPathLog().Warn("powershell dialog failed", "err", err)
 		}
 		return "", nil // user cancelled = exit code != 0
 	}

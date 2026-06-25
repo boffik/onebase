@@ -16,11 +16,26 @@ var checkCmd = &cobra.Command{
 неизвестных функций, схему YAML всех объектов и компиляцию запросов
 виджетов/отчётов. Выводит проблемы в формате file:line:col: message.
 Завершается с ненулевым кодом, если найдены ошибки — пригодно для pre-commit/CI.
+Флаг --lint добавляет рекомендательные предупреждения: неизвестные YAML-ключи,
+неиспользуемые переменные DSL, недостижимые процедуры и объекты без прав в ролях.
 
 Примеры:
   onebase check --project C:\Projects\OneBaseConfs\PuT
+  onebase check --project ./examples/trade --lint
   onebase check --id <baseID> --json`,
 	RunE:          runCheck,
+	SilenceUsage:  true,
+	SilenceErrors: true,
+}
+
+var lintCmd = &cobra.Command{
+	Use:   "lint",
+	Short: "Показать рекомендательные предупреждения конфигурации",
+	Long: `Запускает полный onebase check и добавляет lint-предупреждения поверх
+него: неизвестные YAML-ключи, неиспользуемые переменные DSL, недостижимые
+процедуры и объекты без прав в ролях. Предупреждения не меняют ok/exit code;
+ненулевой код возвращается только при ошибках обычного check.`,
+	RunE:          runLint,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -28,17 +43,31 @@ var checkCmd = &cobra.Command{
 func init() {
 	addBaseFlags(checkCmd)
 	checkCmd.Flags().Bool("json", false, "вывод в JSON")
+	checkCmd.Flags().Bool("lint", false, "добавить рекомендательные lint-предупреждения")
 	rootCmd.AddCommand(checkCmd)
+
+	addBaseFlags(lintCmd)
+	lintCmd.Flags().Bool("json", false, "вывод в JSON")
+	rootCmd.AddCommand(lintCmd)
 }
 
 func runCheck(cmd *cobra.Command, _ []string) error {
+	lint, _ := cmd.Flags().GetBool("lint")
+	return runCheckWithOptions(cmd, configcheck.Options{Lint: lint})
+}
+
+func runLint(cmd *cobra.Command, _ []string) error {
+	return runCheckWithOptions(cmd, configcheck.Options{Lint: true})
+}
+
+func runCheckWithOptions(cmd *cobra.Command, opts configcheck.Options) error {
 	bc, err := resolveBase(cmd)
 	if err != nil {
 		return err
 	}
 	defer bc.Cleanup()
 
-	res := configcheck.RunFull(bc.Dir)
+	res := configcheck.RunFullWithOptions(bc.Dir, opts)
 
 	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
 		enc := json.NewEncoder(os.Stdout)

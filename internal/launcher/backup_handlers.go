@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,8 +18,13 @@ import (
 	"github.com/ivantit66/onebase/internal/backup"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
+	oblog "github.com/ivantit66/onebase/internal/logging"
 	"gopkg.in/yaml.v3"
 )
+
+func backupLog() *slog.Logger {
+	return oblog.Component("launcher.backup")
+}
 
 func (h *handler) backupDir(b *Base) string {
 	custom := h.loadBackupDirSetting(b)
@@ -363,7 +369,7 @@ func (h *handler) backupFullExport(w http.ResponseWriter, r *http.Request) {
 			w,
 		); err != nil {
 			// Headers already sent — log only; cannot change status.
-			fmt.Fprintf(os.Stderr, "backupFullExport universal error: %v\n", err)
+			backupLog().Error("backup full export failed", "err", err)
 		}
 		return
 	}
