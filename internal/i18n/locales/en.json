@@ -966,5 +966,14 @@
   "Недопустимое имя файла печатной формы": "Invalid print form file name",
   "Ошибка сохранения логотипа": "Logo save error",
   "Ошибка удаления логотипа": "Logo delete error",
-  "Свёртка базы": "Database rollup"
+  "Свёртка базы": "Database rollup",
+  "Активность": "Activity",
+  "Активные": "Active",
+  "Вернуть в выбор": "Return to choices",
+  "Вернуть в выбор?": "Return to choices?",
+  "Выберите булевый реквизит активности": "Select a boolean activity field",
+  "Реквизит активности «%s» должен иметь тип bool": "Activity attribute \"%s\" must have type bool",
+  "Скрытые": "Hidden",
+  "Скрыть из выбора": "Hide from choices",
+  "Скрыть из выбора?": "Hide from choices?"
 }

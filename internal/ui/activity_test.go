@@ -72,6 +72,9 @@ func TestPageList_ActivityControlsAndActions(t *testing.T) {
 		"Активные",
 		"Скрытые",
 		"Все",
+		`href="?activity=active"`,
+		`href="?activity=inactive"`,
+		`href="?activity=all"`,
 		`name="activity" value="inactive"`,
 		`data-activity-enabled="1"`,
 		`data-activity-inactive="1"`,
@@ -83,6 +86,9 @@ func TestPageList_ActivityControlsAndActions(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("activity list HTML does not contain %q", want)
 		}
+	}
+	if strings.Contains(html, "activity%3d") {
+		t.Errorf("activity list HTML contains escaped query separator: %s", "activity%3d")
 	}
 }
 

@@ -340,7 +340,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		"isActivityField": func(e *metadata.Entity, f metadata.Field) bool {
 			return e != nil && e.Activity != nil && f.Name == e.Activity.Field
 		},
-		"activityQuery": func(params storage.ListParams, scope string) string {
+		"activityQuery": func(params storage.ListParams, scope string) template.URL {
 			var parts []string
 			parts = append(parts, "activity="+url.QueryEscape(scope))
 			if params.Search != "" {
@@ -363,9 +363,9 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 					parts = append(parts, "f."+url.QueryEscape(k)+"="+url.QueryEscape(v.Value))
 				}
 			}
-			return strings.Join(parts, "&")
+			return template.URL(strings.Join(parts, "&"))
 		},
-		"listQuerySuffix": func(params storage.ListParams) string {
+		"listQuerySuffix": func(params storage.ListParams) template.URL {
 			var parts []string
 			if params.ActivityScope != "" {
 				parts = append(parts, "activity="+url.QueryEscape(params.ActivityScope))
@@ -387,9 +387,9 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			if len(parts) == 0 {
 				return ""
 			}
-			return "?" + strings.Join(parts, "&")
+			return template.URL("?" + strings.Join(parts, "&"))
 		},
-		"filterQuery": func(params storage.ListParams) string {
+		"filterQuery": func(params storage.ListParams) template.URL {
 			var parts []string
 			if params.ActivityScope != "" {
 				parts = append(parts, "activity="+url.QueryEscape(params.ActivityScope))
@@ -408,7 +408,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			if len(parts) == 0 {
 				return ""
 			}
-			return "&" + strings.Join(parts, "&")
+			return template.URL("&" + strings.Join(parts, "&"))
 		},
 		"reportParamQuery": func(params any, values map[string]any) string {
 			type param interface{ GetName() string }
