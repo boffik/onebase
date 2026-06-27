@@ -266,6 +266,30 @@ func TestAITools_FlaggedUserGetsTools(t *testing.T) {
 	}
 }
 
+func TestAITools_RoleAIDataAccessGetsToolsInRBACScope(t *testing.T) {
+	ctx := context.Background()
+	s, _ := newSubmitTestServer(t, nil)
+	if err := s.store.SaveAIDataScope(ctx, storage.AIDataScopeRBAC); err != nil {
+		t.Fatal(err)
+	}
+	u := &auth.User{
+		Login: "demo",
+		Roles: []*auth.Role{{
+			Name: "Демо",
+			Permissions: auth.Permission{
+				AIDataAccess: true,
+				Catalogs:     map[string][]string{"Товар": {"read"}},
+			},
+		}},
+	}
+	r := httptest.NewRequest(http.MethodPost, "/ui/ai/chat", nil)
+	r = r.WithContext(auth.ContextWithUser(r.Context(), u))
+	tools, exec := s.aiTools(r)
+	if tools == nil || exec == nil {
+		t.Fatalf("роль с ai_data_access должна получать инструменты в rbac: tools=%v exec!=nil=%v", tools, exec != nil)
+	}
+}
+
 func TestAISchemaText_RBACFiltered(t *testing.T) {
 	ctx := context.Background()
 	pub := &metadata.Entity{Name: "Товар", Kind: metadata.KindCatalog,

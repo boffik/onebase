@@ -159,8 +159,9 @@ func TestRolesAssignAndPermissions(t *testing.T) {
 		Name:        "Продажник",
 		Description: "Работа с продажами",
 		Permissions: auth.Permission{
-			Catalogs:  map[string][]string{"Контрагенты": {"read", "write"}},
-			Documents: map[string][]string{"Реализация": {"read", "post"}},
+			AIDataAccess: true,
+			Catalogs:     map[string][]string{"Контрагенты": {"read", "write"}},
+			Documents:    map[string][]string{"Реализация": {"read", "post"}},
 		},
 	}}
 	if err := repo.SyncRoles(ctx, roles); err != nil {
@@ -193,6 +194,9 @@ func TestRolesAssignAndPermissions(t *testing.T) {
 	}
 	if user.Has("document", "Реализация", "write") {
 		t.Error("право document/Реализация/write не выдавалось")
+	}
+	if !user.AllowsAIDataAccess() {
+		t.Error("ai_data_access роли должен сохраниться через БД")
 	}
 
 	ids, err := repo.GetUserRoleIDs(ctx, user.ID)
@@ -309,6 +313,7 @@ func TestLoadRolesYAML(t *testing.T) {
 	yaml := `name: Бухгалтер
 description: Ведение учёта
 permissions:
+  ai_data_access: true
   catalogs:
     Контрагенты: [read, write]
   documents:
@@ -335,6 +340,9 @@ permissions:
 	}
 	if got := r.Permissions.Documents["Платёж"]; len(got) != 3 {
 		t.Fatalf("ожидалось 3 операции для Платёж, получено %v", got)
+	}
+	if !r.Permissions.AIDataAccess {
+		t.Fatal("ai_data_access должен разбираться из YAML роли")
 	}
 
 	// Несуществующая папка — не ошибка, пустой результат.

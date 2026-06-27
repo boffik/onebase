@@ -16,12 +16,13 @@ var jsonMarshal = json.Marshal
 
 // Permission holds allowed operations per entity kind.
 type Permission struct {
-	Catalogs   map[string][]string `yaml:"catalogs"`
-	Documents  map[string][]string `yaml:"documents"`
-	Registers  map[string][]string `yaml:"registers"`
-	InfoRegs   map[string][]string `yaml:"inforegs"`
-	Reports    map[string][]string `yaml:"reports"`
-	Processors map[string][]string `yaml:"processors"`
+	AIDataAccess bool                `yaml:"ai_data_access"`
+	Catalogs     map[string][]string `yaml:"catalogs"`
+	Documents    map[string][]string `yaml:"documents"`
+	Registers    map[string][]string `yaml:"registers"`
+	InfoRegs     map[string][]string `yaml:"inforegs"`
+	Reports      map[string][]string `yaml:"reports"`
+	Processors   map[string][]string `yaml:"processors"`
 }
 
 // Role is a named set of permissions.
@@ -75,6 +76,25 @@ func (u *User) Has(kind, entity, op string) bool {
 			if allowed == op {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// AllowsAIDataAccess reports whether the user may receive AI chat data tools
+// when the database-level ai.data_scope allows non-admin access. User-level
+// AIDataAccess remains supported; role-level ai_data_access makes demo and
+// template roles declarative.
+func (u *User) AllowsAIDataAccess() bool {
+	if u == nil {
+		return false
+	}
+	if u.IsAdmin || u.AIDataAccess {
+		return true
+	}
+	for _, r := range u.Roles {
+		if r.Permissions.AIDataAccess {
+			return true
 		}
 	}
 	return false
@@ -285,20 +305,22 @@ func LoadRolesYAML(dir string) ([]*Role, error) {
 // marshalPermissions converts Permission to JSON string.
 func marshalPermissions(p Permission) (string, error) {
 	type permJSON struct {
-		Catalogs   map[string][]string `json:"catalogs,omitempty"`
-		Documents  map[string][]string `json:"documents,omitempty"`
-		Registers  map[string][]string `json:"registers,omitempty"`
-		InfoRegs   map[string][]string `json:"inforegs,omitempty"`
-		Reports    map[string][]string `json:"reports,omitempty"`
-		Processors map[string][]string `json:"processors"`
+		AIDataAccess bool                `json:"ai_data_access,omitempty"`
+		Catalogs     map[string][]string `json:"catalogs,omitempty"`
+		Documents    map[string][]string `json:"documents,omitempty"`
+		Registers    map[string][]string `json:"registers,omitempty"`
+		InfoRegs     map[string][]string `json:"inforegs,omitempty"`
+		Reports      map[string][]string `json:"reports,omitempty"`
+		Processors   map[string][]string `json:"processors"`
 	}
 	b, err := jsonMarshal(permJSON{
-		Catalogs:   p.Catalogs,
-		Documents:  p.Documents,
-		Registers:  p.Registers,
-		InfoRegs:   p.InfoRegs,
-		Reports:    p.Reports,
-		Processors: p.Processors,
+		AIDataAccess: p.AIDataAccess,
+		Catalogs:     p.Catalogs,
+		Documents:    p.Documents,
+		Registers:    p.Registers,
+		InfoRegs:     p.InfoRegs,
+		Reports:      p.Reports,
+		Processors:   p.Processors,
 	})
 	if err != nil {
 		return "{}", err
@@ -312,22 +334,24 @@ func unmarshalPermissions(data []byte) Permission {
 		return Permission{}
 	}
 	var raw struct {
-		Catalogs   map[string][]string `json:"catalogs"`
-		Documents  map[string][]string `json:"documents"`
-		Registers  map[string][]string `json:"registers"`
-		InfoRegs   map[string][]string `json:"inforegs"`
-		Reports    map[string][]string `json:"reports"`
-		Processors map[string][]string `json:"processors"`
+		AIDataAccess bool                `json:"ai_data_access"`
+		Catalogs     map[string][]string `json:"catalogs"`
+		Documents    map[string][]string `json:"documents"`
+		Registers    map[string][]string `json:"registers"`
+		InfoRegs     map[string][]string `json:"inforegs"`
+		Reports      map[string][]string `json:"reports"`
+		Processors   map[string][]string `json:"processors"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return Permission{}
 	}
 	return Permission{
-		Catalogs:   raw.Catalogs,
-		Documents:  raw.Documents,
-		Registers:  raw.Registers,
-		InfoRegs:   raw.InfoRegs,
-		Reports:    raw.Reports,
-		Processors: raw.Processors,
+		AIDataAccess: raw.AIDataAccess,
+		Catalogs:     raw.Catalogs,
+		Documents:    raw.Documents,
+		Registers:    raw.Registers,
+		InfoRegs:     raw.InfoRegs,
+		Reports:      raw.Reports,
+		Processors:   raw.Processors,
 	}
 }

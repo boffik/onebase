@@ -76,3 +76,32 @@ func TestLoadConfig_NoLLMSection(t *testing.T) {
 		t.Errorf("без секции llm ожидался nil, получено %+v", cfg.LLM)
 	}
 }
+
+func TestLoadConfig_AISettingsFromAppYAML(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, "config")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	appYAML := `name: Demo
+ai:
+  data_scope: rbac
+  daily_token_cap: 50000
+`
+	if err := os.WriteFile(filepath.Join(cfgDir, "app.yaml"), []byte(appYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AI == nil {
+		t.Fatal("ожидалась секция ai")
+	}
+	if cfg.AI.DataScope != "rbac" {
+		t.Fatalf("data_scope разобран неверно: %q", cfg.AI.DataScope)
+	}
+	if cfg.AI.DailyTokenCap == nil || *cfg.AI.DailyTokenCap != 50000 {
+		t.Fatalf("daily_token_cap разобран неверно: %v", cfg.AI.DailyTokenCap)
+	}
+}

@@ -246,6 +246,100 @@ func TestMetaTxtUniversalFormat(t *testing.T) {
 	}
 }
 
+func TestUniversalSafeSettingsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	src := newSQLite(t, "settings-src")
+	if err := src.EnsureSettingsSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec(ctx, `INSERT INTO _settings(key,value) VALUES
+		('ai.data_scope','rbac'),
+		('ai.daily_token_cap','50000'),
+		('llm.config','{"api_key":"secret"}')`); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := ExportUniversal(ctx, src, "file", t.TempDir(), "", "test", &buf); err != nil {
+		t.Fatalf("ExportUniversal: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := extractZip(buf.Bytes(), tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(tmpDir, "settings", "safe.jsonl"))
+	if err != nil {
+		t.Fatalf("safe settings missing: %v", err)
+	}
+	if !strings.Contains(string(raw), `"ai.data_scope"`) || !strings.Contains(string(raw), `"ai.daily_token_cap"`) {
+		t.Fatalf("safe settings do not include expected AI keys:\n%s", raw)
+	}
+	if strings.Contains(string(raw), "llm.config") || strings.Contains(string(raw), "secret") {
+		t.Fatalf("safe settings leaked secret config:\n%s", raw)
+	}
+
+	dst := newSQLite(t, "settings-dst")
+	if err := dst.EnsureSettingsSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dst.Exec(ctx, `INSERT INTO _settings(key,value) VALUES
+		('ai.data_scope','admin_only'),
+		('llm.config','target-secret')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportUniversal(ctx, dst, "file", t.TempDir(), "", bytes.NewReader(buf.Bytes()), int64(buf.Len())); err != nil {
+		t.Fatalf("ImportUniversal: %v", err)
+	}
+
+	if got := dst.GetAIDataScope(ctx); got != storage.AIDataScopeRBAC {
+		t.Fatalf("ai.data_scope after import = %q, want rbac", got)
+	}
+	if got := dst.GetAIDailyTokenCap(ctx); got != 50000 {
+		t.Fatalf("ai.daily_token_cap after import = %d, want 50000", got)
+	}
+	var llmRaw string
+	if err := dst.QueryRow(ctx, `SELECT value FROM _settings WHERE key='llm.config'`).Scan(&llmRaw); err != nil {
+		t.Fatal(err)
+	}
+	if llmRaw != "target-secret" {
+		t.Fatalf("llm.config must not be overwritten, got %q", llmRaw)
+	}
+}
+
+func TestDemoResetImportsSafeSettings(t *testing.T) {
+	ctx := context.Background()
+	src := newSQLite(t, "demo-settings-src")
+	if err := src.EnsureSettingsSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec(ctx, `INSERT INTO _settings(key,value) VALUES ('ai.data_scope','rbac')`); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := ExportUniversal(ctx, src, "file", t.TempDir(), "", "demo", &buf); err != nil {
+		t.Fatalf("ExportUniversal: %v", err)
+	}
+	obzPath := filepath.Join(t.TempDir(), "demo.obz")
+	if err := os.WriteFile(obzPath, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := newSQLite(t, "demo-settings-dst")
+	if err := dst.EnsureSettingsSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dst.Exec(ctx, `INSERT INTO _settings(key,value) VALUES ('ai.data_scope','admin_only')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DemoReset(ctx, dst, obzPath); err != nil {
+		t.Fatalf("DemoReset: %v", err)
+	}
+	if got := dst.GetAIDataScope(ctx); got != storage.AIDataScopeRBAC {
+		t.Fatalf("ai.data_scope after demo reset = %q, want rbac", got)
+	}
+}
+
 // TestJSONLRoundTripSQLite exports a simple SQLite table and re-imports it,
 // verifying that string, bool, and integer values survive intact.
 func TestJSONLRoundTripSQLite(t *testing.T) {
@@ -392,15 +486,15 @@ func TestSkipConfigPath(t *testing.T) {
 		skip bool
 	}{
 		{"metadata/Номенклатура.yaml", false},
-		{".gitignore", false},          // file, not the .git dir
-		{"sub/.gitignore", false},      // whole-segment match only
-		{".git", true},                 // the directory itself
-		{".git/objects/00/abc", true},  // read-only object that breaks restore
-		{"deep/.git/config", true},     // nested repo
-		{".svn/entries", true},         // other VCS
-		{".hg/store", true},            // other VCS
-		{"backups/full.obz", true},     // backups are not config
-		{"backupsX/keep.yaml", false},  // prefix must be the backups/ dir
+		{".gitignore", false},         // file, not the .git dir
+		{"sub/.gitignore", false},     // whole-segment match only
+		{".git", true},                // the directory itself
+		{".git/objects/00/abc", true}, // read-only object that breaks restore
+		{"deep/.git/config", true},    // nested repo
+		{".svn/entries", true},        // other VCS
+		{".hg/store", true},           // other VCS
+		{"backups/full.obz", true},    // backups are not config
+		{"backupsX/keep.yaml", false}, // prefix must be the backups/ dir
 	}
 	for _, c := range cases {
 		if got := skipConfigPath(c.rel); got != c.skip {

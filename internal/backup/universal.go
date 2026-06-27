@@ -49,6 +49,13 @@ var systemTables = []string{
 	"_scheduled_runs",
 }
 
+// safeSettingKeys are non-secret _settings values that may travel in a
+// universal .obz. Do not add secret-bearing keys such as llm.config here.
+var safeSettingKeys = map[string]bool{
+	"ai.data_scope":      true,
+	"ai.daily_token_cap": true,
+}
+
 // byteColumns lists known binary columns in system tables.
 // Key: "table.column", value: true.
 var byteColumns = map[string]bool{
@@ -112,13 +119,21 @@ func ExportUniversal(
 		}
 	}
 
-	// --- 3. CONFIG ------------------------------------------------------------
+	// --- 3. SAFE SETTINGS -----------------------------------------------------
+	if n, err := exportSafeSettings(ctx, db, zw); err != nil {
+		zw.Close()
+		return fmt.Errorf("export settings: %w", err)
+	} else if n > 0 {
+		manifest["settings/safe.jsonl"] = n
+	}
+
+	// --- 4. CONFIG ------------------------------------------------------------
 	if err := exportConfig(ctx, db, configSource, configDir, zw); err != nil {
 		zw.Close()
 		return fmt.Errorf("export config: %w", err)
 	}
 
-	// --- 4. ATTACHMENTS (binary files) ----------------------------------------
+	// --- 5. ATTACHMENTS (binary files) ----------------------------------------
 	hasAttachments := false
 	if attachmentsDir != "" {
 		if _, err := os.Stat(attachmentsDir); err == nil {
@@ -130,12 +145,12 @@ func ExportUniversal(
 		}
 	}
 
-	// --- 5. manifest.json ----------------------------------------------------
+	// --- 6. manifest.json ----------------------------------------------------
 	manifestJSON, _ := json.MarshalIndent(manifest, "", "  ")
 	mf, _ := zw.Create("manifest.json")
 	mf.Write(manifestJSON)
 
-	// --- 6. META.txt ----------------------------------------------------------
+	// --- 7. META.txt ----------------------------------------------------------
 	dbType := db.Dialect().Name()
 	meta := fmt.Sprintf(
 		"onebase_full_export\nversion=2\nformat=universal\nsource_db_type=%s\nsource_base=%s\ndate=%s\nhas_attachments=%v\n",
@@ -566,6 +581,52 @@ func exportConfig(ctx context.Context, db *storage.DB, configSource, configDir s
 	})
 }
 
+func exportSafeSettings(ctx context.Context, db *storage.DB, zw *zip.Writer) (int, error) {
+	if !tableExists(ctx, db, "_settings") {
+		return 0, nil
+	}
+	rows, err := db.Query(ctx, `SELECT key, value FROM _settings ORDER BY key`)
+	if err != nil {
+		return 0, nil
+	}
+	defer rows.Close()
+
+	var selected []map[string]string
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			continue
+		}
+		if safeSettingKeys[key] {
+			selected = append(selected, map[string]string{"key": key, "value": value})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(selected) == 0 {
+		return 0, nil
+	}
+
+	fw, err := zw.Create("settings/safe.jsonl")
+	if err != nil {
+		return 0, err
+	}
+	if _, err := fw.Write([]byte(`{"_schema":1}` + "\n")); err != nil {
+		return 0, err
+	}
+	for _, row := range selected {
+		line, err := json.Marshal(row)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := fw.Write(append(line, '\n')); err != nil {
+			return 0, err
+		}
+	}
+	return len(selected), nil
+}
+
 // exportAttachments copies attachment binary files into attachments/ in the ZIP.
 func exportAttachments(attachmentsDir string, zw *zip.Writer) (int, error) {
 	count := 0
@@ -701,7 +762,19 @@ func ImportUniversal(
 		}
 	}
 
-	// --- 6. Restore attachment files ------------------------------------------
+	// --- 6. Merge safe settings -----------------------------------------------
+	settingsFile := filepath.Join(tmpDir, "settings", "safe.jsonl")
+	if _, err := os.Stat(settingsFile); err == nil {
+		n, err := importSafeSettings(ctx, db, settingsFile)
+		if err != nil {
+			return report, fmt.Errorf("import settings: %w", err)
+		}
+		if n > 0 {
+			report.Tables["_settings"] = n
+		}
+	}
+
+	// --- 7. Restore attachment files ------------------------------------------
 	attachSrc := filepath.Join(tmpDir, "attachments")
 	if _, err := os.Stat(attachSrc); err == nil {
 		n, err := restoreAttachments(attachSrc, attachmentsDir)
@@ -711,9 +784,9 @@ func ImportUniversal(
 		report.Files = n
 	}
 
-	// --- 7. Глушим предохранитель сети (план 62) ------------------------------
-	// _settings импортируется вместе с system-таблицами, поэтому net.enabled
-	// мог приехать из оригинала как «вкл». Восстановленная копия не должна
+	// --- 8. Глушим предохранитель сети (план 62) ------------------------------
+	// Безопасные _settings импортируются merge/upsert-ом; net.enabled туда не
+	// входит, но восстановленная копия в любом случае не должна
 	// молча слать вебхуки/письма/HTTP в боевые системы — сбрасываем флаг в
 	// выкл (аналог блокировки регламентных заданий при старте копии в 1С).
 	// Владелец осознанно включит сеть в конфигураторе.
@@ -721,7 +794,7 @@ func ImportUniversal(
 		return report, fmt.Errorf("import: сброс предохранителя сети: %w", err)
 	}
 
-	// --- 8. Глушим выполнение команд ОС (план 67) -----------------------------
+	// --- 9. Глушим выполнение команд ОС (план 67) -----------------------------
 	// По той же причине, что и сеть: exec.enabled мог приехать «вкл» из
 	// оригинала, а запуск команд на чужой машине ещё опаснее. Сбрасываем в выкл.
 	if err := db.SaveExecEnabled(ctx, false); err != nil {
@@ -729,6 +802,57 @@ func ImportUniversal(
 	}
 
 	return report, nil
+}
+
+func importSafeSettings(ctx context.Context, db *storage.DB, filePath string) (int, error) {
+	if err := db.EnsureSettingsSchema(ctx); err != nil {
+		return 0, err
+	}
+	f, err := os.Open(filePath)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	if !scanner.Scan() {
+		return 0, nil
+	}
+	var header struct {
+		Schema int `json:"_schema"`
+	}
+	if err := json.Unmarshal(scanner.Bytes(), &header); err != nil {
+		return 0, fmt.Errorf("schema line: %w", err)
+	}
+
+	d := db.Dialect()
+	q := fmt.Sprintf(
+		`INSERT INTO _settings (key, value) VALUES (%s, %s)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		d.Placeholder(1), d.Placeholder(2))
+	n := 0
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var row struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return n, fmt.Errorf("parse row %d: %w", n+1, err)
+		}
+		if !safeSettingKeys[row.Key] {
+			continue
+		}
+		if _, err := db.Exec(ctx, q, row.Key, row.Value); err != nil {
+			return n, fmt.Errorf("upsert setting %s: %w", row.Key, err)
+		}
+		n++
+	}
+	return n, scanner.Err()
 }
 
 // readMeta parses META.txt from the ZIP and returns key→value map.

@@ -21,21 +21,22 @@ import (
 const aiQueryRowLimit = 100
 
 // aiDataAllowed решает, доступны ли запросу read-only инструменты данных ИИ-чата.
-// Доступ имеют администраторы (как у консоли запросов) и пользователи с флагом
-// AIDataAccess. Флаг даёт доступ к произвольным запросам на чтение в обход
-// объектного RBAC — выдавать его осознанно (см. карточку пользователя).
+// Доступ имеют администраторы (как у консоли запросов), а в режимах rbac/all —
+// пользователи с персональным флагом AIDataAccess или ролью с ai_data_access.
+// В режиме all это даёт доступ к произвольным запросам на чтение в обход
+// объектного RBAC — выдавать его осознанно.
 func (s *Server) aiDataAllowed(r *http.Request) bool {
 	if s.isAdmin(r) {
 		return true
 	}
 	// Режим доступа ИИ к данным (план 54). В дефолтном admin_only флаг
-	// AIDataAccess не даёт доступа — данные только администраторам. В режимах
-	// rbac (с фильтрацией источников) и all флаг работает.
+	// AIDataAccess/роль не дают доступа — данные только администраторам. В
+	// режимах rbac (с фильтрацией источников) и all этот opt-in работает.
 	if s.store.GetAIDataScope(r.Context()) == storage.AIDataScopeAdminOnly {
 		return false
 	}
 	u := auth.UserFromContext(r.Context())
-	return u != nil && u.AIDataAccess
+	return u.AllowsAIDataAccess()
 }
 
 // aiTools формирует набор read-only инструментов для tool-use чата и исполнитель.

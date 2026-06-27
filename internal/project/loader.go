@@ -94,6 +94,14 @@ type BackupConfig struct {
 	Directory string `yaml:"directory"` // пусто = <project>/backups
 }
 
+// AIConfig holds non-secret AI assistant settings from app.yaml section "ai".
+// Secrets and provider routes stay in "llm"; this block is for deploy-time
+// policy knobs that also live in _settings.
+type AIConfig struct {
+	DataScope     string `yaml:"data_scope,omitempty"` // admin_only|rbac|all
+	DailyTokenCap *int   `yaml:"daily_token_cap,omitempty"`
+}
+
 // AppConfig holds the optional config/app.yaml metadata.
 type AppConfig struct {
 	Name    string `yaml:"name"`
@@ -110,6 +118,7 @@ type AppConfig struct {
 	Attachments *AttachmentsConfig `yaml:"attachments,omitempty"`
 	Demo        *DemoConfig        `yaml:"demo,omitempty"`
 	Backup      *BackupConfig      `yaml:"backup,omitempty"`
+	AI          *AIConfig          `yaml:"ai,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в

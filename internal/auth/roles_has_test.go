@@ -60,3 +60,19 @@ func TestUserHas(t *testing.T) {
 		t.Error("permissions should union across roles")
 	}
 }
+
+func TestUserAllowsAIDataAccess(t *testing.T) {
+	if (&User{}).AllowsAIDataAccess() {
+		t.Fatal("user without explicit AI data access must be denied")
+	}
+	if !(&User{IsAdmin: true}).AllowsAIDataAccess() {
+		t.Fatal("admin must be allowed")
+	}
+	if !(&User{AIDataAccess: true}).AllowsAIDataAccess() {
+		t.Fatal("user-level AIDataAccess must be allowed")
+	}
+	u := &User{Roles: []*Role{{Permissions: Permission{AIDataAccess: true}}}}
+	if !u.AllowsAIDataAccess() {
+		t.Fatal("role-level ai_data_access must be allowed")
+	}
+}

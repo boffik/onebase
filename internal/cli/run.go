@@ -222,14 +222,12 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 
 	appCfg, _ := project.LoadConfig(proj.Dir)
-	// app.yaml может задавать конфиг ИИ-помощника (секция llm, ключи через
-	// ${env:...}) — применяем его к базе при старте. Это деплоит ИИ вместе с
-	// конфигурацией: таблица _settings не входит в .obz, поэтому для демо/прод
-	// это способ донести конфиг без утечки ключа в выгрузку.
-	if appCfg != nil && appCfg.LLM != nil {
-		if err := db.SaveLLMConfig(ctx, *appCfg.LLM); err != nil {
-			runLog.Warn("apply app llm config failed", "err", err)
-		}
+	// app.yaml может задавать конфиг ИИ-помощника (llm, ключи через ${env:...})
+	// и non-secret policy-настройки (ai). Применяем их к базе при старте:
+	// таблица _settings не входит в .obz, поэтому для демо/прод это способ
+	// донести настройки вместе с конфигурацией.
+	for _, err := range applyAppAISettings(ctx, db, appCfg) {
+		runLog.Warn("apply app ai setting failed", "err", err)
 	}
 	uiCfg := ui.Config{
 		DSN:         dsn,
