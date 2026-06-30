@@ -2626,6 +2626,22 @@ function openItemPicker(payload, elementName) {
 `
 
 const tplReport = `
+{{/* Кнопки выгрузки отчёта: Excel + PDF (issue #218). output_format: pdf делает
+     PDF основной (первой); по умолчанию первой идёт Excel — поведение не меняется. */}}
+{{define "report-export-buttons"}}
+{{$q := variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant}}
+{{$excel := printf "/ui/report/%s/excel%s" (lower .Report.Name) $q}}
+{{$pdf := printf "/ui/report/%s/pdf%s" (lower .Report.Name) $q}}
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+  {{if eq (lower .Report.OutputFormat) "pdf"}}
+  <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Скачать PDF"}}">{{t $.Lang "PDF ↓"}}</a>
+  <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
+  {{else}}
+  <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
+  <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Скачать PDF"}}">{{t $.Lang "PDF ↓"}}</a>
+  {{end}}
+</div>
+{{end}}
 {{define "page-report"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
@@ -2824,9 +2840,7 @@ const tplReport = `
 {{if .ComposedHTML}}
 {{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
 {{if .ComposeWarnings}}<div class="card" style="background:#fef2f2;border-color:#fecaca;margin-bottom:8px;padding:8px 12px"><strong>{{t $.Lang "Предупреждения компоновки:"}}</strong><ul style="margin:4px 0 0;padding-left:20px">{{range .ComposeWarnings}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
-<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
-</div>
+{{template "report-export-buttons" .}}
 <details class="card report-block" data-block="data" open>
 <summary>{{t $.Lang "Данные"}}</summary>
 <div class="rc-toolbar" style="margin-bottom:8px;display:flex;gap:8px"><button type="button" id="rc-expand" class="btn btn-sm">{{t $.Lang "Развернуть всё"}}</button><button type="button" id="rc-collapse" class="btn btn-sm">{{t $.Lang "Свернуть всё"}}</button></div>
@@ -2888,9 +2902,7 @@ const tplReport = `
 </script>
 {{end}}
 {{if .Cols}}
-<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-  <a class="btn btn-sm" href="/ui/report/{{lower .Report.Name}}/excel{{variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
-</div>
+{{template "report-export-buttons" .}}
 <div class="card">
 {{if .Rows}}
 <table><thead><tr>{{range .Cols}}<th>{{.}}</th>{{end}}</tr></thead>

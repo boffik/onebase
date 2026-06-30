@@ -257,7 +257,7 @@ func reportYAMLSchema() *yamlLintSchema {
 		"appearance":  obj("lines", "zebra"),
 		"chart":       obj("type", "category", "series"),
 	})
-	return with(obj("name", "title", "query", "chart_proc"), map[string]*yamlLintSchema{
+	return with(obj("name", "title", "query", "chart_proc", "output_format"), map[string]*yamlLintSchema{
 		"titles":      freeMap(),
 		"params":      seq(with(obj("name", "type", "label", "options"), map[string]*yamlLintSchema{"labels": freeMap()})),
 		"composition": composition,
