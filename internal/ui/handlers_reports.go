@@ -391,15 +391,13 @@ func (s *Server) loadReportRefOpts(ctx context.Context, params []reportpkg.Param
 }
 
 // reportExcel runs a report query with GET params and returns XLSX.
-func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
-	rep := s.getReport(w, r)
-	if rep == nil {
-		return
-	}
-	if !s.requirePerm(w, r, "report", rep.Name, "run") {
-		return
-	}
-	// Эффективная компоновка с учётом рантайм-настроек пользователя (план 70).
+// reportExportRows вычисляет табличные данные отчёта для выгрузки (Excel/PDF):
+// заголовки и строки с учётом эффективной компоновки (план 70), кросс-таблицы
+// (pivot) или плоского результата. Параметры берутся из query-строки (экспорт —
+// GET). HTTP-ответ об ошибке пишет вызывающий. Общий код reportExcel и reportPDF
+// (issue #218) — чтобы обе выгрузки шли из одних и тех же данных и не расходились
+// с экраном (runReport использует те же crossSheetRows/composedRows).
+func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (headers []string, rows [][]any, err error) {
 	// readReportSettings читает __settings через FormValue (для GET — из query).
 	settings := readReportSettings(r)
 	if settings == nil {
@@ -417,16 +415,14 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		}
 		if val == "" {
 			paramValues[p.Name] = nil
-		} else {
-			if p.Type == "date" {
-				if t, err := time.ParseInLocation("2006-01-02", val, time.Local); err == nil {
-					paramValues[p.Name] = t
-				} else {
-					paramValues[p.Name] = val
-				}
+		} else if p.Type == "date" {
+			if t, perr := time.ParseInLocation("2006-01-02", val, time.Local); perr == nil {
+				paramValues[p.Name] = t
 			} else {
 				paramValues[p.Name] = val
 			}
+		} else {
+			paramValues[p.Name] = val
 		}
 	}
 	compiled, err := query.Compile(rep.Query, query.CompileOpts{
@@ -438,74 +434,69 @@ func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
 		Dialect:     s.store.Dialect(),
 	})
 	if err != nil {
-		http.Error(w, "query compile error: "+s.errText(r, err), 400)
-		return
+		return nil, nil, err
 	}
-	rows, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
+	data, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
 	if err != nil {
-		http.Error(w, "query error: "+s.errText(r, err), 500)
-		return
+		return nil, nil, err
 	}
 	detailLinkCol := ""
 	if comp != nil {
 		detailLinkCol = comp.DetailLink
 	}
-	s.resolveUUIDsInReport(r.Context(), rows, detailLinkCol)
+	s.resolveUUIDsInReport(r.Context(), data, detailLinkCol)
 
 	// Пользовательские отборы (план 70) — до компоновки, как в runReport.
 	if settings != nil && len(settings.Filters) > 0 {
-		rows = compose.ApplyFilters(rows, settings.Filters)
+		data = compose.ApplyFilters(data, settings.Filters)
 	}
 
-	// Если отчёт использует компоновщик — строим дерево групп/итогов для Excel.
+	// Если отчёт использует компоновщик — строим дерево групп/итогов.
 	if comp != nil {
 		ev := newInterpEvaluator(s.interp)
-		// Кросс-таблица (pivot): выгружаем измерения-колонки в столбцы листа.
+		// Кросс-таблица (pivot): измерения-колонки выгружаются в столбцы листа.
 		if len(comp.Columns) > 0 {
-			cr, cerr := compose.ComposeCross(rows, *comp, ev)
+			cr, cerr := compose.ComposeCross(data, *comp, ev)
 			if cerr != nil {
-				http.Error(w, "compose error: "+s.errText(r, cerr), 500)
-				return
+				return nil, nil, cerr
 			}
-			headers, xlsRows := crossSheetRows(cr, comp)
-			data, err := excel.ExportList(headers, xlsRows)
-			if err != nil {
-				http.Error(w, "Excel error: "+s.errText(r, err), 500)
-				return
-			}
-			w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-			w.Header().Set("Content-Disposition", contentDisposition(rep.Name+".xlsx"))
-			w.Write(data)
-			return
+			h, xr := crossSheetRows(cr, comp)
+			return h, xr, nil
 		}
-		res, cerr := compose.Compose(rows, *comp, ev)
+		res, cerr := compose.Compose(data, *comp, ev)
 		if cerr != nil {
-			http.Error(w, "compose error: "+s.errText(r, cerr), 500)
-			return
+			return nil, nil, cerr
 		}
-		headers, xlsRows := composedRows(res, comp)
-		data, err := excel.ExportList(headers, xlsRows)
-		if err != nil {
-			http.Error(w, "Excel error: "+s.errText(r, err), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", contentDisposition(rep.Name+".xlsx"))
-		w.Write(data)
-		return
+		h, xr := composedRows(res, comp)
+		return h, xr, nil
 	}
 
 	// Плоский путь (без компоновки) — обратная совместимость.
-	xlsRows := make([][]any, len(rows))
-	for i, row := range rows {
+	flat := make([][]any, len(data))
+	for i, row := range data {
 		cells := make([]any, len(cols))
 		for j, col := range cols {
 			cells[j] = row[col]
 		}
-		xlsRows[i] = cells
+		flat[i] = cells
 	}
+	return cols, flat, nil
+}
 
-	data, err := excel.ExportList(cols, xlsRows)
+func (s *Server) reportExcel(w http.ResponseWriter, r *http.Request) {
+	rep := s.getReport(w, r)
+	if rep == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
+		return
+	}
+	headers, rows, err := s.reportExportRows(r, rep)
+	if err != nil {
+		http.Error(w, "report export error: "+s.errText(r, err), 500)
+		return
+	}
+	data, err := excel.ExportList(headers, rows)
 	if err != nil {
 		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return

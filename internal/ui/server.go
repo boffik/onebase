@@ -331,6 +331,9 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/report/{name}/excel", s.reportExcel)
 	r.Get("/ui/journal/{name}/excel", s.journalExcel)
 
+	// PDF export отчётов (issue #218) — реальный бинарный PDF, как у печатных форм.
+	r.Get("/ui/report/{name}/pdf", s.reportPDF)
+
 	// Journals
 	r.Get("/ui/journal/{name}", s.journalList)
 
