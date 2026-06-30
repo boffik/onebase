@@ -121,6 +121,12 @@ type FormElement struct {
 	AutoSum         bool              `yaml:"auto_sum,omitempty"`       // ТЧ: авто Сумма = Количество × Цена по именам колонок — opt-in (#215.1)
 	Hint            string            `yaml:"hint,omitempty"`           // всплывающая подсказка
 	Mask            string            `yaml:"mask,omitempty"`           // маска ввода
+	// Format/DisplayFormat распознаются, но для kind: ПолеДаты НЕ применяются в
+	// рантайме: нативный <input type=date> показывает дату по локали браузера, а
+	// значение всегда ISO (issue #219). Поля заведены, чтобы onebase check мог
+	// явно предупредить об этом, а не молча проглатывать неизвестный ключ.
+	Format        string `yaml:"format,omitempty"`
+	DisplayFormat string `yaml:"display_format,omitempty"`
 	Type            string            `yaml:"type,omitempty"`           // "file" для файлового поля, и т.п.
 	Choice          bool              `yaml:"choice,omitempty"`         // включена кнопка выбора у InputField
 	// Choices — декларативный список значений для выбора (аналог 1С СписокВыбора).

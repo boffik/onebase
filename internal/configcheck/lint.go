@@ -360,8 +360,8 @@ func formModuleYAMLSchema() *yamlLintSchema {
 	for _, k := range []string{
 		"id", "name", "kind", "field", "table_part", "visible", "enabled", "required",
 		"original_id", "data_path", "picture", "values_picture", "width", "height",
-		"halign", "valign", "readonly", "use_grid", "no_grid", "hint", "mask",
-		"type", "choice", "unknown_xml", "view",
+		"halign", "valign", "readonly", "use_grid", "no_grid", "auto_sum", "hint", "mask",
+		"format", "display_format", "type", "choice", "unknown_xml", "view",
 	} {
 		element.keys[k] = nil
 	}
