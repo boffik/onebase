@@ -993,8 +993,11 @@ const tplNav = `
 {{end}}
 {{if .Subsystems}}
 <nav class="subsys-bar">
-  <a href="/ui/" class="{{if not .CurrentSubsystem}}active{{end}}">{{t $.Lang "Главная"}}</a>
-  {{range .Subsystems}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{lucideIcon .Icon}}{{.DisplayName $.Lang}}</a>{{end}}
+  {{$home := t $.Lang "Главная"}}
+  <a href="/ui/" class="{{if not .CurrentSubsystem}}active{{end}}">{{$home}}</a>
+  {{/* #215.2: не дублируем ведущую «Главная», если в базе есть одноимённая
+       подсистема (её представление совпадает с меткой домашней ссылки). */}}
+  {{range .Subsystems}}{{if ne (.DisplayName $.Lang) $home}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{lucideIcon .Icon}}{{.DisplayName $.Lang}}</a>{{end}}{{end}}
 </nav>
 {{end}}
 <div class="app-body">
