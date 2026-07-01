@@ -1,5 +1,4 @@
 name: Кладовщик
-title: Кладовщик
 description: Складские операции
 permissions:
   catalogs:

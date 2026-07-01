@@ -9,6 +9,7 @@ permissions:
     ЕдиницаИзмерения: [read, write]
     СтавкаНДС: [read, write]
     МестоХранения: [read, write]
+    ПодключаемоеОборудование: [read, write]
   documents:
     ПоступлениеТоваров: [read, write, post, unpost]
     РеализацияТоваров: [read, write, post, unpost]
@@ -26,6 +27,8 @@ permissions:
     РезервыТоваров: [read]
     ТоварыВПути: [read]
     ВаловаяПрибыль: [read]
+  inforegs:
+    ЦеныНоменклатуры: [read, write]
   reports:
     ОстаткиТоваров: [run]
     ДвиженияТоваров: [run]

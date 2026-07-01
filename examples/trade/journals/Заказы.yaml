@@ -13,5 +13,4 @@ columns:
     label: Сумма
 filters:
   - field: Дата
-    label: Дата
     type: date_range

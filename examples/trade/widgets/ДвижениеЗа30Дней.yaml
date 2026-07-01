@@ -1,7 +1,7 @@
 name: ДвижениеЗа30Дней
 type: chart
 title: Приход/Расход за 30 дней
-chart_type: line
+chart_kind: line
 params:
   Начало: "{{today|-30d}}"
 query: |
@@ -13,3 +13,5 @@ query: |
     И Количество > 0
   СГРУППИРОВАТЬ ПО period
   УПОРЯДОЧИТЬ ПО period
+x_field: Дата
+y_fields: [Количество]

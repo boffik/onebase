@@ -3,6 +3,5 @@ title: Настройки
 icon: settings
 order: 50
 contents:
-  constants: true
   catalogs: [Организация, ЕдиницаИзмерения, СтавкаНДС]
   processors: [ЗаполнитьТестовуюБазу]
