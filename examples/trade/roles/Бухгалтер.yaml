@@ -1,5 +1,4 @@
 name: Бухгалтер
-title: Бухгалтер
 description: Просмотр всех данных и отчётов
 permissions:
   catalogs:

@@ -1,7 +1,7 @@
 name: ДинамикаЗакупок
 type: chart
 title: Закупки за 30 дней
-chart_type: line
+chart_kind: line
 params:
   Начало: "{{today|-30d}}"
 query: |
@@ -11,3 +11,5 @@ query: |
     И вид_движения = 'Расход'
   СГРУППИРОВАТЬ ПО period
   УПОРЯДОЧИТЬ ПО period
+x_field: Дата
+y_fields: [Сумма]

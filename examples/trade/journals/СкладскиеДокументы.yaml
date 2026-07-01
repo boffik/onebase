@@ -19,8 +19,6 @@ columns:
     label: Сумма
 filters:
   - field: Дата
-    label: Дата
     type: date_range
   - field: Склад
-    label: Склад
     type: reference:Склад

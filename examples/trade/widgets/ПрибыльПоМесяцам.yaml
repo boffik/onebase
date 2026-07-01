@@ -1,7 +1,7 @@
 name: ПрибыльПоМесяцам
 type: chart
 title: Продажи по месяцам
-chart_type: bar
+chart_kind: bar
 params:
   Начало: "{{today|-180d}}"
 query: |
@@ -10,3 +10,5 @@ query: |
   ГДЕ Дата >= &Начало
   СГРУППИРОВАТЬ ПО Дата
   УПОРЯДОЧИТЬ ПО Дата
+x_field: Дата
+y_fields: [Сумма]
