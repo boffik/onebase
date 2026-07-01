@@ -836,6 +836,15 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 		userRow = fmt.Sprintf(`<tr><td style="padding:6px 0;color:#888;width:140px">Пользователь</td><td style="padding:6px 0">%s</td></tr>`, label)
 	}
 
+	platVer := escHTML(version.String())
+	if d := version.CommitDate(); d != "" {
+		platVer += ` <span style="color:#94a3b8">· ` + escHTML(d)
+		if c := version.Commit(); c != "" {
+			platVer += ` · ` + escHTML(c)
+		}
+		platVer += `</span>`
+	}
+
 	html := fmt.Sprintf(`<div style="padding:24px;max-width:400px">
 	<div style="text-align:center;margin-bottom:20px">
 	  %s
@@ -852,7 +861,7 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 	</div>`,
 		logoHTML,
 		userRow,
-		escHTML(version.String()),
+		platVer,
 		cfgRows,
 		escHTML(b.ConfigSource),
 		maskDSN(escHTML(b.DB)),

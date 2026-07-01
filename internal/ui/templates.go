@@ -3339,7 +3339,7 @@ const tplAbout = `
     {{end}}
     <tr>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;width:180px;font-size:14px">{{t $.Lang "Версия платформы"}}</td>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:14px">onebase {{if .Cfg.PlatVersion}}{{.Cfg.PlatVersion}}{{else}}dev{{end}}</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:14px">onebase {{if .Cfg.PlatVersion}}{{.Cfg.PlatVersion}}{{else}}dev{{end}}{{if .Cfg.PlatDate}}<span style="color:#94a3b8;font-weight:400"> · {{.Cfg.PlatDate}}{{if .Cfg.PlatCommit}} · {{.Cfg.PlatCommit}}{{end}}</span>{{end}}</td>
     </tr>
     {{if .Cfg.PlatAuthor}}
     <tr>

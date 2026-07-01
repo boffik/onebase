@@ -36,6 +36,8 @@ type Config struct {
 	PlatLicense   string // лицензия платформы (version.License)
 	DSN           string
 	PlatVersion   string
+	PlatCommit    string // короткий git SHA сборки (version.Commit())
+	PlatDate      string // дата коммита сборки, дд.мм.гг (version.CommitDate())
 	Logo          string // path to logo file (png/svg/jpg)
 	Mailer        *mailer.Mailer
 	MaxFileSizeMB int // 0 = use default 50

@@ -451,6 +451,7 @@ type configuratorData struct {
 	SelectedTreeID string
 	// platform version
 	PlatformVer    string
+	PlatformDate   string // дата коммита сборки, дд.мм.гг (version.CommitDate())
 	UIServerURL    string
 	BackupMessage  string
 	BackupDir      string
