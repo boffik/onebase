@@ -2,6 +2,7 @@ package configcheck
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,88 @@ permissions:
 	for code, found := range want {
 		if !found {
 			t.Fatalf("lint warning %s not found; got %+v", code, lint.Warnings)
+		}
+	}
+}
+
+func TestLintYAML_ActivityKeyKnown(t *testing.T) {
+	dir := t.TempDir()
+	// Блок activity (активность справочников) читается загрузчиком — линт не
+	// должен помечать его как неизвестный ключ.
+	mkFile(t, filepath.Join(dir, "catalogs", "товар.yaml"), `name: Товар
+fields:
+  - name: Активный
+    type: bool
+activity:
+  field: Активный
+  default_scope: active
+  hide_from_choice: true
+`)
+	for _, is := range CheckLintYAML(dir) {
+		if is.Code == "metadata.unvalidated-key" {
+			t.Fatalf("блок activity должен быть известен линту, получено: %+v", is)
+		}
+	}
+}
+
+func TestLintCrossScopeRead(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "processors", "касса.yaml"), `name: Касса
+params: []
+`)
+	// ПрочитатьСекрет читает «Секрет», объявленную только в Выполнить: сегодня
+	// работает лишь из-за утечки области видимости вызова.
+	mkFile(t, filepath.Join(dir, "src", "касса.proc.os"), `Процедура Выполнить() Экспорт
+  Секрет = 42;
+  Сообщить(ПрочитатьСекрет());
+КонецПроцедуры
+
+Функция ПрочитатьСекрет()
+  Возврат Секрет;
+КонецФункции
+`)
+
+	lint := RunFullWithOptions(dir, Options{Lint: true})
+	if !lint.OK {
+		t.Fatalf("lint should keep OK=true for warnings: %+v", lint.Issues)
+	}
+	var found *Issue
+	for i := range lint.Warnings {
+		if lint.Warnings[i].Code == "dsl.cross-scope-read" {
+			found = &lint.Warnings[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("dsl.cross-scope-read not found; got %+v", lint.Warnings)
+	}
+	if !strings.Contains(found.Message, "Секрет") {
+		t.Errorf("message should name the leaked variable: %q", found.Message)
+	}
+	if found.Line != 7 {
+		t.Errorf("expected warning at line 7 (Возврат Секрет), got %d", found.Line)
+	}
+}
+
+func TestLintCrossScopeRead_ParamIsClean(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "processors", "касса.yaml"), `name: Касса
+params: []
+`)
+	// Здесь «Секрет» передаётся параметром — утечки нет, предупреждения быть не должно.
+	mkFile(t, filepath.Join(dir, "src", "касса.proc.os"), `Процедура Выполнить() Экспорт
+  Секрет = 42;
+  Сообщить(ПрочитатьСекрет(Секрет));
+КонецПроцедуры
+
+Функция ПрочитатьСекрет(Секрет)
+  Возврат Секрет;
+КонецФункции
+`)
+
+	lint := RunFullWithOptions(dir, Options{Lint: true})
+	for _, w := range lint.Warnings {
+		if w.Code == "dsl.cross-scope-read" {
+			t.Fatalf("unexpected cross-scope-read for a parameter: %+v", w)
 		}
 	}
 }
