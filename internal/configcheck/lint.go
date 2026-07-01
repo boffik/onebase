@@ -199,6 +199,7 @@ func entityYAMLSchema() *yamlLintSchema {
 		"numerator":  obj("prefix", "length", "period", "scope"),
 		"predefined": seq(with(obj("name"), map[string]*yamlLintSchema{"fields": freeMap()})),
 		"tile_view":  obj("image", "title", "subtitle", "fields"),
+		"activity":   obj("field", "default_scope", "hide_from_choice"),
 	})
 }
 
@@ -424,9 +425,235 @@ func CheckLintDSL(dir string, proj *project.Project) []Issue {
 	var issues []Issue
 	for _, lp := range programs {
 		issues = append(issues, lintUnusedVars(lp)...)
+		issues = append(issues, lintCrossScopeReads(lp)...)
 	}
 	issues = append(issues, lintDeadProcedures(programs)...)
 	return issues
+}
+
+// commonDSLGlobals — инжектируемые объекты-значения, доступные в любом модуле без
+// объявления (dslvars.Common.Build + контекстные переменные форм/заданий). Они
+// читаются как значения, поэтому попадают в reads; исключаем, чтобы не спутать с
+// переменными. Builtins-функции в список не нужны: вызов callee не считается
+// чтением (см. collectReadIdentTokensExpr).
+var commonDSLGlobals = map[string]bool{
+	"документы": true, "documents": true,
+	"справочники": true, "catalogs": true,
+	"перечисления": true, "enums": true,
+	"константы": true, "constants": true,
+	"движения": true, "movements": true,
+	"запрос": true, "query": true,
+	"предопределённыезначения": true, "предопределенныезначения": true, "predefinedvalues": true,
+	"регистрынакопления": true, "регистрысведений": true, "регистрыбухгалтерии": true,
+	"планысчетов": true, "планывидовхарактеристик": true,
+	"ссылканаобъект": true, "objectref": true,
+	"этотобъект": true, "this": true,
+	// Контекст форм/страниц/заданий/сервисов.
+	"объект": true, "форма": true, "элементы": true, "элементыформы": true,
+	"отказ": true, "параметры": true, "параметрысеанса": true, "запрос_": true,
+}
+
+// lintCrossScopeReads помечает чтение идентификатора, который процедура не
+// объявляла локально, но который является локальной переменной (параметром,
+// Перем, переменной цикла или целью присваивания) ДРУГОЙ процедуры того же
+// модуля. Такое чтение сегодня резолвится только потому, что окружение вызванной
+// процедуры сцеплено с окружением вызывающей (динамическая видимость чтения):
+// код хрупкий и сломается при корректной лексической изоляции (см. план изоляции
+// scope). Это предупреждение — рантайм не меняется.
+func lintCrossScopeReads(lp lintProgram) []Issue {
+	if lp.prog == nil || len(lp.prog.Procedures) < 2 {
+		return nil
+	}
+	moduleVars := map[string]bool{}
+	for _, decl := range lp.prog.ModuleVars {
+		for _, tok := range decl.Names {
+			moduleVars[strings.ToLower(tok.Literal)] = true
+		}
+	}
+	procNames := map[string]bool{}
+	for _, pr := range lp.prog.Procedures {
+		procNames[strings.ToLower(pr.Name.Literal)] = true
+	}
+	// procLocals[i] — имена, «принадлежащие» i-й процедуре; ownerCount — в
+	// скольких процедурах имя объявлено/присвоено.
+	procLocals := make([]map[string]bool, len(lp.prog.Procedures))
+	ownerCount := map[string]int{}
+	for i, pr := range lp.prog.Procedures {
+		ls := map[string]bool{}
+		for _, p := range pr.Params {
+			ls[strings.ToLower(p.Literal)] = true
+		}
+		collectDeclaredAndAssigned(pr.Body, ls)
+		procLocals[i] = ls
+		for name := range ls {
+			ownerCount[name]++
+		}
+	}
+	var issues []Issue
+	for i, pr := range lp.prog.Procedures {
+		reads := map[string]token.Token{}
+		for _, def := range pr.Defaults {
+			collectReadIdentTokensExpr(def, reads)
+		}
+		collectReadIdentTokensStmts(pr.Body, reads)
+		names := make([]string, 0, len(reads))
+		for name := range reads {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if procLocals[i][name] || moduleVars[name] || procNames[name] || commonDSLGlobals[name] {
+				continue
+			}
+			// Имя — локальная другой процедуры (текущая исключена проверкой выше).
+			if ownerCount[name] > 0 {
+				issues = append(issues, crossScopeReadIssue(lp, reads[name]))
+			}
+		}
+	}
+	return issues
+}
+
+func crossScopeReadIssue(lp lintProgram, tok token.Token) Issue {
+	return Issue{
+		File:         sourceLabelForToken(lp.label, tok),
+		Object:       lp.object,
+		Kind:         lp.kind,
+		Code:         "dsl.cross-scope-read",
+		Line:         tok.Line,
+		Column:       tok.Col,
+		Message:      fmt.Sprintf("переменная %q не объявлена в этой процедуре и является локальной другой процедуры модуля — чтение работает лишь из-за утечки области видимости вызова", tok.Literal),
+		SuggestedFix: "Передайте значение параметром/результатом функции или объявите переменную локально; не полагайтесь на видимость переменных вызывающей процедуры.",
+	}
+}
+
+// collectDeclaredAndAssigned собирает имена, «принадлежащие» процедуре: Перем,
+// переменные циклов и цели простых присваиваний (Ident = ...).
+func collectDeclaredAndAssigned(stmts []ast.Stmt, out map[string]bool) {
+	for _, stmt := range stmts {
+		switch v := stmt.(type) {
+		case *ast.VarDecl:
+			for _, tok := range v.Names {
+				out[strings.ToLower(tok.Literal)] = true
+			}
+		case *ast.AssignStmt:
+			if id, ok := v.Target.(*ast.Ident); ok {
+				out[strings.ToLower(id.Tok.Literal)] = true
+			}
+		case *ast.IfStmt:
+			collectDeclaredAndAssigned(v.Then, out)
+			for _, ei := range v.ElseIfs {
+				collectDeclaredAndAssigned(ei.Body, out)
+			}
+			collectDeclaredAndAssigned(v.Else, out)
+		case *ast.ForEachStmt:
+			out[strings.ToLower(v.Var.Literal)] = true
+			collectDeclaredAndAssigned(v.Body, out)
+		case *ast.NumericForStmt:
+			out[strings.ToLower(v.Var.Literal)] = true
+			collectDeclaredAndAssigned(v.Body, out)
+		case *ast.WhileStmt:
+			collectDeclaredAndAssigned(v.Body, out)
+		case *ast.TryStmt:
+			collectDeclaredAndAssigned(v.Try, out)
+			collectDeclaredAndAssigned(v.Except, out)
+		}
+	}
+}
+
+// collectReadIdentTokensStmts/Expr — как collectDSLReadsStmts, но сохраняет токен
+// первого чтения каждого имени (для точной локации предупреждения). Цель
+// присваивания Ident не считается чтением; callee прямого вызова — тоже.
+func collectReadIdentTokensStmts(stmts []ast.Stmt, out map[string]token.Token) {
+	for _, stmt := range stmts {
+		switch v := stmt.(type) {
+		case *ast.ExprStmt:
+			collectReadIdentTokensExpr(v.X, out)
+		case *ast.AssignStmt:
+			if v.Op == token.ASSIGN {
+				collectReadIdentTokensTarget(v.Target, out)
+			} else {
+				collectReadIdentTokensExpr(v.Target, out)
+			}
+			collectReadIdentTokensExpr(v.Value, out)
+		case *ast.ReturnStmt:
+			collectReadIdentTokensExpr(v.Value, out)
+		case *ast.IfStmt:
+			collectReadIdentTokensExpr(v.Cond, out)
+			collectReadIdentTokensStmts(v.Then, out)
+			for _, ei := range v.ElseIfs {
+				collectReadIdentTokensExpr(ei.Cond, out)
+				collectReadIdentTokensStmts(ei.Body, out)
+			}
+			collectReadIdentTokensStmts(v.Else, out)
+		case *ast.ForEachStmt:
+			collectReadIdentTokensExpr(v.Collection, out)
+			collectReadIdentTokensStmts(v.Body, out)
+		case *ast.NumericForStmt:
+			collectReadIdentTokensExpr(v.Start, out)
+			collectReadIdentTokensExpr(v.End, out)
+			collectReadIdentTokensStmts(v.Body, out)
+		case *ast.WhileStmt:
+			collectReadIdentTokensExpr(v.Cond, out)
+			collectReadIdentTokensStmts(v.Body, out)
+		case *ast.TryStmt:
+			collectReadIdentTokensStmts(v.Try, out)
+			collectReadIdentTokensStmts(v.Except, out)
+		}
+	}
+}
+
+func collectReadIdentTokensTarget(expr ast.Expr, out map[string]token.Token) {
+	switch v := expr.(type) {
+	case *ast.Ident:
+		return
+	case *ast.MemberExpr:
+		collectReadIdentTokensExpr(v.Object, out)
+	case *ast.IndexExpr:
+		collectReadIdentTokensExpr(v.Object, out)
+		collectReadIdentTokensExpr(v.Index, out)
+	default:
+		collectReadIdentTokensExpr(expr, out)
+	}
+}
+
+func collectReadIdentTokensExpr(expr ast.Expr, out map[string]token.Token) {
+	if expr == nil {
+		return
+	}
+	switch v := expr.(type) {
+	case *ast.Ident:
+		if k := strings.ToLower(v.Tok.Literal); k != "" {
+			if _, ok := out[k]; !ok {
+				out[k] = v.Tok
+			}
+		}
+	case *ast.CallExpr:
+		if _, ok := v.Callee.(*ast.Ident); !ok {
+			collectReadIdentTokensExpr(v.Callee, out)
+		}
+		for _, arg := range v.Args {
+			collectReadIdentTokensExpr(arg, out)
+		}
+	case *ast.MemberExpr:
+		collectReadIdentTokensExpr(v.Object, out)
+	case *ast.BinaryExpr:
+		collectReadIdentTokensExpr(v.Left, out)
+		collectReadIdentTokensExpr(v.Right, out)
+	case *ast.UnaryExpr:
+		collectReadIdentTokensExpr(v.Operand, out)
+	case *ast.NewExpr:
+		for _, arg := range v.Args {
+			collectReadIdentTokensExpr(arg, out)
+		}
+	case *ast.IndexExpr:
+		collectReadIdentTokensExpr(v.Object, out)
+		collectReadIdentTokensExpr(v.Index, out)
+	case *ast.TernaryExpr:
+		collectReadIdentTokensExpr(v.Cond, out)
+		collectReadIdentTokensExpr(v.True, out)
+		collectReadIdentTokensExpr(v.False, out)
+	}
 }
 
 func collectLintPrograms(dir string, proj *project.Project) []lintProgram {
