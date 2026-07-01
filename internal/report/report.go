@@ -24,8 +24,8 @@ type Report struct {
 	Composition *Composition      `yaml:"composition"` // nil = плоская таблица (старое поведение)
 	Variants    []ReportVariant   `yaml:"variants"`    // доп. именованные компоновки по тому же запросу
 	// OutputFormat — предпочтительный формат выгрузки отчёта (issue #218): пусто|html
-	// (интерактивный просмотр + кнопки Excel/PDF), pdf или excel (соответствующая
-	// кнопка становится основной). Реальная выгрузка идёт через /ui/report/<name>/pdf
+	// (интерактивный просмотр + кнопки Excel/PDF), pdf, excel или совместимый
+	// legacy-синоним excel_html. Реальная выгрузка идёт через /ui/report/<name>/pdf
 	// и /excel независимо от этого поля; формат лишь подсказывает приоритет в UI.
 	OutputFormat string `yaml:"output_format,omitempty"`
 

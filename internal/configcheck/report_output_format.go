@@ -8,12 +8,14 @@ import (
 )
 
 // validReportOutputFormats — допустимые значения output_format отчёта.
-var validReportOutputFormats = map[string]bool{"": true, "html": true, "pdf": true, "excel": true}
+var validReportOutputFormats = map[string]bool{
+	"": true, "html": true, "pdf": true, "excel": true, "excel_html": true,
+}
 
 // CheckReportOutputFormat проверяет, что output_format отчёта (issue #218) — одно
-// из html|pdf|excel (или пусто). Поле распознаётся загрузчиком, поэтому неизвестное
-// значение — почти наверняка опечатка; ловим её на check как ошибку, а не молча
-// игнорируем (иначе автор получает «ложную уверенность», как было с #219).
+// из html|pdf|excel|excel_html (или пусто). Поле распознаётся загрузчиком, поэтому
+// неизвестное значение — почти наверняка опечатка; ловим её на check как ошибку,
+// а не молча игнорируем (иначе автор получает «ложную уверенность», как было с #219).
 func CheckReportOutputFormat(proj *project.Project) []Issue {
 	var issues []Issue
 	for _, rep := range proj.Reports {
@@ -26,8 +28,8 @@ func CheckReportOutputFormat(proj *project.Project) []Issue {
 			Object:       rep.Name,
 			Kind:         "Отчёт",
 			Code:         "report.bad-output-format",
-			Message:      fmt.Sprintf("неизвестный output_format %q: допустимо html, pdf или excel", rep.OutputFormat),
-			SuggestedFix: "Используйте output_format: html|pdf|excel либо уберите ключ.",
+			Message:      fmt.Sprintf("неизвестный output_format %q: допустимо html, pdf, excel или excel_html", rep.OutputFormat),
+			SuggestedFix: "Используйте output_format: html|pdf|excel|excel_html либо уберите ключ.",
 		})
 	}
 	return issues
