@@ -69,7 +69,7 @@ try{if(localStorage.getItem('cfgTitlesOn')==='1')document.documentElement.classL
   </div>
   <a href="/?sel={{.Base.ID}}">← {{t $.Lang "Лаунчер"}}</a>
   <h1>{{t $.Lang "Конфигуратор"}} — {{if .AppName}}{{.AppName}}{{else}}{{.Base.Name}}{{end}}</h1>
-  <span style="font-size:11px;color:#7aa8d8">{{.DSNMasked}} · :{{.Base.Port}} · {{t $.Lang "платформа"}} {{.PlatformVer}}</span>
+  <span style="font-size:11px;color:#7aa8d8">{{.DSNMasked}} · :{{.Base.Port}} · {{t $.Lang "платформа"}} {{.PlatformVer}}{{if .PlatformDate}} · {{.PlatformDate}}{{end}}</span>
   <button id="cfg-save-topbar" onclick="cfgSaveActive()" title="{{t $.Lang "Сохранить (Ctrl+S)"}}" class="cfg-save-topbar">&#128190; {{t $.Lang "Сохранить"}}</button>
   <button onclick="launchEnterprise()" title="{{t $.Lang "Запустить предприятие"}}" class="run-enterprise-btn"><svg viewBox="0 0 24 24" fill="#333"><polygon points="6,3 20,12 6,21"/></svg></button>
   {{if and (eq .Tab "tree") $.AvailableLangs}}<button id="cfg-titles-toggle" class="dbg-topbar-btn" onclick="cfgTitlesToggle()" title="{{t $.Lang "Показать/скрыть поля переводов у всех объектов"}}">&#127760; {{t $.Lang "Переводы"}}</button>{{end}}

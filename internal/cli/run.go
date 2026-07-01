@@ -232,6 +232,8 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	uiCfg := ui.Config{
 		DSN:         dsn,
 		PlatVersion: version.String(),
+		PlatCommit:  version.Commit(),
+		PlatDate:    version.CommitDate(),
 		PlatAuthor:  version.Author,
 		PlatLicense: version.License,
 	}
