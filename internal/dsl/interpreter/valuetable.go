@@ -20,7 +20,19 @@ type ValueTable struct {
 func NewValueTable(_ []any) *ValueTable { return &ValueTable{} }
 
 func (t *ValueTable) TypeName() string { return "ТаблицаЗначений" }
-func (t *ValueTable) String() string   { return fmt.Sprintf("ТаблицаЗначений[%d]", len(t.rows)) }
+func (t *ValueTable) String() string {
+	return fmt.Sprintf("ТаблицаЗначений[%d]", len(t.rows))
+}
+
+func (t *ValueTable) Get(name string) any {
+	switch strings.ToLower(name) {
+	case "колонки", "columns":
+		return &vtColumns{vt: t}
+	}
+	return nil
+}
+
+func (t *ValueTable) Set(_ string, _ any) {}
 
 // IterateRows реализует контракт цикла «Для Каждого» (см. ForEachStmt):
 // каждая строка оборачивается в *MapThis.

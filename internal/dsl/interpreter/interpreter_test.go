@@ -109,6 +109,20 @@ EndProcedure`
 	}
 }
 
+func TestInterpreter_CallMethodOnUndefinedRaises(t *testing.T) {
+	src := `Процедура Выполнить()
+  Обл = Макет.Область("Заголовок");
+КонецПроцедуры`
+	obj := runtime.NewObject("X", metadata.KindDocument)
+	err := runProc(t, src, obj)
+	if err == nil {
+		t.Fatal("expected error for method call on undefined receiver")
+	}
+	if !strings.Contains(err.Error(), "Метод Область вызван у Неопределено") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // Регрессия для замечания #13: несколько процедур в одном файле
 // (.proc.os и т.п.) должны вызывать друг друга. Реализовано через
 // Interpreter.LookupSiblingProc — резолвер по файлу.

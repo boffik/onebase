@@ -12,7 +12,7 @@ func projWithReport(rep *report.Report) *project.Project {
 }
 
 func TestCheckReportOutputFormat_AcceptsKnown(t *testing.T) {
-	for _, of := range []string{"", "html", "pdf", "excel", "PDF", "Excel"} {
+	for _, of := range []string{"", "html", "pdf", "excel", "excel_html", "PDF", "Excel", "EXCEL_HTML"} {
 		rep := &report.Report{Name: "R", OutputFormat: of}
 		if iss := CheckReportOutputFormat(projWithReport(rep)); len(iss) != 0 {
 			t.Errorf("output_format=%q должен приниматься, получили %d ошибок", of, len(iss))

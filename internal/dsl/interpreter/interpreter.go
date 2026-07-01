@@ -712,6 +712,9 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 				}
 			}
 		}
+		if recv == nil {
+			RaiseUserError("Метод " + callee.Field.Literal + " вызван у Неопределено")
+		}
 		return nil
 	}
 	return nil
