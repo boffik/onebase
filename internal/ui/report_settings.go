@@ -288,12 +288,16 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 
 	// Презентационные коллекции берём из пользовательского ввода, но только если
 	// поле реально присутствовало. Старый UI отправлял частичный JSON и тем самым
-	// случайно очищал Columns/Sort/Totals/Detail базовой СКД.
-	invalidEmptyMeasures := u.Measures != nil && len(u.Measures) == 0
-	if u.Groupings != nil && !invalidEmptyMeasures {
+	// случайно очищал Columns/Sort/Totals/Detail базовой СКД. Пустой набор
+	// группировок или показателей для отчёта, где YAML задаёт их явно, считаем
+	// повреждённой настройкой и не даём ей стереть стандартную компоновку.
+	invalidEmptyGroupings := len(base.Groupings) > 0 && u.Groupings != nil && len(u.Groupings) == 0
+	invalidEmptyMeasures := len(base.Measures) > 0 && u.Measures != nil && len(u.Measures) == 0
+	invalidEmptyComposition := invalidEmptyGroupings || invalidEmptyMeasures
+	if u.Groupings != nil && !invalidEmptyComposition {
 		out.Groupings = canonicalStrings(u.Groupings, canonicalField)
 	}
-	if u.Columns != nil && !invalidEmptyMeasures {
+	if u.Columns != nil && !invalidEmptyComposition {
 		out.Columns = canonicalStrings(u.Columns, canonicalField)
 	}
 	if u.Sort != nil {
@@ -312,7 +316,7 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 
 	// Показатели: презентация — из пользовательского ввода, Expr — только из
 	// доверенной компоновки (по совпадению Field), иначе обнуляем.
-	if u.Measures != nil && len(u.Measures) > 0 {
+	if u.Measures != nil && len(u.Measures) > 0 && !invalidEmptyComposition {
 		measures := make([]reportpkg.Measure, 0, len(u.Measures))
 		for _, m := range u.Measures {
 			baseMeasure := trustedMeasure[strings.ToLower(m.Field)]
