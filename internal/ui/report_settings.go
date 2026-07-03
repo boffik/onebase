@@ -126,7 +126,14 @@ func loadReportPresets(ctx context.Context, store *storage.DB, report, user stri
 	if err != nil {
 		return nil
 	}
-	return presets
+	out := presets[:0]
+	for _, p := range presets {
+		if p.ID == standardReportPresetID {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func activeReportPreset(presets []storage.ReportPreset, id string) *storage.ReportPreset {
@@ -456,6 +463,26 @@ func reportFormURLWithPreset(name, presetID string) string {
 	return u + "?__preset=" + url.QueryEscape(presetID)
 }
 
+func reportRunURLAfterSettingsSave(name string, params []reportpkg.Param, r *http.Request, presetID string) string {
+	u, err := url.Parse(reportFormURL(name))
+	if err != nil {
+		return reportFormURLWithPreset(name, presetID)
+	}
+	q := u.Query()
+	q.Set("__run", "1")
+	if presetID != "" {
+		q.Set("__preset", presetID)
+	}
+	for _, p := range params {
+		val, ok := requestFormValue(r, p.Name)
+		if ok && val != "" {
+			q.Set(p.Name, val)
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // reportSettingsSave сохраняет рантайм-настройки текущего пользователя (POST
 // поля __settings) и возвращает на форму отчёта.
 func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -497,7 +524,7 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 	// сохраняют единственную настройку в _settings.
 	if action == "" {
 		_ = s.store.SaveReportUserSettings(r.Context(), rep.Name, currentUserLogin(r), canon)
-		http.Redirect(w, r, reportFormURL(rep.Name), http.StatusSeeOther)
+		http.Redirect(w, r, reportRunURLAfterSettingsSave(rep.Name, rep.Params, r, ""), http.StatusSeeOther)
 		return
 	}
 
@@ -506,8 +533,12 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("__preset_name"))
 	isDefault := r.FormValue("__preset_default") != ""
 
-	if action == "save" && presetID != "" && presetID != standardReportPresetID {
-		if p, err := s.store.GetReportPreset(r.Context(), rep.Name, user, presetID); err == nil && p != nil {
+	if presetID == standardReportPresetID {
+		presetID = ""
+		_ = s.store.DeleteReportPreset(r.Context(), rep.Name, user, standardReportPresetID)
+	}
+	if action == "save" && presetID != "" {
+		if p, err := s.store.GetReportPreset(r.Context(), rep.Name, user, presetID); err == nil && p != nil && p.ID != standardReportPresetID {
 			if name == "" {
 				name = p.Name
 			}
@@ -534,7 +565,7 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.errText(r, err), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, reportFormURLWithPreset(rep.Name, id), http.StatusSeeOther)
+	http.Redirect(w, r, reportRunURLAfterSettingsSave(rep.Name, rep.Params, r, id), http.StatusSeeOther)
 }
 
 func (s *Server) reportPresetDelete(w http.ResponseWriter, r *http.Request) {
