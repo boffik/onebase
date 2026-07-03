@@ -245,6 +245,17 @@ func TestEffectiveCompositionIgnoresEmptyMeasureOverride(t *testing.T) {
 	if len(eff.Sort) != 1 || eff.Sort[0].Field != "ВаловаяПрибыль" {
 		t.Fatalf("пустой override не должен стирать сортировку: %+v", eff.Sort)
 	}
+
+	userComp = &reportpkg.Composition{
+		Groupings: []string{},
+	}
+	eff = effectiveComposition(rep, &reportpkg.UserReportSettings{Composition: userComp})
+	if strings.Join(eff.Groupings, ",") != "Организация,Номенклатура" {
+		t.Fatalf("пустые группировки без Measures тоже не должны стирать YAML: %+v", eff.Groupings)
+	}
+	if len(eff.Measures) != 2 || eff.Measures[0].Field != "Выручка" {
+		t.Fatalf("повреждённый частичный override не должен стирать показатели: %+v", eff.Measures)
+	}
 }
 
 func TestEffectiveCompositionInheritsMeasurePresentationDefaults(t *testing.T) {
@@ -398,6 +409,7 @@ func TestReportSettingsPanelChecksLowercaseQueryColumns(t *testing.T) {
 		"ParamValues":        map[string]any{},
 		"ReportParams":       []reportParamUI{},
 		"ReportCols":         []string{"организация", "валоваяприбыль"},
+		"UserSettings":       &reportpkg.UserReportSettings{Composition: &reportpkg.Composition{Groupings: []string{}}},
 		"ReportSettingsJSON": reportSettingsPanelJSON(rep, nil),
 		"Cfg":                Config{},
 		"Lang":               "ru",
