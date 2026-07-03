@@ -2,10 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/llm"
 )
 
@@ -35,6 +37,18 @@ type AuditSettings struct {
 	Login   bool // регистрировать вход / выход пользователей
 }
 
+// ReportPreset — именованный пользовательский вариант настроек отчёта.
+// SettingsJSON хранит report.UserReportSettings в каноничном JSON, но слой
+// storage не импортирует internal/report, чтобы не связывать пакеты циклом.
+type ReportPreset struct {
+	ID           string
+	Report       string
+	User         string
+	Name         string
+	SettingsJSON string
+	IsDefault    bool
+}
+
 // DefaultAuditSettings — журнал включён, пишутся изменения данных и проведение;
 // вход/выход по умолчанию не пишется (шумно для однопользовательских баз).
 func DefaultAuditSettings() AuditSettings {
@@ -59,6 +73,35 @@ func (db *DB) EnsureSettingsSchema(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS _settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')`,
 	); err != nil {
 		return fmt.Errorf("settings: create _settings: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) EnsureReportPresetSchema(ctx context.Context) error {
+	d := db.dialect
+	q := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS _report_presets (
+		id TEXT PRIMARY KEY,
+		report_name TEXT NOT NULL,
+		user_login TEXT NOT NULL DEFAULT '',
+		name TEXT NOT NULL,
+		settings_json TEXT NOT NULL DEFAULT '',
+		is_default %s NOT NULL DEFAULT %s,
+		created_at %s NOT NULL DEFAULT %s,
+		updated_at %s NOT NULL DEFAULT %s,
+		UNIQUE(report_name, user_login, name)
+	)`, d.TypeBool(), boolFalseLit(d), d.TypeTimestamp(), d.CurrentTimestampTZ(), d.TypeTimestamp(), d.CurrentTimestampTZ())
+	if _, err := db.Exec(ctx, q); err != nil {
+		return fmt.Errorf("settings: create _report_presets: %w", err)
+	}
+	if _, err := db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_report_presets_owner ON _report_presets (report_name, user_login, name)`); err != nil {
+		return fmt.Errorf("settings: create _report_presets owner index: %w", err)
+	}
+	defaultLit := "TRUE"
+	if d.Name() == "sqlite" {
+		defaultLit = "1"
+	}
+	if _, err := db.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_report_presets_default ON _report_presets (report_name, user_login) WHERE is_default = `+defaultLit); err != nil {
+		return fmt.Errorf("settings: create _report_presets default index: %w", err)
 	}
 	return nil
 }
@@ -453,4 +496,172 @@ func (db *DB) DeleteReportUserSettings(ctx context.Context, report, user string)
 		return fmt.Errorf("settings: delete report settings: %w", err)
 	}
 	return nil
+}
+
+// ListReportPresets возвращает пользовательские варианты отчёта в стабильном
+// порядке: дефолтный выше остальных, дальше по имени.
+func (db *DB) ListReportPresets(ctx context.Context, report, user string) ([]ReportPreset, error) {
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		return nil, err
+	}
+	d := db.dialect
+	rows, err := db.Query(ctx,
+		fmt.Sprintf(`SELECT id, report_name, user_login, name, settings_json, is_default
+			FROM _report_presets
+			WHERE report_name = %s AND user_login = %s
+			ORDER BY is_default DESC, name ASC`, d.Placeholder(1), d.Placeholder(2)),
+		report, user)
+	if err != nil {
+		return nil, fmt.Errorf("settings: list report presets: %w", err)
+	}
+	defer rows.Close()
+	var out []ReportPreset
+	for rows.Next() {
+		p, err := scanReportPreset(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("settings: list report presets rows: %w", err)
+	}
+	return out, nil
+}
+
+func (db *DB) GetReportPreset(ctx context.Context, report, user, id string) (*ReportPreset, error) {
+	if strings.TrimSpace(id) == "" {
+		return nil, nil
+	}
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		return nil, err
+	}
+	d := db.dialect
+	row := db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT id, report_name, user_login, name, settings_json, is_default
+			FROM _report_presets
+			WHERE id = %s AND report_name = %s AND user_login = %s`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3)),
+		id, report, user)
+	p, err := scanReportPresetRow(row)
+	if err != nil {
+		return nil, nil
+	}
+	return &p, nil
+}
+
+func (db *DB) GetDefaultReportPreset(ctx context.Context, report, user string) (*ReportPreset, error) {
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		return nil, err
+	}
+	d := db.dialect
+	row := db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT id, report_name, user_login, name, settings_json, is_default
+			FROM _report_presets
+			WHERE report_name = %s AND user_login = %s AND is_default = %s`,
+			d.Placeholder(1), d.Placeholder(2), reportPresetBoolLit(d, true)),
+		report, user)
+	p, err := scanReportPresetRow(row)
+	if err != nil {
+		return nil, nil
+	}
+	return &p, nil
+}
+
+// SaveReportPreset создаёт или обновляет именованный вариант. Если p.IsDefault,
+// предыдущий дефолтный вариант этого пользователя/отчёта сбрасывается в той же
+// транзакции; частичный уникальный индекс дополнительно защищает инвариант.
+func (db *DB) SaveReportPreset(ctx context.Context, p ReportPreset) (string, error) {
+	p.Report = strings.TrimSpace(p.Report)
+	p.User = strings.TrimSpace(p.User)
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Report == "" {
+		return "", errors.New("report preset: empty report")
+	}
+	if p.Name == "" {
+		return "", errors.New("report preset: empty name")
+	}
+	if p.ID == "" {
+		p.ID = uuid.NewString()
+	}
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		return "", err
+	}
+	d := db.dialect
+	err := db.WithTx(ctx, func(txCtx context.Context) error {
+		if p.IsDefault {
+			if _, err := db.Exec(txCtx,
+				fmt.Sprintf(`UPDATE _report_presets SET is_default = %s, updated_at = %s WHERE report_name = %s AND user_login = %s`,
+					reportPresetBoolLit(d, false), d.Now(), d.Placeholder(1), d.Placeholder(2)),
+				p.Report, p.User); err != nil {
+				return fmt.Errorf("settings: clear report preset default: %w", err)
+			}
+		}
+		q := fmt.Sprintf(`INSERT INTO _report_presets
+			(id, report_name, user_login, name, settings_json, is_default, created_at, updated_at)
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+			ON CONFLICT (id) DO UPDATE SET
+				name = EXCLUDED.name,
+				settings_json = EXCLUDED.settings_json,
+				is_default = EXCLUDED.is_default,
+				updated_at = EXCLUDED.updated_at`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4),
+			d.Placeholder(5), d.Placeholder(6), d.Now(), d.Now())
+		if _, err := db.Exec(txCtx, q, p.ID, p.Report, p.User, p.Name, p.SettingsJSON, p.IsDefault); err != nil {
+			return fmt.Errorf("settings: save report preset: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return p.ID, nil
+}
+
+func (db *DB) DeleteReportPreset(ctx context.Context, report, user, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		return err
+	}
+	d := db.dialect
+	if _, err := db.Exec(ctx,
+		fmt.Sprintf(`DELETE FROM _report_presets WHERE id = %s AND report_name = %s AND user_login = %s`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3)),
+		id, report, user); err != nil {
+		return fmt.Errorf("settings: delete report preset: %w", err)
+	}
+	return nil
+}
+
+type presetScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanReportPreset(rows Rows) (ReportPreset, error) {
+	return scanReportPresetRow(rows)
+}
+
+func scanReportPresetRow(row presetScanner) (ReportPreset, error) {
+	var p ReportPreset
+	var isDefault any
+	if err := row.Scan(&p.ID, &p.Report, &p.User, &p.Name, &p.SettingsJSON, &isDefault); err != nil {
+		return ReportPreset{}, err
+	}
+	p.IsDefault = normalizeBool(isDefault)
+	return p, nil
+}
+
+func reportPresetBoolLit(d Dialect, v bool) string {
+	if d.Name() == "sqlite" {
+		if v {
+			return "1"
+		}
+		return "0"
+	}
+	if v {
+		return "TRUE"
+	}
+	return "FALSE"
 }

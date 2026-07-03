@@ -29,17 +29,29 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
-	// Если у отчёта нет ни параметров, ни вариантов компоновки — строим сразу.
-	// Варианты требуют формы с выбором, поэтому при них форму показываем всегда.
-	if len(rep.Params) == 0 && len(rep.Variants) == 0 {
+	user := currentUserLogin(r)
+	presets := loadReportPresets(r.Context(), s.store, rep.Name, user)
+	activePresetID := r.FormValue("__preset")
+	if activePresetID == "" {
+		if p, err := s.store.GetDefaultReportPreset(r.Context(), rep.Name, user); err == nil && p != nil {
+			activePresetID = p.ID
+		}
+	}
+	activePreset := activeReportPreset(presets, activePresetID)
+	// Если у отчёта нет ни параметров, ни вариантов компоновки, ни пользовательских
+	// пресетов — строим сразу. Варианты/пресеты требуют формы с выбором.
+	if len(rep.Params) == 0 && len(rep.Variants) == 0 && len(presets) == 0 {
 		s.runReport(w, r, rep, map[string]any{})
 		return
 	}
 	s.render(w, r, "page-report", map[string]any{
-		"Report":        rep,
-		"ParamValues":   map[string]any{},
-		"ReportParams":  s.buildReportParams(r.Context(), s.resolveLang(r), rep.Params),
-		"ActiveVariant": r.FormValue("__variant"),
+		"Report":         rep,
+		"ParamValues":    map[string]any{},
+		"ReportParams":   s.buildReportParams(r.Context(), s.resolveLang(r), rep.Params),
+		"ActiveVariant":  r.FormValue("__variant"),
+		"ReportPresets":  presets,
+		"ActivePresetID": activePresetID,
+		"ActivePreset":   activePreset,
 	})
 }
 
@@ -83,16 +95,16 @@ func (s *Server) getReport(w http.ResponseWriter, r *http.Request) *reportpkg.Re
 func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpkg.Report, paramValues map[string]any) {
 	// Выбранный вариант компоновки (параметр __variant); пусто → основной.
 	variant := r.FormValue("__variant")
-	// Рантайм-настройки пользователя (панель «Настройки»). Эффективная
-	// компоновка: override (settings.Composition) → вариант → основной.
-	settings := readReportSettings(r)
-	if settings == nil {
-		// Нет явных правок в запросе — подставляем сохранённые настройки
-		// пользователя, чтобы отчёт открылся в привычном виде (план 70, D1).
-		settings = loadUserSettings(r.Context(), s.store, rep.Name, currentUserLogin(r))
+	user := currentUserLogin(r)
+	presets := loadReportPresets(r.Context(), s.store, rep.Name, user)
+	rs := s.reportSettingsForRequest(r, rep)
+	settings := rs.Settings
+	activePreset := activeReportPreset(presets, rs.ActivePresetID)
+	if settings != nil {
+		variant = settings.Variant
 	}
-	settings = reportSettingsWithRequestVariant(r, settings)
 	comp := effectiveComposition(rep, settings)
+	settingsJSON := reportSettingsPanelJSON(rep, settings)
 	// Build query params: convert date strings to time.Time for proper PG type inference.
 	// Keep paramValues unchanged so the form repopulates with the original strings.
 	queryValues := make(map[string]any, len(paramValues))
@@ -123,22 +135,32 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	reportParams := s.buildReportParams(r.Context(), s.resolveLang(r), rep.Params)
 	if err != nil {
 		s.render(w, r, "page-report", map[string]any{
-			"Report":        rep,
-			"QueryError":    err.Error(),
-			"ParamValues":   paramValues,
-			"ReportParams":  reportParams,
-			"ActiveVariant": variant,
+			"Report":             rep,
+			"QueryError":         err.Error(),
+			"ParamValues":        paramValues,
+			"ReportParams":       reportParams,
+			"ActiveVariant":      variant,
+			"UserSettings":       settings,
+			"ReportSettingsJSON": settingsJSON,
+			"ReportPresets":      presets,
+			"ActivePresetID":     rs.ActivePresetID,
+			"ActivePreset":       activePreset,
 		})
 		return
 	}
 	rows, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
 	if err != nil {
 		s.render(w, r, "page-report", map[string]any{
-			"Report":        rep,
-			"QueryError":    err.Error(),
-			"ParamValues":   paramValues,
-			"ReportParams":  reportParams,
-			"ActiveVariant": variant,
+			"Report":             rep,
+			"QueryError":         err.Error(),
+			"ParamValues":        paramValues,
+			"ReportParams":       reportParams,
+			"ActiveVariant":      variant,
+			"UserSettings":       settings,
+			"ReportSettingsJSON": settingsJSON,
+			"ReportPresets":      presets,
+			"ActivePresetID":     rs.ActivePresetID,
+			"ActivePreset":       activePreset,
 		})
 		return
 	}
@@ -163,20 +185,29 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 				s.render(w, r, "page-report", map[string]any{
 					"Report": rep, "QueryError": cerr.Error(),
 					"ParamValues": paramValues, "ReportParams": reportParams,
-					"ActiveVariant": variant,
+					"ActiveVariant":      variant,
+					"UserSettings":       settings,
+					"ReportSettingsJSON": settingsJSON,
+					"ReportPresets":      presets,
+					"ActivePresetID":     rs.ActivePresetID,
+					"ActivePreset":       activePreset,
 				})
 				return
 			}
 			s.render(w, r, "page-report", map[string]any{
-				"Report":          rep,
-				"ComposedHTML":    renderCrossTable(cr, comp),
-				"Capped":          cr.Capped,
-				"ComposeWarnings": cr.Warnings,
-				"ParamValues":     paramValues,
-				"ReportParams":    reportParams,
-				"ActiveVariant":   variant,
-				"UserSettings":    settings,
-				"ReportCols":      cols,
+				"Report":             rep,
+				"ComposedHTML":       renderCrossTable(cr, comp),
+				"Capped":             cr.Capped,
+				"ComposeWarnings":    cr.Warnings,
+				"ParamValues":        paramValues,
+				"ReportParams":       reportParams,
+				"ActiveVariant":      variant,
+				"UserSettings":       settings,
+				"ReportSettingsJSON": settingsJSON,
+				"ReportPresets":      presets,
+				"ActivePresetID":     rs.ActivePresetID,
+				"ActivePreset":       activePreset,
+				"ReportCols":         cols,
 			})
 			return
 		}
@@ -185,7 +216,12 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 			s.render(w, r, "page-report", map[string]any{
 				"Report": rep, "QueryError": cerr.Error(),
 				"ParamValues": paramValues, "ReportParams": reportParams,
-				"ActiveVariant": variant,
+				"ActiveVariant":      variant,
+				"UserSettings":       settings,
+				"ReportSettingsJSON": settingsJSON,
+				"ReportPresets":      presets,
+				"ActivePresetID":     rs.ActivePresetID,
+				"ActivePreset":       activePreset,
 			})
 			return
 		}
@@ -194,16 +230,20 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 			chartOption = buildComposedChart(res, comp.Chart, rows, *comp, ev)
 		}
 		s.render(w, r, "page-report", map[string]any{
-			"Report":          rep,
-			"ComposedHTML":    renderComposedTable(res, comp),
-			"Capped":          res.Capped,
-			"ComposeWarnings": res.Warnings,
-			"ChartOption":     chartOption,
-			"ParamValues":     paramValues,
-			"ReportParams":    reportParams,
-			"ActiveVariant":   variant,
-			"UserSettings":    settings,
-			"ReportCols":      cols,
+			"Report":             rep,
+			"ComposedHTML":       renderComposedTable(res, comp),
+			"Capped":             res.Capped,
+			"ComposeWarnings":    res.Warnings,
+			"ChartOption":        chartOption,
+			"ParamValues":        paramValues,
+			"ReportParams":       reportParams,
+			"ActiveVariant":      variant,
+			"UserSettings":       settings,
+			"ReportSettingsJSON": settingsJSON,
+			"ReportPresets":      presets,
+			"ActivePresetID":     rs.ActivePresetID,
+			"ActivePreset":       activePreset,
+			"ReportCols":         cols,
 		})
 		return
 	}
@@ -214,15 +254,19 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	}
 
 	s.render(w, r, "page-report", map[string]any{
-		"Report":        rep,
-		"Cols":          cols,
-		"Rows":          rows,
-		"ParamValues":   paramValues,
-		"ChartOption":   chartOption,
-		"ReportParams":  reportParams,
-		"ActiveVariant": variant,
-		"UserSettings":  settings,
-		"ReportCols":    cols,
+		"Report":             rep,
+		"Cols":               cols,
+		"Rows":               rows,
+		"ParamValues":        paramValues,
+		"ChartOption":        chartOption,
+		"ReportParams":       reportParams,
+		"ActiveVariant":      variant,
+		"UserSettings":       settings,
+		"ReportSettingsJSON": settingsJSON,
+		"ReportPresets":      presets,
+		"ActivePresetID":     rs.ActivePresetID,
+		"ActivePreset":       activePreset,
+		"ReportCols":         cols,
 	})
 }
 
@@ -420,13 +464,7 @@ func (s *Server) writeReportExportError(w http.ResponseWriter, r *http.Request, 
 // (issue #218) — чтобы обе выгрузки шли из одних и тех же данных и не расходились
 // с экраном (runReport использует те же crossSheetRows/composedRows).
 func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (headers []string, rows [][]any, err error) {
-	// readReportSettings читает __settings через FormValue (для GET — из query).
-	settings := readReportSettings(r)
-	if settings == nil {
-		// Без явного __settings — выгружаем в сохранённом пользователем виде.
-		settings = loadUserSettings(r.Context(), s.store, rep.Name, currentUserLogin(r))
-	}
-	settings = reportSettingsWithRequestVariant(r, settings)
+	settings := s.reportSettingsForRequest(r, rep).Settings
 	comp := effectiveComposition(rep, settings)
 	paramValues := make(map[string]any, len(rep.Params))
 	for _, p := range rep.Params {
