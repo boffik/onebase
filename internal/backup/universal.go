@@ -47,6 +47,7 @@ var systemTables = []string{
 	"_attachments",
 	"_audit",
 	"_scheduled_runs",
+	"_report_presets",
 }
 
 // safeSettingKeys are non-secret _settings values that may travel in a
@@ -984,6 +985,9 @@ func migrateSchema(ctx context.Context, db *storage.DB, configDest, cfgFileDir s
 	}
 	if err := db.EnsureScheduledRunsTable(ctx); err != nil {
 		return fmt.Errorf("ensure scheduled runs: %w", err)
+	}
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		return fmt.Errorf("ensure report presets: %w", err)
 	}
 	if err := db.EnsureAttachmentTable(ctx); err != nil {
 		return fmt.Errorf("ensure attachments: %w", err)

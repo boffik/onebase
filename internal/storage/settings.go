@@ -25,6 +25,18 @@ const MaxListPageSize = 1000
 // меню не растягивало страницу. Хранится в _settings (ui.collapsible_nav).
 const DefaultNavCollapsible = true
 
+// StandardReportPresetID is a reserved pseudo-preset used by the UI to request
+// the report composition from configuration instead of a saved user preset.
+const StandardReportPresetID = "__standard"
+
+// ErrReportPresetNameExists is returned when a user tries to save a second
+// preset with the same visible name for the same report.
+var ErrReportPresetNameExists = errors.New("вариант отчёта с таким названием уже существует")
+
+// ErrReservedReportPresetID is returned if caller tries to persist the
+// pseudo-preset id as a real database row.
+var ErrReservedReportPresetID = errors.New("зарезервированный идентификатор варианта отчёта")
+
 // AuditSettings — настройки журнала регистрации (аналог «Журнала регистрации»
 // в 1С). Это свойство конкретной информационной базы, а не git-версионируемой
 // конфигурации, поэтому хранится в служебной таблице _settings.
@@ -508,9 +520,9 @@ func (db *DB) ListReportPresets(ctx context.Context, report, user string) ([]Rep
 	rows, err := db.Query(ctx,
 		fmt.Sprintf(`SELECT id, report_name, user_login, name, settings_json, is_default
 			FROM _report_presets
-			WHERE report_name = %s AND user_login = %s
-			ORDER BY is_default DESC, name ASC`, d.Placeholder(1), d.Placeholder(2)),
-		report, user)
+			WHERE report_name = %s AND user_login = %s AND id <> %s
+			ORDER BY is_default DESC, name ASC`, d.Placeholder(1), d.Placeholder(2), d.Placeholder(3)),
+		report, user, StandardReportPresetID)
 	if err != nil {
 		return nil, fmt.Errorf("settings: list report presets: %w", err)
 	}
@@ -530,7 +542,11 @@ func (db *DB) ListReportPresets(ctx context.Context, report, user string) ([]Rep
 }
 
 func (db *DB) GetReportPreset(ctx context.Context, report, user, id string) (*ReportPreset, error) {
-	if strings.TrimSpace(id) == "" {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, nil
+	}
+	if id == StandardReportPresetID {
 		return nil, nil
 	}
 	if err := db.EnsureReportPresetSchema(ctx); err != nil {
@@ -558,9 +574,9 @@ func (db *DB) GetDefaultReportPreset(ctx context.Context, report, user string) (
 	row := db.QueryRow(ctx,
 		fmt.Sprintf(`SELECT id, report_name, user_login, name, settings_json, is_default
 			FROM _report_presets
-			WHERE report_name = %s AND user_login = %s AND is_default = %s`,
-			d.Placeholder(1), d.Placeholder(2), reportPresetBoolLit(d, true)),
-		report, user)
+			WHERE report_name = %s AND user_login = %s AND is_default = %s AND id <> %s`,
+			d.Placeholder(1), d.Placeholder(2), reportPresetBoolLit(d, true), d.Placeholder(3)),
+		report, user, StandardReportPresetID)
 	p, err := scanReportPresetRow(row)
 	if err != nil {
 		return nil, nil
@@ -574,12 +590,16 @@ func (db *DB) GetDefaultReportPreset(ctx context.Context, report, user string) (
 func (db *DB) SaveReportPreset(ctx context.Context, p ReportPreset) (string, error) {
 	p.Report = strings.TrimSpace(p.Report)
 	p.User = strings.TrimSpace(p.User)
+	p.ID = strings.TrimSpace(p.ID)
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Report == "" {
 		return "", errors.New("report preset: empty report")
 	}
 	if p.Name == "" {
 		return "", errors.New("report preset: empty name")
+	}
+	if p.ID == StandardReportPresetID {
+		return "", ErrReservedReportPresetID
 	}
 	if p.ID == "" {
 		p.ID = uuid.NewString()
@@ -589,6 +609,9 @@ func (db *DB) SaveReportPreset(ctx context.Context, p ReportPreset) (string, err
 	}
 	d := db.dialect
 	err := db.WithTx(ctx, func(txCtx context.Context) error {
+		if reportPresetNameTaken(txCtx, db, d, p) {
+			return ErrReportPresetNameExists
+		}
 		if p.IsDefault {
 			if _, err := db.Exec(txCtx,
 				fmt.Sprintf(`UPDATE _report_presets SET is_default = %s, updated_at = %s WHERE report_name = %s AND user_login = %s`,
@@ -616,6 +639,17 @@ func (db *DB) SaveReportPreset(ctx context.Context, p ReportPreset) (string, err
 		return "", err
 	}
 	return p.ID, nil
+}
+
+func reportPresetNameTaken(ctx context.Context, db *DB, d Dialect, p ReportPreset) bool {
+	var existingID string
+	err := db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT id FROM _report_presets
+			WHERE report_name = %s AND user_login = %s AND name = %s AND id <> %s
+			LIMIT 1`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4)),
+		p.Report, p.User, p.Name, p.ID).Scan(&existingID)
+	return err == nil && existingID != ""
 }
 
 func (db *DB) DeleteReportPreset(ctx context.Context, report, user, id string) error {
