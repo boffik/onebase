@@ -676,7 +676,6 @@ func TestReportSettingsSaveFromStandardCreatesReachablePreset(t *testing.T) {
 		"__settings":      {`{"variant":"X"}`},
 		"__preset":        {standardReportPresetID},
 		"__preset_action": {"save"},
-		"__preset_name":   {"По товарам"},
 		"Начало":          {"2026-07-01"},
 	}
 	r := reqWithChi("POST", "/ui/report/Продажи/settings/save", form, map[string]string{"name": "Продажи"})
@@ -696,12 +695,43 @@ func TestReportSettingsSaveFromStandardCreatesReachablePreset(t *testing.T) {
 	if presets[0].ID == standardReportPresetID {
 		t.Fatalf("нельзя сохранять пользовательский вариант с reserved id %q", presets[0].ID)
 	}
+	if presets[0].Name != defaultReportPresetName {
+		t.Fatalf("пустое имя должно получить автозаголовок %q, got %+v", defaultReportPresetName, presets[0])
+	}
 	if !strings.Contains(presets[0].SettingsJSON, `"variant":"X"`) {
 		t.Fatalf("settings_json не сохранён: %q", presets[0].SettingsJSON)
 	}
 	loc := w.Header().Get("Location")
 	if !strings.Contains(loc, "__run=1") || !strings.Contains(loc, "__preset="+url.QueryEscape(presets[0].ID)) || !strings.Contains(loc, "%D0%9D%D0%B0%D1%87%D0%B0%D0%BB%D0%BE=2026-07-01") {
 		t.Fatalf("редирект должен вернуть на сформированный отчёт с параметрами и новым пресетом: %q", loc)
+	}
+
+	form2 := url.Values{
+		"__settings":      {`{"variant":"Y"}`},
+		"__preset":        {standardReportPresetID},
+		"__preset_action": {"save"},
+	}
+	r2 := reqWithChi("POST", "/ui/report/Продажи/settings/save", form2, map[string]string{"name": "Продажи"})
+	w2 := httptest.NewRecorder()
+	s.reportSettingsSave(w2, r2)
+	if w2.Code != http.StatusSeeOther {
+		t.Fatalf("second save from standard: ожидался 303, получен %d: %s", w2.Code, w2.Body.String())
+	}
+	presets, err = db.ListReportPresets(ctx, "Продажи", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 2 {
+		t.Fatalf("ожидали два пресета после второго автосохранения, got %+v", presets)
+	}
+	var foundSecond bool
+	for _, p := range presets {
+		if p.Name == defaultReportPresetName+" 2" {
+			foundSecond = true
+		}
+	}
+	if !foundSecond {
+		t.Fatalf("второй пустой save должен получить уникальное имя, got %+v", presets)
 	}
 }
 
