@@ -257,15 +257,31 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 		// пользовательского ввода: возвращаем пустую презентационную компоновку.
 		base = &reportpkg.Composition{}
 	}
-	// Доверенные показатели по имени поля (регистронезависимо, как DSL).
+	// Доверенные показатели и поля по имени (регистронезависимо, как DSL).
 	// Expr всегда наследуется только отсюда; презентационные поля служат
 	// дефолтами, если пользовательский JSON пришёл частичным.
 	trustedExpr := make(map[string]string, len(base.Measures))
 	trustedMeasure := make(map[string]reportpkg.Measure, len(base.Measures))
+	canonicalField := make(map[string]string)
+	addCanonical := func(field string) {
+		if field != "" {
+			canonicalField[strings.ToLower(field)] = field
+		}
+	}
+	for _, g := range base.Groupings {
+		addCanonical(g)
+	}
+	for _, c := range base.Columns {
+		addCanonical(c)
+	}
 	for _, m := range base.Measures {
 		key := strings.ToLower(m.Field)
 		trustedExpr[key] = m.Expr
 		trustedMeasure[key] = m
+		addCanonical(m.Field)
+	}
+	for _, sk := range base.Sort {
+		addCanonical(sk.Field)
 	}
 
 	out := *base // копия: Conditional/Chart/DetailLink/DetailEntity — из доверенной.
@@ -275,13 +291,13 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 	// случайно очищал Columns/Sort/Totals/Detail базовой СКД.
 	invalidEmptyMeasures := u.Measures != nil && len(u.Measures) == 0
 	if u.Groupings != nil && !invalidEmptyMeasures {
-		out.Groupings = append([]string(nil), u.Groupings...)
+		out.Groupings = canonicalStrings(u.Groupings, canonicalField)
 	}
 	if u.Columns != nil && !invalidEmptyMeasures {
-		out.Columns = append([]string(nil), u.Columns...)
+		out.Columns = canonicalStrings(u.Columns, canonicalField)
 	}
 	if u.Sort != nil {
-		out.Sort = append([]reportpkg.SortKey(nil), u.Sort...)
+		out.Sort = canonicalSortKeys(u.Sort, canonicalField)
 	}
 	// Totals/Detail пока не редактируются в runtime-панели, поэтому пустое
 	// значение не должно стирать доверенную базу. Ненулевое значение применяем
@@ -300,8 +316,12 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 		measures := make([]reportpkg.Measure, 0, len(u.Measures))
 		for _, m := range u.Measures {
 			baseMeasure := trustedMeasure[strings.ToLower(m.Field)]
+			field := m.Field
+			if baseMeasure.Field != "" {
+				field = baseMeasure.Field
+			}
 			safe := reportpkg.Measure{
-				Field:  firstNonEmpty(m.Field, baseMeasure.Field),
+				Field:  field,
 				Agg:    firstNonEmpty(m.Agg, baseMeasure.Agg),
 				Title:  firstNonEmpty(m.Title, baseMeasure.Title),
 				Align:  firstNonEmpty(m.Align, baseMeasure.Align),
@@ -317,11 +337,70 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 	return &out
 }
 
+func canonicalStrings(in []string, canonical map[string]string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if c := canonical[strings.ToLower(v)]; c != "" {
+			out = append(out, c)
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+func canonicalSortKeys(in []reportpkg.SortKey, canonical map[string]string) []reportpkg.SortKey {
+	if in == nil {
+		return nil
+	}
+	out := make([]reportpkg.SortKey, 0, len(in))
+	for _, sk := range in {
+		if c := canonical[strings.ToLower(sk.Field)]; c != "" {
+			sk.Field = c
+		}
+		out = append(out, sk)
+	}
+	return out
+}
+
 func firstNonEmpty(v, fallback string) string {
 	if v != "" {
 		return v
 	}
 	return fallback
+}
+
+func reportGroupChecked(rep *reportpkg.Report, settings *reportpkg.UserReportSettings, field string) bool {
+	state := reportSettingsPanelState(rep, settings)
+	if state == nil || state.Composition == nil {
+		return false
+	}
+	return containsFold(state.Composition.Groupings, field)
+}
+
+func reportMeasureChecked(rep *reportpkg.Report, settings *reportpkg.UserReportSettings, field string) bool {
+	state := reportSettingsPanelState(rep, settings)
+	if state == nil || state.Composition == nil {
+		return false
+	}
+	for _, m := range state.Composition.Measures {
+		if strings.EqualFold(m.Field, field) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsFold(values []string, want string) bool {
+	for _, v := range values {
+		if strings.EqualFold(v, want) {
+			return true
+		}
+	}
+	return false
 }
 
 // safeAppearance канонизирует оформление из пользовательского ввода (__settings —

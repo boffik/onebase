@@ -467,6 +467,8 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			}
 			return existing + sep + "__settings=" + url.QueryEscape(rs)
 		},
+		"reportGroupChecked":   reportGroupChecked,
+		"reportMeasureChecked": reportMeasureChecked,
 		"mul": func(a, b int) int { return a * b },
 		"int": func(v any) int {
 			switch t := v.(type) {
@@ -2768,8 +2770,8 @@ const tplReport = `
     <tbody>
     {{range .ReportCols}}<tr>
       <td>{{.}}</td>
-      <td style="text-align:center"><input type="checkbox" class="rs-group" value="{{.}}"></td>
-      <td style="text-align:center"><input type="checkbox" class="rs-measure" value="{{.}}"></td>
+      <td style="text-align:center"><input type="checkbox" class="rs-group" value="{{.}}" {{if reportGroupChecked $.Report $.UserSettings .}}checked{{end}}></td>
+      <td style="text-align:center"><input type="checkbox" class="rs-measure" value="{{.}}" {{if reportMeasureChecked $.Report $.UserSettings .}}checked{{end}}></td>
     </tr>{{end}}
     </tbody>
   </table>
@@ -2845,6 +2847,12 @@ const tplReport = `
     sel.form.dataset.skipCollect="1";
     sel.form.submit();
   };
+  function rsNorm(v){return String(v||"").toLowerCase();}
+  function rsFieldMap(values){
+    var out={};
+    (values||[]).forEach(function(v){if(v)out[rsNorm(v)]=v;});
+    return out;
+  }
   function preset(){
     if(!hidden) return;
     var raw=hidden.value||hidden.dataset.base||"";
@@ -2856,9 +2864,10 @@ const tplReport = `
       var groups=comp.Groupings||comp.groupings||[];
       var meas=comp.Measures||comp.measures||[];
       var mf=meas.map(function(m){return m.Field||m.field;});
+      var groupMap=rsFieldMap(groups), measureMap=rsFieldMap(mf);
       document.querySelectorAll('.rs-group,.rs-measure').forEach(function(el){el.checked=false;});
-      document.querySelectorAll('.rs-group').forEach(function(el){ if(groups.indexOf(el.value)>=0) el.checked=true; });
-      document.querySelectorAll('.rs-measure').forEach(function(el){ if(mf.indexOf(el.value)>=0) el.checked=true; });
+      document.querySelectorAll('.rs-group').forEach(function(el){ if(groupMap[rsNorm(el.value)]) el.checked=true; });
+      document.querySelectorAll('.rs-measure').forEach(function(el){ if(measureMap[rsNorm(el.value)]) el.checked=true; });
       var ap=comp.Appearance||comp.appearance||{};
       var lines=ap.lines||ap.Lines||"";if(lines==="horizontal")lines="";
       var le=document.getElementById('rs-lines');if(le)le.value=lines;
@@ -2871,13 +2880,19 @@ const tplReport = `
     if(hidden&&!hidden.value&&raw)hidden.value=raw;
     if(raw){try{prev=JSON.parse(raw)||{};}catch(e){prev={};}}
     var prevComp=(prev&&prev.composition)||{};
+    var prevGroups=prevComp.Groupings||prevComp.groupings||[];
+    var prevGroupByField=rsFieldMap(prevGroups);
     var prevMeasures=prevComp.Measures||prevComp.measures||[];
     var prevByField={};
-    prevMeasures.forEach(function(m){var f=m&&(m.Field||m.field);if(f)prevByField[f]=m;});
-    var groupings=[];document.querySelectorAll('.rs-group:checked').forEach(function(c){groupings.push(c.value);});
+    var prevMeasureField={};
+    prevMeasures.forEach(function(m){var f=m&&(m.Field||m.field);if(f){prevByField[rsNorm(f)]=m;prevMeasureField[rsNorm(f)]=f;}});
+    var groupings=[];document.querySelectorAll('.rs-group:checked').forEach(function(c){
+      groupings.push(prevGroupByField[rsNorm(c.value)]||c.value);
+    });
     var measures=[];document.querySelectorAll('.rs-measure:checked').forEach(function(c){
-      var src=prevByField[c.value]||{};
-      var m={Field:c.value,Agg:src.Agg||src.agg||"sum"};
+      var key=rsNorm(c.value);
+      var src=prevByField[key]||{};
+      var m={Field:prevMeasureField[key]||c.value,Agg:src.Agg||src.agg||"sum"};
       var title=src.Title||src.title;if(title)m.Title=title;
       var align=src.Align||src.align;if(align)m.Align=align;
       var format=src.Format||src.format;if(format)m.Format=format;
