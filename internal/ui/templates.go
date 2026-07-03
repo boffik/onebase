@@ -442,6 +442,31 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			}
 			return existing + sep + "__variant=" + url.QueryEscape(vs)
 		},
+		"presetQuery": func(existing string, preset any) string {
+			ps, _ := preset.(string)
+			if ps == "" {
+				return existing
+			}
+			sep := "?"
+			if existing != "" {
+				sep = "&"
+			}
+			return existing + sep + "__preset=" + url.QueryEscape(ps)
+		},
+		"settingsQuery": func(existing string, raw any, active any) string {
+			if active == nil {
+				return existing
+			}
+			rs, _ := raw.(string)
+			if rs == "" {
+				return existing
+			}
+			sep := "?"
+			if existing != "" {
+				sep = "&"
+			}
+			return existing + sep + "__settings=" + url.QueryEscape(rs)
+		},
 		"mul": func(a, b int) int { return a * b },
 		"int": func(v any) int {
 			switch t := v.(type) {
@@ -2629,7 +2654,7 @@ const tplReport = `
 {{/* Кнопки выгрузки отчёта: Excel + PDF (issue #218). output_format: pdf делает
      PDF основной (первой); по умолчанию первой идёт Excel — поведение не меняется. */}}
 {{define "report-export-buttons"}}
-{{$q := variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant}}
+{{$q := settingsQuery (presetQuery (variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant) .ActivePresetID) .ReportSettingsJSON .UserSettings}}
 {{$excel := printf "/ui/report/%s/excel%s" (lower .Report.Name) $q}}
 {{$pdf := printf "/ui/report/%s/pdf%s" (lower .Report.Name) $q}}
 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
@@ -2646,14 +2671,24 @@ const tplReport = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
-{{if or .ReportParams .Report.Variants}}
+{{if or .ReportParams .Report.Variants .ReportPresets}}
 <details class="card report-block" data-block="params" open style="margin-bottom:16px">
 <summary>{{t $.Lang "Параметры"}}</summary>
 <form method="POST">
+  {{if .UserSettings}}<input type="hidden" name="__settings" value="{{if .ReportSettingsJSON}}{{.ReportSettingsJSON}}{{else}}{{.UserSettings.JSON}}{{end}}">{{end}}
+  {{if .ReportPresets}}
+  <div class="form-group" style="margin-bottom:16px;max-width:360px">
+    <label>{{t $.Lang "Вариант пользователя"}}</label>
+    <select name="__preset" onchange="var h=this.form.querySelector('input[name=__settings]');if(h)h.remove();this.form.submit()">
+      <option value="__standard" {{if eq $.ActivePresetID "__standard"}}selected{{end}}>{{t $.Lang "Стандартные настройки"}}</option>
+      {{range .ReportPresets}}<option value="{{.ID}}" {{if eq .ID $.ActivePresetID}}selected{{end}}>{{.Name}}{{if .IsDefault}} *{{end}}</option>{{end}}
+    </select>
+  </div>
+  {{end}}
   {{if .Report.Variants}}
   <div class="form-group" style="margin-bottom:16px;max-width:320px">
     <label>{{t $.Lang "Вариант"}}</label>
-    <select name="__variant" onchange="this.form.submit()">
+    <select name="__variant" onchange="var h=this.form.querySelector('input[name=__settings]');if(h)h.remove();var p=this.form.querySelector('select[name=__preset]');if(p)p.value='__standard';this.form.submit()">
       <option value="" {{if not $.ActiveVariant}}selected{{end}}>{{t $.Lang "Основной"}}</option>
       {{range .Report.Variants}}<option value="{{.Name}}" {{if eq .Name $.ActiveVariant}}selected{{end}}>{{.Name}}</option>{{end}}
     </select>
@@ -2706,10 +2741,24 @@ const tplReport = `
 {{if .ReportCols}}
 <details class="card report-block" data-block="settings" style="margin-bottom:16px">
 <summary>{{t $.Lang "Настройка отчёта"}}{{if .UserSettings}} <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600">{{t $.Lang "изменено"}}</span>{{end}}</summary>
-<form method="POST" onsubmit="rsCollect()">
+<form method="POST" onsubmit="return rsBeforeSubmit(event)">
   {{range .ReportParams}}<input type="hidden" name="{{.Name}}" value="{{str (index $.ParamValues .Name)}}">{{end}}
   <input type="hidden" name="__variant" value="{{.ActiveVariant}}">
-  <input type="hidden" name="__settings" id="rs-json"{{if .UserSettings}} value="{{.UserSettings.JSON}}"{{end}}>
+  <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+    <div class="form-group" style="margin-bottom:0;min-width:220px">
+      <label>{{t $.Lang "Вариант пользователя"}}</label>
+      <select name="__preset" onchange="rsChoosePreset(this)">
+        <option value="__standard" {{if eq $.ActivePresetID "__standard"}}selected{{end}}>{{t $.Lang "Стандартные настройки"}}</option>
+        {{range .ReportPresets}}<option value="{{.ID}}" {{if eq .ID $.ActivePresetID}}selected{{end}}>{{.Name}}{{if .IsDefault}} *{{end}}</option>{{end}}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0;min-width:220px">
+      <label>{{t $.Lang "Название варианта"}}</label>
+      <input type="text" name="__preset_name" value="{{if .ActivePreset}}{{.ActivePreset.Name}}{{end}}" placeholder="{{t $.Lang "Мой вариант"}}">
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;padding-bottom:8px"><input type="checkbox" name="__preset_default" value="1" {{if .ActivePreset}}{{if .ActivePreset.IsDefault}}checked{{end}}{{end}}> {{t $.Lang "по умолчанию"}}</label>
+  </div>
+  <input type="hidden" name="__settings" id="rs-json"{{if .ReportSettingsJSON}} value="{{.ReportSettingsJSON}}"{{else if .UserSettings}} value="{{.UserSettings.JSON}}"{{end}}>
   <table style="width:auto;margin-bottom:12px">
     <thead><tr>
       <th style="text-align:left">{{t $.Lang "Поле"}}</th>
@@ -2775,13 +2824,27 @@ const tplReport = `
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn btn-primary" type="submit">{{t $.Lang "Применить"}}</button>
-    <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/save">{{t $.Lang "Сохранить"}}</button>
+    <button class="btn" type="submit" name="__preset_action" value="save" formaction="/ui/report/{{lower .Report.Name}}/settings/save">{{t $.Lang "Сохранить вариант"}}</button>
+    <button class="btn" type="submit" name="__preset_action" value="save_as" formaction="/ui/report/{{lower .Report.Name}}/settings/save">{{t $.Lang "Сохранить как"}}</button>
+    <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/delete"{{if not .ActivePreset}} disabled{{end}}>{{t $.Lang "Удалить вариант"}}</button>
     <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/reset"{{if not .UserSettings}} disabled{{end}}>{{t $.Lang "Стандартные настройки"}}</button>
   </div>
 </form>
 <script>
 (function(){
   var hidden=document.getElementById('rs-json');
+  window.rsBeforeSubmit=function(ev){
+    var form=ev&&ev.target;
+    if(form&&form.dataset&&form.dataset.skipCollect==="1"){form.dataset.skipCollect="";return true;}
+    rsCollect();
+    return true;
+  };
+  window.rsChoosePreset=function(sel){
+    if(!sel||!sel.form)return;
+    var h=sel.form.querySelector('input[name="__settings"]');if(h)h.remove();
+    sel.form.dataset.skipCollect="1";
+    sel.form.submit();
+  };
   function preset(){
     if(!hidden||!hidden.value) return;
     try{
@@ -2799,8 +2862,21 @@ const tplReport = `
     }catch(e){}
   }
   window.rsCollect=function(){
+    var prev={};
+    if(hidden&&hidden.value){try{prev=JSON.parse(hidden.value)||{};}catch(e){prev={};}}
+    var prevComp=(prev&&prev.composition)||{};
+    var prevMeasures=prevComp.Measures||prevComp.measures||[];
+    var prevByField={};
+    prevMeasures.forEach(function(m){var f=m&&(m.Field||m.field);if(f)prevByField[f]=m;});
     var groupings=[];document.querySelectorAll('.rs-group:checked').forEach(function(c){groupings.push(c.value);});
-    var measures=[];document.querySelectorAll('.rs-measure:checked').forEach(function(c){measures.push({Field:c.value,Agg:"sum"});});
+    var measures=[];document.querySelectorAll('.rs-measure:checked').forEach(function(c){
+      var src=prevByField[c.value]||{};
+      var m={Field:c.value,Agg:src.Agg||src.agg||"sum"};
+      var title=src.Title||src.title;if(title)m.Title=title;
+      var align=src.Align||src.align;if(align)m.Align=align;
+      var format=src.Format||src.format;if(format)m.Format=format;
+      measures.push(m);
+    });
     var filters=[];document.querySelectorAll('.rs-filter-row').forEach(function(row){
       var f=row.querySelector('.rs-f-field'),op=row.querySelector('.rs-f-op'),v=row.querySelector('.rs-f-value');
       if(f&&op&&f.value){ filters.push({field:f.value,op:op.value,value:v?v.value:""}); }
@@ -2808,7 +2884,16 @@ const tplReport = `
     var variantEl=document.querySelector('input[name="__variant"]');
     var lines=(document.getElementById('rs-lines')||{}).value||"";
     var zebra=!!(document.getElementById('rs-zebra')||{}).checked;
-    var s={variant:variantEl?variantEl.value:"",composition:{Groupings:groupings,Measures:measures,appearance:{lines:lines,zebra:zebra}},filters:filters};
+    var columns=prevComp.Columns||prevComp.columns||[];
+    var sort=prevComp.Sort||prevComp.sort||[];
+    var totals=prevComp.Totals||prevComp.totals;
+    var detail=(typeof prevComp.Detail!=="undefined")?prevComp.Detail:prevComp.detail;
+    var nextComp={Groupings:groupings,Measures:measures,Appearance:{lines:lines,zebra:zebra}};
+    if(columns&&columns.length)nextComp.Columns=columns;
+    if(sort&&sort.length)nextComp.Sort=sort;
+    if(totals)nextComp.Totals=totals;
+    if(typeof detail!=="undefined")nextComp.Detail=!!detail;
+    var s={variant:variantEl?variantEl.value:"",composition:nextComp,filters:filters};
     if(hidden)hidden.value=JSON.stringify(s);
   };
   window.rsAddFilter=function(){

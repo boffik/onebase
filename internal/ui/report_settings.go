@@ -23,8 +23,17 @@ import (
 // разумную презентационную настройку (выбор/порядок колонок, отборы, сортировка).
 const maxUserSettingsBytes = 64 * 1024
 
+const standardReportPresetID = "__standard"
+
 // errSettingsTooLarge — отказ сохранить слишком большой блок __settings (issue #23).
 var errSettingsTooLarge = errors.New("настройки отчёта слишком велики")
+
+var errReportPresetNameRequired = errors.New("укажите название варианта отчёта")
+
+type reportSettingsRequest struct {
+	Settings       *reportpkg.UserReportSettings
+	ActivePresetID string
+}
 
 // readReportSettings разбирает пользовательские настройки из поля __settings
 // запроса (FormValue читает и POST-форму, и GET-query). Пустое или повреждённое
@@ -74,6 +83,61 @@ func requestFormValue(r *http.Request, name string) (string, bool) {
 	return vs[0], true
 }
 
+func (s *Server) reportSettingsForRequest(r *http.Request, rep *reportpkg.Report) reportSettingsRequest {
+	presetID, hasPreset := requestFormValue(r, "__preset")
+	if settings := readReportSettings(r); settings != nil {
+		settings = reportSettingsWithRequestVariant(r, settings)
+		return reportSettingsRequest{Settings: settings, ActivePresetID: presetID}
+	}
+
+	user := currentUserLogin(r)
+	if hasPreset {
+		if presetID == "" || presetID == standardReportPresetID {
+			return reportSettingsRequest{Settings: reportSettingsWithRequestVariant(r, nil), ActivePresetID: standardReportPresetID}
+		}
+		if p, err := s.store.GetReportPreset(r.Context(), rep.Name, user, presetID); err == nil && p != nil {
+			if st, err := reportpkg.ParseUserSettings(p.SettingsJSON); err == nil {
+				return reportSettingsRequest{Settings: st, ActivePresetID: p.ID}
+			}
+		}
+		return reportSettingsRequest{Settings: reportSettingsWithRequestVariant(r, nil), ActivePresetID: standardReportPresetID}
+	}
+
+	if p, err := s.store.GetDefaultReportPreset(r.Context(), rep.Name, user); err == nil && p != nil {
+		if st, err := reportpkg.ParseUserSettings(p.SettingsJSON); err == nil {
+			return reportSettingsRequest{Settings: st, ActivePresetID: p.ID}
+		}
+	}
+
+	// Fallback для баз, где до появления именованных пресетов уже была одна
+	// сохранённая настройка в _settings.
+	if settings := loadUserSettings(r.Context(), s.store, rep.Name, user); settings != nil {
+		settings = reportSettingsWithRequestVariant(r, settings)
+		return reportSettingsRequest{Settings: settings}
+	}
+	return reportSettingsRequest{Settings: reportSettingsWithRequestVariant(r, nil)}
+}
+
+func loadReportPresets(ctx context.Context, store *storage.DB, report, user string) []storage.ReportPreset {
+	if store == nil {
+		return nil
+	}
+	presets, err := store.ListReportPresets(ctx, report, user)
+	if err != nil {
+		return nil
+	}
+	return presets
+}
+
+func activeReportPreset(presets []storage.ReportPreset, id string) *storage.ReportPreset {
+	for i := range presets {
+		if presets[i].ID == id {
+			return &presets[i]
+		}
+	}
+	return nil
+}
+
 // effectiveComposition вычисляет компоновку, по которой строится отчёт.
 //
 // БЕЗОПАСНОСТЬ (issue #1): база компоновки берётся ИСКЛЮЧИТЕЛЬНО из доверенной
@@ -95,6 +159,79 @@ func effectiveComposition(rep *reportpkg.Report, s *reportpkg.UserReportSettings
 		return base
 	}
 	return mergeUserComposition(base, s.Composition)
+}
+
+// reportSettingsPanelJSON возвращает JSON, которым панель «Настройка отчёта»
+// инициализирует чекбоксы и скрытое поле __settings. Важно: это не индикатор
+// пользовательской модификации. Если пользовательских настроек нет, но у отчёта
+// есть базовая composition, панель всё равно должна показать её выбранной.
+func reportSettingsPanelJSON(rep *reportpkg.Report, s *reportpkg.UserReportSettings) string {
+	st := reportSettingsPanelState(rep, s)
+	if st == nil {
+		return ""
+	}
+	raw, err := st.JSON()
+	if err != nil {
+		return ""
+	}
+	return raw
+}
+
+func reportSettingsPanelState(rep *reportpkg.Report, s *reportpkg.UserReportSettings) *reportpkg.UserReportSettings {
+	if rep == nil {
+		return nil
+	}
+	comp := effectiveComposition(rep, s)
+	if comp == nil && s == nil {
+		return nil
+	}
+	out := &reportpkg.UserReportSettings{}
+	if s != nil {
+		out.Variant = s.Variant
+		out.Filters = append([]reportpkg.Filter(nil), s.Filters...)
+	}
+	if comp != nil {
+		out.Composition = panelComposition(comp)
+	}
+	if out.Variant == "" && out.Composition == nil && len(out.Filters) == 0 {
+		return nil
+	}
+	return out
+}
+
+func panelComposition(c *reportpkg.Composition) *reportpkg.Composition {
+	if c == nil {
+		return nil
+	}
+	out := &reportpkg.Composition{
+		Groupings:  append([]string(nil), c.Groupings...),
+		Columns:    append([]string(nil), c.Columns...),
+		Measures:   panelMeasures(c.Measures),
+		Totals:     c.Totals,
+		Detail:     c.Detail,
+		Sort:       append([]reportpkg.SortKey(nil), c.Sort...),
+		Appearance: safeAppearance(c.Appearance),
+	}
+	return out
+}
+
+func panelMeasures(in []reportpkg.Measure) []reportpkg.Measure {
+	if in == nil {
+		return nil
+	}
+	out := make([]reportpkg.Measure, 0, len(in))
+	for _, m := range in {
+		// В панель уходит только презентация показателей. Expr не нужен для UI
+		// и при обратной отправке всё равно берётся только из доверенной YAML-базы.
+		out = append(out, reportpkg.Measure{
+			Field:  m.Field,
+			Agg:    m.Agg,
+			Title:  m.Title,
+			Align:  m.Align,
+			Format: m.Format,
+		})
+	}
+	return out
 }
 
 // mergeUserComposition строит итоговую компоновку на базе доверенной (base) и
@@ -128,17 +265,33 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 
 	out := *base // копия: Conditional/Chart/DetailLink/DetailEntity — из доверенной.
 
-	// Презентационные коллекции берём из пользовательского ввода (это данные).
-	out.Groupings = append([]string(nil), u.Groupings...)
-	out.Columns = append([]string(nil), u.Columns...)
-	out.Sort = append([]reportpkg.SortKey(nil), u.Sort...)
-	out.Totals = u.Totals
-	out.Detail = u.Detail
+	// Презентационные коллекции берём из пользовательского ввода, но только если
+	// поле реально присутствовало. Старый UI отправлял частичный JSON и тем самым
+	// случайно очищал Columns/Sort/Totals/Detail базовой СКД.
+	invalidEmptyMeasures := u.Measures != nil && len(u.Measures) == 0
+	if u.Groupings != nil && !invalidEmptyMeasures {
+		out.Groupings = append([]string(nil), u.Groupings...)
+	}
+	if u.Columns != nil && !invalidEmptyMeasures {
+		out.Columns = append([]string(nil), u.Columns...)
+	}
+	if u.Sort != nil {
+		out.Sort = append([]reportpkg.SortKey(nil), u.Sort...)
+	}
+	// Totals/Detail пока не редактируются в runtime-панели, поэтому пустое
+	// значение не должно стирать доверенную базу. Ненулевое значение применяем
+	// для обратной совместимости с уже существующим JSON настроек.
+	if u.Totals.Grand || u.Totals.Subtotals {
+		out.Totals = u.Totals
+	}
+	if u.Detail {
+		out.Detail = true
+	}
 	out.Appearance = safeAppearance(u.Appearance) // презентация: безопасно из пользователя
 
 	// Показатели: презентация — из пользовательского ввода, Expr — только из
 	// доверенной компоновки (по совпадению Field), иначе обнуляем.
-	if u.Measures != nil {
+	if u.Measures != nil && len(u.Measures) > 0 {
 		measures := make([]reportpkg.Measure, 0, len(u.Measures))
 		for _, m := range u.Measures {
 			safe := reportpkg.Measure{
@@ -199,6 +352,14 @@ func reportFormURL(name string) string {
 	return "/ui/report/" + url.PathEscape(strings.ToLower(name))
 }
 
+func reportFormURLWithPreset(name, presetID string) string {
+	u := reportFormURL(name)
+	if presetID == "" {
+		return u
+	}
+	return u + "?__preset=" + url.QueryEscape(presetID)
+}
+
 // reportSettingsSave сохраняет рантайм-настройки текущего пользователя (POST
 // поля __settings) и возвращает на форму отчёта.
 func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +370,7 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
+	action := r.FormValue("__preset_action")
 	raw := r.FormValue("__settings")
 	// Лимит размера: не пускаем в _settings произвольно большой ввод (issue #23).
 	if len(raw) > maxUserSettingsBytes {
@@ -229,8 +391,64 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_ = s.store.SaveReportUserSettings(r.Context(), rep.Name, currentUserLogin(r), canon)
-	http.Redirect(w, r, reportFormURL(rep.Name), http.StatusSeeOther)
+
+	// Обратная совместимость: старые формы без __preset_action по-прежнему
+	// сохраняют единственную настройку в _settings.
+	if action == "" {
+		_ = s.store.SaveReportUserSettings(r.Context(), rep.Name, currentUserLogin(r), canon)
+		http.Redirect(w, r, reportFormURL(rep.Name), http.StatusSeeOther)
+		return
+	}
+
+	user := currentUserLogin(r)
+	presetID := r.FormValue("__preset")
+	name := strings.TrimSpace(r.FormValue("__preset_name"))
+	isDefault := r.FormValue("__preset_default") != ""
+
+	if action == "save" && presetID != "" && presetID != standardReportPresetID {
+		if p, err := s.store.GetReportPreset(r.Context(), rep.Name, user, presetID); err == nil && p != nil {
+			if name == "" {
+				name = p.Name
+			}
+		} else {
+			presetID = ""
+		}
+	}
+	if action == "save_as" {
+		presetID = ""
+	}
+	if name == "" {
+		http.Error(w, s.errText(r, errReportPresetNameRequired), http.StatusBadRequest)
+		return
+	}
+	id, err := s.store.SaveReportPreset(r.Context(), storage.ReportPreset{
+		ID:           presetID,
+		Report:       rep.Name,
+		User:         user,
+		Name:         name,
+		SettingsJSON: canon,
+		IsDefault:    isDefault,
+	})
+	if err != nil {
+		http.Error(w, s.errText(r, err), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, reportFormURLWithPreset(rep.Name, id), http.StatusSeeOther)
+}
+
+func (s *Server) reportPresetDelete(w http.ResponseWriter, r *http.Request) {
+	rep := s.getReport(w, r)
+	if rep == nil {
+		return
+	}
+	if !s.requirePerm(w, r, "report", rep.Name, "run") {
+		return
+	}
+	presetID := r.FormValue("__preset")
+	if presetID != "" && presetID != standardReportPresetID {
+		_ = s.store.DeleteReportPreset(r.Context(), rep.Name, currentUserLogin(r), presetID)
+	}
+	http.Redirect(w, r, reportFormURLWithPreset(rep.Name, standardReportPresetID), http.StatusSeeOther)
 }
 
 // reportSettingsReset удаляет рантайм-настройки текущего пользователя — возврат
@@ -244,5 +462,5 @@ func (s *Server) reportSettingsReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.store.DeleteReportUserSettings(r.Context(), rep.Name, currentUserLogin(r))
-	http.Redirect(w, r, reportFormURL(rep.Name), http.StatusSeeOther)
+	http.Redirect(w, r, reportFormURLWithPreset(rep.Name, standardReportPresetID), http.StatusSeeOther)
 }

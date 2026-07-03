@@ -95,3 +95,90 @@ func TestReportSettingsKeyNoCollision(t *testing.T) {
 		t.Fatalf("(a,b.c) затёрта: %q", v)
 	}
 }
+
+func TestReportPresets(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "presets.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	t.Cleanup(db.Close)
+
+	id1, err := db.SaveReportPreset(ctx, ReportPreset{
+		Report:       "Продажи",
+		User:         "alice",
+		Name:         "По товарам",
+		SettingsJSON: `{"variant":"A"}`,
+		IsDefault:    true,
+	})
+	if err != nil {
+		t.Fatalf("SaveReportPreset #1: %v", err)
+	}
+	id2, err := db.SaveReportPreset(ctx, ReportPreset{
+		Report:       "Продажи",
+		User:         "alice",
+		Name:         "По складам",
+		SettingsJSON: `{"variant":"B"}`,
+		IsDefault:    true,
+	})
+	if err != nil {
+		t.Fatalf("SaveReportPreset #2: %v", err)
+	}
+	if id1 == id2 {
+		t.Fatalf("разные пресеты получили один id: %q", id1)
+	}
+
+	def, err := db.GetDefaultReportPreset(ctx, "Продажи", "alice")
+	if err != nil {
+		t.Fatalf("GetDefaultReportPreset: %v", err)
+	}
+	if def == nil || def.ID != id2 || !def.IsDefault {
+		t.Fatalf("дефолт должен быть вторым пресетом: %+v", def)
+	}
+
+	list, err := db.ListReportPresets(ctx, "Продажи", "alice")
+	if err != nil {
+		t.Fatalf("ListReportPresets: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("ожидали 2 пресета, got %+v", list)
+	}
+	if list[0].ID != id2 || !list[0].IsDefault {
+		t.Fatalf("дефолтный пресет должен быть первым: %+v", list)
+	}
+	if list[1].ID != id1 || list[1].IsDefault {
+		t.Fatalf("первый пресет должен перестать быть default: %+v", list)
+	}
+
+	got, err := db.GetReportPreset(ctx, "Продажи", "alice", id1)
+	if err != nil {
+		t.Fatalf("GetReportPreset: %v", err)
+	}
+	if got == nil || got.Name != "По товарам" || got.SettingsJSON != `{"variant":"A"}` {
+		t.Fatalf("не тот пресет: %+v", got)
+	}
+	if other, _ := db.GetReportPreset(ctx, "Продажи", "bob", id1); other != nil {
+		t.Fatalf("bob не должен видеть preset alice: %+v", other)
+	}
+
+	if _, err := db.SaveReportPreset(ctx, ReportPreset{
+		ID:           id1,
+		Report:       "Продажи",
+		User:         "alice",
+		Name:         "По товарам v2",
+		SettingsJSON: `{"variant":"A2"}`,
+	}); err != nil {
+		t.Fatalf("update preset: %v", err)
+	}
+	updated, _ := db.GetReportPreset(ctx, "Продажи", "alice", id1)
+	if updated == nil || updated.Name != "По товарам v2" || updated.SettingsJSON != `{"variant":"A2"}` {
+		t.Fatalf("update не применился: %+v", updated)
+	}
+
+	if err := db.DeleteReportPreset(ctx, "Продажи", "alice", id1); err != nil {
+		t.Fatalf("DeleteReportPreset: %v", err)
+	}
+	if deleted, _ := db.GetReportPreset(ctx, "Продажи", "alice", id1); deleted != nil {
+		t.Fatalf("пресет должен быть удалён: %+v", deleted)
+	}
+}

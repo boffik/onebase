@@ -75,6 +75,36 @@ func TestReportSettingsWithRequestVariant(t *testing.T) {
 	}
 }
 
+func TestReportSettingsForRequestPresetKeepsPresetVariant(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-variant.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	rep := &reportpkg.Report{Name: "Продажи"}
+	id, err := db.SaveReportPreset(ctx, storage.ReportPreset{
+		Report:       "Продажи",
+		User:         "",
+		Name:         "Вариант пользователя",
+		SettingsJSON: `{"variant":"YAML-V"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{store: db}
+	req := httptest.NewRequest(http.MethodPost, "/ui/report/Продажи", strings.NewReader("__preset="+url.QueryEscape(id)+"&__variant="))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	got := srv.reportSettingsForRequest(req, rep)
+	if got.ActivePresetID != id {
+		t.Fatalf("active preset: %q", got.ActivePresetID)
+	}
+	if got.Settings == nil || got.Settings.Variant != "YAML-V" {
+		t.Fatalf("preset variant должен сохраниться, got %+v", got.Settings)
+	}
+}
+
 // TestEffectiveCompositionNoDSLExecution: ключевой тест безопасности (issue #1).
 // Пользователь присылает __settings с вычисляемым показателем (Expr) и условием
 // оформления (When), содержащими вредоносное DSL. Эффективная компоновка НЕ
@@ -179,16 +209,83 @@ func TestEffectiveCompositionAppearance(t *testing.T) {
 	}
 }
 
+func TestEffectiveCompositionIgnoresEmptyMeasureOverride(t *testing.T) {
+	trusted := &reportpkg.Composition{
+		Groupings: []string{"Организация", "Номенклатура"},
+		Columns:   []string{"Месяц"},
+		Measures: []reportpkg.Measure{
+			{Field: "Выручка", Agg: "sum", Title: "Выручка"},
+			{Field: "ВаловаяПрибыль", Agg: "sum", Title: "Валовая прибыль"},
+		},
+		Totals: reportpkg.Totals{Grand: true, Subtotals: true},
+		Sort:   []reportpkg.SortKey{{Field: "ВаловаяПрибыль", Dir: "desc"}},
+	}
+	rep := &reportpkg.Report{Composition: trusted}
+
+	// Такой JSON сохранял старый UI, когда чекбоксы не были предзаполнены:
+	// пустые Groupings/Measures перекрывали базовую composition и отчёт
+	// переставал нормально формироваться.
+	userComp := &reportpkg.Composition{
+		Groupings: []string{},
+		Measures:  []reportpkg.Measure{},
+	}
+	eff := effectiveComposition(rep, &reportpkg.UserReportSettings{Composition: userComp})
+	if strings.Join(eff.Groupings, ",") != "Организация,Номенклатура" {
+		t.Fatalf("пустой override не должен стирать группировки: %+v", eff.Groupings)
+	}
+	if strings.Join(eff.Columns, ",") != "Месяц" {
+		t.Fatalf("пустой override не должен стирать колонки: %+v", eff.Columns)
+	}
+	if len(eff.Measures) != 2 || eff.Measures[1].Field != "ВаловаяПрибыль" {
+		t.Fatalf("пустой override не должен стирать показатели: %+v", eff.Measures)
+	}
+	if !eff.Totals.Grand || !eff.Totals.Subtotals {
+		t.Fatalf("пустой override не должен стирать итоги: %+v", eff.Totals)
+	}
+	if len(eff.Sort) != 1 || eff.Sort[0].Field != "ВаловаяПрибыль" {
+		t.Fatalf("пустой override не должен стирать сортировку: %+v", eff.Sort)
+	}
+}
+
+func TestReportSettingsPanelJSONUsesBaseComposition(t *testing.T) {
+	rep := &reportpkg.Report{
+		Name: "ВаловаяПрибыльСКД",
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Организация", "Номенклатура"},
+			Columns:   []string{"Месяц"},
+			Measures: []reportpkg.Measure{
+				{Field: "Выручка", Agg: "sum", Title: "Выручка", Format: "#,##0.00"},
+				{Field: "ВаловаяПрибыль", Agg: "sum", Title: "Валовая прибыль", Format: "#,##0.00"},
+			},
+			Totals: reportpkg.Totals{Grand: true, Subtotals: true},
+			Sort:   []reportpkg.SortKey{{Field: "ВаловаяПрибыль", Dir: "desc"}},
+		},
+	}
+	raw := reportSettingsPanelJSON(rep, nil)
+	if raw == "" {
+		t.Fatalf("ожидали JSON предзаполнения панели")
+	}
+	for _, want := range []string{"Организация", "Номенклатура", "ВаловаяПрибыль", "Месяц", "Grand", "Sort"} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("JSON панели не содержит %q: %s", want, raw)
+		}
+	}
+}
+
 // TestReportSettingsPanel: панель «Настройки» рендерится при наличии ReportCols,
 // содержит чекбоксы доступных полей и скрытое поле __settings.
 func TestReportSettingsPanel(t *testing.T) {
 	rep := &reportpkg.Report{Name: "sales", Title: "Продажи"}
+	preset := storage.ReportPreset{ID: "p1", Name: "Мой вариант", IsDefault: true}
 	var buf bytes.Buffer
 	data := map[string]any{
-		"Report":       rep,
-		"ParamValues":  map[string]any{},
-		"ReportParams": []reportParamUI{},
-		"ReportCols":   []string{"Товар", "Сумма"},
+		"Report":         rep,
+		"ParamValues":    map[string]any{},
+		"ReportParams":   []reportParamUI{},
+		"ReportCols":     []string{"Товар", "Сумма"},
+		"ReportPresets":  []storage.ReportPreset{preset},
+		"ActivePresetID": "p1",
+		"ActivePreset":   &preset,
 		"UserSettings": &reportpkg.UserReportSettings{
 			Composition: &reportpkg.Composition{
 				Groupings: []string{"Товар"},
@@ -208,10 +305,84 @@ func TestReportSettingsPanel(t *testing.T) {
 	if !strings.Contains(out, `name="__settings"`) {
 		t.Fatalf("нет скрытого поля __settings")
 	}
+	for _, want := range []string{`name="__preset"`, `Мой вариант`, `name="__preset_action" value="save"`, `name="__preset_action" value="save_as"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("в панели нет элемента пользовательских вариантов %q", want)
+		}
+	}
 	for _, want := range []string{"Товар", "Сумма"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в панели нет поля %q", want)
 		}
+	}
+}
+
+func TestReportSettingsPanelBasePresetWithoutChangedIndicator(t *testing.T) {
+	rep := &reportpkg.Report{
+		Name:  "profit",
+		Title: "Прибыль",
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Организация"},
+			Measures:  []reportpkg.Measure{{Field: "ВаловаяПрибыль", Agg: "sum"}},
+		},
+	}
+	var buf bytes.Buffer
+	data := map[string]any{
+		"Report":             rep,
+		"ParamValues":        map[string]any{},
+		"ReportParams":       []reportParamUI{},
+		"ReportCols":         []string{"Организация", "ВаловаяПрибыль"},
+		"ReportSettingsJSON": reportSettingsPanelJSON(rep, nil),
+		"Cfg":                Config{},
+		"Lang":               "ru",
+	}
+	if err := tmpl.ExecuteTemplate(&buf, "page-report", data); err != nil {
+		t.Fatalf("execute page-report: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `id="rs-json"`) || !strings.Contains(out, "Организация") || !strings.Contains(out, "ВаловаяПрибыль") {
+		t.Fatalf("панель не получила базовый JSON настроек: %s", out)
+	}
+	if strings.Contains(out, "изменено") {
+		t.Fatalf("базовая composition не должна показываться как пользовательское изменение")
+	}
+	if !strings.Contains(out, "disabled") {
+		t.Fatalf("кнопка сброса должна быть disabled без пользовательских настроек")
+	}
+}
+
+func TestReportParamsFormKeepsActiveSettings(t *testing.T) {
+	rep := &reportpkg.Report{
+		Name:   "profit",
+		Title:  "Прибыль",
+		Params: []reportpkg.Param{{Name: "Начало", Type: "date"}},
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Организация"},
+			Measures:  []reportpkg.Measure{{Field: "ВаловаяПрибыль", Agg: "sum"}},
+		},
+	}
+	settings := &reportpkg.UserReportSettings{
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Организация"},
+			Measures:  []reportpkg.Measure{{Field: "ВаловаяПрибыль", Agg: "sum"}},
+		},
+	}
+	var buf bytes.Buffer
+	data := map[string]any{
+		"Report":             rep,
+		"ParamValues":        map[string]any{"Начало": "2026-07-01"},
+		"ReportParams":       []reportParamUI{{Name: "Начало", Label: "С даты", Type: "date", IsDate: true}},
+		"UserSettings":       settings,
+		"ReportSettingsJSON": reportSettingsPanelJSON(rep, settings),
+		"Cfg":                Config{},
+		"Lang":               "ru",
+	}
+	if err := tmpl.ExecuteTemplate(&buf, "page-report", data); err != nil {
+		t.Fatalf("execute page-report: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `name="__settings"`) || !strings.Contains(out, "ВаловаяПрибыль") {
+		t.Fatalf("форма параметров не сохраняет активные настройки: %s", out)
 	}
 }
 
@@ -331,6 +502,70 @@ func TestReportSettingsSaveReset(t *testing.T) {
 	}
 	if got, _ := db.GetReportUserSettings(ctx, "Продажи", ""); got != "" {
 		t.Fatalf("reset: ожидали пусто, получили %q", got)
+	}
+}
+
+func TestReportSettingsSaveNamedPreset(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-save.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	rep := &reportpkg.Report{Name: "Продажи"}
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{Reports: []*reportpkg.Report{rep}})
+	s := &Server{store: db, reg: registry}
+
+	form := url.Values{
+		"__settings":       {`{"variant":"X"}`},
+		"__preset_action":  {"save_as"},
+		"__preset_name":    {"По товарам"},
+		"__preset_default": {"1"},
+	}
+	r := reqWithChi("POST", "/ui/report/Продажи/settings/save", form, map[string]string{"name": "Продажи"})
+	w := httptest.NewRecorder()
+	s.reportSettingsSave(w, r)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("save_as: ожидался 303, получен %d: %s", w.Code, w.Body.String())
+	}
+	presets, err := db.ListReportPresets(ctx, "Продажи", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 1 || presets[0].Name != "По товарам" || !presets[0].IsDefault {
+		t.Fatalf("пресет не сохранён как default: %+v", presets)
+	}
+	if !strings.Contains(presets[0].SettingsJSON, `"variant":"X"`) {
+		t.Fatalf("settings_json не сохранён: %q", presets[0].SettingsJSON)
+	}
+
+	form2 := url.Values{
+		"__settings":      {`{"variant":"Y"}`},
+		"__preset":        {presets[0].ID},
+		"__preset_action": {"save"},
+		"__preset_name":   {"По товарам v2"},
+	}
+	r2 := reqWithChi("POST", "/ui/report/Продажи/settings/save", form2, map[string]string{"name": "Продажи"})
+	w2 := httptest.NewRecorder()
+	s.reportSettingsSave(w2, r2)
+	if w2.Code != http.StatusSeeOther {
+		t.Fatalf("save existing: ожидался 303, получен %d: %s", w2.Code, w2.Body.String())
+	}
+	p, _ := db.GetReportPreset(ctx, "Продажи", "", presets[0].ID)
+	if p == nil || p.Name != "По товарам v2" || !strings.Contains(p.SettingsJSON, `"variant":"Y"`) {
+		t.Fatalf("пресет не обновлён: %+v", p)
+	}
+
+	r3 := reqWithChi("POST", "/ui/report/Продажи/settings/delete", url.Values{"__preset": {presets[0].ID}}, map[string]string{"name": "Продажи"})
+	w3 := httptest.NewRecorder()
+	s.reportPresetDelete(w3, r3)
+	if w3.Code != http.StatusSeeOther {
+		t.Fatalf("delete: ожидался 303, получен %d", w3.Code)
+	}
+	if p, _ := db.GetReportPreset(ctx, "Продажи", "", presets[0].ID); p != nil {
+		t.Fatalf("пресет должен быть удалён: %+v", p)
 	}
 }
 
