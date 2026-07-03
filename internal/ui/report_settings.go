@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,6 +25,7 @@ import (
 const maxUserSettingsBytes = 64 * 1024
 
 const standardReportPresetID = "__standard"
+const defaultReportPresetName = "Мой вариант"
 
 // errSettingsTooLarge — отказ сохранить слишком большой блок __settings (issue #23).
 var errSettingsTooLarge = errors.New("настройки отчёта слишком велики")
@@ -483,6 +485,38 @@ func reportRunURLAfterSettingsSave(name string, params []reportpkg.Param, r *htt
 	return u.String()
 }
 
+func reportPresetNameOrDefault(ctx context.Context, store *storage.DB, report, user, name string) string {
+	name = strings.TrimSpace(name)
+	if name != "" {
+		return name
+	}
+	if store == nil {
+		return defaultReportPresetName
+	}
+	presets, err := store.ListReportPresets(ctx, report, user)
+	if err != nil {
+		return defaultReportPresetName
+	}
+	used := make(map[string]struct{}, len(presets))
+	for _, p := range presets {
+		if p.ID == standardReportPresetID {
+			continue
+		}
+		if n := strings.TrimSpace(p.Name); n != "" {
+			used[strings.ToLower(n)] = struct{}{}
+		}
+	}
+	if _, ok := used[strings.ToLower(defaultReportPresetName)]; !ok {
+		return defaultReportPresetName
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s %d", defaultReportPresetName, i)
+		if _, ok := used[strings.ToLower(candidate)]; !ok {
+			return candidate
+		}
+	}
+}
+
 // reportSettingsSave сохраняет рантайм-настройки текущего пользователя (POST
 // поля __settings) и возвращает на форму отчёта.
 func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -549,6 +583,7 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if action == "save_as" {
 		presetID = ""
 	}
+	name = reportPresetNameOrDefault(r.Context(), s.store, rep.Name, user, name)
 	if name == "" {
 		http.Error(w, s.errText(r, errReportPresetNameRequired), http.StatusBadRequest)
 		return
