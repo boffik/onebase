@@ -2758,7 +2758,7 @@ const tplReport = `
     </div>
     <label style="display:flex;gap:6px;align-items:center;padding-bottom:8px"><input type="checkbox" name="__preset_default" value="1" {{if .ActivePreset}}{{if .ActivePreset.IsDefault}}checked{{end}}{{end}}> {{t $.Lang "по умолчанию"}}</label>
   </div>
-  <input type="hidden" name="__settings" id="rs-json"{{if .ReportSettingsJSON}} value="{{.ReportSettingsJSON}}"{{else if .UserSettings}} value="{{.UserSettings.JSON}}"{{end}}>
+  <input type="hidden" name="__settings" id="rs-json"{{if .ReportSettingsJSON}} value="{{.ReportSettingsJSON}}" data-base="{{.ReportSettingsJSON}}"{{else if .UserSettings}} value="{{.UserSettings.JSON}}" data-base="{{.UserSettings.JSON}}"{{end}}>
   <table style="width:auto;margin-bottom:12px">
     <thead><tr>
       <th style="text-align:left">{{t $.Lang "Поле"}}</th>
@@ -2846,13 +2846,17 @@ const tplReport = `
     sel.form.submit();
   };
   function preset(){
-    if(!hidden||!hidden.value) return;
+    if(!hidden) return;
+    var raw=hidden.value||hidden.dataset.base||"";
+    if(!raw) return;
+    if(!hidden.value) hidden.value=raw;
     try{
-      var s=JSON.parse(hidden.value);
+      var s=JSON.parse(raw);
       var comp=(s&&s.composition)||{};
       var groups=comp.Groupings||comp.groupings||[];
       var meas=comp.Measures||comp.measures||[];
       var mf=meas.map(function(m){return m.Field||m.field;});
+      document.querySelectorAll('.rs-group,.rs-measure').forEach(function(el){el.checked=false;});
       document.querySelectorAll('.rs-group').forEach(function(el){ if(groups.indexOf(el.value)>=0) el.checked=true; });
       document.querySelectorAll('.rs-measure').forEach(function(el){ if(mf.indexOf(el.value)>=0) el.checked=true; });
       var ap=comp.Appearance||comp.appearance||{};
@@ -2863,7 +2867,9 @@ const tplReport = `
   }
   window.rsCollect=function(){
     var prev={};
-    if(hidden&&hidden.value){try{prev=JSON.parse(hidden.value)||{};}catch(e){prev={};}}
+    var raw=hidden?(hidden.value||hidden.dataset.base||""):"";
+    if(hidden&&!hidden.value&&raw)hidden.value=raw;
+    if(raw){try{prev=JSON.parse(raw)||{};}catch(e){prev={};}}
     var prevComp=(prev&&prev.composition)||{};
     var prevMeasures=prevComp.Measures||prevComp.measures||[];
     var prevByField={};

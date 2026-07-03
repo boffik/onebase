@@ -257,10 +257,15 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 		// пользовательского ввода: возвращаем пустую презентационную компоновку.
 		base = &reportpkg.Composition{}
 	}
-	// Доверенные Expr показателей по имени поля (регистронезависимо, как DSL).
+	// Доверенные показатели по имени поля (регистронезависимо, как DSL).
+	// Expr всегда наследуется только отсюда; презентационные поля служат
+	// дефолтами, если пользовательский JSON пришёл частичным.
 	trustedExpr := make(map[string]string, len(base.Measures))
+	trustedMeasure := make(map[string]reportpkg.Measure, len(base.Measures))
 	for _, m := range base.Measures {
-		trustedExpr[strings.ToLower(m.Field)] = m.Expr
+		key := strings.ToLower(m.Field)
+		trustedExpr[key] = m.Expr
+		trustedMeasure[key] = m
 	}
 
 	out := *base // копия: Conditional/Chart/DetailLink/DetailEntity — из доверенной.
@@ -294,12 +299,13 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 	if u.Measures != nil && len(u.Measures) > 0 {
 		measures := make([]reportpkg.Measure, 0, len(u.Measures))
 		for _, m := range u.Measures {
+			baseMeasure := trustedMeasure[strings.ToLower(m.Field)]
 			safe := reportpkg.Measure{
-				Field:  m.Field,
-				Agg:    m.Agg,
-				Title:  m.Title,
-				Align:  m.Align,
-				Format: m.Format,
+				Field:  firstNonEmpty(m.Field, baseMeasure.Field),
+				Agg:    firstNonEmpty(m.Agg, baseMeasure.Agg),
+				Title:  firstNonEmpty(m.Title, baseMeasure.Title),
+				Align:  firstNonEmpty(m.Align, baseMeasure.Align),
+				Format: firstNonEmpty(m.Format, baseMeasure.Format),
 				// Expr НЕ из пользовательского ввода: берём доверенное значение
 				// по имени поля; если показателя нет в доверенной — Expr пуст.
 				Expr: trustedExpr[strings.ToLower(m.Field)],
@@ -309,6 +315,13 @@ func mergeUserComposition(base, u *reportpkg.Composition) *reportpkg.Composition
 		out.Measures = measures
 	}
 	return &out
+}
+
+func firstNonEmpty(v, fallback string) string {
+	if v != "" {
+		return v
+	}
+	return fallback
 }
 
 // safeAppearance канонизирует оформление из пользовательского ввода (__settings —
@@ -384,12 +397,17 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.errText(r, err), http.StatusBadRequest)
 		return
 	}
+	st = reportSettingsWithRequestVariant(r, st)
 	canon := ""
-	if st != nil {
-		if canon, err = st.JSON(); err != nil {
+	if normalized := reportSettingsPanelState(rep, st); normalized != nil {
+		if canon, err = normalized.JSON(); err != nil {
 			http.Error(w, s.errText(r, err), http.StatusBadRequest)
 			return
 		}
+	}
+	if len(canon) > maxUserSettingsBytes {
+		http.Error(w, s.errText(r, errSettingsTooLarge), http.StatusRequestEntityTooLarge)
+		return
 	}
 
 	// Обратная совместимость: старые формы без __preset_action по-прежнему

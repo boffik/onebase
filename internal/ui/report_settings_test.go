@@ -247,6 +247,32 @@ func TestEffectiveCompositionIgnoresEmptyMeasureOverride(t *testing.T) {
 	}
 }
 
+func TestEffectiveCompositionInheritsMeasurePresentationDefaults(t *testing.T) {
+	trusted := &reportpkg.Composition{
+		Groupings: []string{"Организация"},
+		Measures: []reportpkg.Measure{
+			{Field: "ВаловаяПрибыль", Agg: "sum", Title: "Валовая прибыль", Align: "right", Format: "#,##0.00", Expr: "Выручка - Себестоимость"},
+		},
+	}
+	rep := &reportpkg.Report{Composition: trusted}
+
+	userComp := &reportpkg.Composition{
+		Groupings: []string{"Организация"},
+		Measures:  []reportpkg.Measure{{Field: "ВаловаяПрибыль"}},
+	}
+	eff := effectiveComposition(rep, &reportpkg.UserReportSettings{Composition: userComp})
+	if len(eff.Measures) != 1 {
+		t.Fatalf("ожидали один показатель, got %+v", eff.Measures)
+	}
+	m := eff.Measures[0]
+	if m.Title != "Валовая прибыль" || m.Align != "right" || m.Format != "#,##0.00" || m.Agg != "sum" {
+		t.Fatalf("презентационные дефолты из YAML потерялись: %+v", m)
+	}
+	if m.Expr != "Выручка - Себестоимость" {
+		t.Fatalf("доверенный Expr должен наследоваться из YAML, got %q", m.Expr)
+	}
+}
+
 func TestReportSettingsPanelJSONUsesBaseComposition(t *testing.T) {
 	rep := &reportpkg.Report{
 		Name: "ВаловаяПрибыльСКД",
@@ -566,6 +592,65 @@ func TestReportSettingsSaveNamedPreset(t *testing.T) {
 	}
 	if p, _ := db.GetReportPreset(ctx, "Продажи", "", presets[0].ID); p != nil {
 		t.Fatalf("пресет должен быть удалён: %+v", p)
+	}
+}
+
+func TestReportSettingsSaveNamedPresetNormalizesCurrentComposition(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-save-normalized.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	rep := &reportpkg.Report{
+		Name: "ВаловаяПрибыльСКД",
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Организация", "Номенклатура"},
+			Measures: []reportpkg.Measure{
+				{Field: "Выручка", Agg: "sum", Title: "Выручка", Format: "#,##0.00"},
+				{Field: "Себестоимость", Agg: "sum", Title: "Себестоимость", Format: "#,##0.00"},
+				{Field: "ВаловаяПрибыль", Agg: "sum", Title: "Валовая прибыль", Format: "#,##0.00"},
+			},
+			Totals: reportpkg.Totals{Grand: true, Subtotals: true},
+			Sort:   []reportpkg.SortKey{{Field: "ВаловаяПрибыль", Dir: "desc"}},
+		},
+	}
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{Reports: []*reportpkg.Report{rep}})
+	s := &Server{store: db, reg: registry}
+
+	form := url.Values{
+		"__settings":      {`{"composition":{"Groupings":[],"Measures":[]}}`},
+		"__preset_action": {"save_as"},
+		"__preset_name":   {"Текущий"},
+	}
+	r := reqWithChi("POST", "/ui/report/ВаловаяПрибыльСКД/settings/save", form, map[string]string{"name": "ВаловаяПрибыльСКД"})
+	w := httptest.NewRecorder()
+	s.reportSettingsSave(w, r)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("save_as: ожидался 303, получен %d: %s", w.Code, w.Body.String())
+	}
+	presets, err := db.ListReportPresets(ctx, "ВаловаяПрибыльСКД", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 1 {
+		t.Fatalf("ожидали один пресет, got %+v", presets)
+	}
+	if strings.Contains(presets[0].SettingsJSON, `"Measures":[]`) {
+		t.Fatalf("пустые показатели не должны сохраняться: %s", presets[0].SettingsJSON)
+	}
+	st, err := reportpkg.ParseUserSettings(presets[0].SettingsJSON)
+	if err != nil {
+		t.Fatalf("ParseUserSettings: %v", err)
+	}
+	eff := effectiveComposition(rep, st)
+	if len(eff.Groupings) != 2 || len(eff.Measures) != 3 {
+		t.Fatalf("сохранённый пресет не восстановил текущую компоновку: %+v", eff)
+	}
+	if eff.Measures[2].Field != "ВаловаяПрибыль" || eff.Measures[2].Format != "#,##0.00" {
+		t.Fatalf("формат показателя потерян: %+v", eff.Measures[2])
 	}
 }
 
