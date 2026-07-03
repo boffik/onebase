@@ -257,14 +257,20 @@ func TestEffectiveCompositionInheritsMeasurePresentationDefaults(t *testing.T) {
 	rep := &reportpkg.Report{Composition: trusted}
 
 	userComp := &reportpkg.Composition{
-		Groupings: []string{"Организация"},
-		Measures:  []reportpkg.Measure{{Field: "ВаловаяПрибыль"}},
+		Groupings: []string{"организация"},
+		Measures:  []reportpkg.Measure{{Field: "валоваяприбыль"}},
 	}
 	eff := effectiveComposition(rep, &reportpkg.UserReportSettings{Composition: userComp})
+	if len(eff.Groupings) != 1 || eff.Groupings[0] != "Организация" {
+		t.Fatalf("группировка должна канонизироваться к YAML-регистру: %+v", eff.Groupings)
+	}
 	if len(eff.Measures) != 1 {
 		t.Fatalf("ожидали один показатель, got %+v", eff.Measures)
 	}
 	m := eff.Measures[0]
+	if m.Field != "ВаловаяПрибыль" {
+		t.Fatalf("поле показателя должно канонизироваться к YAML-регистру: %+v", m)
+	}
 	if m.Title != "Валовая прибыль" || m.Align != "right" || m.Format != "#,##0.00" || m.Agg != "sum" {
 		t.Fatalf("презентационные дефолты из YAML потерялись: %+v", m)
 	}
@@ -374,6 +380,40 @@ func TestReportSettingsPanelBasePresetWithoutChangedIndicator(t *testing.T) {
 	}
 	if !strings.Contains(out, "disabled") {
 		t.Fatalf("кнопка сброса должна быть disabled без пользовательских настроек")
+	}
+}
+
+func TestReportSettingsPanelChecksLowercaseQueryColumns(t *testing.T) {
+	rep := &reportpkg.Report{
+		Name:  "profit",
+		Title: "Прибыль",
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Организация"},
+			Measures:  []reportpkg.Measure{{Field: "ВаловаяПрибыль", Agg: "sum", Format: "#,##0.00"}},
+		},
+	}
+	var buf bytes.Buffer
+	data := map[string]any{
+		"Report":             rep,
+		"ParamValues":        map[string]any{},
+		"ReportParams":       []reportParamUI{},
+		"ReportCols":         []string{"организация", "валоваяприбыль"},
+		"ReportSettingsJSON": reportSettingsPanelJSON(rep, nil),
+		"Cfg":                Config{},
+		"Lang":               "ru",
+	}
+	if err := tmpl.ExecuteTemplate(&buf, "page-report", data); err != nil {
+		t.Fatalf("execute page-report: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`class="rs-group" value="организация" checked`,
+		`class="rs-measure" value="валоваяприбыль" checked`,
+		`function rsNorm`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("панель должна отметить lower-case колонку %q: %s", want, out)
+		}
 	}
 }
 
