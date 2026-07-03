@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -180,5 +181,82 @@ func TestReportPresets(t *testing.T) {
 	}
 	if deleted, _ := db.GetReportPreset(ctx, "Продажи", "alice", id1); deleted != nil {
 		t.Fatalf("пресет должен быть удалён: %+v", deleted)
+	}
+}
+
+func TestReportPresetRejectsDuplicateName(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-dup.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	t.Cleanup(db.Close)
+
+	if _, err := db.SaveReportPreset(ctx, ReportPreset{
+		Report:       "Продажи",
+		User:         "alice",
+		Name:         "По товарам",
+		SettingsJSON: `{"variant":"A"}`,
+	}); err != nil {
+		t.Fatalf("SaveReportPreset #1: %v", err)
+	}
+	if _, err := db.SaveReportPreset(ctx, ReportPreset{
+		Report:       "Продажи",
+		User:         "alice",
+		Name:         "По товарам",
+		SettingsJSON: `{"variant":"B"}`,
+	}); !errors.Is(err, ErrReportPresetNameExists) {
+		t.Fatalf("duplicate name: got %v, want ErrReportPresetNameExists", err)
+	}
+
+	if _, err := db.SaveReportPreset(ctx, ReportPreset{
+		Report:       "Продажи",
+		User:         "bob",
+		Name:         "По товарам",
+		SettingsJSON: `{"variant":"B"}`,
+	}); err != nil {
+		t.Fatalf("same name for another user must be allowed: %v", err)
+	}
+}
+
+func TestReportPresetReservedIDIsIgnored(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-reserved.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	t.Cleanup(db.Close)
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.SaveReportPreset(ctx, ReportPreset{
+		ID:           StandardReportPresetID,
+		Report:       "Продажи",
+		User:         "alice",
+		Name:         "Стандартный",
+		SettingsJSON: `{"variant":"bad"}`,
+	}); !errors.Is(err, ErrReservedReportPresetID) {
+		t.Fatalf("reserved id save: got %v, want ErrReservedReportPresetID", err)
+	}
+
+	if _, err := db.Exec(ctx, `INSERT INTO _report_presets
+		(id, report_name, user_login, name, settings_json, is_default)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		StandardReportPresetID, "Продажи", "alice", "Стандартный", `{"variant":"bad"}`, true); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := db.GetReportPreset(ctx, "Продажи", "alice", StandardReportPresetID); err != nil || p != nil {
+		t.Fatalf("reserved preset must not be loaded by id: preset=%+v err=%v", p, err)
+	}
+	if p, err := db.GetDefaultReportPreset(ctx, "Продажи", "alice"); err != nil || p != nil {
+		t.Fatalf("reserved preset must not become default: preset=%+v err=%v", p, err)
+	}
+	list, err := db.ListReportPresets(ctx, "Продажи", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("reserved preset must not be listed: %+v", list)
 	}
 }

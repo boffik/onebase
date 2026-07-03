@@ -306,6 +306,62 @@ func TestUniversalSafeSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUniversalReportPresetsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	src := newSQLite(t, "report-presets-src")
+	presetID, err := src.SaveReportPreset(ctx, storage.ReportPreset{
+		Report:       "ВаловаяПрибыльСКД",
+		User:         "alice",
+		Name:         "По номенклатуре",
+		SettingsJSON: `{"composition":{"Groupings":["Номенклатура"],"Measures":[{"Field":"ВаловаяПрибыль"}]}}`,
+		IsDefault:    true,
+	})
+	if err != nil {
+		t.Fatalf("SaveReportPreset: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := ExportUniversal(ctx, src, "file", t.TempDir(), "", "test", &buf); err != nil {
+		t.Fatalf("ExportUniversal: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := extractZip(buf.Bytes(), tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(tmpDir, "system", "_report_presets.jsonl"))
+	if err != nil {
+		t.Fatalf("_report_presets must be exported: %v", err)
+	}
+	if !strings.Contains(string(raw), "По номенклатуре") {
+		t.Fatalf("_report_presets export does not contain saved preset:\n%s", raw)
+	}
+
+	dst := newSQLite(t, "report-presets-dst")
+	if _, err := ImportUniversal(ctx, dst, "file", t.TempDir(), "", bytes.NewReader(buf.Bytes()), int64(buf.Len())); err != nil {
+		t.Fatalf("ImportUniversal: %v", err)
+	}
+	presets, err := dst.ListReportPresets(ctx, "ВаловаяПрибыльСКД", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 1 {
+		t.Fatalf("expected one restored report preset, got %+v", presets)
+	}
+	if presets[0].ID != presetID || presets[0].Name != "По номенклатуре" || !presets[0].IsDefault {
+		t.Fatalf("restored preset mismatch: %+v", presets[0])
+	}
+	if !strings.Contains(presets[0].SettingsJSON, "ВаловаяПрибыль") {
+		t.Fatalf("settings_json was not restored: %q", presets[0].SettingsJSON)
+	}
+	def, err := dst.GetDefaultReportPreset(ctx, "ВаловаяПрибыльСКД", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def == nil || def.ID != presetID {
+		t.Fatalf("default report preset was not restored: %+v", def)
+	}
+}
+
 func TestDemoResetImportsSafeSettings(t *testing.T) {
 	ctx := context.Background()
 	src := newSQLite(t, "demo-settings-src")

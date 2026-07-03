@@ -654,13 +654,13 @@ func TestReportSettingsSaveFromStandardCreatesReachablePreset(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.SaveReportPreset(ctx, storage.ReportPreset{
-		ID:           standardReportPresetID,
-		Report:       "Продажи",
-		User:         "",
-		Name:         "По товарам",
-		SettingsJSON: `{"variant":"broken"}`,
-	}); err != nil {
+	if err := db.EnsureReportPresetSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO _report_presets
+		(id, report_name, user_login, name, settings_json, is_default)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		standardReportPresetID, "Продажи", "", "По товарам", `{"variant":"broken"}`, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -732,6 +732,50 @@ func TestReportSettingsSaveFromStandardCreatesReachablePreset(t *testing.T) {
 	}
 	if !foundSecond {
 		t.Fatalf("второй пустой save должен получить уникальное имя, got %+v", presets)
+	}
+}
+
+func TestReportSettingsSaveDuplicatePresetNameReturnsConflict(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-save-dup.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.SaveReportPreset(ctx, storage.ReportPreset{
+		Report:       "Продажи",
+		User:         "",
+		Name:         "По товарам",
+		SettingsJSON: `{"variant":"A"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rep := &reportpkg.Report{Name: "Продажи"}
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{Reports: []*reportpkg.Report{rep}})
+	s := &Server{store: db, reg: registry}
+
+	form := url.Values{
+		"__settings":      {`{"variant":"B"}`},
+		"__preset_action": {"save_as"},
+		"__preset_name":   {"По товарам"},
+	}
+	r := reqWithChi("POST", "/ui/report/Продажи/settings/save", form, map[string]string{"name": "Продажи"})
+	w := httptest.NewRecorder()
+	s.reportSettingsSave(w, r)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("duplicate save_as: ожидался 409, получен %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), storage.ErrReportPresetNameExists.Error()) {
+		t.Fatalf("duplicate save_as должен вернуть понятную ошибку, got %q", w.Body.String())
+	}
+	presets, err := db.ListReportPresets(ctx, "Продажи", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 1 || presets[0].SettingsJSON != `{"variant":"A"}` {
+		t.Fatalf("duplicate save_as не должен менять существующий пресет: %+v", presets)
 	}
 }
 

@@ -24,7 +24,7 @@ import (
 // разумную презентационную настройку (выбор/порядок колонок, отборы, сортировка).
 const maxUserSettingsBytes = 64 * 1024
 
-const standardReportPresetID = "__standard"
+const standardReportPresetID = storage.StandardReportPresetID
 const defaultReportPresetName = "Мой вариант"
 
 // errSettingsTooLarge — отказ сохранить слишком большой блок __settings (issue #23).
@@ -597,6 +597,10 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 		IsDefault:    isDefault,
 	})
 	if err != nil {
+		if errors.Is(err, storage.ErrReportPresetNameExists) {
+			http.Error(w, s.errText(r, err), http.StatusConflict)
+			return
+		}
 		http.Error(w, s.errText(r, err), http.StatusBadRequest)
 		return
 	}
