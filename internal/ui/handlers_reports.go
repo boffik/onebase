@@ -29,6 +29,14 @@ func (s *Server) reportForm(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
+	if r.URL.Query().Get("__run") == "1" {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, s.errText(r, err), 400)
+			return
+		}
+		s.runReport(w, r, rep, reportParamValuesFromRequest(r, rep))
+		return
+	}
 	user := currentUserLogin(r)
 	presets := loadReportPresets(r.Context(), s.store, rep.Name, user)
 	activePresetID := r.FormValue("__preset")
@@ -67,6 +75,10 @@ func (s *Server) reportRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.errText(r, err), 400)
 		return
 	}
+	s.runReport(w, r, rep, reportParamValuesFromRequest(r, rep))
+}
+
+func reportParamValuesFromRequest(r *http.Request, rep *reportpkg.Report) map[string]any {
 	paramValues := make(map[string]any, len(rep.Params))
 	for _, p := range rep.Params {
 		val := r.FormValue(p.Name)
@@ -76,7 +88,7 @@ func (s *Server) reportRun(w http.ResponseWriter, r *http.Request) {
 			paramValues[p.Name] = val
 		}
 	}
-	s.runReport(w, r, rep, paramValues)
+	return paramValues
 }
 
 func (s *Server) getReport(w http.ResponseWriter, r *http.Request) *reportpkg.Report {

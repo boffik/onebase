@@ -647,6 +647,64 @@ func TestReportSettingsSaveNamedPreset(t *testing.T) {
 	}
 }
 
+func TestReportSettingsSaveFromStandardCreatesReachablePreset(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-save-standard.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.SaveReportPreset(ctx, storage.ReportPreset{
+		ID:           standardReportPresetID,
+		Report:       "Продажи",
+		User:         "",
+		Name:         "По товарам",
+		SettingsJSON: `{"variant":"broken"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rep := &reportpkg.Report{
+		Name:   "Продажи",
+		Params: []reportpkg.Param{{Name: "Начало", Type: "date"}},
+	}
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{Reports: []*reportpkg.Report{rep}})
+	s := &Server{store: db, reg: registry}
+
+	form := url.Values{
+		"__settings":      {`{"variant":"X"}`},
+		"__preset":        {standardReportPresetID},
+		"__preset_action": {"save"},
+		"__preset_name":   {"По товарам"},
+		"Начало":          {"2026-07-01"},
+	}
+	r := reqWithChi("POST", "/ui/report/Продажи/settings/save", form, map[string]string{"name": "Продажи"})
+	w := httptest.NewRecorder()
+	s.reportSettingsSave(w, r)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("save from standard: ожидался 303, получен %d: %s", w.Code, w.Body.String())
+	}
+
+	presets, err := db.ListReportPresets(ctx, "Продажи", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 1 {
+		t.Fatalf("ожидали один доступный пресет, got %+v", presets)
+	}
+	if presets[0].ID == standardReportPresetID {
+		t.Fatalf("нельзя сохранять пользовательский вариант с reserved id %q", presets[0].ID)
+	}
+	if !strings.Contains(presets[0].SettingsJSON, `"variant":"X"`) {
+		t.Fatalf("settings_json не сохранён: %q", presets[0].SettingsJSON)
+	}
+	loc := w.Header().Get("Location")
+	if !strings.Contains(loc, "__run=1") || !strings.Contains(loc, "__preset="+url.QueryEscape(presets[0].ID)) || !strings.Contains(loc, "%D0%9D%D0%B0%D1%87%D0%B0%D0%BB%D0%BE=2026-07-01") {
+		t.Fatalf("редирект должен вернуть на сформированный отчёт с параметрами и новым пресетом: %q", loc)
+	}
+}
+
 func TestReportSettingsSaveNamedPresetNormalizesCurrentComposition(t *testing.T) {
 	ctx := context.Background()
 	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "preset-save-normalized.db"))
