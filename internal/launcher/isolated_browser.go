@@ -29,6 +29,13 @@ type isolatedBrowser interface {
 
 // systemBrowser — боевая реализация: находит установленный Chromium-браузер
 // (платформенный isolatedBrowserCommand) и запускает его отсоединённо.
+//
+// Нативные WebView2-окна вместо внешнего браузера (план 78, п. 4.2) остаются
+// отдельной подзадачей: кандидат с переменной окружения
+// WEBVIEW2_USER_DATA_FOLDER проверен и НЕ работает — vendored webview.h
+// (webview_go) сам вычисляет userDataFolder как %APPDATA%\<имя exe> и передаёт
+// его явным параметром CreateCoreWebView2EnvironmentWithOptions, который
+// сильнее переменной. Нужен патч/форк биндинга.
 type systemBrowser struct{}
 
 func (systemBrowser) Open(profileDir, url string) error {
