@@ -180,6 +180,7 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/admin/users/lang", s.h.cfgAdminUserLang)
 		r.Get("/bases/{id}/configurator/admin/sessions", s.h.cfgAdminSessions)
 		r.Post("/bases/{id}/configurator/admin/sessions/kick", s.h.cfgAdminSessionKick)
+		r.Post("/bases/{id}/configurator/admin/sessions/limit", s.h.cfgAdminSessionLimit)
 		r.Get("/bases/{id}/configurator/admin/audit", s.h.cfgAdminAudit)
 		r.Post("/bases/{id}/configurator/admin/audit/save", s.h.cfgAdminAuditSave)
 		r.Get("/bases/{id}/configurator/admin/settings", s.h.cfgAdminSettings)

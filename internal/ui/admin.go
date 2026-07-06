@@ -471,7 +471,33 @@ func (s *Server) adminSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessions, _ := s.authRepo.ActiveSessions(r.Context())
-	adminTmpl.ExecuteTemplate(w, "admin-sessions", map[string]any{"Sessions": sessionVMs(sessions)})
+	limit := 0
+	if s.store != nil {
+		limit = s.store.GetMaxSessionsPerUser(r.Context())
+	}
+	adminTmpl.ExecuteTemplate(w, "admin-sessions", map[string]any{
+		"Sessions":   sessionVMs(sessions),
+		"Limit":      limit,
+		"LimitSaved": r.URL.Query().Get("limit_saved") == "1",
+	})
+}
+
+// adminSessionLimit сохраняет политику «максимум сессий на пользователя»
+// (план 78, п. 1.6; ключ auth.max_sessions_per_user в _settings).
+func (s *Server) adminSessionLimit(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		s.renderForbidden(w, r)
+		return
+	}
+	r.ParseForm()
+	n, err := strconv.Atoi(strings.TrimSpace(r.FormValue("limit")))
+	if err != nil || n < 0 {
+		n = 0
+	}
+	if s.store != nil {
+		s.store.SaveMaxSessionsPerUser(r.Context(), n)
+	}
+	http.Redirect(w, r, "/ui/admin/sessions?limit_saved=1", http.StatusFound)
 }
 
 // sessionVM — строка экрана активных сессий: SessionInfo + отображаемые поля.
@@ -862,6 +888,15 @@ const tplAdminSessions = `{{define "admin-sessions"}}` + adminHead + `
   <p class="empty">Авторизация не настроена — пользователей нет.</p>
 </div>
 {{else if .Sessions}}
+<div class="card" style="max-width:1100px;margin-bottom:16px">
+  <form method="POST" action="/ui/admin/sessions/limit" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <label style="font-size:13px;color:#475569">Максимум сессий на пользователя (0 — без ограничения)</label>
+    <input type="number" name="limit" value="{{.Limit}}" min="0" max="99" style="width:80px">
+    <button class="btn btn-sm btn-primary" type="submit">Сохранить</button>
+    {{if .LimitSaved}}<span style="color:#16a34a;font-size:13px">✓ Сохранено</span>{{end}}
+  </form>
+  <div style="font-size:12px;color:#94a3b8;margin-top:6px">При превышении лимита новый вход вытесняет самую давнюю по активности сессию Предприятия этого пользователя. Сессии конфигуратора не учитываются.</div>
+</div>
 <div class="card" style="max-width:1100px">
 <table>
 <thead><tr>

@@ -289,10 +289,14 @@ type SessionMeta struct {
 
 // CreateSession создаёт новую сессию пользователя. Живые сессии не трогает
 // (мультисессии, план 78) — подчищает только истёкшие, так что рост _sessions
-// ограничен TTL.
+// ограничен TTL. Опциональная политика «максимум сессий на пользователя»
+// (п. 1.6) может вытеснить старейшую enterprise-сессию.
 func (r *Repo) CreateSession(ctx context.Context, userID string, meta SessionMeta) (string, error) {
 	d := r.db.Dialect()
 	r.DeleteExpiredSessions(ctx)
+	if meta.Kind == SessionKindEnterprise {
+		r.enforceSessionLimit(ctx, userID, meta)
+	}
 
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -307,6 +311,43 @@ func (r *Repo) CreateSession(ctx context.Context, userID string, meta SessionMet
 		d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9))
 	_, err := r.db.Exec(ctx, q, token, userID, expires, uuid.New().String(), meta.Kind, now, now, meta.IP, meta.UserAgent)
 	return token, err
+}
+
+// enforceSessionLimit применяет политику `auth.max_sessions_per_user`
+// (план 78, п. 1.6): при превышении лимита вытесняет старейшие по активности
+// enterprise-сессии пользователя, освобождая место новой. Именно вытеснение,
+// а не отказ во входе: брошенная сессия (браузер закрыт без «Выйти») при TTL
+// 24 ч заблокировала бы пользователя до вмешательства админа. Сессии
+// конфигуратора не считаются и не вытесняются — иначе вернулся бы баг «вход
+// в конфигуратор выбивает Предприятие». Ошибки не фатальны: политика не
+// должна ломать вход.
+func (r *Repo) enforceSessionLimit(ctx context.Context, userID string, meta SessionMeta) {
+	limit := r.db.GetMaxSessionsPerUser(ctx)
+	if limit <= 0 {
+		return
+	}
+	d := r.db.Dialect()
+	var count int
+	q := fmt.Sprintf(`SELECT count(*) FROM _sessions WHERE user_id = %s AND kind = %s AND expires_at > %s`,
+		d.Placeholder(1), d.Placeholder(2), d.Now())
+	if err := r.db.QueryRow(ctx, q, userID, SessionKindEnterprise).Scan(&count); err != nil {
+		return
+	}
+	excess := count - limit + 1 // +1: новая сессия должна поместиться в лимит
+	if excess <= 0 {
+		return
+	}
+	delQ := fmt.Sprintf(`DELETE FROM _sessions WHERE token IN (
+		SELECT token FROM _sessions WHERE user_id = %s AND kind = %s
+		ORDER BY COALESCE(last_seen_at, created_at, expires_at) ASC LIMIT %s)`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+	if _, err := r.db.Exec(ctx, delQ, userID, SessionKindEnterprise, excess); err != nil {
+		return
+	}
+	// Аудит вытеснения — актор сам пользователь: это его новый вход.
+	login := ""
+	r.db.QueryRow(ctx, fmt.Sprintf(`SELECT login FROM _users WHERE id = %s`, d.Placeholder(1)), userID).Scan(&login)
+	r.db.LogAction(ctx, "session_displaced", "", login, userID, userID, login, meta.IP)
 }
 
 // DeleteExpiredSessions удаляет истёкшие сессии всех пользователей.

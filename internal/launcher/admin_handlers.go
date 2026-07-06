@@ -492,6 +492,12 @@ func (h *handler) cfgAdminSessions(w http.ResponseWriter, r *http.Request) {
 
 	html := `<div style="padding:16px">
 	<h3 style="margin:0 0 14px;font-size:15px">Активные пользователи</h3>
+	<div style="margin:0 0 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:#444">
+	  <span>Максимум сессий на пользователя (0 — без ограничения):</span>
+	  <input id="sess-limit" type="number" min="0" max="99" value="` + fmt.Sprintf("%d", db.GetMaxSessionsPerUser(r.Context())) + `" style="width:60px;padding:3px 6px;border:1px solid #ACA899;border-radius:2px">
+	  <button onclick="cfgSaveSessLimit()" style="padding:3px 10px;border:1px solid #ACA899;border-radius:2px;background:#F5F4EE;cursor:pointer;font-size:12px">Сохранить</button>
+	  <span id="sess-limit-msg" style="color:#16a34a"></span>
+	</div>
 	<table style="width:100%;border-collapse:collapse;font-size:12px">
 	<tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;font-weight:600">Логин</th><th style="text-align:left;padding:6px 8px;font-weight:600">Имя</th><th style="text-align:left;padding:6px 8px;font-weight:600">Вид</th><th style="text-align:center;padding:6px 8px;font-weight:600">Админ</th><th style="text-align:left;padding:6px 8px;font-weight:600">Вход</th><th style="text-align:left;padding:6px 8px;font-weight:600">Активность</th><th style="text-align:left;padding:6px 8px;font-weight:600">Действует до</th><th style="text-align:left;padding:6px 8px;font-weight:600">IP</th><th style="padding:6px 8px"></th></tr>`
 	for i, s := range sessions {
@@ -527,6 +533,12 @@ function cfgKickAll(login){
   if(!confirm('Завершить все сессии '+login+'?'))return;
   fetch('/bases/` + b.ID + `/configurator/admin/sessions/kick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:login})})
     .then(function(){cfgAdmin('sessions')})
+}
+function cfgSaveSessLimit(){
+  var n = parseInt(document.getElementById('sess-limit').value, 10) || 0;
+  fetch('/bases/` + b.ID + `/configurator/admin/sessions/limit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:n})})
+    .then(function(r){return r.json()})
+    .then(function(d){document.getElementById('sess-limit-msg').textContent = d.error ? ('Ошибка: '+d.error) : '✓';})
 }
 </script>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -570,6 +582,33 @@ func (h *handler) cfgAdminSessionKick(w http.ResponseWriter, r *http.Request) {
 		logCfgSessionAudit(r, db, "session_kick_all", req.Login, "")
 	default:
 		writeJSON(w, 400, map[string]any{"error": "нужен public_id или login"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// cfgAdminSessionLimit сохраняет политику «максимум сессий на пользователя»
+// (план 78, п. 1.6; ключ auth.max_sessions_per_user в _settings).
+func (h *handler) cfgAdminSessionLimit(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	var req struct {
+		Limit int `json:"limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"error": err.Error()})
+		return
+	}
+	db, err := getAuthDB(r.Context(), b)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if err := db.SaveMaxSessionsPerUser(r.Context(), req.Limit); err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})

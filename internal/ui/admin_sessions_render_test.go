@@ -26,11 +26,18 @@ func TestAdminSessionsTemplate_MultiSession(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := adminTmpl.ExecuteTemplate(&buf, "admin-sessions", map[string]any{"Sessions": sessionVMs(sessions)})
+	err := adminTmpl.ExecuteTemplate(&buf, "admin-sessions", map[string]any{"Sessions": sessionVMs(sessions), "Limit": 2})
 	if err != nil {
 		t.Fatalf("ExecuteTemplate: %v", err)
 	}
 	html := buf.String()
+
+	// Форма политики лимита сессий (п. 1.6) с текущим значением.
+	for _, want := range []string{`action="/ui/admin/sessions/limit"`, `name="limit" value="2"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("в HTML нет формы лимита: %q", want)
+		}
+	}
 
 	// Обе строки одного логина и оба вида сессий.
 	if strings.Count(html, "<strong>ivan</strong>") != 2 {

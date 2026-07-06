@@ -326,6 +326,68 @@ func TestKickUserSessionsByID(t *testing.T) {
 	}
 }
 
+// Политика лимита сессий (план 78, п. 1.6): при превышении вытесняется
+// старейшая по активности enterprise-сессия; конфигуратор не задет.
+func TestSessionLimitDisplacesOldestEnterprise(t *testing.T) {
+	repo, db, ctx := newTestRepoDB(t)
+	if got := db.GetMaxSessionsPerUser(ctx); got != 0 {
+		t.Fatalf("по умолчанию лимит должен быть 0 (безлимит), получено %d", got)
+	}
+	if err := db.SaveMaxSessionsPerUser(ctx, 2); err != nil {
+		t.Fatalf("SaveMaxSessionsPerUser: %v", err)
+	}
+	if got := db.GetMaxSessionsPerUser(ctx); got != 2 {
+		t.Fatalf("лимит должен сохраниться: %d", got)
+	}
+
+	user, _ := repo.Create(ctx, "limited", "pass", "", false)
+	e1, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
+	e2, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
+	cfg, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindConfigurator})
+
+	// Делаем e1 заведомо самой давней по активности.
+	if _, err := db.Exec(ctx, `UPDATE _sessions SET last_seen_at = '2000-01-01 00:00:00' WHERE token = ?`, e1); err != nil {
+		t.Fatalf("состарить last_seen: %v", err)
+	}
+
+	e3, err := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
+	if err != nil {
+		t.Fatalf("CreateSession при лимите должен вытеснять, а не отказывать: %v", err)
+	}
+
+	if _, err := repo.LookupSession(ctx, e1); err == nil {
+		t.Fatal("самая давняя enterprise-сессия должна быть вытеснена")
+	}
+	for name, tok := range map[string]string{"вторая enterprise": e2, "новая enterprise": e3, "конфигуратор": cfg} {
+		if _, err := repo.LookupSession(ctx, tok); err != nil {
+			t.Fatalf("сессия «%s» не должна пострадать: %v", name, err)
+		}
+	}
+}
+
+// Лимит 1 воспроизводит поведение прежних версий, но только для Предприятия.
+func TestSessionLimitOneKeepsConfigurator(t *testing.T) {
+	repo, db, ctx := newTestRepoDB(t)
+	if err := db.SaveMaxSessionsPerUser(ctx, 1); err != nil {
+		t.Fatalf("SaveMaxSessionsPerUser: %v", err)
+	}
+	user, _ := repo.Create(ctx, "single2", "pass", "", false)
+
+	cfg, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindConfigurator})
+	e1, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
+	e2, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
+
+	if _, err := repo.LookupSession(ctx, e1); err == nil {
+		t.Fatal("при лимите 1 прежняя enterprise-сессия должна быть вытеснена")
+	}
+	if _, err := repo.LookupSession(ctx, e2); err != nil {
+		t.Fatalf("новая enterprise-сессия должна работать: %v", err)
+	}
+	if _, err := repo.LookupSession(ctx, cfg); err != nil {
+		t.Fatalf("сессия конфигуратора не должна вытесняться лимитом: %v", err)
+	}
+}
+
 // TouchSession обновляет last_seen_at не чаще раза в 5 минут (троттлинг).
 func TestTouchSessionThrottled(t *testing.T) {
 	repo, ctx := newTestRepo(t)

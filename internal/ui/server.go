@@ -254,6 +254,7 @@ func (s *Server) Mount(r chi.Router) {
 	// Admin: active sessions
 	r.Get("/ui/admin/sessions", s.adminSessions)
 	r.Post("/ui/admin/sessions/kick", s.adminKickSession)
+	r.Post("/ui/admin/sessions/limit", s.adminSessionLimit)
 	r.Post("/ui/admin/sessions/{login}/kick", s.adminKickUser)
 
 	// Admin: roles
