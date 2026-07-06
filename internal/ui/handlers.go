@@ -214,7 +214,7 @@ func (s *Server) loadRefOptionsWithMode(ctx context.Context, entity *metadata.En
 		if refEntity == nil {
 			continue
 		}
-		rows, err := s.referenceOptions(ctx, refEntity, mode)
+		rows, err := s.initialReferenceOptions(ctx, refEntity, mode, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +281,7 @@ func (s *Server) loadTPRefOptions(ctx context.Context, entity *metadata.Entity) 
 			if refEntity == nil {
 				continue
 			}
-			rows, err := s.referenceOptions(ctx, refEntity, refOptionsChoice)
+			rows, err := s.initialReferenceOptions(ctx, refEntity, refOptionsChoice, nil)
 			if err != nil {
 				continue
 			}

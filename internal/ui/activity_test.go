@@ -261,6 +261,104 @@ func TestLoadInitialRefOptionsIncludesSelectedOutsideFirstPage(t *testing.T) {
 	}
 }
 
+func TestLoadRefOptionsCapsLegacyHelper(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	refEnt := &metadata.Entity{
+		Name: "Товары",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	doc := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Товар", Type: metadata.FieldType("reference:Товары"), RefEntity: "Товары"},
+		},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{refEnt, doc}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= refPickerDefaultLimit+5; i++ {
+		id := uuid.MustParse("00000000-0000-0000-0000-" + fmt12(i))
+		if err := db.Upsert(ctx, refEnt.Name, id, map[string]any{"Наименование": fmt.Sprintf("Товар %03d", i)}, refEnt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg := runtime.NewRegistry()
+	reg.Load(runtime.LoadOptions{Entities: []*metadata.Entity{refEnt, doc}})
+	s := &Server{reg: reg, store: db}
+
+	opts, err := s.loadRefOptions(ctx, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(opts["Товар"]); got != refPickerDefaultLimit {
+		t.Fatalf("loadRefOptions loaded %d rows, want capped %d", got, refPickerDefaultLimit)
+	}
+}
+
+func TestLoadInitialTPRefOptionsIncludesSelectedOutsideFirstPage(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	refEnt := &metadata.Entity{
+		Name: "Товары",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	doc := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		TableParts: []metadata.TablePart{{
+			Name: "Товары",
+			Fields: []metadata.Field{
+				{Name: "Товар", Type: metadata.FieldType("reference:Товары"), RefEntity: "Товары"},
+			},
+		}},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{refEnt, doc}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= refPickerDefaultLimit; i++ {
+		id := uuid.MustParse("00000000-0000-0000-0000-" + fmt12(i))
+		if err := db.Upsert(ctx, refEnt.Name, id, map[string]any{"Наименование": "Товар"}, refEnt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	selected := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	if err := db.Upsert(ctx, refEnt.Name, selected, map[string]any{"Наименование": "Выбранный ТЧ"}, refEnt); err != nil {
+		t.Fatal(err)
+	}
+	reg := runtime.NewRegistry()
+	reg.Load(runtime.LoadOptions{Entities: []*metadata.Entity{refEnt, doc}})
+	s := &Server{reg: reg, store: db}
+
+	opts, err := s.loadInitialTPRefOptions(ctx, doc, map[string][]map[string]any{
+		"Товары": {{"Товар": selected.String()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := opts["Товары"]["Товар"]
+	if !hasOptionWithLabel(rows, selected.String(), "Выбранный ТЧ") {
+		t.Fatalf("selected TP ref %s was not added to initial options: %#v", selected, rows)
+	}
+}
+
 func TestTreeChildrenJSON_ReturnsDirectChildren(t *testing.T) {
 	ctx := context.Background()
 	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
