@@ -32,6 +32,22 @@ func applyManagedFormConditionalRules(form *metadata.FormModule, rowsByName map[
 	aliases := formConditionalTargetAliases(form)
 	wc := &formWarnCollector{}
 	applied := map[string]map[int]map[string]bool{}
+	// Контекст вычисления не зависит от правила (служебные _form_-ключи в него
+	// не попадают), поэтому собираем его один раз на строку, а не правило×строку.
+	evalRowsByTarget := map[string][]map[string]any{}
+	evalRowsFor := func(name string, rows []map[string]any) []map[string]any {
+		if er, ok := evalRowsByTarget[name]; ok {
+			return er
+		}
+		er := make([]map[string]any, len(rows))
+		for i, row := range rows {
+			if row != nil {
+				er[i] = formConditionalEvalRow(header, row, i)
+			}
+		}
+		evalRowsByTarget[name] = er
+		return er
+	}
 	for _, rule := range rules {
 		style := cssOfForm(rule.Style)
 		if style == "" {
@@ -44,6 +60,7 @@ func applyManagedFormConditionalRules(form *metadata.FormModule, rowsByName map[
 		}
 		for _, targetName := range targetNames {
 			rows := rowsByName[targetName]
+			evalRows := evalRowsFor(targetName, rows)
 			for i, row := range rows {
 				if row == nil {
 					continue
@@ -52,8 +69,7 @@ func applyManagedFormConditionalRules(form *metadata.FormModule, rowsByName map[
 				if formConditionalAlreadyApplied(applied, targetName, i, fieldKey) {
 					continue
 				}
-				evalRow := formConditionalEvalRow(header, row, i)
-				matches, err := ev.EvalBool(rule.When, compose.Row(evalRow))
+				matches, err := ev.EvalBool(rule.When, compose.Row(evalRows[i]))
 				if err != nil {
 					wc.add(fmt.Sprintf("условное оформление формы «%s»: %v", rule.When, err))
 					continue
