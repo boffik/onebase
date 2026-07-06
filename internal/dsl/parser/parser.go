@@ -589,6 +589,8 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 			return nil, err
 		}
 		return expr, nil
+	case token.LBRACKET:
+		return p.parseArrayLiteral()
 	case token.NEW:
 		return p.parseNew()
 	case token.QUESTION:
@@ -629,6 +631,32 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 		return nil, fmt.Errorf("%s:%d:%d: unexpected %q in expression",
 			p.cur.File, p.cur.Line, p.cur.Col, p.cur.Literal)
 	}
+}
+
+// parseArrayLiteral разбирает краткий литерал массива: [expr, expr, ...].
+func (p *Parser) parseArrayLiteral() (ast.Expr, error) {
+	tok := p.cur
+	p.advance() // consume [
+	var elems []ast.Expr
+	if p.cur.Type != token.RBRACKET {
+		for {
+			expr, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			elems = append(elems, expr)
+			if p.cur.Type != token.COMMA {
+				break
+			}
+			p.advance()
+		}
+	}
+	if _, err := p.expect(token.RBRACKET); err != nil {
+		return nil, err
+	}
+	expr := ast.Expr(&ast.ArrayLit{Tok: tok, Elements: elems})
+	expr = p.parsePostfix(expr)
+	return expr, nil
 }
 
 // parseTry разбирает: Попытка <stmts> Исключение <stmts> КонецПопытки
