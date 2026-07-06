@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	journalRowStyleKey  = "_journal_style"
-	journalCellStyleKey = "_journal_cell_styles"
+	// NUL-prefixed keys cannot collide with configuration identifiers/SQL aliases.
+	journalRowStyleKey  = "\x00journal_style"
+	journalCellStyleKey = "\x00journal_cell_styles"
 )
 
 func applyJournalConditionalStyles(rows []map[string]any, rules []metadata.JournalCondRule, ev compose.Evaluator) []string {

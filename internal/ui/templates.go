@@ -31,8 +31,18 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			}
 			return fmt.Sprintf("%v", v)
 		},
-		"journalRowStyle":  journalRowStyle,
-		"journalCellStyle": journalCellStyle,
+		// Инлайн-CSS условного оформления журнала обязан уходить в атрибут style
+		// типом template.CSS: строку html/template прогоняет через cssValueFilter,
+		// который запрещает ';'/'(' и подменяет стиль из двух и более свойств (или
+		// rgb()-цвет) на "ZgotmplZ". Значения безопасны по построению — их собирает
+		// только cssStyle() из цветов, прошедших csssafe.Color, и фиксированных
+		// font-weight/font-style.
+		"journalRowStyle": func(row map[string]any) template.CSS {
+			return template.CSS(journalRowStyle(row))
+		},
+		"journalCellStyle": func(row map[string]any, field string) template.CSS {
+			return template.CSS(journalCellStyle(row, field))
+		},
 		"formRowClass":     formRowClass,
 		"formCellClass":    formCellClass,
 		"add":              func(a, b int) int { return a + b },
