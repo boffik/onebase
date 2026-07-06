@@ -59,6 +59,25 @@ func TestJournalStyleInternalKeysDoNotCollideWithFields(t *testing.T) {
 	}
 }
 
+func TestJournalConditionalDedupCaseInsensitive(t *testing.T) {
+	rows := []map[string]any{{"_doc_kind": "Док", "id": "1", "Сумма": "-10"}}
+	applyJournalConditionalStyles(rows, []metadata.JournalCondRule{
+		{When: "Сумма < 0", Field: "Сумма", Style: metadata.JournalCellStyle{Color: "#c00"}},
+		{When: "Сумма < 0", Field: "сумма", Style: metadata.JournalCellStyle{Background: "#fee"}},
+	}, newInterpEvaluator(interpreter.New()))
+
+	// «Первое совпавшее правило» действует на ячейку независимо от регистра поля.
+	cellStyles, _ := rows[0][journalCellStyleKey].(map[string]string)
+	if len(cellStyles) != 1 {
+		t.Fatalf("second rule for the same field (different case) must be skipped: %+v", cellStyles)
+	}
+	for _, lookup := range []string{"Сумма", "сумма"} {
+		if got := journalCellStyle(rows[0], lookup); got != "color:#c00" {
+			t.Fatalf("cell style lookup %q: got %q, want color:#c00", lookup, got)
+		}
+	}
+}
+
 func TestJournalConditionalRender(t *testing.T) {
 	j := testJournal()
 	rows := []map[string]any{{"_doc_kind": "Док", "id": "1", "Сумма": "-10", "Номер": "N1", "Контрагент": "К"}}
