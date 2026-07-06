@@ -42,9 +42,11 @@ func TestApplyJournalConditionalStyles(t *testing.T) {
 func TestJournalConditionalRender(t *testing.T) {
 	j := testJournal()
 	rows := []map[string]any{{"_doc_kind": "Док", "id": "1", "Сумма": "-10", "Номер": "N1", "Контрагент": "К"}}
+	// Стили из двух и более свойств содержат ';' — регрессия на cssValueFilter
+	// html/template, который заменял такое значение атрибута style на "ZgotmplZ".
 	applyJournalConditionalStyles(rows, []metadata.JournalCondRule{
-		{When: "Сумма < 0", Style: metadata.JournalCellStyle{Background: "#fee"}},
-		{When: "Сумма < 0", Field: "Сумма", Style: metadata.JournalCellStyle{Color: "#c00"}},
+		{When: "Сумма < 0", Style: metadata.JournalCellStyle{Background: "#fee", Bold: true}},
+		{When: "Сумма < 0", Field: "Сумма", Style: metadata.JournalCellStyle{Color: "#c00", Italic: true}},
 	}, newInterpEvaluator(interpreter.New()))
 
 	var buf bytes.Buffer
@@ -66,9 +68,12 @@ func TestJournalConditionalRender(t *testing.T) {
 		t.Fatalf("execute page-journal: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"background:#fee", "color:#c00"} {
+	for _, want := range []string{"background:#fee;font-weight:bold", "color:#c00;font-style:italic"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rendered journal missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "ZgotmplZ") {
+		t.Fatalf("style attribute rejected by html/template css filter:\n%s", out)
 	}
 }
