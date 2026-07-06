@@ -80,6 +80,36 @@ func CreateTablePartParentIndexSQL(entityName, tpName string) string {
 	return CreateEntityIndexSQL(table, []string{"parent_id", "строка"}, false)
 }
 
+func CreateRegisterPeriodIndexSQL(regName string) string {
+	table := metadata.RegisterTableName(regName)
+	return CreateEntityIndexSQL(table, []string{"period"}, false)
+}
+
+func CreateRegisterDimPeriodIndexSQL(reg *metadata.Register) string {
+	table := metadata.RegisterTableName(reg.Name)
+	cols := registerDimPeriodIndexColumns(reg)
+	if len(cols) == 0 {
+		return ""
+	}
+	return CreateEntityIndexSQL(table, cols, false)
+}
+
+func registerDimPeriodIndexColumns(reg *metadata.Register) []string {
+	if reg == nil || len(reg.Dimensions) == 0 {
+		return nil
+	}
+	limit := len(reg.Dimensions)
+	if limit > 3 {
+		limit = 3
+	}
+	cols := make([]string, 0, limit+1)
+	for _, f := range reg.Dimensions[:limit] {
+		cols = append(cols, metadata.ColumnName(f))
+	}
+	cols = append(cols, "period")
+	return cols
+}
+
 func stableIndexName(table string, cols []string, unique bool) string {
 	kind := "n"
 	if unique {

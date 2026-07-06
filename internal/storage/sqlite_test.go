@@ -300,6 +300,40 @@ func TestSQLiteMigrateCreatesEntityAndTablePartIndexes(t *testing.T) {
 	}
 }
 
+func TestSQLiteMigrateRegistersCreatesPeriodAndDimensionIndexes(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "reg-indexes.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	defer db.Close()
+
+	reg := &metadata.Register{
+		Name: "ОстаткиТоваров",
+		Dimensions: []metadata.Field{
+			{Name: "Склад", Type: "reference:Склады", RefEntity: "Склады"},
+			{Name: "Номенклатура", Type: "reference:Номенклатура", RefEntity: "Номенклатура"},
+			{Name: "Серия", Type: metadata.FieldTypeString},
+			{Name: "Качество", Type: metadata.FieldTypeString},
+		},
+		Resources: []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+	}
+	if err := db.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatalf("MigrateRegisters: %v", err)
+	}
+
+	table := metadata.RegisterTableName(reg.Name)
+	periodIndex := stableIndexName(table, []string{"period"}, false)
+	if !sqliteIndexExists(t, db, table, periodIndex, false, []string{"period"}) {
+		t.Fatalf("period index %s on %s(period) not found", periodIndex, table)
+	}
+	dimCols := []string{"склад_id", "номенклатура_id", "серия", "period"}
+	dimIndex := stableIndexName(table, dimCols, false)
+	if !sqliteIndexExists(t, db, table, dimIndex, false, dimCols) {
+		t.Fatalf("dimension index %s on %s(%v) not found", dimIndex, table, dimCols)
+	}
+}
+
 func sqliteIndexExists(t *testing.T, db *DB, table, index string, unique bool, wantCols []string) bool {
 	t.Helper()
 	rows, err := db.Query(context.Background(), "PRAGMA index_list("+sqliteIdent(table)+")")

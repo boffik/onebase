@@ -56,6 +56,7 @@ func CheckLintProject(dir string, proj *project.Project, roles []*auth.Role) []I
 	var issues []Issue
 	issues = append(issues, CheckLintDSL(dir, proj)...)
 	issues = append(issues, CheckLintRoles(proj, roles)...)
+	issues = append(issues, CheckLintIndexes(proj)...)
 	return issues
 }
 
@@ -1224,6 +1225,67 @@ func CheckLintRoles(proj *project.Project, roles []*auth.Role) []Issue {
 		}
 	}
 	return issues
+}
+
+func CheckLintIndexes(proj *project.Project) []Issue {
+	if proj == nil {
+		return nil
+	}
+	var issues []Issue
+	for _, ent := range proj.Entities {
+		if ent == nil || len(ent.ListForm) == 0 {
+			continue
+		}
+		for _, fieldName := range ent.ListForm {
+			f := findLintEntityField(ent, fieldName)
+			if f == nil || !lintFieldNeedsIndex(*f) || hasLeadingIndex(ent, f.Name) {
+				continue
+			}
+			kindDir, kindName := "catalogs", "Справочник"
+			if ent.Kind == metadata.KindDocument {
+				kindDir, kindName = "documents", "Документ"
+			}
+			issues = append(issues, Issue{
+				File:         kindDir + "/" + ent.Name + ".yaml",
+				Object:       ent.Name,
+				Kind:         kindName,
+				Code:         "metadata.list-field-without-index",
+				Message:      fmt.Sprintf("поле %q используется в list_form, но не покрыто ведущим полем indexes:", f.Name),
+				SuggestedFix: fmt.Sprintf("Добавьте в %s/%s.yaml блок `indexes: - fields: [%s]` или составной индекс, где %s идёт первым.", kindDir, ent.Name, f.Name, f.Name),
+			})
+		}
+	}
+	return issues
+}
+
+func findLintEntityField(ent *metadata.Entity, name string) *metadata.Field {
+	for i := range ent.Fields {
+		if strings.EqualFold(ent.Fields[i].Name, name) {
+			return &ent.Fields[i]
+		}
+	}
+	return nil
+}
+
+func lintFieldNeedsIndex(f metadata.Field) bool {
+	if f.RefEntity != "" {
+		return true
+	}
+	switch f.Type {
+	case metadata.FieldTypeString, metadata.FieldTypeDate, metadata.FieldTypeNumber, metadata.FieldTypeBool:
+		return true
+	default:
+		return false
+	}
+}
+
+func hasLeadingIndex(ent *metadata.Entity, fieldName string) bool {
+	for _, idx := range ent.Indexes {
+		if len(idx.Fields) > 0 && strings.EqualFold(idx.Fields[0], fieldName) {
+			return true
+		}
+	}
+	return false
 }
 
 func programLabel(dir string, prog *ast.Program) string {
