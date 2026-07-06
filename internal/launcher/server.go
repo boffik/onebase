@@ -51,21 +51,14 @@ func (s *Server) URL() string { return "http://" + s.ln.Addr().String() }
 // Done returns a channel that is closed when /quit is received.
 func (s *Server) Done() <-chan struct{} { return s.quit }
 
-// Close shuts down the HTTP server, closes auth pools and kills any running
-// base processes — otherwise onebase-gui.exe children survive as zombies when
-// the launcher window is closed via the X button.
+// Close shuts down the HTTP server and closes auth pools. Запущенные базы
+// НАМЕРЕННО переживают закрытие лаунчера (план 78): лаунчер — окно запуска,
+// а не владелец сеансов, как в 1С — открытые окна Предприятия продолжают
+// работать. Раньше здесь был StopAll («иначе дети-зомби»), но с усыновлением
+// (handler.baseRunning) следующий экземпляр лаунчера видит живые базы,
+// открывает их и умеет останавливать — зомби больше не проблема. Явная
+// остановка всего — кнопка «Стоп всё» (killAll).
 func (s *Server) Close() {
-	if s.h != nil && s.h.runner != nil {
-		var ports []int
-		if s.h.store != nil {
-			if bases, err := s.h.store.List(); err == nil {
-				for _, b := range bases {
-					ports = append(ports, b.Port)
-				}
-			}
-		}
-		s.h.runner.StopAll(ports)
-	}
 	CloseAuthPools()
 	if s.httpSrv != nil {
 		s.httpSrv.Close()
