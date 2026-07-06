@@ -126,12 +126,13 @@ type fakeBrowser struct {
 	calls int
 	dir   string
 	url   string
+	mode  string
 	err   error
 }
 
-func (f *fakeBrowser) Open(dir, url string) error {
+func (f *fakeBrowser) Open(dir, url, mode string) error {
 	f.calls++
-	f.dir, f.url = dir, url
+	f.dir, f.url, f.mode = dir, url, mode
 	return f.err
 }
 
@@ -168,14 +169,39 @@ func newIsolatedFixture(t *testing.T, fb *fakeBrowser) (*handler, *Base) {
 }
 
 func startIsolatedReq(t *testing.T, h *handler, id string) *httptest.ResponseRecorder {
+	return startIsolatedModeReq(t, h, id, "")
+}
+
+func startIsolatedModeReq(t *testing.T, h *handler, id, mode string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest("POST", "/bases/"+id+"/start-isolated", nil)
+	u := "/bases/" + id + "/start-isolated"
+	if mode != "" {
+		u += "?mode=" + mode
+	}
+	req := httptest.NewRequest("POST", u, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", id)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rec := httptest.NewRecorder()
 	h.startIsolated(rec, req)
 	return rec
+}
+
+// Режим открытия прокидывается из query до isolatedBrowser; мусорный режим — 400.
+func TestStartIsolated_ModePlumbing(t *testing.T) {
+	fb := &fakeBrowser{}
+	h, b := newIsolatedFixture(t, fb)
+
+	if rec := startIsolatedModeReq(t, h, b.ID, "native"); rec.Code != 200 || fb.mode != "native" {
+		t.Fatalf("mode=native: код %d, дошёл режим %q", rec.Code, fb.mode)
+	}
+	if rec := startIsolatedModeReq(t, h, b.ID, "browser"); rec.Code != 200 || fb.mode != "browser" {
+		t.Fatalf("mode=browser: код %d, дошёл режим %q", rec.Code, fb.mode)
+	}
+	calls := fb.calls
+	if rec := startIsolatedModeReq(t, h, b.ID, "junk"); rec.Code != 400 || fb.calls != calls {
+		t.Fatalf("мусорный режим должен давать 400 без запуска окна: %d", rec.Code)
+	}
 }
 
 func TestStartIsolated_OpensBrowserWithProfile(t *testing.T) {

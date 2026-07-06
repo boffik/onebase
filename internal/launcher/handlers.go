@@ -146,6 +146,7 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 		"Title":    tr(resolveLang(r), "onebase — Информационные базы"),
 		"Bases":    vms,
 		"Selected": selected,
+		"NativeOK": NativeIsolatedSupported(),
 		"BaseURL": func() string {
 			if selected != nil {
 				return h.runner.BaseURL(selected.Base)
@@ -415,11 +416,19 @@ func (h *handler) startIsolated(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mode := r.URL.Query().Get("mode")
+	switch mode {
+	case "", isolatedModeAuto, isolatedModeNative, isolatedModeBrowser:
+	default:
+		writeJSON(w, 400, map[string]any{"error": "неизвестный режим: " + mode})
+		return
+	}
+
 	root, err := profilesRoot(b.ID)
 	if err == nil {
 		var dir string
 		if dir, err = pickProfileDir(root); err == nil {
-			err = h.isoBrowser.Open(dir, h.runner.BaseURL(b)+"/ui")
+			err = h.isoBrowser.Open(dir, h.runner.BaseURL(b)+"/ui", mode)
 		}
 	}
 	if err != nil {
