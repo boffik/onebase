@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/ivantit66/onebase/internal/auth"
 	oblog "github.com/ivantit66/onebase/internal/logging"
 )
 
@@ -27,15 +29,24 @@ func requestLogger() func(http.Handler) http.Handler {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			defer func() {
-				logger.LogAttrs(r.Context(), slog.LevelInfo, "http request",
+				route := chi.RouteContext(r.Context()).RoutePattern()
+				if route == "" {
+					route = "other"
+				}
+				attrs := []slog.Attr{
 					slog.String("method", r.Method),
 					slog.String("uri", redactURI(r.RequestURI)),
+					slog.String("route", route),
 					slog.Int("status", ww.Status()),
 					slog.Int("bytes", ww.BytesWritten()),
 					slog.Int64("duration_ms", time.Since(start).Milliseconds()),
 					slog.String("remote_addr", r.RemoteAddr),
 					slog.String("request_id", middleware.GetReqID(r.Context())),
-				)
+				}
+				if u := auth.UserFromContext(r.Context()); u != nil {
+					attrs = append(attrs, slog.String("user_login", u.Login))
+				}
+				logger.LogAttrs(r.Context(), slog.LevelInfo, "http request", attrs...)
 			}()
 			next.ServeHTTP(ww, r)
 		})

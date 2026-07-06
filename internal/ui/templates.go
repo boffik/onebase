@@ -43,9 +43,9 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		"journalCellStyle": func(row map[string]any, field string) template.CSS {
 			return template.CSS(journalCellStyle(row, field))
 		},
-		"formRowClass":     formRowClass,
-		"formCellClass":    formCellClass,
-		"add":              func(a, b int) int { return a + b },
+		"formRowClass":  formRowClass,
+		"formCellClass": formCellClass,
+		"add":           func(a, b int) int { return a + b },
 		// lucideIcon рендерит инлайн-SVG иконки навигации по имени Lucide (план 72).
 		"lucideIcon": LucideIcon,
 		"t": func(lang, key string) string {
@@ -3331,6 +3331,7 @@ const tplReport = `
 </details>
 {{end}}
 {{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
+{{if .QueryWarning}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{.QueryWarning}}</div>{{end}}
 {{if .ChartOption}}
 <details class="card report-block" data-block="chart" open style="margin-bottom:16px">
 <summary>{{t $.Lang "Диаграмма"}}</summary>

@@ -222,6 +222,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		if appCfg.Attachments != nil && appCfg.Attachments.MaxFileSizeMB > 0 {
 			uiCfg.MaxFileSizeMB = appCfg.Attachments.MaxFileSizeMB
 		}
+		uiCfg.Limits = runtimeLimitsFromApp(appCfg.Limits)
 		if appCfg.Email != nil {
 			m := mailer.New(mailer.Config{
 				SMTPHost:    appCfg.Email.SMTPHost,

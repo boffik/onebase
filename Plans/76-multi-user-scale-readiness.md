@@ -1,6 +1,6 @@
 # План 76: готовность к многопользовательской нагрузке
 
-**Статус:** запланировано (аудит 2026-06-25).
+**Статус:** в работе (аудит 2026-06-25; E/F core реализован 2026-07-06 в PR runtime-limits).
 
 ## Контекст
 
@@ -162,8 +162,15 @@ Acceptance:
      request_timeout_sec: 60
      report_timeout_sec: 120
      report_max_rows: 50000
+     report_concurrency: 4
+     export_timeout_sec: 180
      export_max_rows: 100000
+     export_concurrency: 2
+     processor_timeout_sec: 120
      processor_concurrency: 4
+     http_service_timeout_sec: 30
+     http_service_concurrency: 16
+     slow_operation_ms: 2000
    ```
 2. Отчёты:
    - SQL-обёртка с `LIMIT max+1`, если запрос сам не содержит явного лимита;
@@ -178,6 +185,15 @@ Acceptance:
 - тяжёлый отчёт отменяется по deadline и освобождает DB connection;
 - при превышении concurrency пользователь получает 429/503 с понятным retry;
 - экспорт 200k строк не держит HTTP handler до бесконечности.
+
+Реализация 2026-07-06:
+- добавлены runtime timeout/concurrency/max rows guardrails для отчётов,
+  экспорта, обработок и HTTP-сервисов;
+- `RunQueryLimit` добавляет SQL `LIMIT max+1`, если верхнеуровневого `LIMIT` нет,
+  и оставляет Go-side read cap вторым рубежом;
+- экран отчёта показывает truncation warning, экспорт сверх лимита возвращает
+  413; отдельный background export с polling/SSE остаётся UX-расширением поверх
+  уже ограниченного выполнения.
 
 ### Этап F — наблюдаемость и эксплуатация (2-3 дня)
 
@@ -196,6 +212,15 @@ Acceptance:
 Acceptance:
 - k6-прогон даёт p95/p99 + DB pool metrics;
 - админ может отличить CPU/DSL bottleneck от ожидания connection pool.
+
+Реализация 2026-07-06:
+- `/metrics` дополнен активными сессиями, SSE subscribers, активными
+  scheduler runs, operation counters/gauges/histograms, slow/limited operation
+  counters и webhook inflight/retry/failure counters;
+- request log пишет route/request_id/duration/user с существующей redaction и
+  JSON-форматом через `ONEBASE_LOG_FORMAT=json`;
+- slow operation log для отчётов пишет `sql_hash`, duration, rows, route/user;
+- обновлён `docs/users-load-limits.md`.
 
 ### Этап G — путь к горизонтальному масштабированию (future)
 

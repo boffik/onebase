@@ -113,12 +113,18 @@ func TestSessionsLifecycle(t *testing.T) {
 	if looked.ID != user.ID {
 		t.Fatalf("сессия вернула чужого пользователя: %s != %s", looked.ID, user.ID)
 	}
+	if count, err := repo.ActiveSessionCount(ctx); err != nil || count != 1 {
+		t.Fatalf("ActiveSessionCount = %d, %v; want 1, nil", count, err)
+	}
 
 	if err := repo.DeleteSession(ctx, token); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
 	if _, err := repo.LookupSession(ctx, token); err == nil {
 		t.Fatal("LookupSession после удаления должен вернуть ошибку")
+	}
+	if count, err := repo.ActiveSessionCount(ctx); err != nil || count != 0 {
+		t.Fatalf("ActiveSessionCount after delete = %d, %v; want 0, nil", count, err)
 	}
 }
 

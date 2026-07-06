@@ -16,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/metrics"
 	"github.com/ivantit66/onebase/internal/realtime"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
@@ -57,6 +58,8 @@ type Config struct {
 	// Используется basic-auth HTTP-сервисов для защиты от брутфорса. nil →
 	// New создаёт собственный, чтобы поле никогда не было пустым.
 	LoginLimit *auth.LoginLimiter
+	Limits     RuntimeLimits
+	Metrics    *metrics.Registry
 }
 
 type Server struct {
@@ -81,6 +84,7 @@ type Server struct {
 	extprocessors    *extform.ProcessorRepo // внешний контур: обработки из БД
 	tmpl             *template.Template
 	hub              *realtime.Hub // real-time-шина уведомлений сервер→браузер (план 74)
+	ops              *operationLimiter
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -92,7 +96,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if loginLimit == nil {
 		loginLimit = auth.NewLoginLimiter(5, time.Minute)
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub()}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub(), ops: newOperationLimiter()}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,
@@ -139,6 +143,15 @@ func (s *Server) Messages() *MessageStore { return s.messages }
 // проведение по той же логике, что и UI submit/submitEdit — иначе бизнес-
 // правила работали бы только через web-форму.
 func (s *Server) EntitySvc() *entityservice.Service { return s.entitySvc }
+
+// SSESubscriberCount returns the number of currently connected realtime
+// subscribers.
+func (s *Server) SSESubscriberCount() int {
+	if s == nil || s.hub == nil {
+		return 0
+	}
+	return s.hub.SubscriberCount()
+}
 
 // InvalidateWidgetCache drops every cached widget result. The dev/reload path
 // calls this so users see fresh data after metadata changes.
