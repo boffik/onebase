@@ -9,9 +9,10 @@
    REST RBAC/list limits, атомарная optimistic locking запись, declarative
    indexes + tablepart/register indexes, server-side reference picker,
    bounded parent-folder options, runtime limits/backpressure, metrics и
-   PostgreSQL advisory locks для `БлокировкаДанных` в Save-хуках. В очереди
-   остаются background export UX поверх уже ограниченного экспорта, нагрузочная
-   валидация на PostgreSQL и документирование остаточных лимитов.
+   PostgreSQL advisory locks для `БлокировкаДанных` в Save-хуках. UI-кнопки
+   Excel/PDF отчётов уже запускают background export job со страницей статуса.
+   В очереди остаются нагрузочная валидация на PostgreSQL и документирование
+   остаточных лимитов.
 
 2. **План 60B — marketplace конфигураций.**
    Версионирование конфигурации в БД и UI истории уже реализованы, а shipped
@@ -38,8 +39,8 @@
   активного списка.
 - **План 76 стоит зафиксировать как следующий guardrail-план.** Текущий REST API,
   большие списки, reference-options, конкурентная запись и тяжёлые отчёты
-  требуют ограничителей; core-срез A/B/C/D1/E/F уже реализован, остатки описаны
-  выше.
+  требуют ограничителей; core-срез A/B/C/D/E/F и background export UX уже
+  реализованы, остатки описаны выше.
 - **`onebase lint` по shipped examples/templates теперь закреплен в CI.**
   PR #263 собирает CLI и прогоняет `onebase lint --json` по `examples/*` и
   `templates/*`, падая на любых issues/warnings.

@@ -20,8 +20,8 @@
 > конфигурации), **65** (richtext), **74** (AI/dev tools 2.0) фактически закрыты.
 > Сверка 2026-07-07: **34 F3** (автодоступ к реквизитам ссылок `this.X.Y` /
 > `Стр.X.Y`) закрыт PR #261 через безопасный single-hop доступ с предзагрузкой
-> и кэшем; **76 A/B/C/D1/E/F core** закрыты серией PR до #264, кроме
-> межпроцессных locks/background export UX/future horizontal scale;
+> и кэшем; **76 A/B/C/D/E/F core** и background export UX закрыты серией PR до #267,
+> кроме future horizontal scale и нагрузочной PostgreSQL-валидации;
 > мультисессионность из плана 76 пока отложена.
 
 ## Текущий приоритет, 2026-07-07
@@ -31,8 +31,8 @@
 1. **План 76:** остатки не-сессионных guardrails нагрузки. Уже закрыты REST
    RBAC/list limits, optimistic locking, индексы, server-side reference picker,
    bounded parent-folder options, runtime limits/backpressure, metrics и
-   PostgreSQL advisory locks для Save-хуков. Остались background export UX и
-   нагрузочная валидация на PostgreSQL.
+   PostgreSQL advisory locks для Save-хуков, а также background export UX для
+   Excel/PDF отчётов. Осталась нагрузочная валидация на PostgreSQL.
 2. **План 60B:** marketplace конфигураций. Часть A (история/diff/rollback/UI)
    уже реализована, shipped examples/templates проходят CI lint-gate.
 3. **План 55, этап 3:** разбор монолитных UI templates/JS.

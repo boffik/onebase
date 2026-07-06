@@ -68,6 +68,25 @@ func (l *operationLimiter) tryAcquire(kind string, limit int) (func(), bool) {
 	}
 }
 
+func (l *operationLimiter) acquire(ctx context.Context, kind string, limit int) (func(), bool) {
+	if limit <= 0 {
+		return func() {}, true
+	}
+	l.mu.Lock()
+	ch := l.slots[kind]
+	if ch == nil || cap(ch) != limit {
+		ch = make(chan struct{}, limit)
+		l.slots[kind] = ch
+	}
+	l.mu.Unlock()
+	select {
+	case ch <- struct{}{}:
+		return func() { <-ch }, true
+	case <-ctx.Done():
+		return nil, false
+	}
+}
+
 type operationFinish func(status string, rows int, truncated bool, extra ...slog.Attr)
 
 func (s *Server) beginOperation(r *http.Request, kind, name string) (context.Context, operationFinish, bool) {
@@ -103,6 +122,46 @@ func (s *Server) beginOperation(r *http.Request, kind, name string) (context.Con
 		}
 		if slow {
 			s.logSlowOperation(r, kind, name, status, d, rows, truncated, extra...)
+		}
+	}, true
+}
+
+func (s *Server) beginQueuedOperation(r *http.Request, kind, name string) (context.Context, operationFinish, bool) {
+	if s.ops == nil {
+		s.ops = newOperationLimiter()
+	}
+	base := context.WithoutCancel(r.Context())
+	ctx := base
+	cancel := func() {}
+	if timeout := s.operationTimeout(kind); timeout > 0 {
+		ctx, cancel = context.WithTimeout(base, timeout)
+	}
+
+	limit := s.operationConcurrency(kind)
+	release, ok := s.ops.acquire(ctx, kind, limit)
+	if !ok {
+		cancel()
+		if s.cfg.Metrics != nil {
+			s.cfg.Metrics.OperationLimited(kind, "concurrency")
+		}
+		return ctx, nil, false
+	}
+
+	start := time.Now()
+	if s.cfg.Metrics != nil {
+		s.cfg.Metrics.OperationStart(kind)
+	}
+	logReq := r.WithContext(ctx)
+	return ctx, func(status string, rows int, truncated bool, extra ...slog.Attr) {
+		cancel()
+		release()
+		d := time.Since(start)
+		slow := s.isSlowOperation(d)
+		if s.cfg.Metrics != nil {
+			s.cfg.Metrics.OperationFinish(kind, status, d, slow)
+		}
+		if slow {
+			s.logSlowOperation(logReq, kind, name, status, d, rows, truncated, extra...)
 		}
 	}, true
 }
