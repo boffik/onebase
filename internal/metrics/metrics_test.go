@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -49,6 +50,30 @@ func TestRegistry_RecordsAndExposes(t *testing.T) {
 	if !strings.Contains(out, "# TYPE onebase_http_requests_total counter") ||
 		!strings.Contains(out, "# TYPE onebase_http_request_duration_seconds histogram") {
 		t.Errorf("отсутствуют TYPE-заголовки, получили:\n%s", out)
+	}
+}
+
+func TestRegistry_OperationMetrics(t *testing.T) {
+	reg := New()
+	reg.OperationStart("report.run")
+	reg.OperationFinish("report.run", "ok", 25*time.Millisecond, false)
+	reg.OperationLimited("http_service.run", "concurrency")
+
+	var sb strings.Builder
+	reg.WritePrometheus(&sb)
+	out := sb.String()
+
+	if !strings.Contains(out, `onebase_operation_total{kind="report.run",status="ok"} 1`) {
+		t.Errorf("missing operation counter:\n%s", out)
+	}
+	if !strings.Contains(out, `onebase_active_operations{kind="report.run"} 0`) {
+		t.Errorf("missing active operation gauge:\n%s", out)
+	}
+	if !strings.Contains(out, `onebase_operation_duration_seconds_count{kind="report.run"} 1`) {
+		t.Errorf("missing operation duration histogram:\n%s", out)
+	}
+	if !strings.Contains(out, `onebase_limited_operation_total{kind="http_service.run",reason="concurrency"} 1`) {
+		t.Errorf("missing limited operation counter:\n%s", out)
 	}
 }
 

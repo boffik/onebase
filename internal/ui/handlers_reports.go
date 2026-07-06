@@ -5,6 +5,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -109,12 +110,22 @@ func (s *Server) getReport(w http.ResponseWriter, r *http.Request) *reportpkg.Re
 }
 
 func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpkg.Report, paramValues map[string]any) {
+	opCtx, finish, ok := s.beginOperation(r, opReportRun, rep.Name)
+	if !ok {
+		http.Error(w, "слишком много одновременно выполняемых отчётов, повторите позже", http.StatusTooManyRequests)
+		return
+	}
+	opStatus := "ok"
+	opRows := 0
+	opTruncated := false
+	defer func() { finish(opStatus, opRows, opTruncated) }()
+
 	// Выбранный вариант компоновки (параметр __variant); пусто → основной.
 	variant := r.FormValue("__variant")
 	user := currentUserLogin(r)
 	var presets []storage.ReportPreset
 	if reportSupportsRuntimeSettings(rep) {
-		presets = loadReportPresets(r.Context(), s.store, rep.Name, user)
+		presets = loadReportPresets(opCtx, s.store, rep.Name, user)
 	}
 	rs := s.reportSettingsForRequest(r, rep)
 	settings := rs.Settings
@@ -151,8 +162,9 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		AccountRegs: s.reg.AccountRegisters(),
 		Dialect:     s.store.Dialect(),
 	})
-	reportParams := s.buildReportParams(r.Context(), s.resolveLang(r), rep.Params, paramValues)
+	reportParams := s.buildReportParams(opCtx, s.resolveLang(r), rep.Params, paramValues)
 	if err != nil {
+		opStatus = "error"
 		s.render(w, r, "page-report", map[string]any{
 			"Report":             rep,
 			"QueryError":         err.Error(),
@@ -167,8 +179,15 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		})
 		return
 	}
-	rows, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
+	rows, cols, truncated, err := s.store.RunQueryLimit(opCtx, compiled.SQL, compiled.Args, s.cfg.Limits.ReportMaxRows)
+	opTruncated = truncated
+	opRows = len(rows)
+	queryWarning := ""
+	if truncated {
+		queryWarning = s.tr(s.resolveLang(r), "Результат отчёта усечён лимитом строк. Уточните параметры или увеличьте report_max_rows.")
+	}
 	if err != nil {
+		opStatus = operationStatus(opCtx, err)
 		s.render(w, r, "page-report", map[string]any{
 			"Report":             rep,
 			"QueryError":         err.Error(),
@@ -187,7 +206,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	if comp != nil {
 		detailLinkCol = comp.DetailLink
 	}
-	s.resolveUUIDsInReport(r.Context(), rows, detailLinkCol)
+	s.resolveUUIDsInReport(opCtx, rows, detailLinkCol)
 
 	// Пользовательские отборы применяются к строкам до компоновки (план 70).
 	if comp != nil && settings != nil && len(settings.Filters) > 0 {
@@ -201,6 +220,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		if len(comp.Columns) > 0 {
 			cr, cerr := compose.ComposeCross(rows, *comp, ev)
 			if cerr != nil {
+				opStatus = "error"
 				s.render(w, r, "page-report", map[string]any{
 					"Report": rep, "QueryError": cerr.Error(),
 					"ParamValues": paramValues, "ReportParams": reportParams,
@@ -210,6 +230,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 					"ReportPresets":      presets,
 					"ActivePresetID":     rs.ActivePresetID,
 					"ActivePreset":       activePreset,
+					"QueryWarning":       queryWarning,
 				})
 				return
 			}
@@ -227,11 +248,13 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 				"ActivePresetID":     rs.ActivePresetID,
 				"ActivePreset":       activePreset,
 				"ReportCols":         cols,
+				"QueryWarning":       queryWarning,
 			})
 			return
 		}
 		res, cerr := compose.Compose(rows, *comp, ev)
 		if cerr != nil {
+			opStatus = "error"
 			s.render(w, r, "page-report", map[string]any{
 				"Report": rep, "QueryError": cerr.Error(),
 				"ParamValues": paramValues, "ReportParams": reportParams,
@@ -241,6 +264,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 				"ReportPresets":      presets,
 				"ActivePresetID":     rs.ActivePresetID,
 				"ActivePreset":       activePreset,
+				"QueryWarning":       queryWarning,
 			})
 			return
 		}
@@ -263,13 +287,14 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 			"ActivePresetID":     rs.ActivePresetID,
 			"ActivePreset":       activePreset,
 			"ReportCols":         cols,
+			"QueryWarning":       queryWarning,
 		})
 		return
 	}
 
 	var chartOption map[string]any
 	if rep.ChartProc != "" {
-		chartOption = s.runChartProc(r.Context(), rep, rows, paramValues)
+		chartOption = s.runChartProc(opCtx, rep, rows, paramValues)
 	}
 
 	s.render(w, r, "page-report", map[string]any{
@@ -286,6 +311,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		"ActivePresetID":     rs.ActivePresetID,
 		"ActivePreset":       activePreset,
 		"ReportCols":         cols,
+		"QueryWarning":       queryWarning,
 	})
 }
 
@@ -475,6 +501,15 @@ func (s *Server) writeReportExportError(w http.ResponseWriter, r *http.Request, 
 // (issue #218) — чтобы обе выгрузки шли из одних и тех же данных и не расходились
 // с экраном (runReport использует те же crossSheetRows/composedRows).
 func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (headers []string, rows [][]any, err error) {
+	opCtx, finish, ok := s.beginOperation(r, opReportExport, rep.Name)
+	if !ok {
+		return nil, nil, newReportExportError(http.StatusTooManyRequests, "export limit", fmt.Errorf("слишком много одновременно выполняемых выгрузок, повторите позже"))
+	}
+	opStatus := "ok"
+	opRows := 0
+	opTruncated := false
+	defer func() { finish(opStatus, opRows, opTruncated) }()
+
 	settings := s.reportSettingsForRequest(r, rep).Settings
 	comp := effectiveComposition(rep, settings)
 	paramValues := make(map[string]any, len(rep.Params))
@@ -505,17 +540,25 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		Dialect:     s.store.Dialect(),
 	})
 	if err != nil {
+		opStatus = "error"
 		return nil, nil, newReportExportError(http.StatusBadRequest, "query compile error", err)
 	}
-	data, cols, err := s.store.RunQuery(r.Context(), compiled.SQL, compiled.Args)
+	data, cols, truncated, err := s.store.RunQueryLimit(opCtx, compiled.SQL, compiled.Args, s.cfg.Limits.ExportMaxRows)
+	opRows = len(data)
+	opTruncated = truncated
 	if err != nil {
+		opStatus = operationStatus(opCtx, err)
 		return nil, nil, newReportExportError(http.StatusInternalServerError, "query error", err)
+	}
+	if truncated {
+		opStatus = "limited"
+		return nil, nil, newReportExportError(http.StatusRequestEntityTooLarge, "export limit", fmt.Errorf("результат выгрузки превышает export_max_rows"))
 	}
 	detailLinkCol := ""
 	if comp != nil {
 		detailLinkCol = comp.DetailLink
 	}
-	s.resolveUUIDsInReport(r.Context(), data, detailLinkCol)
+	s.resolveUUIDsInReport(opCtx, data, detailLinkCol)
 
 	// Пользовательские отборы (план 70) — до компоновки, как в runReport.
 	if comp != nil && settings != nil && len(settings.Filters) > 0 {
@@ -529,6 +572,7 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		if len(comp.Columns) > 0 {
 			cr, cerr := compose.ComposeCross(data, *comp, ev)
 			if cerr != nil {
+				opStatus = "error"
 				return nil, nil, newReportExportError(http.StatusInternalServerError, "compose error", cerr)
 			}
 			h, xr := crossSheetRows(cr, comp)
@@ -536,6 +580,7 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		}
 		res, cerr := compose.Compose(data, *comp, ev)
 		if cerr != nil {
+			opStatus = "error"
 			return nil, nil, newReportExportError(http.StatusInternalServerError, "compose error", cerr)
 		}
 		h, xr := composedRows(res, comp)

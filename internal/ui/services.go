@@ -231,6 +231,15 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 
 	reqObj := interpreter.NewServiceRequest(r.Method, svc.RootURL, r.URL.Path, pathParams, r.URL.Query(), r.Header, body)
 
+	opCtx, finish, ok := s.beginOperation(r, opHTTPServiceRun, svc.Name+"."+handlerName)
+	if !ok {
+		writeServiceError(w, http.StatusTooManyRequests, "слишком много одновременно выполняемых HTTP-сервисов, повторите позже")
+		return
+	}
+	ctx = auth.ContextWithUser(opCtx, auth.UserFromContext(ctx))
+	opStatus := "ok"
+	defer func() { finish(opStatus, 0, false) }()
+
 	var msgs []string
 	mc := runtime.NewMovementsCollector("service", uuid.Nil)
 	dslVars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
@@ -239,8 +248,15 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 	dslVars["Запрос"] = reqObj
 	dslVars["Request"] = reqObj
 
-	result, err := s.interp.Call(procDecl, reqObj, []any{reqObj}, dslVars)
+	var result any
+	var err error
+	if timeout := s.operationTimeout(opHTTPServiceRun); timeout > 0 {
+		result, err = s.interp.CallSandboxed(procDecl, reqObj, []any{reqObj}, interpreter.SandboxProfile{MaxWallClock: timeout}, dslVars)
+	} else {
+		result, err = s.interp.Call(procDecl, reqObj, []any{reqObj}, dslVars)
+	}
 	if err != nil {
+		opStatus = operationStatus(opCtx, err)
 		writeServiceError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

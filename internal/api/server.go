@@ -36,6 +36,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// троттлятся вместе, чтобы брутфорс нельзя было размазать по двум каналам.
 	loginLimit := auth.NewLoginLimiter(5, time.Minute)
 	uiCfg.LoginLimit = loginLimit
+	var metricsReg *metrics.Registry
+	if debugToken != "" {
+		metricsReg = metrics.New()
+		uiCfg.Metrics = metricsReg
+	}
 	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
 	h := &handler{reg: reg, store: store, interp: interp, entitySvc: uiSrv.EntitySvc()}
 	r := chi.NewRouter()
@@ -47,9 +52,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// Сбор HTTP-метрик включаем тем же знаком, что и debug-поверхность: если
 	// задан ONEBASE_DEBUG_TOKEN. Middleware ставим до маршрутов, чтобы он
 	// оборачивал весь роутер; сам /metrics монтируется ниже под токен-гейтом.
-	var metricsReg *metrics.Registry
 	if debugToken != "" {
-		metricsReg = metrics.New()
 		r.Use(metricsReg.Middleware)
 	}
 

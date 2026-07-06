@@ -102,6 +102,21 @@ type AIConfig struct {
 	DailyTokenCap *int   `yaml:"daily_token_cap,omitempty"`
 }
 
+// LimitsConfig holds optional runtime guardrails for heavy operations. Zero
+// values mean "disabled" to preserve existing configuration behavior.
+type LimitsConfig struct {
+	RequestTimeoutSec      int `yaml:"request_timeout_sec,omitempty"`
+	ReportTimeoutSec       int `yaml:"report_timeout_sec,omitempty"`
+	ReportMaxRows          int `yaml:"report_max_rows,omitempty"`
+	ExportTimeoutSec       int `yaml:"export_timeout_sec,omitempty"`
+	ExportMaxRows          int `yaml:"export_max_rows,omitempty"`
+	ProcessorTimeoutSec    int `yaml:"processor_timeout_sec,omitempty"`
+	ProcessorConcurrency   int `yaml:"processor_concurrency,omitempty"`
+	HTTPServiceTimeoutSec  int `yaml:"http_service_timeout_sec,omitempty"`
+	HTTPServiceConcurrency int `yaml:"http_service_concurrency,omitempty"`
+	SlowOperationMS        int `yaml:"slow_operation_ms,omitempty"`
+}
+
 // AppConfig holds the optional config/app.yaml metadata.
 type AppConfig struct {
 	Name    string `yaml:"name"`
@@ -119,6 +134,7 @@ type AppConfig struct {
 	Demo        *DemoConfig        `yaml:"demo,omitempty"`
 	Backup      *BackupConfig      `yaml:"backup,omitempty"`
 	AI          *AIConfig          `yaml:"ai,omitempty"`
+	Limits      *LimitsConfig      `yaml:"limits,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в

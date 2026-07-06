@@ -147,3 +147,36 @@ func (i *Interpreter) RunSandboxed(proc *ast.ProcedureDecl, this This, p Sandbox
 	i.execBlock(proc.Body, e)
 	return nil
 }
+
+// CallSandboxed is the argument-passing counterpart of RunSandboxed. It is used
+// for HTTP services and manager calls that need wall-clock limits but still
+// return a value.
+func (i *Interpreter) CallSandboxed(proc *ast.ProcedureDecl, this This, args []any, p SandboxProfile, extraVars ...map[string]any) (result any, err error) {
+	e := i.startEnv(this)
+	if p.MaxWallClock > 0 {
+		e.ec.deadline = time.Now().Add(p.MaxWallClock)
+	}
+	e.ec.maxLoopIters = p.MaxLoopIters
+	defer func() {
+		if r := recover(); r != nil {
+			switch s := r.(type) {
+			case dslStop:
+				err = s.err
+			case userError:
+				err = &DSLError{File: e.ec.curFile, Line: e.ec.curLine, Msg: s.Msg, Err: s.Err}
+			default:
+				panic(r)
+			}
+		}
+	}()
+	for _, m := range extraVars {
+		for k, v := range m {
+			e.set(k, v)
+		}
+	}
+	for k, v := range p.Vars() {
+		e.set(k, v)
+	}
+	result = i.callUserProc(proc, e, args)
+	return
+}
