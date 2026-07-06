@@ -478,6 +478,12 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 			return o.CallMethod("получить", []any{idx})
 		}
 		return nil
+	case *ast.ArrayLit:
+		items := make([]any, 0, len(v.Elements))
+		for _, elem := range v.Elements {
+			items = append(items, i.evalExpr(elem, e))
+		}
+		return NewArray(items)
 	case *ast.NewExpr:
 		return i.evalNew(v, e)
 	case *ast.UnaryExpr:

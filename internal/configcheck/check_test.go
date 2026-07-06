@@ -61,6 +61,19 @@ func TestParseDSL_UndefinedFunction(t *testing.T) {
 	}
 }
 
+func TestParseDSL_UndefinedFunctionInsideArrayLiteral(t *testing.T) {
+	src := `Процедура Тест()
+  а = [НесуществующаяФункция123("x")];
+КонецПроцедуры`
+	issues := ParseDSL(src, "test.os")
+	for _, is := range issues {
+		if strings.Contains(is.Message, "неизвестная функция") && is.Line == 2 {
+			return
+		}
+	}
+	t.Fatalf("ожидалась неизвестная функция внутри литерала массива, получено: %+v", issues)
+}
+
 func TestCheckDir(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")

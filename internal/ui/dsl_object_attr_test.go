@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -88,6 +91,55 @@ func TestObjectAttributeValue(t *testing.T) {
 	}
 	if chained != "ООО Поставщик" {
 		t.Errorf("цепочка дала %q, ожидалось «ООО Поставщик»", chained)
+	}
+
+	bulk, err := s.objectAttributeValues(ctx, []any{
+		interpreter.NewArray([]any{номРеф}),
+		"Номенклатура",
+		interpreter.NewArray([]any{"Наименование", "Поставщик"}),
+	})
+	if err != nil {
+		t.Fatalf("ЗначенияРеквизитовОбъектов: %v", err)
+	}
+	bulkMap, ok := bulk.(*interpreter.Map)
+	if !ok {
+		t.Fatalf("bulk → %T, ожидался *interpreter.Map", bulk)
+	}
+	bulkRow, ok := bulkMap.CallMethod("получить", []any{номРеф}).(*interpreter.Struct)
+	if !ok {
+		t.Fatalf("bulk row → %T, ожидалась *interpreter.Struct", bulkMap.CallMethod("получить", []any{номРеф}))
+	}
+	if got := bulkRow.Get("Наименование"); got != "Стул" {
+		t.Errorf("bulk Наименование = %v, ожидалось Стул", got)
+	}
+	bulkProvider, ok := bulkRow.Get("Поставщик").(*interpreter.Ref)
+	if !ok {
+		t.Fatalf("bulk Поставщик → %T, ожидался *interpreter.Ref", bulkRow.Get("Поставщик"))
+	}
+	if bulkProvider.Name != "ООО Поставщик" || bulkProvider.Type != "Контрагент" {
+		t.Errorf("bulk ссылка-реквизит: name=%q type=%q", bulkProvider.Name, bulkProvider.Type)
+	}
+
+	src := `Функция Тест()
+  Ссылки = [СсылкаНом];
+  Реквизиты = ЗначенияРеквизитовОбъектов(Ссылки, "Номенклатура", ["Наименование", "Поставщик"]);
+  Возврат Реквизиты[СсылкаНом].Поставщик.Наименование;
+КонецФункции`
+	l := lexer.New(src, "test.os")
+	p := parser.New(l)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatalf("parse DSL bulk sample: %v", err)
+	}
+	interp := interpreter.New()
+	vars := s.buildDSLVars(ctx, runtime.NewMovementsCollector("test", uuid.Nil))
+	vars["СсылкаНом"] = номРеф
+	var result any
+	if err := interp.RunWithResult(prog.Procedures[0], nil, &result, vars); err != nil {
+		t.Fatalf("run DSL bulk sample: %v", err)
+	}
+	if result != "ООО Поставщик" {
+		t.Errorf("DSL sample result = %v, ожидалось ООО Поставщик", result)
 	}
 
 	// Неизвестный реквизит → ошибка, а не тихий nil.

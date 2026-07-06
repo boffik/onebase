@@ -441,6 +441,7 @@ func KnownBuiltinNames() map[string]struct{} {
 		"регистрынакопления", "accumulationregisters",
 		"предопределённыезначения", "predefinedvalues",
 		"значениереквизитаобъекта", "objectattributevalue",
+		"значенияреквизитовобъектов", "objectattributevalues",
 		"выполнитькоманду", "executecommand",
 		"ссылканаобъект", "objectref",
 		"сохранитькартинку", "putimage",

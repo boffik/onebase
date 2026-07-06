@@ -100,6 +100,9 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	attrValueFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
 		return s.objectAttributeValue(txState.Ctx(), args)
 	})
+	attrValuesFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+		return s.objectAttributeValues(txState.Ctx(), args)
+	})
 
 	// СохранитьКартинку(ДанныеBase64, ТипMIME="") → UUID бинарника в blob-хранилище.
 	// Поле типа image хранит именно этот UUID. Данные — base64 картинки (сырой или
@@ -172,6 +175,8 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	vars["UserName"] = userNameFn
 	vars["ЗначениеРеквизитаОбъекта"] = attrValueFn
 	vars["ObjectAttributeValue"] = attrValueFn
+	vars["ЗначенияРеквизитовОбъектов"] = attrValuesFn
+	vars["ObjectAttributeValues"] = attrValuesFn
 	vars["СохранитьКартинку"] = putImageFn
 	vars["PutImage"] = putImageFn
 

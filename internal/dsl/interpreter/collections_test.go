@@ -91,6 +91,18 @@ func TestArray_AddCountIndex(t *testing.T) {
 	}
 }
 
+func TestArray_Literal(t *testing.T) {
+	src := `Функция Тест()
+  а = ["x", "y", 3];
+  Возврат а[1];
+КонецФункции`
+
+	result := evalFunc(t, src)
+	if result != "y" {
+		t.Fatalf("expected y, got %v", result)
+	}
+}
+
 func TestArray_Count(t *testing.T) {
 	src := `Функция Тест()
   а = Новый Массив;

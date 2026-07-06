@@ -665,6 +665,10 @@ func collectReadIdentTokensExpr(expr ast.Expr, out map[string]token.Token) {
 		for _, arg := range v.Args {
 			collectReadIdentTokensExpr(arg, out)
 		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			collectReadIdentTokensExpr(elem, out)
+		}
 	case *ast.IndexExpr:
 		collectReadIdentTokensExpr(v.Object, out)
 		collectReadIdentTokensExpr(v.Index, out)
@@ -1055,6 +1059,10 @@ func collectDSLReadsExpr(expr ast.Expr, reads map[string]int) {
 		for _, arg := range v.Args {
 			collectDSLReadsExpr(arg, reads)
 		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			collectDSLReadsExpr(elem, reads)
+		}
 	case *ast.IndexExpr:
 		collectDSLReadsExpr(v.Object, reads)
 		collectDSLReadsExpr(v.Index, reads)
@@ -1124,6 +1132,10 @@ func collectDSLCallNamesExpr(expr ast.Expr, calls map[string]bool) {
 	case *ast.NewExpr:
 		for _, arg := range v.Args {
 			collectDSLCallNamesExpr(arg, calls)
+		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			collectDSLCallNamesExpr(elem, calls)
 		}
 	case *ast.IndexExpr:
 		collectDSLCallNamesExpr(v.Object, calls)

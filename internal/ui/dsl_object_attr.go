@@ -43,13 +43,7 @@ func (s *Server) objectAttributeValue(ctx context.Context, args []any) (any, err
 	if entity == nil {
 		return nil, fmt.Errorf("ЗначениеРеквизитаОбъекта: неизвестный тип объекта %q", ref.Type)
 	}
-	var field *metadata.Field
-	for i := range entity.Fields {
-		if strings.EqualFold(entity.Fields[i].Name, attrName) {
-			field = &entity.Fields[i]
-			break
-		}
-	}
+	field := findObjectAttributeField(entity, attrName)
 	if field == nil {
 		return nil, fmt.Errorf("ЗначениеРеквизитаОбъекта: у объекта %s нет реквизита %q", ref.Type, attrName)
 	}
@@ -66,6 +60,280 @@ func (s *Server) objectAttributeValue(ctx context.Context, args []any) (any, err
 		return s.refFromValue(ctx, field.RefEntity, val), nil
 	}
 	return normalizeAttrValue(field.Type, val), nil
+}
+
+type bulkObjectRef struct {
+	key   *interpreter.Ref
+	id    uuid.UUID
+	idStr string
+}
+
+// objectAttributeValues реализует DSL-функцию
+// ЗначенияРеквизитовОбъектов(Ссылки, "ТипОбъекта", ["Реквизит1", ...]).
+// Возвращает Соответствие: Ссылка -> Структура с запрошенными реквизитами.
+func (s *Server) objectAttributeValues(ctx context.Context, args []any) (any, error) {
+	if len(args) < 3 {
+		return nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: ожидаются ссылки, имя типа объекта и список реквизитов")
+	}
+	entityName := strings.TrimSpace(fmt.Sprint(args[1]))
+	if entityName == "" {
+		return nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: не указан тип объекта")
+	}
+	entity := s.reg.GetEntity(entityName)
+	if entity == nil {
+		return nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: неизвестный тип объекта %q", entityName)
+	}
+	fields, err := objectAttributeFields(entity, args[2], "ЗначенияРеквизитовОбъектов")
+	if err != nil {
+		return nil, err
+	}
+	refs, ids, err := s.collectBulkObjectRefs(ctx, args[0], entity)
+	if err != nil {
+		return nil, err
+	}
+	out := &interpreter.Map{}
+	if len(refs) == 0 {
+		return out, nil
+	}
+
+	queryFields := uniqueObjectFields(append(fields, displayField(entity)...))
+	rows, err := s.store.GetFieldsByIDs(ctx, entity, ids, queryFields)
+	if err != nil {
+		return nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: %w", err)
+	}
+	refNames := s.bulkReferenceNames(ctx, rows, fields)
+	for _, ref := range refs {
+		row := rows[ref.idStr]
+		if row == nil {
+			continue
+		}
+		if ref.key.Name == "" || ref.key.Name == ref.key.UUID {
+			ref.key.Name = firstStringField(row, entity)
+		}
+		vals := make(map[string]any, len(fields))
+		for _, f := range fields {
+			raw := row[f.Name]
+			if f.RefEntity != "" {
+				vals[f.Name] = s.refFromValueCached(ctx, f.RefEntity, raw, refNames[f.RefEntity])
+			} else {
+				vals[f.Name] = normalizeAttrValue(f.Type, raw)
+			}
+		}
+		out.CallMethod("вставить", []any{ref.key, interpreter.NewStructFromMap(vals)})
+	}
+	return out, nil
+}
+
+func (s *Server) collectBulkObjectRefs(ctx context.Context, raw any, entity *metadata.Entity) ([]bulkObjectRef, []uuid.UUID, error) {
+	items, ok := valueItems(raw)
+	if !ok {
+		items = []any{raw}
+	}
+	refs := make([]bulkObjectRef, 0, len(items))
+	ids := make([]uuid.UUID, 0, len(items))
+	seen := map[string]bool{}
+	manager := s.refManagerFor(entity, ctx)
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		var idStr, name, typ string
+		switch v := item.(type) {
+		case *interpreter.Ref:
+			idStr, name, typ = strings.TrimSpace(v.UUID), v.Name, v.Type
+		case interface{ GetRefUUID() string }:
+			idStr = strings.TrimSpace(v.GetRefUUID())
+		case string:
+			idStr = strings.TrimSpace(v)
+		default:
+			return nil, nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: ожидается ссылка или UUID, получено %T", item)
+		}
+		if idStr == "" {
+			continue
+		}
+		if typ == "" {
+			typ = entity.Name
+		}
+		if !strings.EqualFold(typ, entity.Name) {
+			return nil, nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: ссылка типа %q не соответствует типу %q", typ, entity.Name)
+		}
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("ЗначенияРеквизитовОбъектов: неверный идентификатор ссылки %q", idStr)
+		}
+		idStr = id.String()
+		refs = append(refs, bulkObjectRef{
+			key:   &interpreter.Ref{UUID: idStr, Name: name, Type: entity.Name, Manager: manager},
+			id:    id,
+			idStr: idStr,
+		})
+		if !seen[idStr] {
+			ids = append(ids, id)
+			seen[idStr] = true
+		}
+	}
+	return refs, ids, nil
+}
+
+func objectAttributeFields(entity *metadata.Entity, raw any, funcName string) ([]metadata.Field, error) {
+	items, ok := valueItems(raw)
+	if !ok {
+		if s, ok := raw.(string); ok {
+			for _, part := range strings.Split(s, ",") {
+				items = append(items, strings.TrimSpace(part))
+			}
+		}
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("%s: список реквизитов пуст", funcName)
+	}
+	fields := make([]metadata.Field, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		name := strings.TrimSpace(fmt.Sprint(item))
+		if name == "" {
+			continue
+		}
+		field := findObjectAttributeField(entity, name)
+		if field == nil {
+			return nil, fmt.Errorf("%s: у объекта %s нет реквизита %q", funcName, entity.Name, name)
+		}
+		low := strings.ToLower(field.Name)
+		if !seen[low] {
+			fields = append(fields, *field)
+			seen[low] = true
+		}
+	}
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("%s: список реквизитов пуст", funcName)
+	}
+	return fields, nil
+}
+
+func valueItems(v any) ([]any, bool) {
+	switch x := v.(type) {
+	case *interpreter.Array:
+		return x.Iterate(), true
+	case []any:
+		return x, true
+	case []string:
+		items := make([]any, 0, len(x))
+		for _, s := range x {
+			items = append(items, s)
+		}
+		return items, true
+	default:
+		return nil, false
+	}
+}
+
+func findObjectAttributeField(entity *metadata.Entity, name string) *metadata.Field {
+	for i := range entity.Fields {
+		if strings.EqualFold(entity.Fields[i].Name, name) {
+			return &entity.Fields[i]
+		}
+	}
+	return nil
+}
+
+func displayField(entity *metadata.Entity) []metadata.Field {
+	if entity == nil {
+		return nil
+	}
+	for _, f := range entity.Fields {
+		if f.Type == metadata.FieldTypeString {
+			return []metadata.Field{f}
+		}
+	}
+	return nil
+}
+
+func uniqueObjectFields(fields []metadata.Field) []metadata.Field {
+	out := make([]metadata.Field, 0, len(fields))
+	seen := map[string]bool{}
+	for _, f := range fields {
+		low := strings.ToLower(f.Name)
+		if seen[low] {
+			continue
+		}
+		out = append(out, f)
+		seen[low] = true
+	}
+	return out
+}
+
+func (s *Server) bulkReferenceNames(ctx context.Context, rows map[string]map[string]any, fields []metadata.Field) map[string]map[string]string {
+	idsByEntity := map[string]map[string]uuid.UUID{}
+	for _, f := range fields {
+		if f.RefEntity == "" {
+			continue
+		}
+		if idsByEntity[f.RefEntity] == nil {
+			idsByEntity[f.RefEntity] = map[string]uuid.UUID{}
+		}
+		for _, row := range rows {
+			if idStr, id, ok := uuidFromValue(row[f.Name]); ok {
+				idsByEntity[f.RefEntity][idStr] = id
+			}
+		}
+	}
+	names := map[string]map[string]string{}
+	for entityName, idSet := range idsByEntity {
+		refEntity := s.reg.GetEntity(entityName)
+		if refEntity == nil || len(idSet) == 0 {
+			continue
+		}
+		ids := make([]uuid.UUID, 0, len(idSet))
+		for _, id := range idSet {
+			ids = append(ids, id)
+		}
+		refRows, err := s.store.GetFieldsByIDs(ctx, refEntity, ids, displayField(refEntity))
+		if err != nil {
+			continue
+		}
+		names[entityName] = make(map[string]string, len(refRows))
+		for idStr, row := range refRows {
+			names[entityName][idStr] = firstStringField(row, refEntity)
+		}
+	}
+	return names
+}
+
+func (s *Server) refFromValueCached(ctx context.Context, refEntityName string, raw any, names map[string]string) any {
+	idStr, _, ok := uuidFromValue(raw)
+	if !ok {
+		return nil
+	}
+	name := idStr
+	if names != nil && strings.TrimSpace(names[idStr]) != "" {
+		name = names[idStr]
+	}
+	refEntity := s.reg.GetEntity(refEntityName)
+	return &interpreter.Ref{
+		UUID:    idStr,
+		Name:    name,
+		Type:    refEntityName,
+		Manager: s.refManagerFor(refEntity, ctx),
+	}
+}
+
+func uuidFromValue(raw any) (string, uuid.UUID, bool) {
+	if raw == nil {
+		return "", uuid.UUID{}, false
+	}
+	idStr := fmt.Sprint(raw)
+	if up, ok := raw.(interface{ GetRefUUID() string }); ok {
+		idStr = up.GetRefUUID()
+	}
+	idStr = strings.TrimSpace(idStr)
+	if idStr == "" || idStr == "<nil>" {
+		return "", uuid.UUID{}, false
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return "", uuid.UUID{}, false
+	}
+	return id.String(), id, true
 }
 
 // refFromValue строит ссылку на запись справочника/документа по UUID,
