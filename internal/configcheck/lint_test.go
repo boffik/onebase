@@ -108,6 +108,57 @@ indexes:
 	}
 }
 
+func TestLintProject_ListFormFieldWithoutIndex(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "catalogs", "товар.yaml"), `name: Товар
+fields:
+  - name: Артикул
+    type: string
+  - name: Наименование
+    type: string
+list_form: [Артикул, Наименование]
+indexes:
+  - fields: [Наименование]
+`)
+
+	lint := RunFullWithOptions(dir, Options{Lint: true})
+	if !lint.OK {
+		t.Fatalf("lint check should keep OK=true for warnings: %+v", lint.Issues)
+	}
+	var found *Issue
+	for i := range lint.Warnings {
+		if lint.Warnings[i].Code == "metadata.list-field-without-index" {
+			found = &lint.Warnings[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("metadata.list-field-without-index not found; got %+v", lint.Warnings)
+	}
+	if !strings.Contains(found.Message, "Артикул") {
+		t.Fatalf("warning should point to Артикул, got %+v", found)
+	}
+}
+
+func TestLintProject_ListFormLeadingIndexSuppressesWarning(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "catalogs", "товар.yaml"), `name: Товар
+fields:
+  - name: Артикул
+    type: string
+list_form: [Артикул]
+indexes:
+  - fields: [Артикул]
+`)
+
+	lint := RunFullWithOptions(dir, Options{Lint: true})
+	for _, w := range lint.Warnings {
+		if w.Code == "metadata.list-field-without-index" {
+			t.Fatalf("unexpected index warning: %+v", w)
+		}
+	}
+}
+
 func TestLintYAML_JournalConditionalKnown(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "journals", "ж.yaml"), `name: Ж
