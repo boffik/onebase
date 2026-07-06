@@ -123,6 +123,9 @@ func renderExportButtons(t *testing.T, rep *reportpkg.Report) string {
 
 func TestReportExportButtons_DefaultExcelFirst(t *testing.T) {
 	out := renderExportButtons(t, &reportpkg.Report{Name: "Прод"})
+	if !strings.Contains(out, "/export/excel") || !strings.Contains(out, "/export/pdf") {
+		t.Fatalf("кнопки должны запускать фоновые выгрузки:\n%s", out)
+	}
 	pdfIdx, excelIdx := strings.Index(out, "/pdf"), strings.Index(out, "/excel")
 	if pdfIdx < 0 || excelIdx < 0 {
 		t.Fatalf("обе кнопки должны присутствовать:\n%s", out)
@@ -134,6 +137,9 @@ func TestReportExportButtons_DefaultExcelFirst(t *testing.T) {
 
 func TestReportExportButtons_OutputFormatPDFFirst(t *testing.T) {
 	out := renderExportButtons(t, &reportpkg.Report{Name: "Прод", OutputFormat: "pdf"})
+	if !strings.Contains(out, "/export/excel") || !strings.Contains(out, "/export/pdf") {
+		t.Fatalf("кнопки должны запускать фоновые выгрузки:\n%s", out)
+	}
 	pdfIdx, excelIdx := strings.Index(out, "/pdf"), strings.Index(out, "/excel")
 	if pdfIdx < 0 || excelIdx < 0 {
 		t.Fatalf("обе кнопки должны присутствовать:\n%s", out)

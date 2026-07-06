@@ -3057,21 +3057,49 @@ function openItemPicker(payload, elementName) {
 `
 
 const tplReport = `
-{{/* Кнопки выгрузки отчёта: Excel + PDF (issue #218). output_format: pdf делает
-     PDF основной (первой); по умолчанию первой идёт Excel — поведение не меняется. */}}
+{{/* Кнопки фоновой выгрузки отчёта: Excel + PDF. Старые прямые маршруты /excel и
+     /pdf остаются для совместимости; UI ведёт через страницу статуса задачи. */}}
 {{define "report-export-buttons"}}
 {{$q := settingsQuery (presetQuery (variantQuery (reportParamQuery .Report.Params .ParamValues) .ActiveVariant) .ActivePresetID) .ReportSettingsJSON .UserSettings}}
-{{$excel := printf "/ui/report/%s/excel%s" (lower .Report.Name) $q}}
-{{$pdf := printf "/ui/report/%s/pdf%s" (lower .Report.Name) $q}}
+{{$excel := printf "/ui/report/%s/export/excel%s" (lower .Report.Name) $q}}
+{{$pdf := printf "/ui/report/%s/export/pdf%s" (lower .Report.Name) $q}}
 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
   {{if eq (lower .Report.OutputFormat) "pdf"}}
-  <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Скачать PDF"}}">{{t $.Lang "PDF ↓"}}</a>
-  <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
+  <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Запустить выгрузку PDF"}}">{{t $.Lang "PDF"}}</a>
+  <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Запустить выгрузку Excel"}}">{{t $.Lang "Excel"}}</a>
   {{else}}
-  <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Скачать Excel"}}">{{t $.Lang "Excel ↓"}}</a>
-  <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Скачать PDF"}}">{{t $.Lang "PDF ↓"}}</a>
+  <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Запустить выгрузку Excel"}}">{{t $.Lang "Excel"}}</a>
+  <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Запустить выгрузку PDF"}}">{{t $.Lang "PDF"}}</a>
   {{end}}
 </div>
+{{end}}
+{{define "page-export-job"}}
+{{template "head" .}}{{template "nav" .}}
+<main>
+<h2>{{t $.Lang "Выгрузка отчёта"}}</h2>
+<div class="card" style="max-width:720px">
+  <div style="display:grid;grid-template-columns:140px 1fr;gap:8px 16px;margin-bottom:16px">
+    <div style="color:#64748b">{{t $.Lang "Отчёт"}}</div><div>{{.Job.Name}}</div>
+    <div style="color:#64748b">{{t $.Lang "Формат"}}</div><div>{{.JobFormatLabel}}</div>
+    <div style="color:#64748b">{{t $.Lang "Статус"}}</div><div>{{.JobStatusLabel}}</div>
+    <div style="color:#64748b">{{t $.Lang "Создано"}}</div><div>{{.CreatedAtText}}</div>
+    {{if .JobDone}}<div style="color:#64748b">{{t $.Lang "Доступно до"}}</div><div>{{.ExpiresAtText}}</div>{{end}}
+  </div>
+  {{if .JobDone}}
+    <a class="btn btn-primary" href="{{.DownloadURL}}">{{t $.Lang "Скачать файл"}}</a>
+    <a class="btn btn-sm" href="{{.BackURL}}" style="margin-left:8px">{{t $.Lang "К отчёту"}}</a>
+  {{else if .JobFailed}}
+    <div class="alert alert-error" style="margin-bottom:12px">{{.Job.Error}}</div>
+    <a class="btn btn-sm" href="{{.BackURL}}">{{t $.Lang "К отчёту"}}</a>
+  {{else}}
+    <div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin-bottom:12px">
+      <div style="height:100%;width:45%;background:#2563eb"></div>
+    </div>
+    <p style="margin:0;color:#475569">{{t $.Lang "Файл готовится в фоне. Страница обновится автоматически."}}</p>
+    <script>setTimeout(function(){ window.location.reload(); }, 2000);</script>
+  {{end}}
+</div>
+</main></body></html>
 {{end}}
 {{define "page-report"}}
 {{template "head" .}}{{template "nav" .}}

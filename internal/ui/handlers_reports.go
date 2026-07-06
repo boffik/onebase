@@ -496,6 +496,22 @@ func (s *Server) writeReportExportError(w http.ResponseWriter, r *http.Request, 
 	http.Error(w, "report export error: "+s.errText(r, err), http.StatusInternalServerError)
 }
 
+type reportExportStats struct {
+	rows      int
+	truncated bool
+	attrs     []slog.Attr
+}
+
+func reportExportOpStatus(ctx context.Context, err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if ee, ok := err.(*reportExportError); ok && ee.status == http.StatusRequestEntityTooLarge {
+		return "limited"
+	}
+	return operationStatus(ctx, err)
+}
+
 // reportExcel runs a report query with GET params and returns XLSX.
 // reportExportRows вычисляет табличные данные отчёта для выгрузки (Excel/PDF):
 // заголовки и строки с учётом эффективной компоновки (план 70), кросс-таблицы
@@ -508,12 +524,20 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 	if !ok {
 		return nil, nil, newReportExportError(http.StatusTooManyRequests, "export limit", fmt.Errorf("слишком много одновременно выполняемых выгрузок, повторите позже"))
 	}
+	stats := &reportExportStats{}
 	opStatus := "ok"
-	opRows := 0
-	opTruncated := false
-	var opAttrs []slog.Attr
-	defer func() { finish(opStatus, opRows, opTruncated, opAttrs...) }()
+	defer func() { finish(opStatus, stats.rows, stats.truncated, stats.attrs...) }()
 
+	headers, rows, err = s.reportExportRowsWithContext(opCtx, r, rep, stats)
+	if err != nil {
+		opStatus = reportExportOpStatus(opCtx, err)
+		return nil, nil, err
+	}
+	return headers, rows, nil
+}
+
+func (s *Server) reportExportRowsWithContext(ctx context.Context, r *http.Request, rep *reportpkg.Report, stats *reportExportStats) (headers []string, rows [][]any, err error) {
+	r = r.WithContext(ctx)
 	settings := s.reportSettingsForRequest(r, rep).Settings
 	comp := effectiveComposition(rep, settings)
 	paramValues := make(map[string]any, len(rep.Params))
@@ -544,26 +568,27 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		Dialect:     s.store.Dialect(),
 	})
 	if err != nil {
-		opStatus = "error"
 		return nil, nil, newReportExportError(http.StatusBadRequest, "query compile error", err)
 	}
-	opAttrs = []slog.Attr{slog.String("sql_hash", sqlHash(compiled.SQL))}
-	data, cols, truncated, err := s.store.RunQueryLimit(opCtx, compiled.SQL, compiled.Args, s.cfg.Limits.ExportMaxRows)
-	opRows = len(data)
-	opTruncated = truncated
+	if stats != nil {
+		stats.attrs = []slog.Attr{slog.String("sql_hash", sqlHash(compiled.SQL))}
+	}
+	data, cols, truncated, err := s.store.RunQueryLimit(ctx, compiled.SQL, compiled.Args, s.cfg.Limits.ExportMaxRows)
+	if stats != nil {
+		stats.rows = len(data)
+		stats.truncated = truncated
+	}
 	if err != nil {
-		opStatus = operationStatus(opCtx, err)
 		return nil, nil, newReportExportError(http.StatusInternalServerError, "query error", err)
 	}
 	if truncated {
-		opStatus = "limited"
 		return nil, nil, newReportExportError(http.StatusRequestEntityTooLarge, "export limit", fmt.Errorf("результат выгрузки превышает export_max_rows"))
 	}
 	detailLinkCol := ""
 	if comp != nil {
 		detailLinkCol = comp.DetailLink
 	}
-	s.resolveUUIDsInReport(opCtx, data, detailLinkCol)
+	s.resolveUUIDsInReport(ctx, data, detailLinkCol)
 
 	// Пользовательские отборы (план 70) — до компоновки, как в runReport.
 	if comp != nil && settings != nil && len(settings.Filters) > 0 {
@@ -577,7 +602,6 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		if len(comp.Columns) > 0 {
 			cr, cerr := compose.ComposeCross(data, *comp, ev)
 			if cerr != nil {
-				opStatus = "error"
 				return nil, nil, newReportExportError(http.StatusInternalServerError, "compose error", cerr)
 			}
 			h, xr := crossSheetRows(cr, comp)
@@ -585,7 +609,6 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		}
 		res, cerr := compose.Compose(data, *comp, ev)
 		if cerr != nil {
-			opStatus = "error"
 			return nil, nil, newReportExportError(http.StatusInternalServerError, "compose error", cerr)
 		}
 		h, xr := composedRows(res, comp)

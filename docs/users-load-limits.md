@@ -1,8 +1,8 @@
 # Пользователи, ограничения и нагрузочное тестирование
 
 Дата анализа: 2026-06-23.
-Обновлено по runtime-лимитам, метрикам и bounded reference/folder options:
-2026-07-07.
+Обновлено по runtime-лимитам, метрикам, bounded reference/folder options и
+background export UX: 2026-07-07.
 
 Документ фиксирует текущие практические ограничения onebase для базы с несколькими
 пользователями и способ проверить это нагрузочным тестом.
@@ -92,8 +92,9 @@
   `UpsertVersioned`: один `UPDATE ... WHERE id=? AND _version=?` с инкрементом
   `_version`. Если клиент не передал ожидаемую версию, сохраняется старый путь
   совместимости без проверки.
-- DSL `LockManager` процесс-локальный. При нескольких экземплярах приложения
-  нужны блокировки на уровне PostgreSQL, например row locks или advisory locks.
+- DSL `LockManager` остаётся process-local для SQLite/single-process режима.
+  В Save-хуках `БлокировкаДанных` на PostgreSQL дополнительно берёт
+  transaction-scoped advisory locks внутри транзакции записи/проведения.
 
 ### Производительность UI и данных
 
@@ -126,8 +127,12 @@
   Go. На экране отчета показывается предупреждение об усечении, экспорт при
   превышении лимита возвращает понятную ошибку.
 - `report_concurrency`, `export_concurrency`, `processor_concurrency` и
-  `http_service_concurrency` включают backpressure: лишний параллельный запуск
-  получает 429, а не занимает goroutine и connection из пула.
+  `http_service_concurrency` включают backpressure. Обычные тяжелые операции
+  сверх лимита получают 429; фоновые Excel/PDF выгрузки отчётов ждут свободный
+  `export_concurrency`-слот в статусе `queued`.
+- UI-кнопки Excel/PDF отчётов запускают in-process background job и ведут на
+  страницу статуса `/ui/export-jobs/{id}`. Готовый файл доступен по download URL
+  30 минут; прямые `/ui/report/{name}/excel` и `/pdf` сохранены для совместимости.
 - HTTP server имеет `ReadHeaderTimeout` и `IdleTimeout`, но без общего
   `ReadTimeout/WriteTimeout`, что сделано ради длинных операций вроде restore,
   SSE и download.
@@ -139,7 +144,8 @@
   token cap.
 - AI tools возвращают максимум 100 строк.
 - Горизонтальное масштабирование требует отдельной работы: часть состояния
-  процесс-локальная, файлы по умолчанию локальные, locks не распределенные.
+  процесс-локальная, файлы по умолчанию локальные, background export jobs
+  in-process, realtime hub внутрипроцессный.
 
 ## Как запустить нагрузочное тестирование
 

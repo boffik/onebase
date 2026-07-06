@@ -86,6 +86,7 @@ type Server struct {
 	tmpl             *template.Template
 	hub              *realtime.Hub // real-time-шина уведомлений сервер→браузер (план 74)
 	ops              *operationLimiter
+	exportJobs       *exportJobStore
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -97,7 +98,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if loginLimit == nil {
 		loginLimit = auth.NewLoginLimiter(5, time.Minute)
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub(), ops: newOperationLimiter()}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub(), ops: newOperationLimiter(), exportJobs: newExportJobStore(defaultExportJobTTL)}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,
@@ -361,6 +362,9 @@ func (s *Server) Mount(r chi.Router) {
 
 	// PDF export отчётов (issue #218) — реальный бинарный PDF, как у печатных форм.
 	r.Get("/ui/report/{name}/pdf", s.reportPDF)
+	r.Get("/ui/report/{name}/export/{format}", s.reportExportJobStart)
+	r.Get("/ui/export-jobs/{id}", s.exportJobStatus)
+	r.Get("/ui/export-jobs/{id}/download", s.exportJobDownload)
 
 	// Journals
 	r.Get("/ui/journal/{name}", s.journalList)
