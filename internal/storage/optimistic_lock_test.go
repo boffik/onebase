@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -119,6 +120,81 @@ func TestUpsertVersioned_Conflict(t *testing.T) {
 	v, _ := row["_version"].(int64)
 	if v != 2 {
 		t.Errorf("_version = %d, want 2 (только одна успешная запись после исходной)", v)
+	}
+}
+
+// TestUpsertVersioned_ConcurrentSameVersion фиксирует атомарность проверки:
+// два конкурентных сохранения с одной expectedVersion не могут оба пройти.
+func TestUpsertVersioned_ConcurrentSameVersion(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	entity := &metadata.Entity{
+		Name: "Контрагент",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{entity}); err != nil {
+		t.Fatal(err)
+	}
+
+	id := uuid.New()
+	if err := db.Upsert(ctx, "Контрагент", id, map[string]any{"Наименование": "исходное"}, entity); err != nil {
+		t.Fatal(err)
+	}
+	row, err := db.GetByID(ctx, "Контрагент", id, entity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, _ := row["_version"].(int64)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, name := range []string{"первый", "второй"} {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			<-start
+			errs <- db.UpsertVersioned(ctx, "Контрагент", id, map[string]any{"Наименование": name}, entity, &expected)
+		}(name)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	successes := 0
+	conflicts := 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, ErrVersionConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("successes=%d conflicts=%d, want 1/1", successes, conflicts)
+	}
+
+	finalRow, err := db.GetByID(ctx, "Контрагент", id, entity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalRow["Наименование"] != "первый" && finalRow["Наименование"] != "второй" {
+		t.Fatalf("unexpected final name: %v", finalRow["Наименование"])
+	}
+	finalVersion, _ := finalRow["_version"].(int64)
+	if finalVersion != 2 {
+		t.Fatalf("final _version = %d, want 2", finalVersion)
 	}
 }
 
