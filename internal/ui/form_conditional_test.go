@@ -200,6 +200,71 @@ func TestManagedFormEventAddsConditionalFormattingRule(t *testing.T) {
 	}
 }
 
+func TestManagedFormHeaderValuesTyping(t *testing.T) {
+	ent := &metadata.Entity{
+		Name: "Заказ",
+		Fields: []metadata.Field{
+			{Name: "Скидка", Type: metadata.FieldTypeNumber},
+			{Name: "Оптовый", Type: metadata.FieldTypeBool},
+			{Name: "Комментарий", Type: metadata.FieldTypeString},
+		},
+	}
+	out := managedFormHeaderValues(ent, map[string]string{
+		"Скидка":      "10.50",
+		"Оптовый":     "true",
+		"Комментарий": "7",
+		"parent_id":   "abc",
+	})
+	if got, ok := out["Скидка"].(float64); !ok || got != 10.5 {
+		t.Fatalf("number field must be typed as float64, got %T %v", out["Скидка"], out["Скидка"])
+	}
+	if got, ok := out["Оптовый"].(bool); !ok || !got {
+		t.Fatalf("bool field must be typed, got %T %v", out["Оптовый"], out["Оптовый"])
+	}
+	if got, ok := out["Комментарий"].(string); !ok || got != "7" {
+		t.Fatalf("string field must stay string, got %T %v", out["Комментарий"], out["Комментарий"])
+	}
+	if got, ok := out["parent_id"].(string); !ok || got != "abc" {
+		t.Fatalf("unknown keys must pass through, got %T %v", out["parent_id"], out["parent_id"])
+	}
+}
+
+func TestPrepareManagedFormDataTypesHeaderValues(t *testing.T) {
+	// Равенство по числовому полю шапки: на первичном рендере Values — строки,
+	// и «10.50» (так PG numeric приезжает в fmt.Sprintf) без типизации не был
+	// равен литералу 10.5 — equal сравнивает нечисловые типы строковым ключом.
+	form := &metadata.FormModule{
+		Name:       "ФормаОбъекта",
+		Kind:       "object",
+		EntityName: "Заказ",
+		LayoutKind: metadata.FormLayoutManaged,
+		Elements: []*metadata.FormElement{{
+			Kind:     metadata.FormElementTablePart,
+			Name:     "ТаблицаТовары",
+			DataPath: "Объект.Товары",
+		}},
+		Conditional: []metadata.FormCondRule{
+			{Target: "Товары", When: "Скидка = 10.5", Style: metadata.FormCellStyle{Background: "#fee2e2"}},
+		},
+	}
+	ent := testConditionalEntity(form)
+	ent.Fields = []metadata.Field{{Name: "Скидка", Type: metadata.FieldTypeNumber}}
+	rows := map[string][]map[string]any{"Товары": {{"Номенклатура": "A"}}}
+	data := map[string]any{
+		"Entity":        ent,
+		"Values":        map[string]string{"Скидка": "10.50"},
+		"TablePartRows": rows,
+	}
+	s := &Server{interp: interpreter.New()}
+	s.prepareManagedFormData(data, form)
+	if warns, _ := data["FormWarnings"].([]string); len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if got := formRowClass(rows["Товары"][0]); !strings.HasPrefix(got, "ob-cfr-") {
+		t.Fatalf("header equality rule must match on first render, row: %+v", rows["Товары"][0])
+	}
+}
+
 func testConditionalForm(noGrid bool) *metadata.FormModule {
 	return &metadata.FormModule{
 		Name:       "ФормаОбъекта",

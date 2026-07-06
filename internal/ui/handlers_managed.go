@@ -3,6 +3,7 @@ package ui
 import (
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ivantit66/onebase/internal/metadata"
@@ -65,13 +66,21 @@ func (s *Server) prepareManagedFormData(data map[string]any, form *metadata.Form
 	if len(rows) == 0 || len(form.Conditional) == 0 || s.interp == nil {
 		return
 	}
-	warnings := applyManagedFormConditionalStyles(form, rows, managedFormHeaderValues(data["Values"]), newInterpEvaluator(s.interp))
+	entity, _ := data["Entity"].(*metadata.Entity)
+	warnings := applyManagedFormConditionalStyles(form, rows, managedFormHeaderValues(entity, data["Values"]), newInterpEvaluator(s.interp))
 	if len(warnings) > 0 {
 		data["FormWarnings"] = appendManagedFormWarnings(data["FormWarnings"], warnings)
 	}
 }
 
-func managedFormHeaderValues(v any) map[string]any {
+// managedFormHeaderValues приводит значения шапки к типам event-пути. На
+// первичном рендере Values — map[string]string, а DSL-равенство нечисловых
+// типов сравнивает строковые ключи (equal намеренно не парсит строки, в
+// отличие от </>): `when: Поле = 10.5` по полю шапки со значением "10.50"
+// (PG numeric) не срабатывало до первого события. Числа и булево типизируем
+// по метаданным сущности — как formToFields; даты обоих путей уже в одном
+// строковом формате 2006-01-02T15:04.
+func managedFormHeaderValues(entity *metadata.Entity, v any) map[string]any {
 	out := map[string]any{}
 	switch m := v.(type) {
 	case map[string]string:
@@ -81,6 +90,23 @@ func managedFormHeaderValues(v any) map[string]any {
 	case map[string]any:
 		for k, val := range m {
 			out[k] = val
+		}
+	}
+	if entity == nil {
+		return out
+	}
+	for _, f := range entity.Fields {
+		raw, ok := out[f.Name].(string)
+		if !ok {
+			continue
+		}
+		switch f.Type {
+		case metadata.FieldTypeNumber:
+			if n, err := strconv.ParseFloat(raw, 64); err == nil {
+				out[f.Name] = n
+			}
+		case metadata.FieldTypeBool:
+			out[f.Name] = raw == "true"
 		}
 	}
 	return out
