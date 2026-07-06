@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
 	"time"
 )
@@ -53,14 +54,26 @@ type LogEntry struct {
 	Attempts   int
 }
 
+// Metrics is a low-cardinality snapshot for Prometheus scraping.
+type Metrics struct {
+	Inflight   int64
+	Dispatched uint64
+	Retries    uint64
+	Failed     uint64
+}
+
 // Dispatcher проверяет фильтры и отправляет HTTP-запросы асинхронно.
 type Dispatcher struct {
-	hooks     []Config
-	client    *http.Client
-	logFn     func(LogEntry) // best-effort журнал; может быть nil
-	guard     func() bool    // предохранитель сети (план 62): true = сеть разрешена; nil = без ограничений
-	wg        sync.WaitGroup
-	retryBase time.Duration // база экспоненциальной задержки (тесты ускоряют)
+	hooks      []Config
+	client     *http.Client
+	logFn      func(LogEntry) // best-effort журнал; может быть nil
+	guard      func() bool    // предохранитель сети (план 62): true = сеть разрешена; nil = без ограничений
+	wg         sync.WaitGroup
+	retryBase  time.Duration // база экспоненциальной задержки (тесты ускоряют)
+	inflight   atomic.Int64
+	dispatched atomic.Uint64
+	retries    atomic.Uint64
+	failed     atomic.Uint64
 }
 
 // New строит диспетчер. logFn вызывается после завершения каждого вызова
@@ -82,6 +95,19 @@ func (d *Dispatcher) SetGuard(guard func() bool) { d.guard = guard }
 // Enabled сообщает, настроен ли хотя бы один веб-хук.
 func (d *Dispatcher) Enabled() bool { return d != nil && len(d.hooks) > 0 }
 
+// Metrics returns a snapshot of dispatcher activity.
+func (d *Dispatcher) Metrics() Metrics {
+	if d == nil {
+		return Metrics{}
+	}
+	return Metrics{
+		Inflight:   d.inflight.Load(),
+		Dispatched: d.dispatched.Load(),
+		Retries:    d.retries.Load(),
+		Failed:     d.failed.Load(),
+	}
+}
+
 // Dispatch запускает подходящие веб-хуки асинхронно: вызов не блокирует
 // сохранение документа (сетевые задержки и ретраи — в фоне).
 func (d *Dispatcher) Dispatch(e Event) {
@@ -96,9 +122,12 @@ func (d *Dispatcher) Dispatch(e Event) {
 		if want := h.Filter["entity"]; want != "" && !strings.EqualFold(want, e.Entity) {
 			continue
 		}
+		d.dispatched.Add(1)
+		d.inflight.Add(1)
 		d.wg.Add(1)
 		go func(h *Config) {
 			defer d.wg.Done()
+			defer d.inflight.Add(-1)
 			d.fire(h, e)
 		}(h)
 	}
@@ -116,6 +145,7 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 	if d.guard != nil && !d.guard() {
 		entry.Error = "заблокировано предохранителем сети (net.enabled выкл.)"
 		entry.Attempts = 0
+		d.failed.Add(1)
 		d.log(entry, start)
 		return
 	}
@@ -123,6 +153,7 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 	body, err := renderBody(h.Body, e)
 	if err != nil {
 		entry.Error = "шаблон тела: " + err.Error()
+		d.failed.Add(1)
 		d.log(entry, start)
 		return
 	}
@@ -154,6 +185,7 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 	for try := 0; try < attempts; try++ {
 		entry.Attempts = try + 1
 		if try > 0 {
+			d.retries.Add(1)
 			// экспоненциальная задержка с потолком: base, 2*base, 4*base, …, maxBackoff.
 			delay := d.retryBase << (try - 1)
 			if delay <= 0 || delay > maxBackoff {
@@ -172,6 +204,9 @@ func (d *Dispatcher) fire(h *Config, e Event) {
 			break
 		}
 		entry.Error = fmt.Sprintf("HTTP %d", code)
+	}
+	if entry.Error != "" {
+		d.failed.Add(1)
 	}
 	d.log(entry, start)
 }

@@ -108,8 +108,10 @@ type LimitsConfig struct {
 	RequestTimeoutSec      int `yaml:"request_timeout_sec,omitempty"`
 	ReportTimeoutSec       int `yaml:"report_timeout_sec,omitempty"`
 	ReportMaxRows          int `yaml:"report_max_rows,omitempty"`
+	ReportConcurrency      int `yaml:"report_concurrency,omitempty"`
 	ExportTimeoutSec       int `yaml:"export_timeout_sec,omitempty"`
 	ExportMaxRows          int `yaml:"export_max_rows,omitempty"`
+	ExportConcurrency      int `yaml:"export_concurrency,omitempty"`
 	ProcessorTimeoutSec    int `yaml:"processor_timeout_sec,omitempty"`
 	ProcessorConcurrency   int `yaml:"processor_concurrency,omitempty"`
 	HTTPServiceTimeoutSec  int `yaml:"http_service_timeout_sec,omitempty"`

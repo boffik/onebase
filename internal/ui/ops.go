@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -27,8 +29,10 @@ type RuntimeLimits struct {
 	RequestTimeoutSec      int
 	ReportTimeoutSec       int
 	ReportMaxRows          int
+	ReportConcurrency      int
 	ExportTimeoutSec       int
 	ExportMaxRows          int
+	ExportConcurrency      int
 	ProcessorTimeoutSec    int
 	ProcessorConcurrency   int
 	HTTPServiceTimeoutSec  int
@@ -64,7 +68,7 @@ func (l *operationLimiter) tryAcquire(kind string, limit int) (func(), bool) {
 	}
 }
 
-type operationFinish func(status string, rows int, truncated bool)
+type operationFinish func(status string, rows int, truncated bool, extra ...slog.Attr)
 
 func (s *Server) beginOperation(r *http.Request, kind, name string) (context.Context, operationFinish, bool) {
 	if s.ops == nil {
@@ -89,7 +93,7 @@ func (s *Server) beginOperation(r *http.Request, kind, name string) (context.Con
 	if s.cfg.Metrics != nil {
 		s.cfg.Metrics.OperationStart(kind)
 	}
-	return ctx, func(status string, rows int, truncated bool) {
+	return ctx, func(status string, rows int, truncated bool, extra ...slog.Attr) {
 		cancel()
 		release()
 		d := time.Since(start)
@@ -98,7 +102,7 @@ func (s *Server) beginOperation(r *http.Request, kind, name string) (context.Con
 			s.cfg.Metrics.OperationFinish(kind, status, d, slow)
 		}
 		if slow {
-			s.logSlowOperation(r, kind, name, status, d, rows, truncated)
+			s.logSlowOperation(r, kind, name, status, d, rows, truncated, extra...)
 		}
 	}, true
 }
@@ -127,6 +131,10 @@ func (s *Server) operationTimeout(kind string) time.Duration {
 func (s *Server) operationConcurrency(kind string) int {
 	l := s.cfg.Limits
 	switch kind {
+	case opReportRun:
+		return l.ReportConcurrency
+	case opReportExport:
+		return l.ExportConcurrency
 	case opProcessorRun:
 		return l.ProcessorConcurrency
 	case opHTTPServiceRun:
@@ -144,7 +152,7 @@ func (s *Server) isSlowOperation(d time.Duration) bool {
 	return d >= time.Duration(ms)*time.Millisecond
 }
 
-func (s *Server) logSlowOperation(r *http.Request, kind, name, status string, d time.Duration, rows int, truncated bool) {
+func (s *Server) logSlowOperation(r *http.Request, kind, name, status string, d time.Duration, rows int, truncated bool, extra ...slog.Attr) {
 	attrs := []slog.Attr{
 		slog.String("kind", kind),
 		slog.String("name", name),
@@ -158,7 +166,14 @@ func (s *Server) logSlowOperation(r *http.Request, kind, name, status string, d 
 	if u := auth.UserFromContext(r.Context()); u != nil {
 		attrs = append(attrs, slog.String("user_login", u.Login))
 	}
+	attrs = append(attrs, extra...)
 	oblog.Component("runtime_ops").LogAttrs(r.Context(), slog.LevelWarn, "slow operation", attrs...)
+}
+
+func sqlHash(sql string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(sql))
+	return fmt.Sprintf("%016x", h.Sum64())
 }
 
 func firstPositive(vals ...int) int {

@@ -17,8 +17,10 @@ limits:
   request_timeout_sec: 10
   report_timeout_sec: 20
   report_max_rows: 1000
+  report_concurrency: 4
   export_timeout_sec: 30
   export_max_rows: 2000
+  export_concurrency: 2
   processor_timeout_sec: 40
   processor_concurrency: 2
   http_service_timeout_sec: 50
@@ -36,7 +38,7 @@ limits:
 	if cfg.Limits == nil {
 		t.Fatal("Limits nil")
 	}
-	if cfg.Limits.ReportMaxRows != 1000 || cfg.Limits.HTTPServiceConcurrency != 3 || cfg.Limits.SlowOperationMS != 1500 {
+	if cfg.Limits.ReportMaxRows != 1000 || cfg.Limits.ReportConcurrency != 4 || cfg.Limits.ExportConcurrency != 2 || cfg.Limits.HTTPServiceConcurrency != 3 || cfg.Limits.SlowOperationMS != 1500 {
 		t.Fatalf("limits parsed incorrectly: %+v", cfg.Limits)
 	}
 }

@@ -6,6 +6,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -118,7 +119,8 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 	opStatus := "ok"
 	opRows := 0
 	opTruncated := false
-	defer func() { finish(opStatus, opRows, opTruncated) }()
+	var opAttrs []slog.Attr
+	defer func() { finish(opStatus, opRows, opTruncated, opAttrs...) }()
 
 	// Выбранный вариант компоновки (параметр __variant); пусто → основной.
 	variant := r.FormValue("__variant")
@@ -179,6 +181,7 @@ func (s *Server) runReport(w http.ResponseWriter, r *http.Request, rep *reportpk
 		})
 		return
 	}
+	opAttrs = []slog.Attr{slog.String("sql_hash", sqlHash(compiled.SQL))}
 	rows, cols, truncated, err := s.store.RunQueryLimit(opCtx, compiled.SQL, compiled.Args, s.cfg.Limits.ReportMaxRows)
 	opTruncated = truncated
 	opRows = len(rows)
@@ -508,7 +511,8 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 	opStatus := "ok"
 	opRows := 0
 	opTruncated := false
-	defer func() { finish(opStatus, opRows, opTruncated) }()
+	var opAttrs []slog.Attr
+	defer func() { finish(opStatus, opRows, opTruncated, opAttrs...) }()
 
 	settings := s.reportSettingsForRequest(r, rep).Settings
 	comp := effectiveComposition(rep, settings)
@@ -543,6 +547,7 @@ func (s *Server) reportExportRows(r *http.Request, rep *reportpkg.Report) (heade
 		opStatus = "error"
 		return nil, nil, newReportExportError(http.StatusBadRequest, "query compile error", err)
 	}
+	opAttrs = []slog.Attr{slog.String("sql_hash", sqlHash(compiled.SQL))}
 	data, cols, truncated, err := s.store.RunQueryLimit(opCtx, compiled.SQL, compiled.Args, s.cfg.Limits.ExportMaxRows)
 	opRows = len(data)
 	opTruncated = truncated

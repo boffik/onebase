@@ -1,12 +1,18 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/metrics"
+	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/ivantit66/onebase/internal/webhook"
 )
 
 // mountMetrics вешает /metrics, отдающий HTTP-метрики (reg) и gauges пула
@@ -19,6 +25,41 @@ func mountMetrics(r chi.Router, token string, reg *metrics.Registry, store *stor
 		reg.WritePrometheus(w)
 		writePoolStats(w, store)
 	})
+}
+
+func registerRuntimeMetrics(reg *metrics.Registry, authRepo *auth.Repo, uiSrv *ui.Server, sched *scheduler.Scheduler, hooks *webhook.Dispatcher) {
+	reg.RegisterGaugeFunc("onebase_active_sessions", "Активные пользовательские сессии.", func() float64 {
+		if authRepo == nil {
+			return 0
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		n, err := authRepo.ActiveSessionCount(ctx)
+		if err != nil {
+			return 0
+		}
+		return float64(n)
+	})
+	reg.RegisterGaugeFunc("onebase_sse_subscribers", "Активные SSE-подписчики.", func() float64 {
+		return float64(uiSrv.SSESubscriberCount())
+	})
+	reg.RegisterGaugeFunc("onebase_active_scheduled_jobs", "Активные регламентные задания.", func() float64 {
+		return float64(sched.ActiveRunCount())
+	})
+	if hooks != nil {
+		reg.RegisterGaugeFunc("onebase_webhook_inflight", "Webhook-вызовы в очереди или выполнении.", func() float64 {
+			return float64(hooks.Metrics().Inflight)
+		})
+		reg.RegisterCounterFunc("onebase_webhook_dispatched_total", "Всего поставленных в выполнение webhook-вызовов.", func() float64 {
+			return float64(hooks.Metrics().Dispatched)
+		})
+		reg.RegisterCounterFunc("onebase_webhook_retry_total", "Всего повторных webhook-попыток.", func() float64 {
+			return float64(hooks.Metrics().Retries)
+		})
+		reg.RegisterCounterFunc("onebase_webhook_failed_total", "Webhook-вызовы, завершившиеся ошибкой.", func() float64 {
+			return float64(hooks.Metrics().Failed)
+		})
+	}
 }
 
 // writePoolStats дописывает gauges пула соединений PostgreSQL. Для SQLite пул

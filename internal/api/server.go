@@ -42,6 +42,9 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		uiCfg.Metrics = metricsReg
 	}
 	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
+	if metricsReg != nil {
+		registerRuntimeMetrics(metricsReg, authRepo, uiSrv, sched, uiCfg.Webhooks)
+	}
 	h := &handler{reg: reg, store: store, interp: interp, entitySvc: uiSrv.EntitySvc()}
 	r := chi.NewRouter()
 	r.Use(requestLogger()) // как middleware.Logger, но режет токены/коды из URI (план 53)

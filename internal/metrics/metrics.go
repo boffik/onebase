@@ -27,6 +27,12 @@ type reqKey struct{ method, route, status string }
 type routeKey struct{ method, route string }
 type opKey struct{ kind, status string }
 type limitedOpKey struct{ kind, reason string }
+type funcMetric struct {
+	name       string
+	help       string
+	metricType string
+	value      func() float64
+}
 
 type histogram struct {
 	// counts[i] — число наблюдений в корзине i (значение <= buckets[i]).
@@ -47,6 +53,7 @@ type Registry struct {
 	activeOperations   map[string]int64
 	slowOperations     map[string]uint64
 	limitedOperations  map[limitedOpKey]uint64
+	funcMetrics        []funcMetric
 }
 
 // New создаёт реестр с корзинами гистограммы по умолчанию.
@@ -61,6 +68,32 @@ func New() *Registry {
 		slowOperations:     make(map[string]uint64),
 		limitedOperations:  make(map[limitedOpKey]uint64),
 	}
+}
+
+// RegisterGaugeFunc registers a gauge whose value is sampled on scrape.
+// Callbacks must not mutate this Registry and should use low-latency reads.
+func (reg *Registry) RegisterGaugeFunc(name, help string, value func() float64) {
+	reg.registerFuncMetric(name, help, "gauge", value)
+}
+
+// RegisterCounterFunc registers a monotonically increasing counter sampled on
+// scrape. The callback is responsible for returning a cumulative value.
+func (reg *Registry) RegisterCounterFunc(name, help string, value func() float64) {
+	reg.registerFuncMetric(name, help, "counter", value)
+}
+
+func (reg *Registry) registerFuncMetric(name, help, metricType string, value func() float64) {
+	if reg == nil || name == "" || help == "" || value == nil {
+		return
+	}
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	reg.funcMetrics = append(reg.funcMetrics, funcMetric{
+		name:       name,
+		help:       help,
+		metricType: metricType,
+		value:      value,
+	})
 }
 
 func (reg *Registry) observe(method, route string, status int, d time.Duration) {
@@ -180,7 +213,7 @@ func (reg *Registry) Middleware(next http.Handler) http.Handler {
 // WritePrometheus печатает накопленные метрики в формате Prometheus exposition.
 func (reg *Registry) WritePrometheus(w io.Writer) {
 	reg.mu.Lock()
-	defer reg.mu.Unlock()
+	funcMetrics := append([]funcMetric(nil), reg.funcMetrics...)
 
 	// ── counter: onebase_http_requests_total ──────────────────────────────
 	fmt.Fprintln(w, "# HELP onebase_http_requests_total Общее число обработанных HTTP-запросов.")
@@ -314,4 +347,24 @@ func (reg *Registry) WritePrometheus(w io.Writer) {
 		fmt.Fprintf(w, "onebase_limited_operation_total{kind=%q,reason=%q} %d\n",
 			k.kind, k.reason, reg.limitedOperations[k])
 	}
+	reg.mu.Unlock()
+	writeFuncMetrics(w, funcMetrics)
+}
+
+func writeFuncMetrics(w io.Writer, metrics []funcMetric) {
+	sort.Slice(metrics, func(i, j int) bool { return metrics[i].name < metrics[j].name })
+	for _, m := range metrics {
+		fmt.Fprintf(w, "# HELP %s %s\n", m.name, m.help)
+		fmt.Fprintf(w, "# TYPE %s %s\n", m.name, m.metricType)
+		fmt.Fprintf(w, "%s %s\n", m.name, strconv.FormatFloat(safeMetricValue(m.value), 'g', -1, 64))
+	}
+}
+
+func safeMetricValue(value func() float64) (out float64) {
+	defer func() {
+		if recover() != nil {
+			out = 0
+		}
+	}()
+	return value()
 }

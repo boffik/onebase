@@ -309,6 +309,17 @@ func (r *Repo) ActiveSessions(ctx context.Context) ([]*SessionInfo, error) {
 	return sessions, rows.Err()
 }
 
+// ActiveSessionCount returns the number of non-expired sessions.
+func (r *Repo) ActiveSessionCount(ctx context.Context) (int, error) {
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM _sessions WHERE expires_at > %s`, d.Now())
+	var count int
+	if err := r.db.QueryRow(ctx, q).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // parseSessionTime normalises an expires_at column value to time.Time.
 // PostgreSQL returns time.Time natively; SQLite stores it as TEXT which
 // the driver may return as string or []byte in Go's time format.

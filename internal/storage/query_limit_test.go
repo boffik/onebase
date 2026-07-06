@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,34 @@ func TestRunQueryLimit_Disabled(t *testing.T) {
 	}
 	if len(rows) != 2 {
 		t.Fatalf("rows len = %d, want 2", len(rows))
+	}
+}
+
+func TestLimitedQuerySQL_AddsLimitWhenMissing(t *testing.T) {
+	got := limitedQuerySQL(`SELECT id FROM items ORDER BY id;`, 11)
+	want := `SELECT id FROM items ORDER BY id LIMIT 11`
+	if got != want {
+		t.Fatalf("limitedQuerySQL = %q, want %q", got, want)
+	}
+}
+
+func TestLimitedQuerySQL_KeepsExplicitTopLevelLimit(t *testing.T) {
+	query := `SELECT id FROM items ORDER BY id LIMIT 5`
+	if got := limitedQuerySQL(query, 11); got != query {
+		t.Fatalf("limitedQuerySQL changed explicit limit: %q", got)
+	}
+}
+
+func TestLimitedQuerySQL_IgnoresNestedLimit(t *testing.T) {
+	got := limitedQuerySQL(`SELECT * FROM (SELECT id FROM items LIMIT 5) x`, 11)
+	if strings.Count(strings.ToLower(got), " limit ") != 2 {
+		t.Fatalf("expected outer limit to be added, got %q", got)
+	}
+}
+
+func TestLimitedQuerySQL_IgnoresLimitInStringAndComment(t *testing.T) {
+	got := limitedQuerySQL("SELECT 'limit' AS word -- limit in comment\nFROM items", 11)
+	if !strings.HasSuffix(got, " LIMIT 11") {
+		t.Fatalf("expected outer limit suffix, got %q", got)
 	}
 }

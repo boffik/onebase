@@ -77,6 +77,25 @@ func TestRegistry_OperationMetrics(t *testing.T) {
 	}
 }
 
+func TestRegistry_FuncMetrics(t *testing.T) {
+	reg := New()
+	reg.RegisterGaugeFunc("onebase_active_sessions", "Active sessions.", func() float64 { return 3 })
+	reg.RegisterCounterFunc("onebase_webhook_retry_total", "Webhook retries.", func() float64 { return 7 })
+
+	var sb strings.Builder
+	reg.WritePrometheus(&sb)
+	out := sb.String()
+
+	if !strings.Contains(out, "# TYPE onebase_active_sessions gauge") ||
+		!strings.Contains(out, "onebase_active_sessions 3") {
+		t.Errorf("missing gauge func metric:\n%s", out)
+	}
+	if !strings.Contains(out, "# TYPE onebase_webhook_retry_total counter") ||
+		!strings.Contains(out, "onebase_webhook_retry_total 7") {
+		t.Errorf("missing counter func metric:\n%s", out)
+	}
+}
+
 // Незаматченный путь группируется под route="other", а не плодит серию.
 func TestRegistry_UnmatchedRouteIsOther(t *testing.T) {
 	reg := New()
