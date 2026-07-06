@@ -232,6 +232,23 @@ function cleanProfiles(id) {
     .catch(function(e){ alert('Ошибка: ' + e); });
   return false;
 }
+// showStartError показывает ошибку запуска в уже открытом окне-заготовке.
+// Раньше окно закрывалось, а alert уходил под него — в WebView2 это выглядело
+// как «вечный белый экран» (закрытие попапа может не сработать, и ошибка
+// оставалась невидимой за ним).
+function showStartError(win, msg) {
+  var text = String(msg);
+  if (win) {
+    try {
+      win.document.open();
+      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>onebase</title></head><body style="font-family:Segoe UI,Arial,sans-serif;padding:28px"><h3 style="color:#c00;margin:0 0 12px">Ошибка запуска базы</h3><pre id="err" style="white-space:pre-wrap;font:13px Consolas,monospace;color:#333"></pre></body></html>');
+      win.document.getElementById('err').textContent = text;
+      win.document.close();
+      return;
+    } catch (e) { try { win.close(); } catch (e2) {} }
+  }
+  alert('Ошибка запуска:\n' + text);
+}
 function startBase(el, id) {
   el.preventDefault ? el.preventDefault() : (el.returnValue = false);
   var btn = el.target || el;
@@ -244,15 +261,13 @@ function startBase(el, id) {
       if (d.url) {
         if (win) win.location.href = d.url;
         setTimeout(function(){ window.location.href = '/?sel=' + id; }, 800);
-      } else if (d.error) {
-        if (win) win.close();
-        alert('Ошибка запуска:\n' + d.error);
+      } else {
+        showStartError(win, d.error || 'Неизвестная ошибка');
         if (btn.innerHTML) btn.innerHTML = origText;
       }
     })
     .catch(function(e){
-      if (win) win.close();
-      alert('Ошибка запуска: ' + e);
+      showStartError(win, e);
       if (btn.innerHTML) btn.innerHTML = origText;
     });
   return false;
