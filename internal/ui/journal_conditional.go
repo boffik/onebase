@@ -25,7 +25,10 @@ func applyJournalConditionalStyles(rows []map[string]any, rules []metadata.Journ
 		applied := map[string]bool{}
 		for _, rule := range rules {
 			field := journalStyleField(rule.Field)
-			if applied[field] {
+			// Дедуп «первое совпавшее правило» — регистронезависимо, как и всё
+			// остальное сопоставление полей: «Сумма» и «сумма» — одна ячейка.
+			appliedKey := strings.ToLower(field)
+			if applied[appliedKey] {
 				continue
 			}
 			style := cssOfJournal(rule.Style)
@@ -40,7 +43,7 @@ func applyJournalConditionalStyles(rows []map[string]any, rules []metadata.Journ
 			if !ok {
 				continue
 			}
-			applied[field] = true
+			applied[appliedKey] = true
 			if field == "" {
 				row[journalRowStyleKey] = joinStyles(journalRowStyle(row), style)
 				continue

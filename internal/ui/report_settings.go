@@ -581,7 +581,10 @@ func (s *Server) reportSettingsSave(w http.ResponseWriter, r *http.Request) {
 	// Обратная совместимость: старые формы без __preset_action по-прежнему
 	// сохраняют единственную настройку в _settings.
 	if action == "" {
-		_ = s.store.SaveReportUserSettings(r.Context(), rep.Name, currentUserLogin(r), canon)
+		if err := s.store.SaveReportUserSettings(r.Context(), rep.Name, currentUserLogin(r), canon); err != nil {
+			http.Error(w, s.errText(r, err), http.StatusInternalServerError)
+			return
+		}
 		http.Redirect(w, r, reportRunURLAfterSettingsSave(rep.Name, rep.Params, r, ""), http.StatusSeeOther)
 		return
 	}
@@ -641,7 +644,10 @@ func (s *Server) reportPresetDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	presetID := r.FormValue("__preset")
 	if presetID != "" && presetID != standardReportPresetID {
-		_ = s.store.DeleteReportPreset(r.Context(), rep.Name, currentUserLogin(r), presetID)
+		if err := s.store.DeleteReportPreset(r.Context(), rep.Name, currentUserLogin(r), presetID); err != nil {
+			http.Error(w, s.errText(r, err), http.StatusInternalServerError)
+			return
+		}
 	}
 	http.Redirect(w, r, reportFormURLWithPreset(rep.Name, standardReportPresetID), http.StatusSeeOther)
 }
@@ -656,6 +662,9 @@ func (s *Server) reportSettingsReset(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePerm(w, r, "report", rep.Name, "run") {
 		return
 	}
-	_ = s.store.DeleteReportUserSettings(r.Context(), rep.Name, currentUserLogin(r))
+	if err := s.store.DeleteReportUserSettings(r.Context(), rep.Name, currentUserLogin(r)); err != nil {
+		http.Error(w, s.errText(r, err), http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, reportFormURLWithPreset(rep.Name, standardReportPresetID), http.StatusSeeOther)
 }

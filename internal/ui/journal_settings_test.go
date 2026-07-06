@@ -108,6 +108,28 @@ func TestJournalSettingsPanelRender(t *testing.T) {
 	}
 }
 
+func TestJournalSettingsSaveErrorSurfaces(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "journal-settings-err.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close() // закрытое хранилище: сохранение обязано вернуть 500, а не молчаливый redirect
+
+	j := testJournal()
+	registry := runtime.NewRegistry()
+	registry.LoadJournals([]*metadata.Journal{j})
+	s := &Server{store: db, reg: registry}
+
+	form := url.Values{"__journal_settings": {`{"columns":[{"field":"Сумма","visible":false}]}`}}
+	r := reqWithChi(http.MethodPost, "/ui/journal/Журнал/settings/save", form, map[string]string{"name": "Журнал"})
+	w := httptest.NewRecorder()
+	s.journalSettingsSave(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500 on store error, got %d (location=%q)", w.Code, w.Header().Get("Location"))
+	}
+}
+
 func TestJournalSettingsSaveReset(t *testing.T) {
 	ctx := context.Background()
 	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "journal-settings.db"))
