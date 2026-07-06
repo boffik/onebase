@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -41,6 +42,10 @@ func (r *Repo) Middleware(next http.Handler) http.Handler {
 			redirectToLogin(w, req)
 			return
 		}
+
+		// last_seen_at для админки сессий (план 78); троттлится внутри,
+		// ошибка не критична.
+		r.TouchSession(ctx, token, time.Now())
 
 		// Load roles for this user (best-effort — don't fail if table missing yet)
 		if roles, err2 := r.GetRolesForUser(ctx, user.ID); err2 == nil {

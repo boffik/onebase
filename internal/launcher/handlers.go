@@ -73,6 +73,9 @@ func sanitizeFileName(name string) string {
 type handler struct {
 	store  *Store
 	runner *Runner
+	// isoBrowser запускает изолированные окна Предприятия (план 78);
+	// в тестах подменяется фейком.
+	isoBrowser isolatedBrowser
 }
 
 // baseVM — view-модель информационной базы для списка лаунчера: встраивает
@@ -369,6 +372,71 @@ func (h *handler) start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, map[string]any{"url": h.runner.BaseURL(b)})
+}
+
+// startIsolated (план 78, фаза 3): запускает базу (если нужно) и открывает
+// внешнее Chromium-окно с изолированным браузерным профилем. Сессионный токен
+// не передаётся: свежий профиль без cookie попадает на /login — это и есть
+// смысл «окна под другого пользователя».
+func (h *handler) startIsolated(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	lang := resolveLang(r)
+
+	if !h.runner.IsRunning(b.ID) {
+		if b.DBType != "sqlite" {
+			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
+				writeJSON(w, 500, map[string]any{"error": tr(lang, "Не удалось создать БД") + ": " + err.Error()})
+				return
+			}
+		}
+		if err := h.runner.Start(b); err != nil {
+			writeJSON(w, 500, map[string]any{"error": errText(r, err)})
+			return
+		}
+		b.LastOpened = time.Now()
+		h.store.Update(b)
+	}
+	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
+		return
+	}
+
+	root, err := profilesRoot(b.ID)
+	if err == nil {
+		var dir string
+		if dir, err = pickProfileDir(root); err == nil {
+			err = h.isoBrowser.Open(dir, h.runner.BaseURL(b)+"/ui")
+		}
+	}
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// cleanProfiles удаляет свободные (не запущенные) изолированные профили базы.
+func (h *handler) cleanProfiles(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	root, err := profilesRoot(b.ID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	removed, err := cleanIsolatedProfiles(root)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "removed": removed})
 }
 
 func (h *handler) stop(w http.ResponseWriter, r *http.Request) {
