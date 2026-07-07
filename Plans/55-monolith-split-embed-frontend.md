@@ -1,6 +1,6 @@
 # План 55 — Раскол монолитов и фронт в go:embed
 
-**Статус:** 🟡 Этап 1 реализован (2026-06-10, ветка `refactor/split-ui-handlers`); этап 2 **Фаза 1** (конфигуратор на `html/template`, XSS-долг плана 47 §1.3 закрыт) — реализована 2026-06-19 (ветка `feature/55-configurator-htmltemplate`, см. `55-impl-htmltemplate-embed.md`); этап 2 **Фаза 2** (вынос CSS/JS конфигуратора в `/static` + go:embed, bootstrap `window.__cfg`/`__cfgI18n`) — реализована 2026-06-19 (`configurator_tmpl.go` 6726→2443 строк; `static/configurator.{css,js}`); этап 3 (inline-JS `ui/templates.go`) — не начат
+**Статус:** 🟡 Этап 1 реализован (2026-06-10, ветка `refactor/split-ui-handlers`); этап 2 **Фаза 1** (конфигуратор на `html/template`, XSS-долг плана 47 §1.3 закрыт) — реализована 2026-06-19 (ветка `feature/55-configurator-htmltemplate`, см. `55-impl-htmltemplate-embed.md`); этап 2 **Фаза 2** (вынос CSS/JS конфигуратора в `/static` + go:embed, bootstrap `window.__cfg`/`__cfgI18n`) — реализована 2026-06-19 (`configurator_tmpl.go` 6726→2443 строк; `static/configurator.{css,js}`); этап 3 **Фаза 3a** (глобальные UI-скрипты из `tplHead` + общий reference picker в `/static/ui.js` через `go:embed`) — реализована 2026-07-07; остаток этапа 3 — template-bound inline-JS списков/форм/отчётов после введения bootstrap data-слоя.
 
 > **Как реализовано (этап 1).** `ui/handlers.go` разнесён механически (as-is,
 > вместе с doc-комментариями) с 3908 до 660 строк: `handlers_entity.go` (CRUD
@@ -98,6 +98,19 @@ JSON через `template.JS(jsonBytes)` (как уже делается в `dev
 Аналогично этапу 2 для `internal/ui`: ИИ-виджет (`templates.go:514-559`), панель
 сообщений (`:560+`) и прочий крупный inline-JS вынести в `internal/ui/assets/*.js` +
 `go:embed`, отдавать через существующий `/static/` маршрут (`mountStatic`).
+
+Реализация 2026-07-07:
+- добавлен embedded asset `internal/ui/static/ui.js`, отдаётся как
+  `/static/ui.js` через `mountStatic`;
+- из `tplHead` вынесены вкладочная shell-интеграция, AI-виджет, панель
+  сообщений, PWA service-worker registration, `onebaseDevice` bridge и
+  realtime/telephony toast listener;
+- верхний общий `ref-picker-js` также вынесен в `/static/ui.js`; form-shared-js
+  пока оставляет свою локальную копию, как и до рефакторинга, чтобы не менять
+  поведение форм;
+- оставшиеся inline-блоки в `templates.go` зависят от Go-template данных
+  (`{{jsJSON ...}}`, переводов и URL текущей сущности). Их нужно выносить
+  следующим шагом через явный bootstrap JSON, а не механическим копированием.
 
 ---
 

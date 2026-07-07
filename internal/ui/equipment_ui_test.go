@@ -26,12 +26,16 @@ func renderPage(t *testing.T, name string) string {
 	return buf.String()
 }
 
-// Мост onebaseDevice встроен в общий layout (head) и доступен на каждой странице.
+// Мост onebaseDevice подключён общим layout и доступен на каждой странице.
 func TestUI_DeviceBridge_InHead(t *testing.T) {
 	html := renderPage(t, "page-index")
+	if !strings.Contains(html, `src="/static/ui.js"`) {
+		t.Fatalf("layout не подключает /static/ui.js")
+	}
+	js := string(uiJS)
 	for _, want := range []string{"window.onebaseDevice", "obAgentURL", "X-Agent-Token", "/print", "/weight", "/pay", "/fiscal", "/events"} {
-		if !strings.Contains(html, want) {
-			t.Errorf("в layout нет %q", want)
+		if !strings.Contains(js, want) {
+			t.Errorf("в ui.js нет %q", want)
 		}
 	}
 }

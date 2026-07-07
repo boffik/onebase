@@ -75,18 +75,21 @@ func TestServiceWorkerCacheVersioned(t *testing.T) {
 }
 
 // TestHeadHasPWATags — smoke-тест из плана 45: рендер шаблона head содержит
-// viewport, ссылку на manifest и регистрацию service worker. Защищает от
-// случайного удаления этих тегов при правке tplHead.
+// viewport, ссылку на manifest и подключение общего ui.js, где регистрируется
+// service worker. Защищает от случайного удаления этих тегов при правке tplHead.
 func TestHeadHasPWATags(t *testing.T) {
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "head", map[string]any{"Cfg": Config{}}); err != nil {
 		t.Fatalf("рендер head: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{`name="viewport"`, `rel="manifest"`, "/sw.js"} {
+	for _, want := range []string{`name="viewport"`, `rel="manifest"`, `src="/static/ui.js"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("head не содержит %q", want)
 		}
+	}
+	if !strings.Contains(string(uiJS), "navigator.serviceWorker.register('/sw.js')") {
+		t.Error("ui.js не регистрирует /sw.js")
 	}
 }
 
