@@ -320,11 +320,10 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{if .Dimensions}}
     <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Измерения"}} ({{len .Dimensions}})</summary>
     <table class="fields-tbl" id="ir-dim-{{.Name}}">
-    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th style="width:44px"></th></tr>
     {{range $i, $f := .Dimensions}}
-    <input type="hidden" name="dim.{{$i}}.name" value="{{$f.Name}}">
     <tr>
-      <td>{{$f.Name}}</td>
+      <td><input type="hidden" name="dim.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
       <td>
         <select name="dim.{{$i}}.type" onchange="cfgToggleRef(this,'irdr-{{$ir.Name}}-{{$i}}');cfgToggleNum(this,'irdn-{{$ir.Name}}-{{$i}}')">
           <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -344,8 +343,9 @@ const cfgTabTree = `{{define "tab-tree"}}
           {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
         </select>
       </td>
+      <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
     </tr>
-    {{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+    {{if $.AvailableLangs}}<tr data-cfg-field-extra="1"><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddField('ir-dim-{{.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
@@ -354,11 +354,10 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{if .Resources}}
     <details open><summary class="section-hd" style="cursor:pointer;margin-top:8px">{{t $.Lang "Ресурсы"}} ({{len .Resources}})</summary>
     <table class="fields-tbl" id="ir-res-{{.Name}}">
-    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th style="width:44px"></th></tr>
     {{range $i, $f := .Resources}}
-    <input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">
     <tr>
-      <td>{{$f.Name}}</td>
+      <td><input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
       <td>
         <select name="res.{{$i}}.type" onchange="cfgToggleRef(this,'irrr-{{$ir.Name}}-{{$i}}');cfgToggleNum(this,'irrn-{{$ir.Name}}-{{$i}}')">
           <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -378,8 +377,9 @@ const cfgTabTree = `{{define "tab-tree"}}
           {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
         </select>
       </td>
+      <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
     </tr>
-    {{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+    {{if $.AvailableLangs}}<tr data-cfg-field-extra="1"><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddField('ir-res-{{.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
@@ -414,11 +414,10 @@ const cfgTabTree = `{{define "tab-tree"}}
     {{if .Resources}}
     <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Ресурсы"}} ({{len .Resources}})</summary>
     <table class="fields-tbl" id="ar-res-{{.Name}}">
-    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th></tr>
+    <tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="width:44px"></th></tr>
     {{range $i, $f := .Resources}}
-    <input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">
     <tr>
-      <td>{{$f.Name}}</td>
+      <td><input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
       <td>
         <select name="res.{{$i}}.type" onchange="cfgToggleNum(this,'arn-{{$ar.Name}}-{{$i}}')">
           <option value="number" {{if eq $f.Type "number"}}selected{{end}}>{{t $.Lang "число"}}</option>
@@ -430,15 +429,16 @@ const cfgTabTree = `{{define "tab-tree"}}
           , <input type="number" min="0" name="res.{{$i}}.scale" value="{{if $f.Length}}{{$f.Scale}}{{end}}" placeholder="точн" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">
         </span>
       </td>
+      <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
     </tr>
-    {{if $.AvailableLangs}}<tr><td colspan="2" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+    {{if $.AvailableLangs}}<tr data-cfg-field-extra="1"><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
     {{end}}
     </table>
     <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
     </details>
     {{else}}
     <div id="ar-res-{{.Name}}-wrap">
-    <table class="fields-tbl" id="ar-res-{{.Name}}" style="display:none"><tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th></tr></table>
+    <table class="fields-tbl" id="ar-res-{{.Name}}" style="display:none"><tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="width:44px"></th></tr></table>
     </div>
     <button type="button" onclick="cfgAddARField('ar-res-{{.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
     {{end}}
@@ -1454,11 +1454,10 @@ const cfgTabTree = `{{define "tab-tree"}}
 {{if $e.Fields}}
 <details open><summary class="section-hd" style="cursor:pointer">{{t $.Lang "Реквизиты"}} ({{len $e.Fields}})</summary>
 <table class="fields-tbl" id="ft-{{$e.Name}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th title="{{t $.Lang "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа."}}">{{t $.Lang "+ в picker'е"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th title="{{t $.Lang "Кнопка «+ Создать» в picker'е для ссылочного поля. По умолчанию включена для шапки документа."}}">{{t $.Lang "+ в picker'е"}}</th><th style="width:44px"></th></tr>
 {{range $i, $f := $e.Fields}}
-<input type="hidden" name="field.{{$i}}.name" value="{{$f.Name}}">
 <tr>
-  <td>{{$f.Name}}</td>
+  <td><input type="hidden" name="field.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
   <td>
     <select name="field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-f{{$i}}');cfgToggleNum(this,'cfn-{{$e.Name}}-f{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -1489,8 +1488,9 @@ const cfgTabTree = `{{define "tab-tree"}}
     <input type="checkbox" name="field.{{$i}}.inline_allow" value="1"{{if $f.InlineAllowChecked false}} checked{{end}} title="{{t $.Lang "Показывать «+ Создать» в picker'е"}}">
     {{end}}
   </td>
+  <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
 </tr>
-{{if $availLangs}}<tr><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" (printf "field.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+{{if $availLangs}}<tr data-cfg-field-extra="1"><td colspan="5" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" (printf "field.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('ft-{{$e.Name}}','new_field','{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>
@@ -1501,11 +1501,10 @@ const cfgTabTree = `{{define "tab-tree"}}
 <details open><summary class="section-hd" style="cursor:pointer">📋 {{$tp.Name}} ({{len $tp.Fields}})</summary>
 <div class="tp-block">
 <table class="fields-tbl" id="ft-{{$e.Name}}-tp{{$j}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th title="{{t $.Lang "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена."}}">{{t $.Lang "+ в picker'е"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th title="{{t $.Lang "Кнопка «+ Создать» в picker'е. В ТЧ по умолчанию выключена."}}">{{t $.Lang "+ в picker'е"}}</th><th style="width:44px"></th></tr>
 {{range $i, $f := $tp.Fields}}
-<input type="hidden" name="tp.{{$tp.Name}}.field.{{$i}}.name" value="{{$f.Name}}">
 <tr>
-  <td>{{$f.Name}}</td>
+  <td><input type="hidden" name="tp.{{$tp.Name}}.field.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
   <td>
     <select name="tp.{{$tp.Name}}.field.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$e.Name}}-tp{{$j}}f{{$i}}');cfgToggleNum(this,'cfn-{{$e.Name}}-tp{{$j}}f{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -1536,8 +1535,9 @@ const cfgTabTree = `{{define "tab-tree"}}
     <input type="checkbox" name="tp.{{$tp.Name}}.field.{{$i}}.inline_allow" value="1"{{if $f.InlineAllowChecked true}} checked{{end}} title="{{t $.Lang "Показывать «+ Создать» в picker'е"}}">
     {{end}}
   </td>
+  <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
 </tr>
-{{if $availLangs}}<tr><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" (printf "tp.%s.field.%d.titles" $tp.Name $i) "Values" $f.Titles)}}</td></tr>{{end}}
+{{if $availLangs}}<tr data-cfg-field-extra="1"><td colspan="5" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $lang "Langs" $availLangs "Prefix" (printf "tp.%s.field.%d.titles" $tp.Name $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('ft-{{$e.Name}}-tp{{$j}}','new_tp.{{$tp.Name}}.field','{{$e.Name}}')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить поле"}}</button>
@@ -1843,11 +1843,10 @@ const cfgRegDetail = `{{define "register-detail"}}
 
 <div class="section-hd">{{t $.Lang "Измерения"}}</div>
 <table class="fields-tbl" id="rg-dim-{{$rg.Name}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th style="width:44px"></th></tr>
 {{range $i, $f := $rg.Dimensions}}
-<input type="hidden" name="dim.{{$i}}.name" value="{{$f.Name}}">
 <tr>
-  <td>{{$f.Name}}</td>
+  <td><input type="hidden" name="dim.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
   <td>
     <select name="dim.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$rg.Name}}-d{{$i}}');cfgToggleNum(this,'cfn-{{$rg.Name}}-d{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -1867,19 +1866,19 @@ const cfgRegDetail = `{{define "register-detail"}}
       {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </td>
+  <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
 </tr>
-{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+{{if $.AvailableLangs}}<tr data-cfg-field-extra="1"><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "dim.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-dim-{{$rg.Name}}','new_dim','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить измерение"}}</button>
 
 <div class="section-hd">{{t $.Lang "Ресурсы"}}</div>
 <table class="fields-tbl" id="rg-res-{{$rg.Name}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th style="width:44px"></th></tr>
 {{range $i, $f := $rg.Resources}}
-<input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">
 <tr>
-  <td>{{$f.Name}}</td>
+  <td><input type="hidden" name="res.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
   <td>
     <select name="res.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$rg.Name}}-r{{$i}}');cfgToggleNum(this,'cfn-{{$rg.Name}}-r{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -1899,19 +1898,19 @@ const cfgRegDetail = `{{define "register-detail"}}
       {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </td>
+  <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
 </tr>
-{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+{{if $.AvailableLangs}}<tr data-cfg-field-extra="1"><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "res.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-res-{{$rg.Name}}','new_res','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить ресурс"}}</button>
 
 <div class="section-hd">{{t $.Lang "Реквизиты"}}</div>
 <table class="fields-tbl" id="rg-attr-{{$rg.Name}}">
-<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th></tr>
+<tr><th>{{t $.Lang "Поле"}}</th><th>{{t $.Lang "Тип"}}</th><th style="min-width:150px">{{t $.Lang "Объект"}}</th><th style="width:44px"></th></tr>
 {{range $i, $f := $rg.Attributes}}
-<input type="hidden" name="attr.{{$i}}.name" value="{{$f.Name}}">
 <tr>
-  <td>{{$f.Name}}</td>
+  <td><input type="hidden" name="attr.{{$i}}.name" value="{{$f.Name}}">{{$f.Name}}</td>
   <td>
     <select name="attr.{{$i}}.type" onchange="cfgToggleRef(this,'cfr-{{$rg.Name}}-a{{$i}}');cfgToggleNum(this,'cfn-{{$rg.Name}}-a{{$i}}')">
       <option value="string"    {{if eq $f.Type "string"}}selected{{end}}>{{t $.Lang "строка"}}</option>
@@ -1931,8 +1930,9 @@ const cfgRegDetail = `{{define "register-detail"}}
       {{range $allEntities}}<option value="{{.}}"{{if eq . $f.RefEntity}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </td>
+  <td style="text-align:center"><button type="button" onclick="cfgDeleteField(this)" title="{{t $.Lang "Удалить поле"}}" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button></td>
 </tr>
-{{if $.AvailableLangs}}<tr><td colspan="3" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "attr.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
+{{if $.AvailableLangs}}<tr data-cfg-field-extra="1"><td colspan="4" style="padding:0 0 4px">{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" (printf "attr.%d.titles" $i) "Values" $f.Titles)}}</td></tr>{{end}}
 {{end}}
 </table>
 <button type="button" onclick="cfgAddField('rg-attr-{{$rg.Name}}','new_attr','')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ {{t $.Lang "Добавить реквизит"}}</button>

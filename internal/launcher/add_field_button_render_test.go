@@ -54,3 +54,35 @@ func TestConfigurator_AddFieldButtonQuotesEntity(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurator_FieldRowsRenderDeleteButtons(t *testing.T) {
+	data := &configuratorData{
+		Base: &Base{ID: "test-base", Name: "Тест", ConfigSource: "file"},
+		Lang: "ru",
+		Tab:  "tree",
+		Catalogs: []cfgEntity{{
+			Name: "Номенклатура", Kind: "Справочник",
+			Fields: []cfgField{{Name: "Цена", Type: "number"}},
+			TableParts: []cfgTablePart{{
+				Name:   "Состав",
+				Fields: []cfgField{{Name: "Количество", Type: "number"}},
+			}},
+		}},
+	}
+	var buf bytes.Buffer
+	if err := cfgTmpl.ExecuteTemplate(&buf, "tab-tree", data); err != nil {
+		t.Fatalf("ExecuteTemplate tab-tree: %v", err)
+	}
+	html := buf.String()
+
+	for _, want := range []string{
+		`onclick="cfgDeleteField(this)"`,
+		`title="Удалить поле"`,
+		`<input type="hidden" name="field.0.name" value="Цена">Цена`,
+		`<input type="hidden" name="tp.Состав.field.0.name" value="Количество">Количество`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("в HTML строки поля нет ожидаемого фрагмента: %q", want)
+		}
+	}
+}

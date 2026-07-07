@@ -256,6 +256,27 @@ function cfgToggleNum(sel, numId) {
   n.style.display = (sel.value === 'number') ? '' : 'none';
 }
 var _cfgNewFieldIdx = 0;
+function cfgDeleteField(btn) {
+  var tr = btn && btn.closest ? btn.closest('tr') : null;
+  if (!tr) return;
+  var next = tr.nextElementSibling;
+  tr.remove();
+  if (next && next.getAttribute('data-cfg-field-extra') === '1') next.remove();
+}
+function cfgDeleteFieldButtonHTML() {
+  return '<button type="button" onclick="cfgDeleteField(this)" title="'+T("Удалить поле")+'" style="background:none;border:none;color:#c00;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">&times;</button>';
+}
+function cfgAppendDeleteCell(tr, tbl) {
+  var head = tbl ? tbl.querySelector('tr') : null;
+  var headCols = head ? head.children.length : 0;
+  while (headCols > 0 && tr.children.length < headCols - 1) {
+    tr.appendChild(document.createElement('td'));
+  }
+  var td = document.createElement('td');
+  td.style.textAlign = 'center';
+  td.innerHTML = cfgDeleteFieldButtonHTML();
+  tr.appendChild(td);
+}
 function cfgAddField(tblId, prefix, entityName) {
   _cfgNewFieldIdx++;
   var tbl = document.getElementById(tblId);
@@ -275,6 +296,7 @@ function cfgAddField(tblId, prefix, entityName) {
     +'<option value="">'+T("— выбрать —")+'</option>'
     +'</select></td>';
   tbl.appendChild(tr);
+  cfgAppendDeleteCell(tr, tbl);
   tr.querySelector('input').focus();
 }
 var _cfgNewTpIdx = 0;
@@ -291,7 +313,7 @@ function cfgAddTP(btn, entityName) {
   wrapper.innerHTML = '<summary class="section-hd" style="cursor:pointer">📋 '+tpName+' (0)</summary>'
     +'<input type="hidden" name="new_tp_name" value="'+tpName+'">'
     +'<div class="tp-block"><table class="fields-tbl" id="'+tblId+'">'
-    +'<tr><th>'+T("Поле")+'</th><th>'+T("Тип")+'</th><th style="min-width:150px">'+T("Объект")+'</th></tr>'
+    +'<tr><th>'+T("Поле")+'</th><th>'+T("Тип")+'</th><th style="min-width:150px">'+T("Объект")+'</th><th style="width:44px"></th></tr>'
     +'</table>'
     +'<button type="button" onclick="cfgAddField(\''+tblId+'\',\''+fldPrefix+'\',\''+entityName+'\')" style="font-size:11px;color:#1a4a80;background:none;border:1px dashed #c0c8d8;padding:2px 8px;border-radius:3px;cursor:pointer;margin:4px 0">+ '+T("Добавить поле")+'</button>'
     +'</div>';
@@ -319,13 +341,12 @@ function cfgAddPreRow(tblId, fieldCount) {
   tr.querySelector('input').focus();
 }
 // ── AccountReg resource row ───────────────────────────────────────
-var _cfgARResIdx = 0;
+var _cfgARResIdx = 10000;
 function cfgAddARField(tblId) {
-  _cfgARResIdx++;
   var tbl = document.getElementById(tblId);
   if (!tbl) return;
   tbl.style.display = '';
-  var idx = tbl.querySelectorAll('tr').length - 1;
+  var idx = _cfgARResIdx++;
   var numId = 'arn-new-'+idx;
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><input type="text" name="res.'+idx+'.name" placeholder="ИмяРесурса" style="width:100%;font-size:12px;padding:2px 4px;border:1px solid #dde;border-radius:3px"></td>'
@@ -335,6 +356,7 @@ function cfgAddARField(tblId) {
     +' , <input type="number" min="0" name="res.'+idx+'.scale" placeholder="точн" style="width:46px;padding:2px 3px;border:1px solid #ccd0d8;border-radius:3px;font-size:11px">'
     +'</span></td>';
   tbl.appendChild(tr);
+  cfgAppendDeleteCell(tr, tbl);
   tr.querySelector('input').focus();
 }
 // ── Click-to-edit module (Monaco with textarea fallback) ─────────
