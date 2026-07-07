@@ -162,7 +162,11 @@ func (r *dslRefAttrResolver) preloadIDs(entity *metadata.Entity, ids []uuid.UUID
 	if len(missing) == 0 {
 		return nil
 	}
-	fields := uniqueObjectFields(append(entity.Fields, displayField(entity)...))
+	// Только uniqueObjectFields(entity.Fields): displayField возвращает поле,
+	// уже входящее в entity.Fields (дедуп его выкидывал), а append к слайсу
+	// реестра при cap>len писал в разделяемый backing array метаданных из
+	// конкурентных запросов (гонка под -race).
+	fields := uniqueObjectFields(entity.Fields)
 	rows, err := r.s.store.GetFieldsByIDs(r.ctx, entity, missing, fields)
 	if err != nil {
 		return fmt.Errorf("%s: %w", entity.Name, err)
@@ -239,7 +243,9 @@ func (m *refAwareMapThis) Set(name string, v any) {
 			return
 		}
 	}
-	m.row[low] = v
+	// Новый ключ — с исходным регистром, как interpreter.MapThis: lowercase
+	// давал бы строки ТЧ с ключами, не совпадающими с именами полей метаданных.
+	m.row[name] = v
 }
 
 func (m *refAwareMapThis) wrapValue(name string, v any) any {
