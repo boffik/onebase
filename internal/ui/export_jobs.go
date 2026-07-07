@@ -53,7 +53,24 @@ func newExportJobStore(ttl time.Duration) *exportJobStore {
 	if ttl <= 0 {
 		ttl = defaultExportJobTTL
 	}
-	return &exportJobStore{jobs: make(map[string]*exportJob), ttl: ttl}
+	s := &exportJobStore{jobs: make(map[string]*exportJob), ttl: ttl}
+	// Готовые файлы лежат в памяти (Data []byte), а уборка раньше происходила
+	// только при create/get: если к джобе никто не обращался, большой экспорт
+	// висел в RAM бессрочно. Фоновый sweeper снимает это ограничение.
+	interval := ttl / 3
+	if interval < time.Second {
+		interval = time.Second
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for range t.C {
+			s.mu.Lock()
+			s.cleanupLocked(time.Now())
+			s.mu.Unlock()
+		}
+	}()
+	return s
 }
 
 func (s *exportJobStore) create(owner, kind, name, format string) exportJob {
@@ -160,6 +177,15 @@ func (s *Server) reportExportJobStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) runReportExportJob(r *http.Request, jobID string, rep *reportpkg.Report, format string) {
+	// Горутина живёт вне HTTP-цепочки — chi Recoverer её не прикрывает, а
+	// внутри генерация Excel/PDF по произвольным данным. Без recover одна
+	// паника роняла весь процесс базы вместе со всеми сессиями.
+	defer func() {
+		if p := recover(); p != nil {
+			s.exportJobStore().markError(jobID, fmt.Sprintf("внутренняя ошибка выгрузки: %v", p))
+		}
+	}()
+
 	ctx, finish, ok := s.beginQueuedOperation(r, opReportExport, rep.Name)
 	if !ok {
 		msg := "слишком много одновременно выполняемых выгрузок, задача не дождалась свободного слота"
