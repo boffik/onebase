@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,9 +113,27 @@ func (r *Repo) LookupAPIToken(ctx context.Context, raw string) (*User, error) {
 		u.Roles = roles
 	}
 
+	r.touchAPIToken(ctx, tokenID, time.Now())
+	return u, nil
+}
+
+// apiTokenTouch троттлит запись last_used_at: интеграции ходят в REST с
+// высоким RPS, и UPDATE на каждый запрос давал бы постоянный writer-трафик
+// (актуально для SQLite). Тот же приём, что touchThrottle у сессий.
+var apiTokenTouch sync.Map // map[tokenID]time.Time
+
+const apiTokenTouchInterval = 5 * time.Minute
+
+// touchAPIToken обновляет last_used_at не чаще apiTokenTouchInterval.
+// now передаётся параметром ради детерминизма в тестах.
+func (r *Repo) touchAPIToken(ctx context.Context, tokenID string, now time.Time) {
+	if last, ok := apiTokenTouch.Load(tokenID); ok && now.Sub(last.(time.Time)) < apiTokenTouchInterval {
+		return
+	}
+	apiTokenTouch.Store(tokenID, now)
+	d := r.db.Dialect()
 	upd := fmt.Sprintf(`UPDATE _api_tokens SET last_used_at = %s WHERE id = %s`, d.Now(), d.Placeholder(1))
 	_, _ = r.db.Exec(ctx, upd, tokenID)
-	return u, nil
 }
 
 func (r *Repo) ListAPITokens(ctx context.Context) ([]*APIToken, error) {

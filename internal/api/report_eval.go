@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -49,13 +50,26 @@ func (e *reportEvaluator) compile(expr string) (*ast.ProcedureDecl, error) {
 	return proc, nil
 }
 
+// composeExprProfile ограничивает одну формулу композиции по времени и
+// итерациям: формула вычисляется на каждую строку отчёта и обязана быть
+// мгновенной. Без лимитов «Пока Истина Цикл» в формуле вешал хендлер навсегда
+// (ctx-таймаут интерпретатор не прерывает) и навечно занимал слот
+// concurrency-лимита отчётов. Запреты возможностей не включаем: формулы —
+// доверенный код конфигурации, как и запрос отчёта.
+func composeExprProfile() interpreter.SandboxProfile {
+	return interpreter.SandboxProfile{
+		MaxWallClock: 10 * time.Second,
+		MaxLoopIters: 1_000_000,
+	}
+}
+
 func (e *reportEvaluator) EvalBool(expr string, row compose.Row) (bool, error) {
 	proc, err := e.compile(expr)
 	if err != nil {
 		return false, err
 	}
-	var result any
-	if err := e.interp.RunWithResult(proc, &interpreter.MapThis{M: row}, &result, map[string]any(row)); err != nil {
+	result, err := e.interp.CallSandboxed(proc, &interpreter.MapThis{M: row}, nil, composeExprProfile(), map[string]any(row))
+	if err != nil {
 		if errors.Is(err, interpreter.ErrDivisionByZero) {
 			return false, nil
 		}
@@ -70,8 +84,8 @@ func (e *reportEvaluator) EvalNum(expr string, row compose.Row) (decimal.Decimal
 	if err != nil {
 		return decimal.Zero, false, err
 	}
-	var result any
-	if err := e.interp.RunWithResult(proc, &interpreter.MapThis{M: row}, &result, map[string]any(row)); err != nil {
+	result, err := e.interp.CallSandboxed(proc, &interpreter.MapThis{M: row}, nil, composeExprProfile(), map[string]any(row))
+	if err != nil {
 		if errors.Is(err, interpreter.ErrDivisionByZero) {
 			return decimal.Zero, false, nil
 		}
