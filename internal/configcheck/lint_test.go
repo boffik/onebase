@@ -289,6 +289,16 @@ params: []
 КонецФункции
 `)
 
+	plain := RunFull(dir)
+	if !plain.OK {
+		t.Fatalf("plain check should keep legacy cross-scope read non-blocking: %+v", plain.Issues)
+	}
+	for _, w := range plain.Warnings {
+		if w.Code == "dsl.cross-scope-read" {
+			t.Fatalf("plain RunFull unexpectedly returned cross-scope warning: %+v", w)
+		}
+	}
+
 	lint := RunFullWithOptions(dir, Options{Lint: true})
 	if !lint.OK {
 		t.Fatalf("lint should keep OK=true for warnings: %+v", lint.Issues)
@@ -307,6 +317,48 @@ params: []
 	}
 	if found.Line != 7 {
 		t.Errorf("expected warning at line 7 (Возврат Секрет), got %d", found.Line)
+	}
+}
+
+func TestStrictLexicalScopePromotesCrossScopeRead(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "config", "app.yaml"), `name: Test
+dsl:
+  strict_lexical_scope: true
+`)
+	mkFile(t, filepath.Join(dir, "processors", "касса.yaml"), `name: Касса
+params: []
+`)
+	mkFile(t, filepath.Join(dir, "src", "касса.proc.os"), `Процедура Выполнить() Экспорт
+  Секрет = 42;
+  Сообщить(ПрочитатьСекрет());
+КонецПроцедуры
+
+Функция ПрочитатьСекрет()
+  Возврат Секрет;
+КонецФункции
+`)
+
+	res := RunFullWithOptions(dir, Options{Lint: true})
+	if res.OK {
+		t.Fatalf("strict lexical scope should fail on cross-scope read")
+	}
+	var issue *Issue
+	for i := range res.Issues {
+		if res.Issues[i].Code == "dsl.cross-scope-read" {
+			issue = &res.Issues[i]
+		}
+	}
+	if issue == nil {
+		t.Fatalf("dsl.cross-scope-read issue not found; got %+v", res.Issues)
+	}
+	if !strings.Contains(issue.Message, "strict_lexical_scope") {
+		t.Fatalf("strict issue should mention strict mode: %+v", issue)
+	}
+	for _, w := range res.Warnings {
+		if w.Code == "dsl.cross-scope-read" {
+			t.Fatalf("strict + lint should not duplicate cross-scope warning: %+v", w)
+		}
 	}
 }
 
@@ -330,6 +382,36 @@ params: []
 	for _, w := range lint.Warnings {
 		if w.Code == "dsl.cross-scope-read" {
 			t.Fatalf("unexpected cross-scope-read for a parameter: %+v", w)
+		}
+	}
+}
+
+func TestStrictLexicalScopeParamIsClean(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "config", "app.yaml"), `name: Test
+dsl:
+  strict_lexical_scope: true
+`)
+	mkFile(t, filepath.Join(dir, "processors", "касса.yaml"), `name: Касса
+params: []
+`)
+	mkFile(t, filepath.Join(dir, "src", "касса.proc.os"), `Процедура Выполнить() Экспорт
+  Секрет = 42;
+  Сообщить(ПрочитатьСекрет(Секрет));
+КонецПроцедуры
+
+Функция ПрочитатьСекрет(Секрет)
+  Возврат Секрет;
+КонецФункции
+`)
+
+	res := RunFull(dir)
+	if !res.OK {
+		t.Fatalf("strict lexical scope should allow explicit parameter passing: %+v", res.Issues)
+	}
+	for _, is := range res.Issues {
+		if is.Code == "dsl.cross-scope-read" {
+			t.Fatalf("unexpected cross-scope-read issue: %+v", is)
 		}
 	}
 }

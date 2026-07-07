@@ -35,6 +35,7 @@ func RunFullWithOptions(dir string, opts Options) Result {
 	}
 
 	if proj, err := project.Load(dir); err == nil {
+		strictLexicalScope := strictLexicalScopeEnabled(dir)
 		issues = append(issues, CheckQueries(proj)...)
 		issues = append(issues, CheckReportComposition(proj)...)
 		issues = append(issues, CheckJournalConditional(proj)...)
@@ -47,8 +48,15 @@ func RunFullWithOptions(dir string, opts Options) Result {
 		issues = append(issues, CheckHTTPServices(proj)...)
 		issues = append(issues, CheckPages(proj)...)
 		issues = append(issues, CheckNameCollisions(proj)...)
+		if strictLexicalScope {
+			issues = append(issues, CheckStrictLexicalScope(dir, proj)...)
+		}
 		if opts.Lint {
-			warnings = append(warnings, CheckLintProject(dir, proj, roles)...)
+			lintWarnings := CheckLintProject(dir, proj, roles)
+			if strictLexicalScope {
+				lintWarnings = excludeIssueCode(lintWarnings, "dsl.cross-scope-read")
+			}
+			warnings = append(warnings, lintWarnings...)
 		}
 		if db, closeDB, derr := BuildSchemaDB(proj); derr == nil {
 			validate := func(sql string) error { return db.ValidateQuery(context.Background(), sql) }
@@ -64,6 +72,24 @@ func RunFullWithOptions(dir string, opts Options) Result {
 	}
 
 	return NewResult(issues, warnings)
+}
+
+func strictLexicalScopeEnabled(dir string) bool {
+	cfg, err := project.LoadConfig(dir)
+	return err == nil && cfg != nil && cfg.DSL != nil && cfg.DSL.StrictLexicalScope
+}
+
+func excludeIssueCode(in []Issue, code string) []Issue {
+	if len(in) == 0 {
+		return in
+	}
+	out := in[:0]
+	for _, is := range in {
+		if is.Code != code {
+			out = append(out, is)
+		}
+	}
+	return out
 }
 
 // BuildSchemaDB creates a temporary SQLite database with the schema described by

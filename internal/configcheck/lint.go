@@ -559,6 +559,22 @@ func CheckLintDSL(dir string, proj *project.Project) []Issue {
 	return issues
 }
 
+// CheckStrictLexicalScope reports DSL dependencies that are incompatible with
+// dsl.strict_lexical_scope. Unlike CheckLintDSL, these issues are blocking:
+// strict runtime will not expose caller-local variables to helper procedures.
+func CheckStrictLexicalScope(dir string, proj *project.Project) []Issue {
+	programs := collectLintPrograms(dir, proj)
+	var issues []Issue
+	for _, lp := range programs {
+		for _, is := range lintCrossScopeReads(lp) {
+			is.Message += "; при dsl.strict_lexical_scope: true это блокирующая ошибка"
+			is.SuggestedFix = "Передайте значение параметром/результатом функции или объявите переменную локально: строгий режим не даёт процедуре читать локальные переменные вызывающей."
+			issues = append(issues, is)
+		}
+	}
+	return issues
+}
+
 // commonDSLGlobals — инжектируемые объекты-значения, доступные в любом модуле без
 // объявления (dslvars.Common.Build + контекстные переменные форм/заданий). Они
 // читаются как значения, поэтому попадают в reads; исключаем, чтобы не спутать с
