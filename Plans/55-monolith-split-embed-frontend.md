@@ -1,6 +1,6 @@
 # План 55 — Раскол монолитов и фронт в go:embed
 
-**Статус:** 🟡 Этап 1 реализован (2026-06-10, ветка `refactor/split-ui-handlers`); этап 2 **Фаза 1** (конфигуратор на `html/template`, XSS-долг плана 47 §1.3 закрыт) — реализована 2026-06-19 (ветка `feature/55-configurator-htmltemplate`, см. `55-impl-htmltemplate-embed.md`); этап 2 **Фаза 2** (вынос CSS/JS конфигуратора в `/static` + go:embed, bootstrap `window.__cfg`/`__cfgI18n`) — реализована 2026-06-19 (`configurator_tmpl.go` 6726→2443 строк; `static/configurator.{css,js}`); этап 3 **Фаза 3a** (глобальные UI-скрипты из `tplHead` + общий reference picker в `/static/ui.js` через `go:embed`) — реализована 2026-07-07; этап 3 **Фаза 3b** (nav drawer/collapsible nav, dashboard/page/report charts через JSON bootstrap, runtime-настройки отчётов, сворачивание отчётов, dirty-watch формы и вложения) — реализована 2026-07-07; остаток этапа 3 — наиболее связанные inline-JS списков и `form-shared-js` (табличные части, richtext/image helpers, picker stopgap) отдельным безопасным заходом.
+**Статус:** 🟡 Этап 1 реализован (2026-06-10, ветка `refactor/split-ui-handlers`); этап 2 **Фаза 1** (конфигуратор на `html/template`, XSS-долг плана 47 §1.3 закрыт) — реализована 2026-06-19 (ветка `feature/55-configurator-htmltemplate`, см. `55-impl-htmltemplate-embed.md`); этап 2 **Фаза 2** (вынос CSS/JS конфигуратора в `/static` + go:embed, bootstrap `window.__cfg`/`__cfgI18n`) — реализована 2026-06-19 (`configurator_tmpl.go` 6726→2443 строк; `static/configurator.{css,js}`); этап 3 **Фаза 3a** (глобальные UI-скрипты из `tplHead` + общий reference picker в `/static/ui.js` через `go:embed`) — реализована 2026-07-07; этап 3 **Фаза 3b** (nav drawer/collapsible nav, dashboard/page/report charts через JSON bootstrap, runtime-настройки отчётов, сворачивание отчётов, dirty-watch формы и вложения) — реализована 2026-07-07; этап 3 **Фаза 3c** (`form-shared-js`: richtext/image/tablepart helpers/item picker + runtime списка: selection/context menu/tree lazy-load/feed) — реализована 2026-07-07; остаток этапа 3 — специализированные inline-блоки управляемых форм, журналов, query/dev tools и админок.
 
 > **Как реализовано (этап 1).** `ui/handlers.go` разнесён механически (as-is,
 > вместе с doc-комментариями) с 3908 до 660 строк: `handlers_entity.go` (CRUD
@@ -105,17 +105,19 @@ JSON через `template.JS(jsonBytes)` (как уже делается в `dev
 - из `tplHead` вынесены вкладочная shell-интеграция, AI-виджет, панель
   сообщений, PWA service-worker registration, `onebaseDevice` bridge и
   realtime/telephony toast listener;
-- верхний общий `ref-picker-js` также вынесен в `/static/ui.js`; form-shared-js
-  пока оставляет свою локальную копию, как и до рефакторинга, чтобы не менять
-  поведение форм;
+- верхний общий `ref-picker-js` также вынесен в `/static/ui.js`;
 - следующим срезом вынесены drawer навигации, сохранение раскрытых разделов
   меню, графики главной/страниц/отчётов через `<script type="application/json">`,
   runtime-настройки отчётов, сворачивание блоков отчёта, dirty-watch обычной
   формы и панель вложений через `data-attachments-url`;
-- оставшиеся inline-блоки в `templates.go` зависят от Go-template данных и
-  активной формы (`form-shared-js`, логика списков, часть админ/журналов).
+- следующим срезом вынесены `form-shared-js` и runtime списка: richtext init,
+  image upload/clear, добавление строк табличных частей, пересчёт итогов,
+  item picker, selection/context menu, tree lazy-load и feed infinite scroll;
+  шаблон оставляет только JSON bootstrap (`ob-tp-ref-*`, `ob-list-config`);
+- оставшиеся inline-блоки в `templates.go` и соседних UI-шаблонах
+  специализированы под управляемые формы, журналы, query/dev tools и админки.
   Их нужно выносить отдельными PR через явный bootstrap JSON и браузерную
-  проверку форм/списков, а не механическим копированием.
+  проверку конкретных экранов, а не механическим копированием.
 
 ---
 

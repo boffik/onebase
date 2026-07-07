@@ -450,6 +450,362 @@ obReady(function () {
   obInitReportBlocks();
 });
 
+var _listSel = null;
+
+function obListConfig() {
+  return obReadJSONScript('ob-list-config', { labels: {} }) || { labels: {} };
+}
+
+function obListLabel(key, fallback) {
+  var labels = obListConfig().labels || {};
+  return labels[key] || fallback;
+}
+
+function listTitle() {
+  var h = document.querySelector('h2');
+  return h ? h.textContent.replace(/\s+/g, ' ').trim() : 'Форма';
+}
+
+function listOpen(url, title) {
+  if (!url) return;
+  try {
+    if (window.obOpenInShell && window.obOpenInShell(url, title || listTitle())) return;
+  } catch (e) {}
+  window.location.href = url;
+}
+
+function listRowClick(e, tr) {
+  if (e.target.closest('a,button')) return;
+  if (_listSel) {
+    _listSel.querySelectorAll('td').forEach(function (td) { td.style.background = ''; });
+    _listSel.classList.remove('tile-selected');
+  }
+  _listSel = tr;
+  tr.querySelectorAll('td').forEach(function (td) { td.style.background = '#dbeafe'; });
+  tr.classList.add('tile-selected');
+}
+
+function listRowDblClick(e, tr) {
+  if (e.target.closest('a,button')) return;
+  if (tr.dataset.isFolder === '1') window.location.href = tr.dataset.folderUrl;
+  else listOpen(tr.dataset.openUrl);
+}
+
+function initTreeToggle(btn) {
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleTreeNode(btn);
+  });
+}
+
+function toggleTreeNode(btn) {
+  var tr = btn.closest('tr');
+  var fid = btn.dataset.folderId;
+  var expanded = btn.getAttribute('data-expanded') === '1';
+  if (expanded) {
+    treeSetVisible(fid, false);
+    btn.setAttribute('data-expanded', '0');
+    btn.textContent = '▶';
+    return;
+  }
+  if (btn.getAttribute('data-loaded') === '1') {
+    treeSetVisible(fid, true);
+    btn.setAttribute('data-expanded', '1');
+    btn.textContent = '▼';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '…';
+  var cfg = obListConfig();
+  var depth = (tr && tr.dataset.treeDepth) || '0';
+  var url = '/ui/_tree-children/' + encodeURIComponent(cfg.treeEntity || '') + '?parent=' + encodeURIComponent(fid) + '&depth=' + encodeURIComponent(depth);
+  if (cfg.subsystem) url += '&subsystem=' + encodeURIComponent(cfg.subsystem);
+  fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+    .then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.json();
+    })
+    .then(function (data) {
+      var rows = (data && data.rows) || [];
+      insertTreeRows(tr, rows);
+      btn.setAttribute('data-loaded', '1');
+      btn.setAttribute('data-expanded', '1');
+      btn.textContent = rows.length ? '▼' : '•';
+    })
+    .catch(function () {
+      btn.textContent = '▶';
+    })
+    .finally(function () { btn.disabled = false; });
+}
+
+function treeSetVisible(parentId, visible) {
+  document.querySelectorAll('[data-tree-parent="' + parentId + '"]').forEach(function (row) {
+    row.style.display = visible ? '' : 'none';
+    var childId = row.dataset.treeId;
+    if (childId) {
+      treeSetVisible(childId, visible && row.dataset.isFolder !== '1' || row.querySelector('.tree-toggle[data-expanded="1"]') !== null);
+    }
+  });
+}
+
+function insertTreeRows(parentTr, rows) {
+  if (!parentTr || !rows.length) return;
+  var tbody = parentTr.parentNode;
+  var parentDepth = parseInt(parentTr.dataset.treeDepth || '0', 10);
+  var before = parentTr.nextElementSibling;
+  while (before && parseInt(before.dataset.treeDepth || '0', 10) > parentDepth) before = before.nextElementSibling;
+  rows.forEach(function (row) {
+    var tr = makeTreeRow(row);
+    tbody.insertBefore(tr, before);
+  });
+}
+
+function makeTreeRow(row) {
+  var tr = document.createElement('tr');
+  tr.style.cursor = 'pointer';
+  if (row.marked) {
+    tr.style.opacity = '0.45';
+    tr.style.textDecoration = 'line-through';
+  }
+  tr.dataset.treeId = row.id || '';
+  tr.dataset.treeDepth = String(row.depth || 0);
+  tr.dataset.treeParent = row.parent_id || '';
+  tr.dataset.predefined = row.predefined ? '1' : '';
+  tr.dataset.isFolder = row.is_folder ? '1' : '';
+  tr.dataset.folderUrl = row.folder_url || '';
+  tr.dataset.markUrl = row.mark_url || '';
+  tr.dataset.delUrl = row.delete_url || '';
+  tr.dataset.posted = row.posted ? '1' : '';
+  tr.dataset.marked = row.marked ? '1' : '';
+  tr.dataset.unpostUrl = row.unpost_url || '';
+  tr.dataset.unmarkUrl = row.unmark_url || '';
+  tr.dataset.activityEnabled = row.activity_enabled ? '1' : '';
+  tr.dataset.activityInactive = row.activity_inactive ? '1' : '';
+  tr.dataset.activityHideUrl = row.activity_hide_url || '';
+  tr.dataset.activityShowUrl = row.activity_show_url || '';
+  tr.dataset.openUrl = row.open_url || '';
+  tr.onclick = function (e) { listRowClick(e, tr); };
+  tr.ondblclick = function (e) { listRowDblClick(e, tr); };
+  tr.oncontextmenu = function (e) { listCtxMenu(e, tr); };
+  var cells = row.cells || [];
+  var treeCell = row.tree_cell || 0;
+  for (var i = 0; i < cells.length; i++) {
+    var td = document.createElement('td');
+    if (i === treeCell) {
+      var indent = document.createElement('span');
+      indent.style.display = 'inline-block';
+      indent.style.width = ((row.depth || 0) * 20) + 'px';
+      td.appendChild(indent);
+      if (row.is_folder) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tree-toggle';
+        btn.setAttribute('data-folder-id', row.id || '');
+        btn.setAttribute('data-expanded', '0');
+        btn.setAttribute('data-loaded', '0');
+        btn.title = obListLabel('collapseExpand', 'Свернуть/Развернуть');
+        btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px';
+        btn.textContent = '▶';
+        initTreeToggle(btn);
+        td.appendChild(btn);
+        td.appendChild(document.createTextNode(' 📁 '));
+      } else {
+        td.appendChild(document.createTextNode('📄 '));
+      }
+      td.appendChild(document.createTextNode(cells[i] || ''));
+      if (row.predefined) {
+        var star = document.createElement('span');
+        star.title = obListLabel('predefined', 'Предопределённый');
+        star.style.cssText = 'color:#f59e0b;font-size:11px';
+        star.textContent = ' ★';
+        td.appendChild(star);
+      }
+    } else {
+      td.textContent = cells[i] || '';
+    }
+    tr.appendChild(td);
+  }
+  var action = document.createElement('td');
+  var a = document.createElement('a');
+  a.className = row.is_folder ? 'btn btn-sm btn-secondary' : 'btn btn-sm btn-primary';
+  a.href = row.is_folder ? (row.folder_url || '#') : (row.open_url || '#');
+  a.textContent = row.is_folder ? obListLabel('enter', '▶ Войти') : obListLabel('open', 'Открыть');
+  action.appendChild(a);
+  tr.appendChild(action);
+  return tr;
+}
+
+function listMenuItems(tr) {
+  var cfg = obListConfig();
+  var labels = cfg.labels || {};
+  var isPredefined = tr.dataset.predefined === '1';
+  var isFolder = tr.dataset.isFolder === '1';
+  var items = [];
+  if (isFolder) {
+    items.push({ label: labels.enterGroup || '▶ Войти в группу', fn: function () { window.location.href = tr.dataset.folderUrl; } });
+    items.push({ label: labels.edit || 'Редактировать', fn: function () { listOpen(tr.dataset.openUrl); } });
+  } else {
+    items.push({ label: labels.open || 'Открыть', fn: function () { listOpen(tr.dataset.openUrl); } });
+  }
+  if (cfg.canWrite && tr.dataset.activityEnabled === '1') {
+    if (tr.dataset.activityInactive === '1') {
+      items.push({ label: labels.activityShow || 'Вернуть в выбор', fn: function () { listSubmit(tr.dataset.activityShowUrl, labels.activityShowConfirm || 'Вернуть в выбор?'); } });
+    } else {
+      items.push({ label: labels.activityHide || 'Скрыть из выбора', fn: function () { listSubmit(tr.dataset.activityHideUrl, labels.activityHideConfirm || 'Скрыть из выбора?'); } });
+    }
+  }
+  if (cfg.canDelete) {
+    if (!isPredefined) {
+      items.push({ label: labels.markDelete || 'Пометить на удаление', danger: true, fn: function () { listSubmit(tr.dataset.markUrl, labels.markDeleteConfirm || 'Пометить на удаление?'); } });
+    } else {
+      items.push({ label: labels.predefinedNoDelete || 'Предопределённый — нельзя удалить', disabled: true });
+    }
+  }
+  if (cfg.canUnpost && tr.dataset.posted === '1') {
+    items.push({ label: labels.unpost || 'Отменить проведение', fn: function () { listSubmit(tr.dataset.unpostUrl, labels.unpostConfirm || 'Отменить проведение?'); } });
+  }
+  if (cfg.canDelete && tr.dataset.marked === '1' && !isPredefined) {
+    items.push({ label: labels.unmarkDelete || 'Снять пометку на удаление', fn: function () { listSubmit(tr.dataset.unmarkUrl, labels.unmarkDeleteConfirm || 'Снять пометку на удаление?'); } });
+  }
+  if (cfg.isAdmin && !isPredefined) {
+    items.push({ label: labels.deleteForever || 'Удалить навсегда', danger: true, fn: function () { listSubmit(tr.dataset.delUrl, labels.deleteForeverConfirm || 'Удалить запись навсегда?'); } });
+  }
+  return items;
+}
+
+function showListMenu(items, x, y) {
+  var old = document.getElementById('_lctx');
+  if (old) old.remove();
+  var m = document.createElement('div');
+  m.id = '_lctx';
+  m.style.cssText = 'position:fixed;z-index:999;background:#fff;border:1px solid #c8d0de;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:190px;font-size:13px';
+  m.style.left = x + 'px';
+  m.style.top = y + 'px';
+  items.forEach(function (item) {
+    var mi = document.createElement('div');
+    mi.textContent = item.label;
+    if (item.disabled) {
+      mi.style.cssText = 'padding:8px 14px;color:#94a3b8;cursor:default;font-style:italic';
+    } else {
+      mi.style.cssText = 'padding:8px 14px;cursor:pointer' + (item.danger ? ';color:#dc2626' : '');
+      mi.onmouseenter = function () { mi.style.background = '#f8fafc'; };
+      mi.onmouseleave = function () { mi.style.background = ''; };
+      mi.onclick = function () { m.remove(); item.fn(); };
+    }
+    m.appendChild(mi);
+  });
+  document.body.appendChild(m);
+  setTimeout(function () {
+    document.addEventListener('click', function h() {
+      m.remove();
+      document.removeEventListener('click', h);
+    }, { once: true });
+  }, 0);
+}
+
+function listCtxMenu(e, tr) {
+  if (e.target.closest('a,button')) return;
+  e.preventDefault();
+  listRowClick(e, tr);
+  showListMenu(listMenuItems(tr), e.clientX, e.clientY);
+}
+
+function listActionsBtnClick(e) {
+  e.preventDefault();
+  if (!_listSel) {
+    alert(obListLabel('selectRowFirst', 'Сначала выберите строку списка'));
+    return;
+  }
+  var r = e.currentTarget.getBoundingClientRect();
+  showListMenu(listMenuItems(_listSel), r.left, r.bottom);
+}
+
+function listSubmit(url, msg) {
+  if (!url) return;
+  if (confirm(msg)) {
+    var f = document.createElement('form');
+    f.method = 'POST';
+    f.action = url;
+    document.body.appendChild(f);
+    f.submit();
+  }
+}
+
+function obInitFeed() {
+  var more = document.getElementById('feed-more');
+  if (!more) return;
+  var loading = false;
+  var done = false;
+  function stop() {
+    done = true;
+    if (more && more.parentNode) more.parentNode.removeChild(more);
+  }
+  function loadNext() {
+    if (loading || done) return;
+    var n = parseInt(more.getAttribute('data-next'), 10);
+    var pages = parseInt(more.getAttribute('data-pages'), 10);
+    if (!n || n > pages) {
+      stop();
+      return;
+    }
+    var sel = more.getAttribute('data-container');
+    var c = document.querySelector(sel);
+    if (!c) {
+      stop();
+      return;
+    }
+    loading = true;
+    var sp = new URLSearchParams(window.location.search);
+    sp.set('page', n);
+    sp.set('lm', 'feed');
+    fetch(window.location.pathname + '?' + sp.toString(), { credentials: 'same-origin' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var items = doc.querySelectorAll(sel + ' > ' + more.getAttribute('data-item'));
+        if (!items.length) {
+          stop();
+          return;
+        }
+        items.forEach(function (el) { c.appendChild(document.importNode(el, true)); });
+        var loaded = document.getElementById('feed-loaded');
+        if (loaded) loaded.textContent = c.children.length;
+        n++;
+        more.setAttribute('data-next', n);
+        loading = false;
+        if (n > pages) {
+          stop();
+          return;
+        }
+        var rect = more.getBoundingClientRect();
+        if (rect.top < (window.innerHeight || document.documentElement.clientHeight) + 300) loadNext();
+      })
+      .catch(function () { loading = false; });
+  }
+  more.addEventListener('click', function (e) {
+    var a = e.target.closest('a');
+    if (a) {
+      e.preventDefault();
+      loadNext();
+    }
+  });
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (ents) {
+      ents.forEach(function (en) { if (en.isIntersecting) loadNext(); });
+    }, { rootMargin: '300px' }).observe(more);
+  }
+}
+
+obReady(function () {
+  document.querySelectorAll('.tree-toggle').forEach(initTreeToggle);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Delete' && _listSel && obListConfig().canDelete) {
+      listSubmit(_listSel.dataset.markUrl, obListLabel('markDeleteConfirm', 'Пометить на удаление?'));
+    }
+  });
+  obInitFeed();
+});
+
 (function () {
   if (window.__obAiInit) return;
   window.__obAiInit = true;
@@ -642,6 +998,481 @@ obReady(function () {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
+
+function obInitRichText() {
+  if (typeof Quill === 'undefined') return;
+  var fields = document.querySelectorAll('textarea.richtext-field');
+  fields.forEach(function (ta) {
+    var holder = ta.nextElementSibling;
+    if (!holder || !holder.classList || !holder.classList.contains('richtext-editor')) return;
+    if (holder.getAttribute('data-ql-ready') === '1') return;
+    holder.setAttribute('data-ql-ready', '1');
+    var q = new Quill(holder, {
+      theme: 'snow',
+      modules: { toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['blockquote', 'link', 'image'],
+        ['clean']
+      ] }
+    });
+    q.setContents(q.clipboard.convert({ html: ta.value }), 'silent');
+    ta.style.display = 'none';
+    function normalizeLists(html) {
+      var box = document.createElement('div');
+      box.innerHTML = html;
+      box.querySelectorAll('ol').forEach(function (ol) {
+        var items = Array.prototype.slice.call(ol.children).filter(function (el) {
+          return el.tagName === 'LI';
+        });
+        if (!items.length) return;
+        var isBullet = items[0].getAttribute('data-list') === 'bullet';
+        if (isBullet) {
+          var ul = document.createElement('ul');
+          while (ol.firstChild) ul.appendChild(ol.firstChild);
+          ol.parentNode.replaceChild(ul, ol);
+        }
+      });
+      box.querySelectorAll('li[data-list]').forEach(function (li) { li.removeAttribute('data-list'); });
+      box.querySelectorAll('.ql-ui').forEach(function (n) { n.remove(); });
+      return box.innerHTML;
+    }
+    function sync() { ta.value = normalizeLists(q.root.innerHTML); }
+    q.on('text-change', sync);
+    var form = ta.form;
+    if (form) form.addEventListener('submit', sync);
+  });
+}
+obReady(obInitRichText);
+
+function obImageUpload(input, url) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var wrap = input.closest('.img-field');
+  var fd = new FormData();
+  fd.append('file', file);
+  fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function (resp) {
+      if (!resp.ok) {
+        return resp.text().then(function (t) { throw new Error(t || ('HTTP ' + resp.status)); });
+      }
+      return resp.json();
+    })
+    .then(function (data) {
+      if (!wrap || !data || !data.ref) return;
+      wrap.querySelector('input[type=hidden]').value = data.ref;
+      var prev = wrap.querySelector('.img-preview');
+      if (prev) {
+        var img = prev.querySelector('img');
+        if (img) img.src = '/ui/_image/' + data.ref;
+        prev.style.display = '';
+      }
+      var clr = wrap.querySelector('.img-clear-btn');
+      if (clr) clr.style.display = '';
+    })
+    .catch(function (e) { alert('Ошибка загрузки картинки: ' + e.message); })
+    .finally(function () { input.value = ''; });
+}
+
+function obImageClear(btn) {
+  var wrap = btn.closest('.img-field');
+  if (!wrap) return;
+  var hidden = wrap.querySelector('input[type=hidden]');
+  if (hidden) hidden.value = '';
+  var prev = wrap.querySelector('.img-preview');
+  if (prev) {
+    prev.style.display = 'none';
+    var img = prev.querySelector('img');
+    if (img) img.removeAttribute('src');
+  }
+  btn.style.display = 'none';
+}
+
+function obTPRefOpts() {
+  if (!window._tpRefOpts) window._tpRefOpts = obReadJSONScript('ob-tp-ref-opts', {});
+  return window._tpRefOpts || {};
+}
+
+function obTPRefMeta() {
+  if (!window._tpRefMeta) window._tpRefMeta = obReadJSONScript('ob-tp-ref-meta', {});
+  return window._tpRefMeta || {};
+}
+
+function addTpRow(tpName, fields, numFields, idx) {
+  var tbody = document.getElementById('tp-body-' + tpName);
+  var tr = document.createElement('tr');
+  var refOpts = (obTPRefOpts()[tpName]) || {};
+  var refMeta = (obTPRefMeta()[tpName]) || {};
+  if (tbody && tbody.getAttribute('data-tp-cmd') === '1') {
+    var tdSel = document.createElement('td');
+    tdSel.style.textAlign = 'center';
+    var cbSel = document.createElement('input');
+    cbSel.type = 'checkbox';
+    cbSel.className = '_tp-sel';
+    tdSel.appendChild(cbSel);
+    tr.appendChild(tdSel);
+  }
+  fields.forEach(function (fn) {
+    var td = document.createElement('td');
+    if (refOpts[fn] !== undefined) {
+      var wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex;gap:4px;align-items:center';
+      var sel = document.createElement('select');
+      sel.name = 'tp.' + tpName + '.' + idx + '.' + fn;
+      sel.style.flex = '1';
+      var meta = refMeta[fn];
+      if (meta && meta.entity) {
+        sel.setAttribute('data-ref-entity', meta.entity);
+        if (meta.allowCreate) sel.setAttribute('data-ref-allow-create', '1');
+      }
+      var defOpt = document.createElement('option');
+      defOpt.value = '';
+      defOpt.textContent = '— выбрать —';
+      sel.appendChild(defOpt);
+      (refOpts[fn] || []).forEach(function (opt) {
+        var o = document.createElement('option');
+        o.value = opt.id;
+        o.textContent = opt._label || opt.id;
+        sel.appendChild(o);
+      });
+      var pickBtn = document.createElement('button');
+      pickBtn.type = 'button';
+      pickBtn.textContent = '...';
+      pickBtn.title = 'Выбрать из списка';
+      pickBtn.style.cssText = 'padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0';
+      pickBtn.onclick = function () { openRefPicker(sel); };
+      wrapper.appendChild(sel);
+      wrapper.appendChild(pickBtn);
+      if (meta && meta.entity) {
+        var openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.textContent = '🔍';
+        openBtn.title = 'Открыть карточку';
+        openBtn.style.cssText = 'padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0';
+        openBtn.onclick = function () { openRefCurrent(sel); };
+        wrapper.appendChild(openBtn);
+      }
+      td.appendChild(wrapper);
+    } else {
+      var inp = document.createElement('input');
+      inp.name = 'tp.' + tpName + '.' + idx + '.' + fn;
+      if (numFields.indexOf(fn) !== -1) {
+        inp.type = 'number';
+        inp.setAttribute('data-tp-num', fn);
+        inp.setAttribute('oninput', 'recalcTpRow(this)');
+      } else {
+        inp.type = 'text';
+      }
+      td.appendChild(inp);
+    }
+    tr.appendChild(td);
+  });
+  var tdDel = document.createElement('td');
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'del-btn';
+  btn.textContent = '×';
+  btn.onclick = function () { tr.remove(); };
+  tdDel.appendChild(btn);
+  tr.appendChild(tdDel);
+  tbody.appendChild(tr);
+}
+
+function recalcTpRow(inp) {
+  var tr = inp.closest('tr');
+  var nums = tr.querySelectorAll('[data-tp-num]');
+  if (nums.length === 3) {
+    var a = parseFloat(nums[0].value) || 0;
+    var b = parseFloat(nums[1].value) || 0;
+    nums[2].value = (a * b).toFixed(2);
+  }
+  recalcTpTotals(inp);
+}
+
+function recalcTpTotals(inp) {
+  var tbody = inp.closest('tbody');
+  if (!tbody) return;
+  var table = tbody.closest('table');
+  if (!table) return;
+  var tfoot = table.querySelector('tfoot');
+  if (!tfoot) return;
+  var totals = {};
+  var numFields = [];
+  tbody.querySelectorAll('[data-tp-num]').forEach(function (el) {
+    var fn = el.getAttribute('data-tp-num');
+    if (totals[fn] === undefined) {
+      totals[fn] = 0;
+      numFields.push(fn);
+    }
+    totals[fn] += parseFloat(el.value) || 0;
+  });
+  var hasData = false;
+  numFields.forEach(function (fn) {
+    tfoot.querySelectorAll('[data-tp-total]').forEach(function (cell) {
+      var key = cell.getAttribute('data-tp-total');
+      if (key && key.split('.').pop() === fn) {
+        cell.textContent = totals[fn].toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      }
+    });
+    if (totals[fn] !== 0) hasData = true;
+  });
+  tfoot.style.display = hasData ? '' : 'none';
+}
+
+obReady(function () {
+  document.querySelectorAll('.tp-table tfoot').forEach(function (tfoot) {
+    var table = tfoot.closest('table');
+    if (!table) return;
+    var tbody = table.querySelector('tbody');
+    if (!tbody || !tbody.rows.length) return;
+    var firstNum = tbody.querySelector('[data-tp-num]');
+    if (firstNum) recalcTpTotals(firstNum);
+  });
+});
+
+function openItemPicker(payload, elementName) {
+  if (!payload) return;
+  var cols = payload.columns || [];
+  var rows = payload.rows || [];
+  var cfg = payload.config || {};
+  var old = document.getElementById('_item-picker-modal');
+  if (old) old.remove();
+  var modal = document.createElement('div');
+  modal.id = '_item-picker-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:10px;padding:20px;width:720px;max-width:96vw;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18)';
+  var head = document.createElement('div');
+  head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;font-size:15px;color:#1e293b';
+  title.textContent = cfg.title || 'Подбор';
+  var counter = document.createElement('div');
+  counter.style.cssText = 'font-size:12px;color:#64748b';
+  head.appendChild(title);
+  head.appendChild(counter);
+  box.appendChild(head);
+  var search = document.createElement('input');
+  search.type = 'text';
+  search.placeholder = 'Поиск...';
+  search.autocomplete = 'off';
+  search.style.cssText = 'padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;margin-bottom:10px;outline:none';
+  box.appendChild(search);
+  var scroll = document.createElement('div');
+  scroll.style.cssText = 'overflow:auto;flex:1;min-height:120px;border:1px solid #e2e8f0;border-radius:7px';
+  var table = document.createElement('table');
+  table.className = 'tp-table';
+  table.style.cssText = 'width:100%;font-size:13px;margin:0';
+  var thead = document.createElement('thead');
+  var htr = document.createElement('tr');
+  var thCb = document.createElement('th');
+  thCb.style.width = '34px';
+  var cbAll = document.createElement('input');
+  cbAll.type = 'checkbox';
+  thCb.appendChild(cbAll);
+  htr.appendChild(thCb);
+  cols.forEach(function (c) {
+    var th = document.createElement('th');
+    th.textContent = c.title || c.name;
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr);
+  table.appendChild(thead);
+  var tbody = document.createElement('tbody');
+  function rowText(r) {
+    return cols.map(function (c) {
+      var v = (r.data || {})[c.name];
+      return v == null ? '' : String(v);
+    }).join(' ').toLowerCase();
+  }
+  rows.forEach(function (r) {
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-id', r.id || '');
+    tr.setAttribute('data-search', rowText(r));
+    var tdCb = document.createElement('td');
+    tdCb.style.textAlign = 'center';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = '_ip-cb';
+    if (cfg.checkAll) cb.checked = true;
+    cb.onchange = updateCounter;
+    tdCb.appendChild(cb);
+    tr.appendChild(tdCb);
+    cols.forEach(function (c) {
+      var td = document.createElement('td');
+      var v = (r.data || {})[c.name];
+      if (c.editable) {
+        var inp = document.createElement('input');
+        inp.type = (c.type === 'number') ? 'number' : 'text';
+        if (c.type === 'number') inp.step = 'any';
+        inp.value = (v == null ? '' : v);
+        inp.className = '_ip-val';
+        inp.setAttribute('data-col', c.name);
+        inp.style.cssText = 'width:90px;padding:3px 6px';
+        td.appendChild(inp);
+      } else {
+        td.textContent = (v == null ? '' : String(v));
+        td.setAttribute('data-col', c.name);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tbody.addEventListener('input', function (e) {
+    var inp = e.target;
+    if (!inp.classList.contains('_ip-val')) return;
+    if (cfg.qtyField && inp.getAttribute('data-col') !== cfg.qtyField) return;
+    var tr = inp.closest('tr');
+    if (!tr) return;
+    var cb = tr.querySelector('._ip-cb');
+    if (!cb) return;
+    var val = parseFloat(inp.value);
+    cb.checked = (!isNaN(val) && val > 0);
+    updateCounter();
+    updateBasket();
+  });
+  table.appendChild(tbody);
+  scroll.appendChild(table);
+  box.appendChild(scroll);
+  var displayCol = null;
+  for (var ci = 0; ci < cols.length; ci++) {
+    if (cols[ci].name !== cfg.qtyField) {
+      displayCol = cols[ci];
+      break;
+    }
+  }
+  var qtyCol = null;
+  for (var qi = 0; qi < cols.length; qi++) {
+    if (cols[qi].name === cfg.qtyField) {
+      qtyCol = cols[qi];
+      break;
+    }
+  }
+  var basketHead = document.createElement('div');
+  basketHead.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:6px 10px;background:#f1f5f9;border-radius:7px;cursor:pointer;user-select:none;font-weight:600;font-size:13px;color:#334155';
+  var basketTitle = document.createElement('span');
+  basketTitle.textContent = 'Корзина';
+  var basketBadge = document.createElement('span');
+  basketBadge.style.cssText = 'font-size:12px;color:#64748b;font-weight:400';
+  basketHead.appendChild(basketTitle);
+  basketHead.appendChild(basketBadge);
+  box.appendChild(basketHead);
+  var basketScroll = document.createElement('div');
+  basketScroll.style.cssText = 'overflow:auto;max-height:180px;margin-top:4px;border:1px solid #e2e8f0;border-radius:7px;display:none';
+  var basketTable = document.createElement('table');
+  basketTable.className = 'tp-table';
+  basketTable.style.cssText = 'width:100%;font-size:13px;margin:0';
+  var bThead = document.createElement('thead');
+  var bHtr = document.createElement('tr');
+  var bTh1 = document.createElement('th');
+  bTh1.textContent = displayCol ? (displayCol.title || displayCol.name) : 'Номенклатура';
+  bHtr.appendChild(bTh1);
+  var bTh2 = document.createElement('th');
+  bTh2.style.cssText = 'width:90px;text-align:right';
+  bTh2.textContent = qtyCol ? (qtyCol.title || qtyCol.name) : 'Кол-во';
+  bHtr.appendChild(bTh2);
+  bThead.appendChild(bHtr);
+  basketTable.appendChild(bThead);
+  var bTbody = document.createElement('tbody');
+  basketTable.appendChild(bTbody);
+  basketScroll.appendChild(basketTable);
+  box.appendChild(basketScroll);
+  basketHead.addEventListener('click', function () {
+    basketScroll.style.display = basketScroll.style.display === 'none' ? '' : 'none';
+  });
+  var foot = document.createElement('div');
+  foot.style.cssText = 'margin-top:12px;display:flex;justify-content:flex-end;gap:8px';
+  var btnCancel = document.createElement('button');
+  btnCancel.type = 'button';
+  btnCancel.textContent = 'Отмена';
+  btnCancel.style.cssText = 'padding:7px 18px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px';
+  var btnOk = document.createElement('button');
+  btnOk.type = 'button';
+  btnOk.textContent = 'Перенести в документ';
+  btnOk.style.cssText = 'padding:7px 18px;border:1px solid #2563eb;border-radius:7px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px;font-weight:600';
+  foot.appendChild(btnCancel);
+  foot.appendChild(btnOk);
+  box.appendChild(foot);
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+  function checkedRows() {
+    return Array.prototype.slice.call(tbody.querySelectorAll('._ip-cb')).filter(function (cb) {
+      return cb.checked && cb.closest('tr').style.display !== 'none';
+    });
+  }
+  function updateCounter() { counter.textContent = 'Выбрано: ' + checkedRows().length; }
+  function updateBasket() {
+    bTbody.innerHTML = '';
+    var cnt = 0;
+    if (!cfg.qtyField) return;
+    Array.prototype.forEach.call(tbody.rows, function (tr) {
+      if (tr.style.display === 'none') return;
+      var inp = tr.querySelector('._ip-val[data-col="' + cfg.qtyField + '"]');
+      if (!inp) return;
+      var val = parseFloat(inp.value);
+      if (isNaN(val) || val <= 0) return;
+      cnt++;
+      var bTr = document.createElement('tr');
+      var tdName = document.createElement('td');
+      if (displayCol) {
+        var srcTd = tr.querySelector('td[data-col="' + displayCol.name + '"]');
+        tdName.textContent = srcTd ? srcTd.textContent : '';
+      }
+      var tdQty = document.createElement('td');
+      tdQty.style.cssText = 'text-align:right;font-weight:600';
+      tdQty.textContent = inp.value;
+      bTr.appendChild(tdName);
+      bTr.appendChild(tdQty);
+      bTbody.appendChild(bTr);
+    });
+    basketBadge.textContent = cnt > 0 ? (cnt + ' поз.') : 'пусто';
+    if (cnt > 0 && basketScroll.style.display === 'none') basketScroll.style.display = '';
+    if (cnt === 0) basketScroll.style.display = 'none';
+  }
+  updateCounter();
+  updateBasket();
+  search.focus();
+  search.addEventListener('input', function () {
+    var q = this.value.toLowerCase();
+    Array.prototype.forEach.call(tbody.rows, function (tr) {
+      tr.style.display = (tr.getAttribute('data-search') || '').indexOf(q) >= 0 ? '' : 'none';
+    });
+    updateCounter();
+    updateBasket();
+  });
+  cbAll.addEventListener('change', function () {
+    Array.prototype.forEach.call(tbody.rows, function (tr) {
+      if (tr.style.display === 'none') return;
+      var cb = tr.querySelector('._ip-cb');
+      if (cb) cb.checked = cbAll.checked;
+    });
+    updateCounter();
+    updateBasket();
+  });
+  btnCancel.addEventListener('click', function () { modal.remove(); });
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.remove(); });
+  btnOk.addEventListener('click', function () {
+    var result = checkedRows().map(function (cb) {
+      var tr = cb.closest('tr');
+      var obj = { id: tr.getAttribute('data-id') };
+      cols.forEach(function (c) {
+        if (c.editable) {
+          var inp = tr.querySelector('._ip-val[data-col="' + c.name + '"]');
+          obj[c.name] = inp ? inp.value : '';
+        } else {
+          var td = tr.querySelector('td[data-col="' + c.name + '"]');
+          obj[c.name] = td ? td.textContent : '';
+        }
+      });
+      return obj;
+    });
+    modal.remove();
+    if (typeof obFire === 'function') {
+      obFire(elementName, 'Выбор', { _pick_result: JSON.stringify(result) });
+    }
   });
 }
 

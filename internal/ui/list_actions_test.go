@@ -11,8 +11,7 @@ import (
 
 // TestPageList_HasActionsButton — smoke-тест плана 41: страница списка
 // рендерится и содержит кнопку «Действия» на панели (id="list-actions-btn"),
-// а вспомогательные JS-функции listMenuItems/showListMenu определены ровно
-// один раз (контекстное меню и кнопка делят один источник пунктов).
+// а JS-runtime списка живёт в /static/ui.js и читает JSON-конфиг страницы.
 func TestPageList_HasActionsButton(t *testing.T) {
 	ent := &metadata.Entity{
 		Name: "Контрагент",
@@ -51,12 +50,17 @@ func TestPageList_HasActionsButton(t *testing.T) {
 		t.Error("на панели списка нет кнопки «Действия» (id=list-actions-btn)")
 	}
 
-	// listMenuItems — единый источник пунктов; должен быть объявлен ровно один раз.
-	if n := strings.Count(html, "function listMenuItems"); n != 1 {
-		t.Errorf("function listMenuItems объявлена %d раз(а), ожидалось 1", n)
+	if !strings.Contains(html, `id="ob-list-config"`) {
+		t.Error("список не содержит JSON-конфиг ob-list-config")
 	}
-	if !strings.Contains(html, "function showListMenu") {
-		t.Error("не найдена функция showListMenu — рендер меню не вынесен")
+	if strings.Contains(html, "function listMenuItems") || strings.Contains(html, "function showListMenu") {
+		t.Error("runtime списка должен жить в /static/ui.js, а не в HTML")
+	}
+	js := string(uiJS)
+	for _, want := range []string{"function listMenuItems", "function showListMenu", "function listActionsBtnClick"} {
+		if !strings.Contains(js, want) {
+			t.Errorf("/static/ui.js не содержит %q", want)
+		}
 	}
 }
 
@@ -86,20 +90,30 @@ func TestPageList_EmbeddedOpenUsesShell(t *testing.T) {
 	html := buf.String()
 
 	for _, want := range []string{
-		`function listOpen(url,title)`,
-		`window.obOpenInShell && window.obOpenInShell(url,title||listTitle())`,
-		`else{listOpen(tr.dataset.openUrl);}`,
-		`fn:function(){listOpen(tr.dataset.openUrl);}`,
+		`id="ob-list-config"`,
+		`data-open-url="/ui/document/`,
+		`11111111-1111-1111-1111-111111111111"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("список не содержит embedded-open фрагмент %q", want)
 		}
 	}
-	if strings.Contains(html, `window.location.href=tr.dataset.openUrl`) {
-		t.Error("открытие записи из списка по-прежнему заменяет текущий iframe вместо новой вкладки")
+	if !strings.Contains(html, `data-folder-url="/ui/document/`) || !strings.Contains(html, `parent=11111111-1111-1111-1111-111111111111`) {
+		t.Error("строка списка не содержит data-folder-url для навигации по папкам")
 	}
-	if !strings.Contains(html, `window.location.href=tr.dataset.folderUrl`) {
-		t.Error("переход в папку списка должен остаться навигацией внутри текущей вкладки")
+	js := string(uiJS)
+	for _, want := range []string{
+		`window.obOpenInShell && window.obOpenInShell(url, title || listTitle())`,
+		`window.location.href = tr.dataset.folderUrl`,
+		`else listOpen(tr.dataset.openUrl);`,
+		`fn: function () { listOpen(tr.dataset.openUrl); }`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("/static/ui.js не содержит embedded-open фрагмент %q", want)
+		}
+	}
+	if strings.Contains(js, `window.location.href = tr.dataset.openUrl`) {
+		t.Error("открытие записи из списка по-прежнему заменяет текущий iframe вместо новой вкладки")
 	}
 }
 

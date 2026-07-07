@@ -27,6 +27,13 @@ func TestStaticUIJS(t *testing.T) {
 	for _, want := range []string{
 		"window.obOpenInShell",
 		"openRefPicker",
+		"function obImageUpload",
+		"function addTpRow",
+		"function openItemPicker",
+		"function obInitRichText",
+		"function listMenuItems",
+		"function obInitFeed",
+		"function toggleTreeNode",
 		"obInitMappedCharts",
 		"window.rsBeforeSubmit",
 		"data-ob-attachments",
