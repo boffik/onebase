@@ -212,6 +212,29 @@ conditional_formatting:
 	}
 }
 
+func TestLintYAML_FormAccessKeyKnown(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "forms", "заказ", "объекта.form.yaml"), `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заказ
+elements:
+  - kind: ПолеВвода
+    name: ПолеНомер
+    data_path: Объект.Номер
+    accesskey: "N"
+  - kind: Кнопка
+    name: КнопкаКопировать
+    accesskey: "7"
+`)
+	for _, is := range CheckLintYAML(dir) {
+		if is.Code == "metadata.unvalidated-key" {
+			t.Fatalf("accesskey формы должен быть известен линту, получено: %+v", is)
+		}
+	}
+}
+
 func TestLintCrossScopeRead(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "processors", "касса.yaml"), `name: Касса

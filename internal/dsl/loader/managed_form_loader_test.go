@@ -47,11 +47,13 @@ elements:
         name: ПолеКонтрагент
         data_path: Объект
         original_id: "132"
+        accesskey: "K"
         events:
           ПриИзменении: КонтрагентПриИзменении
       - kind: Флажок
         name: ПолеАктивен
         data_path: Объект.Активен
+        accesskey: "A"
 
 events:
   ПриОткрытии: ПриОткрытииФормы
@@ -107,7 +109,6 @@ func TestManagedFormLoader_ParseYAML(t *testing.T) {
 	if form.Commands[0].Name != "ПровестиКоманда" || form.Commands[0].Action != "ПровестиОбработчик" {
 		t.Errorf("command = %+v", form.Commands[0])
 	}
-
 	// Дерево элементов
 	if len(form.Elements) != 1 || form.Elements[0].Kind != metadata.FormElementGroupBox {
 		t.Fatalf("root element = %+v", form.Elements)
@@ -123,8 +124,14 @@ func TestManagedFormLoader_ParseYAML(t *testing.T) {
 	if first.DataPath != "Объект" || first.OriginalID != "132" {
 		t.Errorf("first child datapath/original_id = %q / %q", first.DataPath, first.OriginalID)
 	}
+	if first.AccessKey != "K" {
+		t.Errorf("first child accesskey = %q, want K", first.AccessKey)
+	}
 	if first.Handlers[metadata.FormEventOnChange] != "КонтрагентПриИзменении" {
 		t.Errorf("first child events = %+v", first.Handlers)
+	}
+	if root.Children[1].AccessKey != "A" {
+		t.Errorf("second child accesskey = %q, want A", root.Children[1].AccessKey)
 	}
 
 	// Form-level events
