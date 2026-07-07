@@ -104,12 +104,14 @@ func TestPageForm_RichTextLoadsQuill(t *testing.T) {
 		`<div class="richtext-editor"></div>`,               // контейнер Quill
 		`/vendor/quill/quill.snow.css`,                      // CSS офлайн
 		`/vendor/quill/quill.js`,                            // bundle офлайн
-		`new Quill(`,                                        // init-код
-		`q.clipboard.convert(`,                              // загрузка через парсер Quill
-		`q.setContents(`,                                    // Delta, а не сырой innerHTML
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("page-form не содержит %q", want)
+		}
+	}
+	for _, want := range []string{`new Quill(`, `q.clipboard.convert(`, `q.setContents(`} {
+		if !strings.Contains(string(uiJS), want) {
+			t.Errorf("/static/ui.js не содержит %q", want)
 		}
 	}
 }

@@ -45,11 +45,14 @@ func TestPageForm_ImageFieldWidget(t *testing.T) {
 		`<input type="hidden" name="Картинка" value="abc-123">`, // form-backing ссылка
 		`/ui/_image/abc-123`,              // превью существующей картинки
 		`/ui/catalog/номенклатура/_image`, // entity-scoped URL загрузки (lower)
-		`function obImageUpload(`,         // JS загрузки подключён
+		`id="ob-tp-ref-opts"`,             // общий form-shared bootstrap подключён
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("page-form (image) не содержит %q", want)
 		}
+	}
+	if !strings.Contains(string(uiJS), `function obImageUpload(`) {
+		t.Errorf("/static/ui.js не содержит obImageUpload")
 	}
 }
 

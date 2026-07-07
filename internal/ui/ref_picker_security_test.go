@@ -1,17 +1,12 @@
 package ui
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
 
 func TestRefPickerDoesNotInjectOptionLabelAsHTML(t *testing.T) {
-	raw, err := os.ReadFile("templates.go")
-	if err != nil {
-		t.Fatalf("read templates.go: %v", err)
-	}
-	src := string(raw)
+	src := string(uiJS)
 
 	for _, bad := range []string{
 		`+ opts[i].label +`,
