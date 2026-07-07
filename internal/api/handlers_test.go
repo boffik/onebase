@@ -734,6 +734,16 @@ func TestAPIV2_OpenAPIIncludesPathsAndSchemas(t *testing.T) {
 	if !openAPIHasQueryParam(reportParams, "composition") || !openAPIHasQueryParam(reportParams, "variant") {
 		t.Fatalf("report parameters must include composition and variant: %#v", reportParams)
 	}
+	catalogList := paths["/api/v2/catalog/{name}"].(map[string]any)["get"].(map[string]any)
+	catalogListResp := catalogList["responses"].(map[string]any)["200"].(map[string]any)
+	catalogListSchema := catalogListResp["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	if catalogListSchema["$ref"] != "#/components/schemas/CatalogListEnvelope" {
+		t.Fatalf("catalog list response schema = %#v", catalogListSchema)
+	}
+	catalogPut := paths["/api/v2/catalog/{name}/{id}"].(map[string]any)["put"].(map[string]any)
+	if !openAPIHasHeaderParam(catalogPut["parameters"].([]any), "If-Match") {
+		t.Fatalf("PUT parameters must include If-Match: %#v", catalogPut["parameters"])
+	}
 	components := spec["components"].(map[string]any)
 	securitySchemes := components["securitySchemes"].(map[string]any)
 	if _, ok := securitySchemes["bearerAuth"]; !ok {
@@ -744,6 +754,15 @@ func TestAPIV2_OpenAPIIncludesPathsAndSchemas(t *testing.T) {
 	props := schema["properties"].(map[string]any)
 	if _, ok := props["Наименование"]; !ok {
 		t.Fatalf("catalog schema lacks field: %#v", props)
+	}
+	docSchema := schemas["document_Поступление"].(map[string]any)
+	docProps := docSchema["properties"].(map[string]any)
+	if _, ok := docProps["__action"]; !ok {
+		t.Fatalf("document schema lacks __action: %#v", docProps)
+	}
+	catalogObject := schemas["CatalogObject"].(map[string]any)
+	if catalogObject["$ref"] != "#/components/schemas/catalog_Товар" {
+		t.Fatalf("CatalogObject schema = %#v", catalogObject)
 	}
 	reportSchema := schemas["report_Остатки"].(map[string]any)
 	reportProps := reportSchema["properties"].(map[string]any)
@@ -760,6 +779,16 @@ func openAPIHasQueryParam(params []any, name string) bool {
 	for _, p := range params {
 		pm, ok := p.(map[string]any)
 		if ok && pm["name"] == name && pm["in"] == "query" {
+			return true
+		}
+	}
+	return false
+}
+
+func openAPIHasHeaderParam(params []any, name string) bool {
+	for _, p := range params {
+		pm, ok := p.(map[string]any)
+		if ok && pm["name"] == name && pm["in"] == "header" {
 			return true
 		}
 	}
@@ -807,6 +836,65 @@ func TestAPIV2_ReportRunsQueryEnvelope(t *testing.T) {
 	}
 	if len(resp.Meta.Columns) != 1 || resp.Meta.Columns[0] != "наименование" {
 		t.Fatalf("columns = %#v", resp.Meta.Columns)
+	}
+}
+
+func TestAPIV2_ReportRequiresReadOnQuerySourcesAndAppliesRowAccess(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	rep := &reportpkg.Report{
+		Name:  "Товары",
+		Query: `ВЫБРАТЬ Наименование ИЗ Справочник.Товар УПОРЯДОЧИТЬ ПО Наименование`,
+	}
+	h, ctx := newAPITestHandlerWithReports(t, []*metadata.Entity{cat}, []*reportpkg.Report{rep}, nil)
+	for _, row := range []map[string]any{
+		{"Наименование": "Allowed", "Owner": "u"},
+		{"Наименование": "Hidden", "Owner": "other"},
+	} {
+		if err := h.store.Upsert(ctx, cat.Name, uuid.New(), row, cat); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := "/api/v2/report/Товары"
+	params := map[string]string{"name": "Товары"}
+
+	deniedReq := reqWithEntity("GET", target, nil, params, nil)
+	deniedReq = withUser(deniedReq, apiUser("runner", auth.Permission{
+		Reports: map[string][]string{"Товары": {"run"}},
+	}))
+	deniedRec := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(deniedRec, deniedReq)
+	if deniedRec.Code != http.StatusForbidden {
+		t.Fatalf("expected source-read 403, got %d: %s", deniedRec.Code, deniedRec.Body.String())
+	}
+
+	allowedReq := reqWithEntity("GET", target, nil, params, nil)
+	allowedReq = withUser(allowedReq, apiUser("u", auth.Permission{
+		Reports:  map[string][]string{"Товары": {"run"}},
+		Catalogs: map[string][]string{"Товар": {"read"}},
+		RowAccess: auth.RowAccess{Catalogs: map[string]auth.RowPolicies{
+			"Товар": {"read": {Field: "Owner", Op: "eq", Value: auth.RowValue{User: "login"}}},
+		}},
+	}))
+	allowedRec := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(allowedRec, allowedReq)
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", allowedRec.Code, allowedRec.Body.String())
+	}
+	var resp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(allowedRec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0]["наименование"] != "Allowed" {
+		t.Fatalf("RLS report rows = %#v", resp.Data)
 	}
 }
 

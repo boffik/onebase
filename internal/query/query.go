@@ -21,6 +21,9 @@ type CompileOpts struct {
 	InfoRegs    []*metadata.InfoRegister
 	AccountRegs []*metadata.AccountRegister
 	Entities    []*metadata.Entity
+	// RowFilters are SQL-side read predicates keyed by source object. The
+	// compiler qualifies each predicate against the actual table alias.
+	RowFilters map[SourceRef]*storage.Predicate
 	// Dialect selects the SQL flavour. nil = PgDialect (default).
 	Dialect storage.Dialect
 }
@@ -468,6 +471,15 @@ type translator struct {
 	section     querySection                  // current clause context
 	aliases     map[string]struct{}           // имена алиасов вывода (КАК ...) — их не квалифицируем и не CAST'им
 	sources     []SourceRef                   // объекты-источники запроса (для RBAC, план 54)
+	rowFilters  []pendingRowFilter            // RLS-фильтры обычных источников, внедряемые в WHERE
+	rowsScoped  bool                          // true после внедрения rowFilters в outer WHERE
+}
+
+type pendingRowFilter struct {
+	source SourceRef
+	alias  string
+	meta   *metadata.Entity
+	filter *storage.Predicate
 }
 
 // addSource фиксирует объект-источник запроса для последующей проверки прав.
@@ -489,6 +501,148 @@ func (tr *translator) addRefSource(rd refDimInfo) {
 		return
 	}
 	tr.addSource(rd.refSrcType, rd.refEntity)
+}
+
+func (tr *translator) sourceRowFilter(kind, name string) *storage.Predicate {
+	for src, pred := range tr.opts.RowFilters {
+		if src.Kind == kind && strings.EqualFold(src.Name, name) {
+			return pred
+		}
+	}
+	return nil
+}
+
+func (tr *translator) predicateEntityForSource(typeUpper, name string) *metadata.Entity {
+	switch {
+	case isAccumRegType(typeUpper):
+		if reg := tr.findRegister(name); reg != nil {
+			return storage.RegisterPredicateEntity(reg)
+		}
+	case isInfoRegType(typeUpper):
+		if ir := tr.findInfoRegister(name); ir != nil {
+			return storage.InfoRegisterPredicateEntity(ir)
+		}
+	case isAccountRegType(typeUpper):
+		if ar := tr.findAccountRegister(name); ar != nil {
+			return storage.AccountRegisterPredicateEntity(ar)
+		}
+	default:
+		for _, e := range tr.opts.Entities {
+			if strings.EqualFold(e.Name, name) {
+				return e
+			}
+		}
+	}
+	return nil
+}
+
+func (tr *translator) addPendingRowFilter(typeUpper, name, alias string) error {
+	kind := sourcePermKind(typeUpper)
+	pred := tr.sourceRowFilter(kind, name)
+	if pred == nil {
+		return nil
+	}
+	meta := tr.predicateEntityForSource(typeUpper, name)
+	if meta == nil {
+		return fmt.Errorf("row filter source %s.%s metadata not found", kind, name)
+	}
+	tr.rowFilters = append(tr.rowFilters, pendingRowFilter{
+		source: SourceRef{Kind: kind, Name: name},
+		alias:  alias,
+		meta:   meta,
+		filter: pred,
+	})
+	return nil
+}
+
+func (tr *translator) rowFilterCondition(kind, name string, meta *metadata.Entity, alias string) (string, error) {
+	pred := tr.sourceRowFilter(kind, name)
+	if pred == nil {
+		return "", nil
+	}
+	if meta == nil {
+		return "", fmt.Errorf("row filter source %s.%s metadata not found", kind, name)
+	}
+	sql, args, _, err := storage.PredicateSQLQualified(dialectOrDefault(tr.opts.Dialect), meta, pred, len(tr.args)+1, alias)
+	if err != nil {
+		return "", err
+	}
+	tr.args = append(tr.args, args...)
+	return sql, nil
+}
+
+func (tr *translator) rowFilteredSourceSQL(typeUpper, name, tableName, alias string) (string, bool, error) {
+	kind := sourcePermKind(typeUpper)
+	pred := tr.sourceRowFilter(kind, name)
+	if pred == nil {
+		return "", false, nil
+	}
+	meta := tr.predicateEntityForSource(typeUpper, name)
+	if meta == nil {
+		return "", false, fmt.Errorf("row filter source %s.%s metadata not found", kind, name)
+	}
+	sql, args, _, err := storage.PredicateSQLQualified(dialectOrDefault(tr.opts.Dialect), meta, pred, len(tr.args)+1, "")
+	if err != nil {
+		return "", false, fmt.Errorf("row filter %s.%s: %w", kind, name, err)
+	}
+	tr.args = append(tr.args, args...)
+	return fmt.Sprintf("(SELECT * FROM %s WHERE %s) AS %s", tableName, sql, alias), true, nil
+}
+
+func (tr *translator) pendingRowFilterConditions() ([]string, error) {
+	conds := make([]string, 0, len(tr.rowFilters))
+	for _, rf := range tr.rowFilters {
+		sql, args, _, err := storage.PredicateSQLQualified(dialectOrDefault(tr.opts.Dialect), rf.meta, rf.filter, len(tr.args)+1, rf.alias)
+		if err != nil {
+			return nil, fmt.Errorf("row filter %s.%s: %w", rf.source.Kind, rf.source.Name, err)
+		}
+		if sql == "" {
+			continue
+		}
+		tr.args = append(tr.args, args...)
+		conds = append(conds, "("+sql+")")
+	}
+	return conds, nil
+}
+
+func (tr *translator) emitPendingRowFiltersAsWhere() error {
+	if tr.rowsScoped {
+		return nil
+	}
+	tr.rowsScoped = true
+	if len(tr.rowFilters) == 0 {
+		return nil
+	}
+	conds, err := tr.pendingRowFilterConditions()
+	if err != nil {
+		return err
+	}
+	if len(conds) == 0 {
+		return nil
+	}
+	tr.emit("WHERE")
+	tr.emit(strings.Join(conds, " AND "))
+	return nil
+}
+
+func (tr *translator) emitPendingRowFiltersAfterWhere() error {
+	if tr.rowsScoped {
+		return nil
+	}
+	tr.rowsScoped = true
+	if len(tr.rowFilters) == 0 {
+		return nil
+	}
+	conds, err := tr.pendingRowFilterConditions()
+	if err != nil {
+		return err
+	}
+	if len(conds) == 0 {
+		return nil
+	}
+	tr.emit(strings.Join(conds, " AND "))
+	tr.emit("AND")
+	return nil
 }
 
 func (tr *translator) peek(offset int) tok {
@@ -878,6 +1032,12 @@ func (tr *translator) genAccountBalances(ar *metadata.AccountRegister, args [][]
 		sb.WriteString(" AND ")
 		sb.WriteString(strings.Join(conds, " AND "))
 	}
+	if s, err := tr.rowFilterCondition("register", ar.Name, storage.AccountRegisterPredicateEntity(ar), "r"); err != nil {
+		return "", "", fmt.Errorf("row filter %s: %w", ar.Name, err)
+	} else if s != "" {
+		sb.WriteString(" AND ")
+		sb.WriteString(s)
+	}
 	if len(args) > 1 && len(args[1]) > 0 {
 		if s := tr.translateAccountFilter(ar, args[1]); s != "" {
 			sb.WriteString(" WHERE (")
@@ -938,6 +1098,12 @@ func (tr *translator) genAccountTurnovers(ar *metadata.AccountRegister, args [][
 		sb.WriteString(" AND ")
 		sb.WriteString(strings.Join(conds, " AND "))
 	}
+	if s, err := tr.rowFilterCondition("register", ar.Name, storage.AccountRegisterPredicateEntity(ar), "r"); err != nil {
+		return "", "", fmt.Errorf("row filter %s: %w", ar.Name, err)
+	} else if s != "" {
+		sb.WriteString(" AND ")
+		sb.WriteString(s)
+	}
 	if len(args) > 2 && len(args[2]) > 0 {
 		if s := tr.translateAccountFilter(ar, args[2]); s != "" {
 			sb.WriteString(" WHERE (")
@@ -991,6 +1157,11 @@ func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string,
 		if s := tr.translateFilterTokens(args[1]); s != "" {
 			conds = append(conds, s)
 		}
+	}
+	if s, err := tr.rowFilterCondition("register", reg.Name, storage.RegisterPredicateEntity(reg), ""); err != nil {
+		return "", "", fmt.Errorf("row filter %s: %w", reg.Name, err)
+	} else if s != "" {
+		conds = append(conds, s)
 	}
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
@@ -1064,6 +1235,11 @@ func (tr *translator) genTurnovers(reg *metadata.Register, args [][]tok) (string
 		if s := tr.translateFilterTokens(filterTokens); s != "" {
 			conds = append(conds, s)
 		}
+	}
+	if s, err := tr.rowFilterCondition("register", reg.Name, storage.RegisterPredicateEntity(reg), ""); err != nil {
+		return "", "", fmt.Errorf("row filter %s: %w", reg.Name, err)
+	} else if s != "" {
+		conds = append(conds, s)
 	}
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
@@ -1163,6 +1339,11 @@ func (tr *translator) genBalancesAndTurnovers(reg *metadata.Register, args [][]t
 	if filterSQL != "" {
 		conds = append(conds, filterSQL)
 	}
+	if s, err := tr.rowFilterCondition("register", reg.Name, storage.RegisterPredicateEntity(reg), ""); err != nil {
+		return "", "", fmt.Errorf("row filter %s: %w", reg.Name, err)
+	} else if s != "" {
+		conds = append(conds, s)
+	}
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(strings.Join(conds, " AND "))
@@ -1232,6 +1413,11 @@ func (tr *translator) genInfoSlice(ir *metadata.InfoRegister, args [][]tok, dire
 		if s := tr.translateFilterTokens(args[filterIdx]); s != "" {
 			conds = append(conds, s)
 		}
+	}
+	if s, err := tr.rowFilterCondition("inforeg", ir.Name, storage.InfoRegisterPredicateEntity(ir), ""); err != nil {
+		return "", "", fmt.Errorf("row filter %s: %w", ir.Name, err)
+	} else if s != "" {
+		conds = append(conds, s)
 	}
 	where := strings.Join(conds, " AND ")
 
@@ -1430,7 +1616,7 @@ func (tr *translator) findRefDim(name string) *refDimInfo {
 
 // emitVTSubquery emits a VT subquery with its alias, detects optional user alias (КАК),
 // and adds auto-JOINs for reference dimensions using the correct alias.
-func (tr *translator) emitVTSubquery(subq, defaultAlias string) {
+func (tr *translator) emitVTSubquery(subq, defaultAlias string) error {
 	alias := defaultAlias
 	if p := tr.peek(0); p.kind == tIdent {
 		pUpper := strings.ToUpper(p.val)
@@ -1448,14 +1634,20 @@ func (tr *translator) emitVTSubquery(subq, defaultAlias string) {
 	if tr.section == sectionFrom && !tr.mainEmitted {
 		for _, rd := range tr.refDims {
 			if rd.isVT {
-				tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
-					rd.joinTable, rd.joinAlias, rd.joinAlias, alias, rd.fieldName))
+				joinCond := fmt.Sprintf("%s.id = %s.%s", rd.joinAlias, alias, rd.fieldName)
+				if s, err := tr.rowFilterCondition(sourcePermKind(rd.refSrcType), rd.refEntity, tr.predicateEntityForSource(rd.refSrcType, rd.refEntity), rd.joinAlias); err != nil {
+					return err
+				} else if s != "" {
+					joinCond += " AND " + s
+				}
+				tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s", rd.joinTable, rd.joinAlias, joinCond))
 				// #14: связанная сущность ссылочного измерения VT — источник RBAC.
 				tr.addRefSource(rd)
 			}
 		}
 	}
 	tr.mainEmitted = true
+	return nil
 }
 
 // --- main translator loop ---
@@ -1728,7 +1920,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if err != nil {
 						return Result{}, err
 					}
-					tr.emitVTSubquery(subq, alias)
+					if err := tr.emitVTSubquery(subq, alias); err != nil {
+						return Result{}, err
+					}
 					continue
 				}
 
@@ -1745,7 +1939,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if err != nil {
 						return Result{}, err
 					}
-					tr.emitVTSubquery(subq, alias)
+					if err := tr.emitVTSubquery(subq, alias); err != nil {
+						return Result{}, err
+					}
 					continue
 				}
 
@@ -1762,7 +1958,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if err != nil {
 						return Result{}, err
 					}
-					tr.emitVTSubquery(subq, alias)
+					if err := tr.emitVTSubquery(subq, alias); err != nil {
+						return Result{}, err
+					}
 					continue
 				}
 			}
@@ -1795,15 +1993,19 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			if isMain {
 				tr.mainTable = tableName
 			}
-			tr.emit(tableName)
-			// Consume optional КАК/AS alias before auto-JOINs
+			sourceAlias := tableName
+			hasAlias := false
+			// Consume optional КАК/AS alias before emitting the source. Joined
+			// restricted sources are scoped as subqueries and need the final alias
+			// up front.
 			if p := tr.peek(0); p.kind == tIdent {
 				pUpper := strings.ToUpper(p.val)
 				if pUpper == "КАК" || pUpper == "AS" {
 					tr.advance()
 					if a := tr.peek(0); a.kind == tIdent {
 						aliasName := strings.ToLower(tr.advance().val)
-						tr.emit("AS " + aliasName)
+						sourceAlias = aliasName
+						hasAlias = true
 						// Собственные колонки квалифицируем алиасом, а не именем
 						// таблицы (иначе `таблица.col` не совпадёт с `AS алиас`).
 						if isMain {
@@ -1812,13 +2014,40 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					}
 				}
 			}
+			if !isMain {
+				filtered, ok, err := tr.rowFilteredSourceSQL(upper, entity.val, tableName, sourceAlias)
+				if err != nil {
+					return Result{}, err
+				}
+				if ok {
+					tr.emit(filtered)
+				} else {
+					tr.emit(tableName)
+					if hasAlias {
+						tr.emit("AS " + sourceAlias)
+					}
+				}
+			} else {
+				tr.emit(tableName)
+				if hasAlias {
+					tr.emit("AS " + sourceAlias)
+				}
+				if err := tr.addPendingRowFilter(upper, entity.val, sourceAlias); err != nil {
+					return Result{}, err
+				}
+			}
 			if tr.section == sectionFrom && isMain {
 				// ON ссылается на источник через tr.mainTable: это имя таблицы
 				// либо её алиас (КАК р). Использование сырого tableName при
 				// наличии алиаса давало `no such column: таблица.col`.
 				for _, rd := range tr.refDims {
-					tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s.id = %s.%s",
-						rd.joinTable, rd.joinAlias, rd.joinAlias, tr.mainTable, rd.idCol))
+					joinCond := fmt.Sprintf("%s.id = %s.%s", rd.joinAlias, tr.mainTable, rd.idCol)
+					if s, err := tr.rowFilterCondition(sourcePermKind(rd.refSrcType), rd.refEntity, tr.predicateEntityForSource(rd.refSrcType, rd.refEntity), rd.joinAlias); err != nil {
+						return Result{}, err
+					} else if s != "" {
+						joinCond += " AND " + s
+					}
+					tr.emit(fmt.Sprintf("LEFT JOIN %s %s ON %s", rd.joinTable, rd.joinAlias, joinCond))
 					// #14: авто-JOIN ссылочного поля читает наименование/номер
 					// связанной сущности — регистрируем её как источник для RBAC,
 					// иначе чтение через ссылку обходит проверку прав.
@@ -1831,6 +2060,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 
 		// Multi-word: СГРУППИРОВАТЬ ПО / УПОРЯДОЧИТЬ ПО
 		if t.kind == tIdent && (upper == "СГРУППИРОВАТЬ" || upper == "УПОРЯДОЧИТЬ") {
+			if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+				return Result{}, err
+			}
 			tr.advance()
 			if upper == "УПОРЯДОЧИТЬ" {
 				tr.section = sectionOrderBy
@@ -1905,6 +2137,23 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			if agg, ok := sqlAgg(t.val); ok && tr.peek(0).kind == tLParen {
 				tr.emit(agg)
 			} else if kw, ok := sqlKW(t.val); ok {
+				switch kw {
+				case "UNION":
+					if len(tr.opts.RowFilters) > 0 {
+						return Result{}, fmt.Errorf("row-level filters for UNION queries are not supported yet")
+					}
+				case "WHERE":
+					tr.emit("WHERE")
+					tr.section = sectionWhere
+					if err := tr.emitPendingRowFiltersAfterWhere(); err != nil {
+						return Result{}, err
+					}
+					continue
+				case "GROUP", "HAVING", "ORDER":
+					if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+						return Result{}, err
+					}
+				}
 				tr.emit(kw)
 				// track clause context
 				switch kw {
@@ -1912,10 +2161,10 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					tr.section = sectionSelect
 				case "FROM":
 					tr.section = sectionFrom
-				case "WHERE":
-					tr.section = sectionWhere
 				case "HAVING":
 					tr.section = sectionHaving
+				case "ORDER":
+					tr.section = sectionOrderBy
 				}
 			} else {
 				lower := strings.ToLower(t.val)
@@ -1969,6 +2218,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		}
 
 		tr.advance()
+	}
+	if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+		return Result{}, err
 	}
 	return Result{SQL: tr.build(), Args: tr.args, Sources: tr.sources}, nil
 }
