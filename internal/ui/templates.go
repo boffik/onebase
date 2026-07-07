@@ -90,6 +90,22 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		},
 		"isRichText": func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeRichText) },
 		"isImage":    func(t any) bool { return fmt.Sprintf("%v", t) == string(metadata.FieldTypeImage) },
+		"fieldNamesCSV": func(fields []metadata.Field) string {
+			names := make([]string, 0, len(fields))
+			for _, f := range fields {
+				names = append(names, f.Name)
+			}
+			return strings.Join(names, ",")
+		},
+		"numberFieldNamesCSV": func(fields []metadata.Field) string {
+			names := make([]string, 0, len(fields))
+			for _, f := range fields {
+				if fmt.Sprintf("%v", f.Type) == string(metadata.FieldTypeNumber) {
+					names = append(names, f.Name)
+				}
+			}
+			return strings.Join(names, ",")
+		},
 		// entityHasRichText — есть ли среди реквизитов шапки сущности richtext-поле.
 		// Quill (vendor-ассеты + init) грузятся на форме только при true, чтобы не
 		// тянуть редактор на формы без richtext-полей.
@@ -1275,7 +1291,7 @@ const tplForm = `
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;max-width:1400px">
   <h2 style="margin-bottom:0">{{if .IsNew}}{{t $.Lang "Создать"}}{{else}}{{t $.Lang "Редактировать"}}{{end}} — {{.Entity.DisplayName $.Lang}}</h2>
   {{if .IsPopup}}
-  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  <a href="#" data-ob-popup-cancel title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{else}}
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{end}}
@@ -1315,7 +1331,7 @@ const tplForm = `
     <a href="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/history" class="btn btn-sm btn-secondary">{{t $.Lang "История"}}</a>
     {{if or .AllPrintForms .HasPrintProc}}
     <div style="position:relative">
-      <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">{{t $.Lang "Печать"}} ▾</button>
+      <button type="button" class="btn btn-sm btn-secondary" data-ob-toggle-next>{{t $.Lang "Печать"}} ▾</button>
       <div style="display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);min-width:200px;z-index:50;margin-top:4px">
         {{range .AllPrintForms}}
         <div style="display:flex;align-items:center;border-bottom:1px solid #f1f5f9">
@@ -1334,7 +1350,7 @@ const tplForm = `
     {{end}}
     {{if .Receivers}}
     <div style="position:relative">
-      <button type="button" class="btn btn-sm btn-secondary" onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'">{{t $.Lang "Ввести на основании"}} ▾</button>
+      <button type="button" class="btn btn-sm btn-secondary" data-ob-toggle-next>{{t $.Lang "Ввести на основании"}} ▾</button>
       <div style="display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);min-width:200px;z-index:50;margin-top:4px">
         {{range .Receivers}}
         <a href="/ui/{{lower (str .Kind)}}/{{.Name}}/new?based_on={{$.Entity.Name}}&based_on_id={{$.ID}}"
@@ -1345,7 +1361,7 @@ const tplForm = `
     {{end}}
     {{if .CanDelete}}
     <form method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/delete"
-          onsubmit="return confirm('{{if .IsAdmin}}{{t $.Lang "Удалить запись навсегда?"}}{{else}}{{t $.Lang "Пометить запись на удаление?"}}{{end}}')" style="margin-left:auto">
+          data-ob-confirm="{{if .IsAdmin}}{{t $.Lang "Удалить запись навсегда?"}}{{else}}{{t $.Lang "Пометить запись на удаление?"}}{{end}}" style="margin-left:auto">
       <button class="btn btn-danger btn-sm" type="submit">{{if .IsAdmin}}{{t $.Lang "Удалить"}}{{else}}{{t $.Lang "Пометить на удаление"}}{{end}}</button>
     </form>
     {{end}}
@@ -1411,8 +1427,8 @@ const tplForm = `
         <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
         {{end}}
       </select>
-      <button type="button" onclick="openRefPicker('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-      <button type="button" onclick="openRefCurrent('ref-{{$fn}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
+      <button type="button" data-ob-ref-picker="ref-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+      <button type="button" data-ob-ref-current="ref-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
     </div>
   {{else if isEnum (str .Type)}}
     <select name="{{$fn}}">
@@ -1444,8 +1460,8 @@ const tplForm = `
       <input type="hidden" name="{{$fn}}" value="{{$iv}}">
       <div class="img-preview"{{if not $iv}} style="display:none"{{end}}><img src="{{if $iv}}/ui/_image/{{$iv}}{{end}}" alt=""></div>
       <div class="img-actions">
-        <label class="btn btn-sm btn-secondary">{{t $.Lang "Загрузить…"}}<input type="file" accept="image/*" style="display:none" onchange="obImageUpload(this,'/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/_image')"></label>
-        <button type="button" class="btn btn-sm img-clear-btn" onclick="obImageClear(this)"{{if not $iv}} style="display:none"{{end}}>{{t $.Lang "Очистить"}}</button>
+        <label class="btn btn-sm btn-secondary">{{t $.Lang "Загрузить…"}}<input type="file" accept="image/*" style="display:none" data-ob-image-upload="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/_image"></label>
+        <button type="button" class="btn btn-sm img-clear-btn" data-ob-image-clear{{if not $iv}} style="display:none"{{end}}>{{t $.Lang "Очистить"}}</button>
       </div>
     </div>
   {{else}}
@@ -1475,19 +1491,19 @@ const tplForm = `
               <option value="{{index . "id"}}" {{if eq (str (index . "id")) (refID (index $row $fn))}}selected{{end}}>{{index . "_label"}}</option>
               {{end}}
             </select>
-            <button type="button" onclick="openRefPicker(this.parentElement.querySelector('select'))" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-            <button type="button" onclick="openRefCurrent(this.parentElement.querySelector('select'))" style="padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
+            <button type="button" data-ob-ref-picker-self style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+            <button type="button" data-ob-ref-current-self style="padding:4px 7px;border:1px solid #e2e8f0;border-radius:5px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
           </div>
         {{else if eq (str .Type) "number"}}
           <input type="number" name="tp.{{$tpName}}.{{$i}}.{{$fn}}" value="{{index $row $fn}}"
-            data-tp-num="{{$fn}}" oninput="recalcTpRow(this)">
+            data-tp-num="{{$fn}}" data-ob-tp-recalc>
         {{else}}
           <input type="text" name="tp.{{$tpName}}.{{$i}}.{{$fn}}" value="{{index $row $fn}}"
-            oninput="recalcTpRow(this)">
+            data-ob-tp-recalc>
         {{end}}
         </td>
       {{end}}
-      <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">×</button></td>
+      <td><button type="button" class="del-btn" data-ob-remove-row="tr">×</button></td>
     </tr>
   {{end}}
   </tbody>
@@ -1496,7 +1512,7 @@ const tplForm = `
   </tr></tfoot>
 </table>
 <button type="button" class="btn btn-sm" style="background:#e2e8f0;color:#475569;margin-bottom:8px"
-  onclick="addTpRow('{{$tpName}}', [{{range .Fields}}'{{.Name}}',{{end}}], [{{range .Fields}}{{if eq (str .Type) "number"}}'{{.Name}}',{{end}}{{end}}], document.getElementById('tp-body-{{$tpName}}').rows.length)">
+  data-ob-add-tp-row data-tp-name="{{$tpName}}" data-tp-fields="{{fieldNamesCSV .Fields}}" data-tp-num-fields="{{numberFieldNamesCSV .Fields}}">
   + {{t $.Lang "Добавить строку"}}
 </button>
 {{end}}
@@ -1504,7 +1520,7 @@ const tplForm = `
 <div style="margin-top:16px">
   {{if .IsPopup}}
   {{if .CanWrite}}<button class="btn btn-primary" type="submit" name="_action" value="" form="main-form">{{t $.Lang "Записать и выбрать"}}</button>{{end}}
-  <a href="javascript:void(0)" onclick="try{parent.postMessage({source:'obRefCancel'}, '*')}catch(e){}" class="btn btn-cancel">{{t $.Lang "Отмена"}}</a>
+  <a href="#" data-ob-popup-cancel class="btn btn-cancel">{{t $.Lang "Отмена"}}</a>
   {{else}}
   {{if .CanWrite}}<button class="btn btn-secondary" type="submit" name="_action" value="" form="main-form">{{t $.Lang "Записать"}}</button>{{end}}
   <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" class="btn btn-cancel">{{t $.Lang "Отмена"}}</a>
@@ -1536,8 +1552,8 @@ const tplForm = `
   <div id="att-list" style="margin-bottom:12px"></div>
   <form id="att-upload-form" method="POST" enctype="multipart/form-data"
         action="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/attachments">
-    <input type="file" name="file" id="att-file-input" style="display:none" onchange="document.getElementById('att-upload-form').submit()">
-    <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('att-file-input').click()">
+    <input type="file" name="file" id="att-file-input" style="display:none" data-ob-submit-form="att-upload-form">
+    <button type="button" class="btn btn-sm btn-secondary" data-ob-file-click="att-file-input">
       + {{t $.Lang "Прикрепить файл"}}
     </button>
   </form>
