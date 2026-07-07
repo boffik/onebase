@@ -58,10 +58,13 @@ func TestPageCustomTemplate(t *testing.T) {
 	out := buf.String()
 	// URL в href нормализуется html/template (кириллица percent-кодируется),
 	// поэтому проверяем ASCII-префикс пути ячейки-ссылки.
-	for _, want := range []string{"Заголовок", "<b>ok</b>", "/ui/catalog/", "data-pagechart", "echarts.min.js"} {
+	for _, want := range []string{"Заголовок", "<b>ok</b>", "/ui/catalog/", "data-pagechart", `id="ob-page-charts"`, "echarts.min.js"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в выводе нет %q", want)
 		}
+	}
+	if strings.Contains(out, `window.__obPageCharts`) {
+		t.Errorf("page-custom снова генерирует inline JS для графиков")
 	}
 	// Сырой HTML не должен пройти экранирование (pageRaw), а текст блоков —
 	// должен (нет «живого» тега из текста).

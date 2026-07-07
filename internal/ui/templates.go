@@ -524,10 +524,12 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			}
 			return template.JS(b)
 		},
-		"wcell":       widgetCell,
-		"echartsJSON": echartsJSON,
-		"splitCamel":  splitCamel,
-		"fmtCell":     fmtReportCell,
+		"wcell":            widgetCell,
+		"echartsJSON":      echartsJSON,
+		"splitCamel":       splitCamel,
+		"fmtCell":          fmtReportCell,
+		"widgetChartsJSON": widgetChartsJSON,
+		"pageChartsJSON":   pageChartsJSON,
 		// pageRaw помечает уже санитизированный HTML страницы (план 66) как
 		// безопасный. Источник — только ДобавитьСыройHTML, прошедший sanitizePageHTML.
 		"pageRaw": func(s string) template.HTML { return template.HTML(s) },
@@ -834,46 +836,6 @@ const tplNav = `
   {{end}}{{end}}
   {{end}}
 </aside>
-<script>
-(function(){
-  if(window.__obNavInit)return;window.__obNavInit=true; // ob-nav drawer
-  // Управление мобильным drawer. Состояние — класс body.nav-open; синхронно
-  // обновляем aria-expanded кнопки ☰ (для скринридеров). На десктопе меню видно
-  // всегда, обработчики безвредны (nav-open там не выставляется).
-  function setNav(open){
-    document.body.classList.toggle('nav-open',open);
-    var btn=document.querySelector('.nav-toggle');
-    if(btn)btn.setAttribute('aria-expanded',open?'true':'false');
-  }
-  window.obNavToggle=function(){setNav(!document.body.classList.contains('nav-open'));};
-  // Тап по затемнению (вне меню и вне кнопки ☰) закрывает drawer.
-  document.addEventListener('click',function(e){
-    if(!document.body.classList.contains('nav-open'))return;
-    if(e.target.closest&&e.target.closest('.nav-toggle'))return;
-    var as=document.getElementById('ob-nav');
-    if(as&&as.contains(e.target))return;
-    setNav(false);
-  },true);
-  // Esc закрывает drawer (клавиатурная доступность).
-  document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'&&document.body.classList.contains('nav-open'))setNav(false);
-  });
-})();
-</script>
-{{if .CollapsibleNav}}
-<script>
-(function(){
-  try{
-    document.querySelectorAll('aside details.navsec').forEach(function(d){
-      var key='navsec:'+d.getAttribute('data-navsec');
-      var saved=localStorage.getItem(key);
-      if(saved==='1')d.open=true; else if(saved==='0')d.open=false;
-      d.addEventListener('toggle',function(){localStorage.setItem(key,d.open?'1':'0');});
-    });
-  }catch(e){}
-})();
-</script>
-{{end}}
 {{end}}
 `
 
@@ -923,36 +885,8 @@ const tplIndex = `
     {{end}}
   </div>
 </main></div>
-<script>
-window.__obWidgetCharts = window.__obWidgetCharts || {};
-{{range .WidgetResults}}{{if and (eq .Type "chart") .Chart}}window.__obWidgetCharts["{{.Name}}"] = {{echartsJSON .Chart}};
-{{end}}{{end}}
-</script>
+<script type="application/json" id="ob-widget-charts">{{widgetChartsJSON .WidgetResults}}</script>
 <script src="/vendor/echarts/echarts.min.js"></script>
-<script>
-(function(){
-  function initCharts(){
-    if(!window.echarts)return;
-    var nodes=document.querySelectorAll('.w-chart-canvas[data-widget]');
-    for(var i=0;i<nodes.length;i++){
-      var node=nodes[i];
-      if(node.getAttribute('data-ob-init'))continue; // не переинициализировать → нет повторного «моргания»
-      var name=node.getAttribute('data-widget');
-      var opt=window.__obWidgetCharts[name];
-      if(!opt)continue;
-      node.setAttribute('data-ob-init','1');
-      try{
-        var c=echarts.init(node);
-        opt.animation=false; // мгновенная отрисовка без анимации входа (библиотека грузится с задержкой)
-        if(opt.yAxis&&opt.yAxis.type==="value"){opt.yAxis.axisLabel={formatter:function(v){if(Math.abs(v)>=1e6)return(v/1e6).toFixed(1)+"M";if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+"k";return v%1===0?v:v.toFixed(2)}};}
-        c.setOption(opt);
-        (function(c){window.addEventListener('resize',function(){c.resize();});})(c);
-      }catch(e){console.error('chart init failed',e);}
-    }
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initCharts);else initCharts();
-})();
-</script>
 </body></html>
 {{end}}
 
@@ -1695,7 +1629,7 @@ const tplForm = `
 {{end}}{{/* end if not .IsPopup */}}
 
 <div class="card">
-<form id="main-form" method="POST">
+<form id="main-form" method="POST" data-ob-dirty-watch="1">
 {{if and (not .IsNew) (index .Values "_version")}}<input type="hidden" name="_version" value="{{index .Values "_version"}}">{{end}}
 {{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}
 {{if .Entity.Hierarchical}}
@@ -1832,25 +1766,6 @@ const tplForm = `
 <form id="form-unpost" method="POST" action="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}/{{.ID}}/unpost"></form>
 {{end}}
 {{end}}
-<script>
-// Несохранённые изменения: звёздочка в заголовке вкладки браузера (аналог «*» в
-// 1С) и предупреждение при любом уходе со страницы (крестик, клик по ссылке,
-// закрытие/обновление). Сохранение формы сбрасывает флаг.
-(function(){
-  window._obFormDirty = false;
-  var base = document.title;
-  function mark(){ window._obFormDirty = true; if (document.title.charAt(0) !== '●') document.title = '● ' + base; }
-  var f = document.getElementById('main-form');
-  if (f) {
-    f.addEventListener('input',  mark, true);
-    f.addEventListener('change', mark, true);
-    f.addEventListener('submit', function(){ window._obFormDirty = false; });
-  }
-  window.addEventListener('beforeunload', function(e){
-    if (window._obFormDirty) { e.preventDefault(); e.returnValue = ''; return ''; }
-  });
-})();
-</script>
 {{template "ob-attachments" .}}
 </div>
 {{template "form-shared-js" .}}
@@ -1863,7 +1778,7 @@ const tplForm = `
      сохранённой записи объекта (не новая, не попап, не обработка). */}}
 {{define "ob-attachments"}}
 {{if and (not .IsNew) (not .IsPopup) (not .IsProcessor)}}
-<div class="card" style="margin-top:16px">
+<div class="card" style="margin-top:16px" data-ob-attachments data-attachments-url="/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/attachments">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h3 style="margin:0;font-size:14px;font-weight:600;color:#374151">{{t $.Lang "Вложения"}}</h3>
     <span id="att-count" style="color:#94a3b8;font-size:12px"></span>
@@ -1877,59 +1792,6 @@ const tplForm = `
     </button>
   </form>
 </div>
-<script>
-(function(){
-  function fmtSize(b) {
-    if(b<1024) return b+' Б';
-    if(b<1024*1024) return (b/1024).toFixed(1)+' КБ';
-    return (b/1024/1024).toFixed(1)+' МБ';
-  }
-  function loadAtts() {
-    fetch('/ui/{{lower (str .Entity.Kind)}}/{{.Entity.Name}}/{{.ID}}/attachments')
-      .then(r=>r.json()).then(atts=>{
-        var cnt = document.getElementById('att-count');
-        var list = document.getElementById('att-list');
-        cnt.textContent = atts.length ? atts.length+' файл(ов)' : '';
-        if(!atts.length){ list.innerHTML='<p style="color:#94a3b8;font-size:13px;margin:0">Нет вложений</p>'; return; }
-        // Имя файла (a.filename) приходит от пользователя и НЕ доверенное —
-        // строим DOM безопасно: имя кладём через textContent, чтобы исключить
-        // хранимый XSS (например имя «<img src=x onerror=...>.txt»). id —
-        // серверный UUID, подставляем только в кодированном виде.
-        list.innerHTML='';
-        atts.forEach(function(a){
-          var row=document.createElement('div');
-          row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9';
-          var nameEl=document.createElement('span');
-          nameEl.style.cssText='flex:1;font-size:13px;word-break:break-all';
-          nameEl.textContent=String(a.filename==null?'':a.filename);
-          var sizeEl=document.createElement('span');
-          sizeEl.style.cssText='color:#94a3b8;font-size:12px;white-space:nowrap';
-          sizeEl.textContent=fmtSize(a.size_bytes);
-          var aid=encodeURIComponent(String(a.id));
-          var dl=document.createElement('a');
-          dl.href='/ui/attachments/'+aid+'/download';
-          dl.className='btn btn-sm btn-secondary';
-          dl.style.cssText='padding:3px 10px;font-size:12px';
-          dl.textContent='↓';
-          var delForm=document.createElement('form');
-          delForm.method='POST';
-          delForm.action='/ui/attachments/'+aid+'/delete';
-          delForm.style.margin='0';
-          delForm.addEventListener('submit',function(e){ if(!confirm('Удалить вложение?')) e.preventDefault(); });
-          var delBtn=document.createElement('button');
-          delBtn.type='submit';
-          delBtn.className='btn btn-sm btn-danger';
-          delBtn.style.cssText='padding:3px 8px;font-size:12px';
-          delBtn.textContent='×';
-          delForm.appendChild(delBtn);
-          row.appendChild(nameEl); row.appendChild(sizeEl); row.appendChild(dl); row.appendChild(delForm);
-          list.appendChild(row);
-        });
-      }).catch(function(){});
-  }
-  loadAtts();
-})();
-</script>
 {{end}}
 {{end}}
 
@@ -2835,99 +2697,6 @@ const tplReport = `
     <button class="btn" type="submit" formaction="/ui/report/{{lower .Report.Name}}/settings/reset"{{if not .UserSettings}} disabled{{end}}>{{t $.Lang "Стандартные настройки"}}</button>
   </div>
 </form>
-<script>
-(function(){
-  var hidden=document.getElementById('rs-json');
-  window.rsBeforeSubmit=function(ev){
-    var form=ev&&ev.target;
-    if(form&&form.dataset&&form.dataset.skipCollect==="1"){form.dataset.skipCollect="";return true;}
-    rsCollect();
-    return true;
-  };
-  window.rsChoosePreset=function(sel){
-    if(!sel||!sel.form)return;
-    var h=sel.form.querySelector('input[name="__settings"]');if(h)h.remove();
-    sel.form.dataset.skipCollect="1";
-    sel.form.submit();
-  };
-  function rsNorm(v){return String(v||"").toLowerCase();}
-  function rsFieldMap(values){
-    var out={};
-    (values||[]).forEach(function(v){if(v)out[rsNorm(v)]=v;});
-    return out;
-  }
-  function preset(){
-    if(!hidden) return;
-    var raw=hidden.value||hidden.dataset.base||"";
-    if(!raw) return;
-    if(!hidden.value) hidden.value=raw;
-    try{
-      var s=JSON.parse(raw);
-      var comp=(s&&s.composition)||{};
-      var groups=comp.Groupings||comp.groupings||[];
-      var meas=comp.Measures||comp.measures||[];
-      var mf=meas.map(function(m){return m.Field||m.field;});
-      var groupMap=rsFieldMap(groups), measureMap=rsFieldMap(mf);
-      document.querySelectorAll('.rs-group,.rs-measure').forEach(function(el){el.checked=false;});
-      document.querySelectorAll('.rs-group').forEach(function(el){ if(groupMap[rsNorm(el.value)]) el.checked=true; });
-      document.querySelectorAll('.rs-measure').forEach(function(el){ if(measureMap[rsNorm(el.value)]) el.checked=true; });
-      var ap=comp.Appearance||comp.appearance||{};
-      var lines=ap.lines||ap.Lines||"";if(lines==="horizontal")lines="";
-      var le=document.getElementById('rs-lines');if(le)le.value=lines;
-      var ze=document.getElementById('rs-zebra');if(ze)ze.checked=!!(ap.zebra||ap.Zebra);
-    }catch(e){}
-  }
-  window.rsCollect=function(){
-    var prev={};
-    var raw=hidden?(hidden.value||hidden.dataset.base||""):"";
-    if(hidden&&!hidden.value&&raw)hidden.value=raw;
-    if(raw){try{prev=JSON.parse(raw)||{};}catch(e){prev={};}}
-    var prevComp=(prev&&prev.composition)||{};
-    var prevGroups=prevComp.Groupings||prevComp.groupings||[];
-    var prevGroupByField=rsFieldMap(prevGroups);
-    var prevMeasures=prevComp.Measures||prevComp.measures||[];
-    var prevByField={};
-    var prevMeasureField={};
-    prevMeasures.forEach(function(m){var f=m&&(m.Field||m.field);if(f){prevByField[rsNorm(f)]=m;prevMeasureField[rsNorm(f)]=f;}});
-    var groupings=[];document.querySelectorAll('.rs-group:checked').forEach(function(c){
-      groupings.push(prevGroupByField[rsNorm(c.value)]||c.value);
-    });
-    var measures=[];document.querySelectorAll('.rs-measure:checked').forEach(function(c){
-      var key=rsNorm(c.value);
-      var src=prevByField[key]||{};
-      var m={Field:prevMeasureField[key]||c.value,Agg:src.Agg||src.agg||"sum"};
-      var title=src.Title||src.title;if(title)m.Title=title;
-      var align=src.Align||src.align;if(align)m.Align=align;
-      var format=src.Format||src.format;if(format)m.Format=format;
-      measures.push(m);
-    });
-    var filters=[];document.querySelectorAll('.rs-filter-row').forEach(function(row){
-      var f=row.querySelector('.rs-f-field'),op=row.querySelector('.rs-f-op'),v=row.querySelector('.rs-f-value');
-      if(f&&op&&f.value){ filters.push({field:f.value,op:op.value,value:v?v.value:""}); }
-    });
-    var variantEl=document.querySelector('input[name="__variant"]');
-    var lines=(document.getElementById('rs-lines')||{}).value||"";
-    var zebra=!!(document.getElementById('rs-zebra')||{}).checked;
-    var columns=prevComp.Columns||prevComp.columns||[];
-    var sort=prevComp.Sort||prevComp.sort||[];
-    var totals=prevComp.Totals||prevComp.totals;
-    var detail=(typeof prevComp.Detail!=="undefined")?prevComp.Detail:prevComp.detail;
-    var nextComp={Groupings:groupings,Measures:measures,Appearance:{lines:lines,zebra:zebra}};
-    if(columns&&columns.length)nextComp.Columns=columns;
-    if(sort&&sort.length)nextComp.Sort=sort;
-    if(totals)nextComp.Totals=totals;
-    if(typeof detail!=="undefined")nextComp.Detail=!!detail;
-    var s={variant:variantEl?variantEl.value:"",composition:nextComp,filters:filters};
-    if(hidden)hidden.value=JSON.stringify(s);
-  };
-  window.rsAddFilter=function(){
-    var tpl=document.getElementById('rs-filter-tpl');
-    if(!tpl||!tpl.content) return;
-    document.getElementById('rs-filter-rows').appendChild(tpl.content.cloneNode(true));
-  };
-  preset();
-})();
-</script>
 </details>
 {{end}}
 {{if .QueryError}}<div class="error">{{t $.Lang "Ошибка запроса:"}} {{.QueryError}}</div>{{end}}
@@ -2937,15 +2706,8 @@ const tplReport = `
 <summary>{{t $.Lang "Диаграмма"}}</summary>
   <div id="ob-chart" style="width:100%;min-height:400px"></div>
 </details>
+<script type="application/json" id="ob-report-chart">{{jsJSON .ChartOption}}</script>
 <script src="/vendor/echarts/echarts.min.js"></script>
-<script>
-(function(){
-  var c=echarts.init(document.getElementById('ob-chart'));
-  var _o={{jsJSON .ChartOption}};_o.animation=false;if(_o.yAxis&&_o.yAxis.type==="value"){_o.yAxis.axisLabel={formatter:function(v){if(Math.abs(v)>=1e6)return(v/1e6).toFixed(1)+"M";if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+"k";return v%1===0?v:v.toFixed(2)}};}
-  c.setOption(_o);
-  window.addEventListener('resize',function(){c.resize()});
-})();
-</script>
 {{end}}
 {{if .ComposedHTML}}
 {{if .Capped}}<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:8px;padding:8px 12px">{{t $.Lang "Показаны первые строки — данных больше потолка."}}</div>{{end}}
@@ -2956,60 +2718,6 @@ const tplReport = `
 <div class="rc-toolbar" style="margin-bottom:8px;display:flex;gap:8px"><button type="button" id="rc-expand" class="btn btn-sm">{{t $.Lang "Развернуть всё"}}</button><button type="button" id="rc-collapse" class="btn btn-sm">{{t $.Lang "Свернуть всё"}}</button></div>
 {{.ComposedHTML}}
 </details>
-<script>
-(function(){
-  function rcEscape(key){
-    return (window.CSS&&CSS.escape)?CSS.escape(key):key.replace(/["\\\]]/g,'\\$&');
-  }
-  function rcSetOpen(tr, open){
-    var key=tr.getAttribute('data-group');
-    var ek=rcEscape(key);
-    var cell=tr.querySelector('td');
-    var sel='[data-parent="'+ek+'"],[data-parent^="'+ek+'/"],[data-group^="'+ek+'/"]';
-    document.querySelectorAll(sel).forEach(function(el){ el.style.display = open ? '' : 'none'; });
-    if(cell){ cell.textContent=(open?'▼':'▶')+cell.textContent.slice(1); }
-  }
-  document.querySelectorAll('tr.grp').forEach(function(tr){
-    tr.style.cursor='pointer';
-    tr.addEventListener('click', function(){
-      var cell=tr.querySelector('td');
-      var open=cell.textContent.trim().charAt(0)==='▼';
-      rcSetOpen(tr, !open);
-    });
-  });
-  var expandBtn=document.getElementById('rc-expand');
-  var collapseBtn=document.getElementById('rc-collapse');
-  if(expandBtn){
-    expandBtn.addEventListener('click', function(){
-      var tbody=document.querySelector('table.report-composed tbody');
-      if(!tbody) return;
-      tbody.querySelectorAll('tr').forEach(function(tr){ tr.style.display=''; });
-      tbody.querySelectorAll('tr.grp').forEach(function(tr){
-        var cell=tr.querySelector('td');
-        if(cell&&cell.textContent.trim().charAt(0)==='▶'){
-          cell.textContent='▼'+cell.textContent.slice(1);
-        }
-      });
-    });
-  }
-  if(collapseBtn){
-    collapseBtn.addEventListener('click', function(){
-      var tbody=document.querySelector('table.report-composed tbody');
-      if(!tbody) return;
-      tbody.querySelectorAll('tr.det,tr.subtotal').forEach(function(tr){ tr.style.display='none'; });
-      tbody.querySelectorAll('tr.grp').forEach(function(tr){
-        var level=parseInt(tr.getAttribute('data-level')||'0',10);
-        if(level>0){ tr.style.display='none'; } else {
-          var cell=tr.querySelector('td');
-          if(cell&&cell.textContent.trim().charAt(0)==='▼'){
-            cell.textContent='▶'+cell.textContent.slice(1);
-          }
-        }
-      });
-    });
-  }
-})();
-</script>
 {{end}}
 {{if .Cols}}
 {{template "report-export-buttons" .}}
@@ -3025,18 +2733,6 @@ const tplReport = `
 </div>
 {{end}}
 {{template "form-shared-js" .}}
-<script>
-(function(){
-  try{
-    document.querySelectorAll('details.report-block').forEach(function(el){
-      var key='rb-'+location.pathname+'-'+el.dataset.block;
-      var saved=localStorage.getItem(key);
-      if(saved==='1')el.open=true; else if(saved==='0')el.open=false;
-      el.addEventListener('toggle',function(){localStorage.setItem(key,el.open?'1':'0');});
-    });
-  }catch(e){}
-})();
-</script>
 </main></div></body></html>
 {{end}}
 `
@@ -4098,29 +3794,8 @@ const tplPageCustom = `
   {{end}}
 </main></div>
 {{if .PageHasChart}}
-<script>
-window.__obPageCharts = window.__obPageCharts || {};
-{{range $i, $b := .PageBlocks}}{{if eq $b.Kind "chart"}}window.__obPageCharts["{{$i}}"] = {{echartsJSON (pageChart $b.Chart)}};
-{{end}}{{end}}
-</script>
+<script type="application/json" id="ob-page-charts">{{pageChartsJSON .PageBlocks}}</script>
 <script src="/vendor/echarts/echarts.min.js"></script>
-<script>
-(function(){
-  function init(){
-    if(!window.echarts)return;
-    var nodes=document.querySelectorAll('.w-chart-canvas[data-pagechart]');
-    for(var i=0;i<nodes.length;i++){
-      var node=nodes[i];
-      if(node.getAttribute('data-ob-init'))continue;
-      var opt=window.__obPageCharts[node.getAttribute('data-pagechart')];
-      if(!opt)continue;
-      node.setAttribute('data-ob-init','1');
-      try{var c=echarts.init(node);opt.animation=false;c.setOption(opt);(function(c){window.addEventListener('resize',function(){c.resize();});})(c);}catch(e){console.error('page chart init failed',e);}
-    }
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-})();
-</script>
 {{end}}
 </body></html>
 {{end}}

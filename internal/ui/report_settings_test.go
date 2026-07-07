@@ -385,6 +385,12 @@ func TestReportSettingsPanel(t *testing.T) {
 	if !strings.Contains(out, `name="__settings"`) {
 		t.Fatalf("нет скрытого поля __settings")
 	}
+	if !strings.Contains(out, `onsubmit="return rsBeforeSubmit(event)"`) {
+		t.Fatalf("форма настроек не вызывает static rsBeforeSubmit")
+	}
+	if strings.Contains(out, `window.rsBeforeSubmit=function`) {
+		t.Fatalf("панель настроек снова содержит inline JS-функции")
+	}
 	for _, want := range []string{`name="__preset"`, `Мой вариант`, `name="__preset_action" value="save"`, `name="__preset_action" value="save_as"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в панели нет элемента пользовательских вариантов %q", want)
@@ -458,11 +464,16 @@ func TestReportSettingsPanelChecksLowercaseQueryColumns(t *testing.T) {
 	for _, want := range []string{
 		`class="rs-group" value="организация" checked`,
 		`class="rs-measure" value="валоваяприбыль" checked`,
-		`function rsNorm`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("панель должна отметить lower-case колонку %q: %s", want, out)
 		}
+	}
+	if strings.Contains(out, `function rsNorm`) {
+		t.Fatalf("rsNorm должен жить в /static/ui.js, а не в HTML")
+	}
+	if !strings.Contains(string(uiJS), `function rsNorm`) {
+		t.Fatalf("/static/ui.js не содержит rsNorm для runtime-настроек отчета")
 	}
 }
 

@@ -58,6 +58,398 @@ if (window.__obEmbedded) {
   })();
 }
 
+function obReady(fn) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+  else fn();
+}
+
+function obReadJSONScript(id, fallback) {
+  var el = document.getElementById(id);
+  if (!el) return fallback;
+  var raw = el.textContent || '';
+  if (!raw.trim()) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return fallback;
+  }
+}
+
+(function () {
+  if (window.__obNavInit) return;
+  window.__obNavInit = true;
+  function setNav(open) {
+    document.body.classList.toggle('nav-open', open);
+    var btn = document.querySelector('.nav-toggle');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  window.obNavToggle = function () {
+    setNav(!document.body.classList.contains('nav-open'));
+  };
+  obReady(function () {
+    document.addEventListener('click', function (e) {
+      if (!document.body.classList.contains('nav-open')) return;
+      if (e.target.closest && e.target.closest('.nav-toggle')) return;
+      var as = document.getElementById('ob-nav');
+      if (as && as.contains(e.target)) return;
+      setNav(false);
+    }, true);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && document.body.classList.contains('nav-open')) setNav(false);
+    });
+    try {
+      document.querySelectorAll('aside details.navsec').forEach(function (d) {
+        var key = 'navsec:' + d.getAttribute('data-navsec');
+        var saved = localStorage.getItem(key);
+        if (saved === '1') d.open = true;
+        else if (saved === '0') d.open = false;
+        d.addEventListener('toggle', function () { localStorage.setItem(key, d.open ? '1' : '0'); });
+      });
+    } catch (e) {}
+  });
+})();
+
+function obApplyValueAxisFormatter(opt) {
+  if (opt && opt.yAxis && opt.yAxis.type === 'value') {
+    opt.yAxis.axisLabel = {
+      formatter: function (v) {
+        if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+        if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+        return v % 1 === 0 ? v : v.toFixed(2);
+      }
+    };
+  }
+}
+
+function obInitMappedCharts(jsonID, selector, attrName, errorText, formatValueAxis) {
+  if (!window.echarts) return;
+  var charts = obReadJSONScript(jsonID, {});
+  var nodes = document.querySelectorAll(selector);
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (node.getAttribute('data-ob-init')) continue;
+    var opt = charts[node.getAttribute(attrName)];
+    if (!opt) continue;
+    node.setAttribute('data-ob-init', '1');
+    try {
+      var c = echarts.init(node);
+      opt.animation = false;
+      if (formatValueAxis) obApplyValueAxisFormatter(opt);
+      c.setOption(opt);
+      (function (chart) { window.addEventListener('resize', function () { chart.resize(); }); })(c);
+    } catch (e) {
+      console.error(errorText, e);
+    }
+  }
+}
+
+function obInitReportChart() {
+  if (!window.echarts) return;
+  var node = document.getElementById('ob-chart');
+  if (!node || node.getAttribute('data-ob-init')) return;
+  var opt = obReadJSONScript('ob-report-chart', null);
+  if (!opt) return;
+  node.setAttribute('data-ob-init', '1');
+  try {
+    var c = echarts.init(node);
+    opt.animation = false;
+    obApplyValueAxisFormatter(opt);
+    c.setOption(opt);
+    window.addEventListener('resize', function () { c.resize(); });
+  } catch (e) {
+    console.error('report chart init failed', e);
+  }
+}
+
+obReady(function () {
+  obInitMappedCharts('ob-widget-charts', '.w-chart-canvas[data-widget]', 'data-widget', 'chart init failed', true);
+  obInitMappedCharts('ob-page-charts', '.w-chart-canvas[data-pagechart]', 'data-pagechart', 'page chart init failed', false);
+  obInitReportChart();
+});
+
+function obInitFormDirty() {
+  var f = document.querySelector('#main-form[data-ob-dirty-watch="1"]');
+  if (!f) return;
+  window._obFormDirty = false;
+  var base = document.title;
+  function mark() {
+    window._obFormDirty = true;
+    if (document.title.charAt(0) !== '●') document.title = '● ' + base;
+  }
+  f.addEventListener('input', mark, true);
+  f.addEventListener('change', mark, true);
+  f.addEventListener('submit', function () { window._obFormDirty = false; });
+  window.addEventListener('beforeunload', function (e) {
+    if (window._obFormDirty) {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+  });
+}
+obReady(obInitFormDirty);
+
+function obInitAttachments() {
+  var panel = document.querySelector('[data-ob-attachments]');
+  if (!panel) return;
+  var url = panel.getAttribute('data-attachments-url') || '';
+  if (!url) return;
+  function fmtSize(b) {
+    if (b < 1024) return b + ' Б';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' КБ';
+    return (b / 1024 / 1024).toFixed(1) + ' МБ';
+  }
+  function loadAtts() {
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (atts) {
+        var cnt = document.getElementById('att-count');
+        var list = document.getElementById('att-list');
+        if (!cnt || !list) return;
+        cnt.textContent = atts.length ? atts.length + ' файл(ов)' : '';
+        if (!atts.length) {
+          list.innerHTML = '<p style="color:#94a3b8;font-size:13px;margin:0">Нет вложений</p>';
+          return;
+        }
+        list.innerHTML = '';
+        atts.forEach(function (a) {
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9';
+          var nameEl = document.createElement('span');
+          nameEl.style.cssText = 'flex:1;font-size:13px;word-break:break-all';
+          nameEl.textContent = String(a.filename == null ? '' : a.filename);
+          var sizeEl = document.createElement('span');
+          sizeEl.style.cssText = 'color:#94a3b8;font-size:12px;white-space:nowrap';
+          sizeEl.textContent = fmtSize(a.size_bytes);
+          var aid = encodeURIComponent(String(a.id));
+          var dl = document.createElement('a');
+          dl.href = '/ui/attachments/' + aid + '/download';
+          dl.className = 'btn btn-sm btn-secondary';
+          dl.style.cssText = 'padding:3px 10px;font-size:12px';
+          dl.textContent = '↓';
+          var delForm = document.createElement('form');
+          delForm.method = 'POST';
+          delForm.action = '/ui/attachments/' + aid + '/delete';
+          delForm.style.margin = '0';
+          delForm.addEventListener('submit', function (e) {
+            if (!confirm('Удалить вложение?')) e.preventDefault();
+          });
+          var delBtn = document.createElement('button');
+          delBtn.type = 'submit';
+          delBtn.className = 'btn btn-sm btn-danger';
+          delBtn.style.cssText = 'padding:3px 8px;font-size:12px';
+          delBtn.textContent = '×';
+          delForm.appendChild(delBtn);
+          row.appendChild(nameEl);
+          row.appendChild(sizeEl);
+          row.appendChild(dl);
+          row.appendChild(delForm);
+          list.appendChild(row);
+        });
+      }).catch(function () {});
+  }
+  loadAtts();
+}
+obReady(obInitAttachments);
+
+function rsNorm(v) { return String(v || '').toLowerCase(); }
+
+function rsFieldMap(values) {
+  var out = {};
+  (values || []).forEach(function (v) { if (v) out[rsNorm(v)] = v; });
+  return out;
+}
+
+window.rsBeforeSubmit = function (ev) {
+  var form = ev && ev.target;
+  if (form && form.dataset && form.dataset.skipCollect === '1') {
+    form.dataset.skipCollect = '';
+    return true;
+  }
+  window.rsCollect();
+  return true;
+};
+
+window.rsChoosePreset = function (sel) {
+  if (!sel || !sel.form) return;
+  var h = sel.form.querySelector('input[name="__settings"]');
+  if (h) h.remove();
+  sel.form.dataset.skipCollect = '1';
+  sel.form.submit();
+};
+
+function obPresetReportSettings() {
+  var hidden = document.getElementById('rs-json');
+  if (!hidden) return;
+  var raw = hidden.value || hidden.dataset.base || '';
+  if (!raw) return;
+  if (!hidden.value) hidden.value = raw;
+  try {
+    var s = JSON.parse(raw);
+    var comp = (s && s.composition) || {};
+    var groups = comp.Groupings || comp.groupings || [];
+    var meas = comp.Measures || comp.measures || [];
+    var mf = meas.map(function (m) { return m.Field || m.field; });
+    var groupMap = rsFieldMap(groups);
+    var measureMap = rsFieldMap(mf);
+    document.querySelectorAll('.rs-group,.rs-measure').forEach(function (el) { el.checked = false; });
+    document.querySelectorAll('.rs-group').forEach(function (el) { if (groupMap[rsNorm(el.value)]) el.checked = true; });
+    document.querySelectorAll('.rs-measure').forEach(function (el) { if (measureMap[rsNorm(el.value)]) el.checked = true; });
+    var ap = comp.Appearance || comp.appearance || {};
+    var lines = ap.lines || ap.Lines || '';
+    if (lines === 'horizontal') lines = '';
+    var le = document.getElementById('rs-lines');
+    if (le) le.value = lines;
+    var ze = document.getElementById('rs-zebra');
+    if (ze) ze.checked = !!(ap.zebra || ap.Zebra);
+  } catch (e) {}
+}
+
+window.rsCollect = function () {
+  var hidden = document.getElementById('rs-json');
+  var prev = {};
+  var raw = hidden ? (hidden.value || hidden.dataset.base || '') : '';
+  if (hidden && !hidden.value && raw) hidden.value = raw;
+  if (raw) {
+    try {
+      prev = JSON.parse(raw) || {};
+    } catch (e) {
+      prev = {};
+    }
+  }
+  var prevComp = (prev && prev.composition) || {};
+  var prevGroups = prevComp.Groupings || prevComp.groupings || [];
+  var prevGroupByField = rsFieldMap(prevGroups);
+  var prevMeasures = prevComp.Measures || prevComp.measures || [];
+  var prevByField = {};
+  var prevMeasureField = {};
+  prevMeasures.forEach(function (m) {
+    var f = m && (m.Field || m.field);
+    if (f) {
+      prevByField[rsNorm(f)] = m;
+      prevMeasureField[rsNorm(f)] = f;
+    }
+  });
+  var groupings = [];
+  document.querySelectorAll('.rs-group:checked').forEach(function (c) {
+    groupings.push(prevGroupByField[rsNorm(c.value)] || c.value);
+  });
+  var measures = [];
+  document.querySelectorAll('.rs-measure:checked').forEach(function (c) {
+    var key = rsNorm(c.value);
+    var src = prevByField[key] || {};
+    var m = { Field: prevMeasureField[key] || c.value, Agg: src.Agg || src.agg || 'sum' };
+    var title = src.Title || src.title;
+    if (title) m.Title = title;
+    var align = src.Align || src.align;
+    if (align) m.Align = align;
+    var format = src.Format || src.format;
+    if (format) m.Format = format;
+    measures.push(m);
+  });
+  var filters = [];
+  document.querySelectorAll('.rs-filter-row').forEach(function (row) {
+    var f = row.querySelector('.rs-f-field');
+    var op = row.querySelector('.rs-f-op');
+    var v = row.querySelector('.rs-f-value');
+    if (f && op && f.value) filters.push({ field: f.value, op: op.value, value: v ? v.value : '' });
+  });
+  var variantEl = document.querySelector('input[name="__variant"]');
+  var lines = (document.getElementById('rs-lines') || {}).value || '';
+  var zebra = !!(document.getElementById('rs-zebra') || {}).checked;
+  var columns = prevComp.Columns || prevComp.columns || [];
+  var sort = prevComp.Sort || prevComp.sort || [];
+  var totals = prevComp.Totals || prevComp.totals;
+  var detail = (typeof prevComp.Detail !== 'undefined') ? prevComp.Detail : prevComp.detail;
+  var nextComp = { Groupings: groupings, Measures: measures, Appearance: { lines: lines, zebra: zebra } };
+  if (columns && columns.length) nextComp.Columns = columns;
+  if (sort && sort.length) nextComp.Sort = sort;
+  if (totals) nextComp.Totals = totals;
+  if (typeof detail !== 'undefined') nextComp.Detail = !!detail;
+  var s = { variant: variantEl ? variantEl.value : '', composition: nextComp, filters: filters };
+  if (hidden) hidden.value = JSON.stringify(s);
+};
+
+window.rsAddFilter = function () {
+  var tpl = document.getElementById('rs-filter-tpl');
+  var rows = document.getElementById('rs-filter-rows');
+  if (!tpl || !tpl.content || !rows) return;
+  rows.appendChild(tpl.content.cloneNode(true));
+};
+
+function obInitReportCompositionControls() {
+  function rcEscape(key) {
+    return (window.CSS && CSS.escape) ? CSS.escape(key) : key.replace(/["\\\]]/g, '\\$&');
+  }
+  function rcSetOpen(tr, open) {
+    var key = tr.getAttribute('data-group');
+    var ek = rcEscape(key);
+    var cell = tr.querySelector('td');
+    var sel = '[data-parent="' + ek + '"],[data-parent^="' + ek + '/"],[data-group^="' + ek + '/"]';
+    document.querySelectorAll(sel).forEach(function (el) { el.style.display = open ? '' : 'none'; });
+    if (cell) cell.textContent = (open ? '▼' : '▶') + cell.textContent.slice(1);
+  }
+  document.querySelectorAll('tr.grp').forEach(function (tr) {
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', function () {
+      var cell = tr.querySelector('td');
+      var open = cell.textContent.trim().charAt(0) === '▼';
+      rcSetOpen(tr, !open);
+    });
+  });
+  var expandBtn = document.getElementById('rc-expand');
+  var collapseBtn = document.getElementById('rc-collapse');
+  if (expandBtn) {
+    expandBtn.addEventListener('click', function () {
+      var tbody = document.querySelector('table.report-composed tbody');
+      if (!tbody) return;
+      tbody.querySelectorAll('tr').forEach(function (tr) { tr.style.display = ''; });
+      tbody.querySelectorAll('tr.grp').forEach(function (tr) {
+        var cell = tr.querySelector('td');
+        if (cell && cell.textContent.trim().charAt(0) === '▶') {
+          cell.textContent = '▼' + cell.textContent.slice(1);
+        }
+      });
+    });
+  }
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', function () {
+      var tbody = document.querySelector('table.report-composed tbody');
+      if (!tbody) return;
+      tbody.querySelectorAll('tr.det,tr.subtotal').forEach(function (tr) { tr.style.display = 'none'; });
+      tbody.querySelectorAll('tr.grp').forEach(function (tr) {
+        var level = parseInt(tr.getAttribute('data-level') || '0', 10);
+        if (level > 0) {
+          tr.style.display = 'none';
+        } else {
+          var cell = tr.querySelector('td');
+          if (cell && cell.textContent.trim().charAt(0) === '▼') {
+            cell.textContent = '▶' + cell.textContent.slice(1);
+          }
+        }
+      });
+    });
+  }
+}
+
+function obInitReportBlocks() {
+  try {
+    document.querySelectorAll('details.report-block').forEach(function (el) {
+      var key = 'rb-' + location.pathname + '-' + el.dataset.block;
+      var saved = localStorage.getItem(key);
+      if (saved === '1') el.open = true;
+      else if (saved === '0') el.open = false;
+      el.addEventListener('toggle', function () { localStorage.setItem(key, el.open ? '1' : '0'); });
+    });
+  } catch (e) {}
+}
+
+obReady(function () {
+  obPresetReportSettings();
+  obInitReportCompositionControls();
+  obInitReportBlocks();
+});
+
 (function () {
   if (window.__obAiInit) return;
   window.__obAiInit = true;

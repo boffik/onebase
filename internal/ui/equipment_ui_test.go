@@ -40,6 +40,16 @@ func TestUI_DeviceBridge_InHead(t *testing.T) {
 	}
 }
 
+func TestUI_IndexChartsUseJSONBootstrap(t *testing.T) {
+	html := renderPage(t, "page-index")
+	if !strings.Contains(html, `id="ob-widget-charts"`) {
+		t.Fatalf("dashboard не содержит JSON-якорь графиков")
+	}
+	if strings.Contains(html, `window.__obWidgetCharts`) {
+		t.Fatalf("dashboard снова генерирует inline JS для графиков")
+	}
+}
+
 // Пункты меню РМК и настроек агента попадают в общий nav.
 func TestUI_NavLinks(t *testing.T) {
 	html := renderPage(t, "page-index")

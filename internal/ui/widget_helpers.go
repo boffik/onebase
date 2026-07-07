@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/widget"
 	"github.com/shopspring/decimal"
 )
@@ -91,6 +92,41 @@ func echartsJSON(chart *widget.ChartData) template.JS {
 	b, err := json.Marshal(opt)
 	if err != nil {
 		return template.JS("null")
+	}
+	return template.JS(b)
+}
+
+func widgetChartsJSON(v any) template.JS {
+	results, ok := v.([]widget.Result)
+	if !ok || len(results) == 0 {
+		return template.JS("{}")
+	}
+	out := make(map[string]any)
+	for _, res := range results {
+		if res.Type == "chart" && res.Chart != nil {
+			out[res.Name] = widget.EChartsOption(res.Chart)
+		}
+	}
+	return jsMarshal(out)
+}
+
+func pageChartsJSON(blocks []interpreter.PageBlock) template.JS {
+	if len(blocks) == 0 {
+		return template.JS("{}")
+	}
+	out := make(map[string]any)
+	for i, block := range blocks {
+		if block.Kind == "chart" && block.Chart != nil {
+			out[fmt.Sprintf("%d", i)] = widget.EChartsOption(pageChartData(block.Chart))
+		}
+	}
+	return jsMarshal(out)
+}
+
+func jsMarshal(v any) template.JS {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return template.JS("{}")
 	}
 	return template.JS(b)
 }

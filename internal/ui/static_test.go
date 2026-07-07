@@ -24,7 +24,15 @@ func TestStaticUIJS(t *testing.T) {
 		t.Fatalf("/static/ui.js content-type = %q", ct)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"window.obOpenInShell", "openRefPicker", "window.onebaseDevice", "onebase:звонок.входящий"} {
+	for _, want := range []string{
+		"window.obOpenInShell",
+		"openRefPicker",
+		"obInitMappedCharts",
+		"window.rsBeforeSubmit",
+		"data-ob-attachments",
+		"window.onebaseDevice",
+		"onebase:звонок.входящий",
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("/static/ui.js не содержит %q", want)
 		}
