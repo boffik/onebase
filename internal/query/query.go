@@ -473,6 +473,8 @@ type translator struct {
 	sources     []SourceRef                   // объекты-источники запроса (для RBAC, план 54)
 	rowFilters  []pendingRowFilter            // RLS-фильтры обычных источников, внедряемые в WHERE
 	rowsScoped  bool                          // true после внедрения rowFilters в outer WHERE
+	rowApplied  []SourceRef                   // источники, к которым RLS-предикат реально внедрён (для финальной сверки)
+	parenDepth  int                           // глубина незакрытых '(' в основном потоке (VT-аргументы считает parseVTArgs)
 }
 
 type pendingRowFilter struct {
@@ -512,6 +514,46 @@ func (tr *translator) sourceRowFilter(kind, name string) *storage.Predicate {
 	return nil
 }
 
+// markRowApplied фиксирует, что RLS-предикат источника реально внедрён в SQL.
+// Матчинг по kind+EqualFold(name) — как в sourceRowFilter, чтобы регистр имени
+// источника (токен запроса vs metadata) не расходился со сверкой.
+func (tr *translator) markRowApplied(kind, name string) {
+	if tr.rowFilterApplied(kind, name) {
+		return
+	}
+	tr.rowApplied = append(tr.rowApplied, SourceRef{Kind: kind, Name: name})
+}
+
+func (tr *translator) rowFilterApplied(kind, name string) bool {
+	for _, s := range tr.rowApplied {
+		if s.Kind == kind && strings.EqualFold(s.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// assertRowFiltersApplied — финальная защита: если у источника запроса есть
+// активная строковая политика, но предикат не был внедрён ни одним из путей
+// (главная таблица / скоуп-подзапрос джойна / условие авто-JOIN), запрос
+// отклоняется. Так неучтённая форма запроса даёт fail-closed отказ, а не тихую
+// утечку чужих строк в отчётах/AI, где object-gate ограниченный источник
+// пропускает (право read у пользователя есть). См. план 79, этап 79E.
+func (tr *translator) assertRowFiltersApplied() error {
+	if len(tr.opts.RowFilters) == 0 {
+		return nil
+	}
+	for _, src := range tr.sources {
+		if tr.sourceRowFilter(src.Kind, src.Name) == nil {
+			continue
+		}
+		if !tr.rowFilterApplied(src.Kind, src.Name) {
+			return fmt.Errorf("строковая политика источника %s.%s не внедрена в запрос", src.Kind, src.Name)
+		}
+	}
+	return nil
+}
+
 func (tr *translator) predicateEntityForSource(typeUpper, name string) *metadata.Entity {
 	switch {
 	case isAccumRegType(typeUpper):
@@ -542,6 +584,14 @@ func (tr *translator) addPendingRowFilter(typeUpper, name, alias string) error {
 	if pred == nil {
 		return nil
 	}
+	// Отложенный фильтр главной таблицы внедряется в outer WHERE. Если источник
+	// оказался первым, но лежит внутри подзапроса ИЗ (parenDepth>0), внешний
+	// WHERE ссылался бы на таблицу вне области видимости — раньше это давало
+	// битый SQL. Отказываем явно (fail-closed): alias-aware внедрение в
+	// подзапросы — отдельный этап (план 79, 79E).
+	if tr.parenDepth > 0 {
+		return fmt.Errorf("строковая политика источника %s.%s: фильтрация подзапроса в ИЗ пока не поддерживается", kind, name)
+	}
 	meta := tr.predicateEntityForSource(typeUpper, name)
 	if meta == nil {
 		return fmt.Errorf("row filter source %s.%s metadata not found", kind, name)
@@ -552,6 +602,7 @@ func (tr *translator) addPendingRowFilter(typeUpper, name, alias string) error {
 		meta:   meta,
 		filter: pred,
 	})
+	tr.markRowApplied(kind, name)
 	return nil
 }
 
@@ -568,6 +619,7 @@ func (tr *translator) rowFilterCondition(kind, name string, meta *metadata.Entit
 		return "", err
 	}
 	tr.args = append(tr.args, args...)
+	tr.markRowApplied(kind, name)
 	return sql, nil
 }
 
@@ -586,6 +638,7 @@ func (tr *translator) rowFilteredSourceSQL(typeUpper, name, tableName, alias str
 		return "", false, fmt.Errorf("row filter %s.%s: %w", kind, name, err)
 	}
 	tr.args = append(tr.args, args...)
+	tr.markRowApplied(kind, name)
 	return fmt.Sprintf("(SELECT * FROM %s WHERE %s) AS %s", tableName, sql, alias), true, nil
 }
 
@@ -2060,8 +2113,10 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 
 		// Multi-word: СГРУППИРОВАТЬ ПО / УПОРЯДОЧИТЬ ПО
 		if t.kind == tIdent && (upper == "СГРУППИРОВАТЬ" || upper == "УПОРЯДОЧИТЬ") {
-			if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
-				return Result{}, err
+			if tr.parenDepth == 0 {
+				if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+					return Result{}, err
+				}
 			}
 			tr.advance()
 			if upper == "УПОРЯДОЧИТЬ" {
@@ -2104,6 +2159,15 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		// Punctuation
 		if t.kind == tComma || t.kind == tLParen || t.kind == tRParen {
 			tr.prevWasDot = false
+			// Считаем глубину подзапросов/группировок: источник ИЗ, встреченный
+			// при parenDepth>0, лежит внутри подзапроса, а не в верхнем FROM.
+			// (Скобки виртуальных таблиц регистров съедает parseVTArgs — сюда не
+			// попадают, баланс не нарушают.)
+			if t.kind == tLParen {
+				tr.parenDepth++
+			} else if t.kind == tRParen && tr.parenDepth > 0 {
+				tr.parenDepth--
+			}
 			tr.advance()
 			tr.emit(t.val)
 			continue
@@ -2145,13 +2209,17 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				case "WHERE":
 					tr.emit("WHERE")
 					tr.section = sectionWhere
-					if err := tr.emitPendingRowFiltersAfterWhere(); err != nil {
-						return Result{}, err
+					if tr.parenDepth == 0 {
+						if err := tr.emitPendingRowFiltersAfterWhere(); err != nil {
+							return Result{}, err
+						}
 					}
 					continue
 				case "GROUP", "HAVING", "ORDER":
-					if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
-						return Result{}, err
+					if tr.parenDepth == 0 {
+						if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+							return Result{}, err
+						}
 					}
 				}
 				tr.emit(kw)
@@ -2220,6 +2288,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		tr.advance()
 	}
 	if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+		return Result{}, err
+	}
+	if err := tr.assertRowFiltersApplied(); err != nil {
 		return Result{}, err
 	}
 	return Result{SQL: tr.build(), Args: tr.args, Sources: tr.sources}, nil

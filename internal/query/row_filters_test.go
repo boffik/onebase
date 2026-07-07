@@ -112,3 +112,89 @@ func TestCompile_RowFiltersJoinedSourceScopedBeforeOn(t *testing.T) {
 		t.Fatalf("args = %#v, want one joined row filter arg", res.Args)
 	}
 }
+
+func TestCompile_RowFiltersSkipNestedWhereBeforeOuterScope(t *testing.T) {
+	product := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	client := &metadata.Entity{
+		Name: "Клиент",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	res, err := query.Compile(`ВЫБРАТЬ т.Ссылка
+ИЗ Справочник.Товар КАК т
+ЛЕВОЕ СОЕДИНЕНИЕ Справочник.Клиент КАК к
+ПО к.Ссылка В (ВЫБРАТЬ Ссылка ИЗ Справочник.Клиент ГДЕ Наименование <> &Пусто)`, query.CompileOpts{
+		Entities: []*metadata.Entity{product, client},
+		Params:   map[string]any{"Пусто": ""},
+		Dialect:  storage.SQLiteDialect{},
+		RowFilters: map[query.SourceRef]*storage.Predicate{
+			{Kind: "catalog", Name: "Товар"}: {Field: "Owner", Op: "eq", Value: "u"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if strings.Contains(res.SQL, "WHERE (т.owner = ?) AND наименование") {
+		t.Fatalf("main row filter must not be injected into nested WHERE:\n%s", res.SQL)
+	}
+	if !strings.Contains(res.SQL, ") WHERE (т.owner = ?)") {
+		t.Fatalf("main row filter must be emitted at outer query level, got:\n%s", res.SQL)
+	}
+	if len(res.Args) != 2 || res.Args[0] != "" || res.Args[1] != "u" {
+		t.Fatalf("args = %#v, want nested param first, then outer row filter", res.Args)
+	}
+}
+
+// TestCompile_RowFiltersSubqueryInFromFailClosed: у ограниченного источника,
+// оказавшегося главной таблицей внутри подзапроса ИЗ, отложенный фильтр нельзя
+// корректно поместить в outer WHERE (раньше выходил битый SQL). Теперь — явный
+// fail-closed отказ, а не тихая утечка/поломка.
+func TestCompile_RowFiltersSubqueryInFromFailClosed(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Owner", Type: metadata.FieldTypeString}},
+	}
+	_, err := query.Compile(`ВЫБРАТЬ * ИЗ (ВЫБРАТЬ Ссылка ИЗ Справочник.Товар) КАК П`, query.CompileOpts{
+		Entities: []*metadata.Entity{cat},
+		Dialect:  storage.SQLiteDialect{},
+		RowFilters: map[query.SourceRef]*storage.Predicate{
+			{Kind: "catalog", Name: "Товар"}: {Field: "Owner", Op: "eq", Value: "u"},
+		},
+	})
+	if err == nil {
+		t.Fatal("restricted source inside a FROM subquery must fail closed, got nil error")
+	}
+	if !strings.Contains(err.Error(), "подзапрос") {
+		t.Fatalf("error must explain the FROM-subquery limitation, got: %v", err)
+	}
+}
+
+// TestCompile_SubqueryInFromOpenDeployment: без активных строковых политик
+// подзапрос в ИЗ по-прежнему компилируется (отказ касается только ограниченных
+// источников — pred!=nil).
+func TestCompile_SubqueryInFromOpenDeployment(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+	}
+	res, err := query.Compile(`ВЫБРАТЬ * ИЗ (ВЫБРАТЬ Ссылка ИЗ Справочник.Товар) КАК П`, query.CompileOpts{
+		Entities: []*metadata.Entity{cat},
+		Dialect:  storage.SQLiteDialect{},
+	})
+	if err != nil {
+		t.Fatalf("open deployment must still compile FROM subqueries: %v", err)
+	}
+	if !strings.Contains(res.SQL, "SELECT id FROM товар") {
+		t.Fatalf("FROM subquery must survive without row filters, got:\n%s", res.SQL)
+	}
+}
