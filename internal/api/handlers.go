@@ -17,6 +17,7 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/webhook"
 )
 
 const (
@@ -30,6 +31,19 @@ type handler struct {
 	store     *storage.DB
 	interp    *interpreter.Interpreter
 	entitySvc *entityservice.Service // разделяем с ui — см. ui.Server.EntitySvc()
+	hooks     *webhook.Dispatcher    // исходящие веб-хуки (план 29); nil-safe
+}
+
+// dispatchHook шлёт исходящий веб-хук после успешной операции. REST-путь
+// обязан оповещать интеграции так же, как UI (план 29): save/post идут через
+// entityservice и событие шлют, а unpost/delete раньше уходили молча.
+func (h *handler) dispatchHook(ctx context.Context, name, entity string, id uuid.UUID) {
+	if h.hooks.Enabled() {
+		h.hooks.Dispatch(webhook.Event{
+			Name: name, Entity: entity, ID: id.String(),
+			User: storage.AuditUserLogin(ctx),
+		})
+	}
 }
 
 // createUpdateBody — JSON-контракт для POST/PUT. Шапка — flat-поля (как раньше),
@@ -284,6 +298,7 @@ func (h *handler) deleteObject(kind metadata.Kind) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
 			return
 		}
+		h.dispatchHook(r.Context(), string(kind)+".delete", entityName, id)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

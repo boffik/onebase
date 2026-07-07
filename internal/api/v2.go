@@ -230,6 +230,7 @@ func (h *handler) deleteObjectV2(kind metadata.Kind) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
 			return
 		}
+		h.dispatchHook(r.Context(), string(kind)+".delete", entityName, id)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -297,6 +298,7 @@ func (h *handler) unpostDocumentV2() http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
 			return
 		}
+		h.dispatchHook(r.Context(), "document.unpost", entityName, id)
 		writeJSONV2(w, http.StatusOK, restV2Envelope{Data: map[string]any{
 			"id":     id.String(),
 			"posted": false,
