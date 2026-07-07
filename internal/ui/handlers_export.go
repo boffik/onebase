@@ -21,6 +21,11 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := parseListParams(r, entity, s.store.GetListPageSize(r.Context()))
+	var ok bool
+	params, ok = s.applyRowFilter(w, r, entity, "read", params)
+	if !ok {
+		return
+	}
 	rows, err := s.store.List(r.Context(), entity.Name, entity, params)
 	if err != nil {
 		http.Error(w, s.errText(r, err), 500)
@@ -54,7 +59,7 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 
 // contentDisposition собирает заголовок Content-Disposition по RFC 6266:
 // ASCII-фолбэк в filename= (для старых клиентов) и полное имя в
-// filename*=UTF-8'' (issue #46 — сырой UTF-8 в quoted-string браузеры
+// filename*=UTF-8” (issue #46 — сырой UTF-8 в quoted-string браузеры
 // декодируют как latin-1, имя файла превращается в кракозябры).
 func contentDisposition(filename string) string {
 	fallback := make([]rune, 0, len(filename))
@@ -68,7 +73,7 @@ func contentDisposition(filename string) string {
 	return "attachment; filename=\"" + string(fallback) + "\"; filename*=UTF-8''" + encodeRFC5987(filename)
 }
 
-// encodeRFC5987 кодирует строку для filename*=UTF-8'' — percent-кодируется
+// encodeRFC5987 кодирует строку для filename*=UTF-8” — percent-кодируется
 // всё, кроме attr-char по RFC 5987 (url.PathEscape оставляет «=», «@», «:»,
 // которые ломают разбор заголовка).
 func encodeRFC5987(s string) string {

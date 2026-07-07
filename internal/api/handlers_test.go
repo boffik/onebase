@@ -237,6 +237,67 @@ func TestAPI_RBAC_DeniesListAndGetWithoutRead(t *testing.T) {
 	}
 }
 
+func TestAPI_RowAccessFiltersListAndBlocksDirectRow(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+	ownID := uuid.New()
+	otherID := uuid.New()
+	if err := h.store.Upsert(ctx, cat.Name, ownID, map[string]any{"Наименование": "A", "Owner": "u"}, cat); err != nil {
+		t.Fatalf("upsert own: %v", err)
+	}
+	if err := h.store.Upsert(ctx, cat.Name, otherID, map[string]any{"Наименование": "B", "Owner": "other"}, cat); err != nil {
+		t.Fatalf("upsert other: %v", err)
+	}
+	user := apiUser("u", auth.Permission{
+		Catalogs: map[string][]string{cat.Name: {"read", "write"}},
+		RowAccess: auth.RowAccess{Catalogs: map[string]auth.RowPolicies{
+			cat.Name: {
+				"read":  {Field: "Owner", Op: "eq", Value: auth.RowValue{User: "login"}},
+				"write": {SameAs: "read"},
+			},
+		}},
+	})
+
+	listReq := withUser(reqWithEntity(http.MethodGet, "/catalogs/Товар", nil, map[string]string{"entity": "Товар"}, nil), user)
+	listRec := httptest.NewRecorder()
+	h.listObjects(metadata.KindCatalog)(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(listRec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["Owner"] != "u" {
+		t.Fatalf("rows = %#v", rows)
+	}
+	if got := listRec.Header().Get("X-Total-Count"); got != "1" {
+		t.Fatalf("X-Total-Count = %q, want 1", got)
+	}
+
+	getReq := withUser(reqWithEntity(http.MethodGet, "/catalogs/Товар/"+otherID.String(), nil, map[string]string{"entity": "Товар", "id": otherID.String()}, nil), user)
+	getRec := httptest.NewRecorder()
+	h.getObject(metadata.KindCatalog)(getRec, getReq)
+	if getRec.Code != http.StatusForbidden {
+		t.Fatalf("get hidden status = %d, want 403; body=%s", getRec.Code, getRec.Body.String())
+	}
+
+	body := []byte(`{"Наименование":"B2","Owner":"u"}`)
+	updReq := withUser(reqWithEntity(http.MethodPut, "/catalogs/Товар/"+otherID.String(), body, map[string]string{"entity": "Товар", "id": otherID.String()}, nil), user)
+	updRec := httptest.NewRecorder()
+	h.updateObject(metadata.KindCatalog)(updRec, updReq)
+	if updRec.Code != http.StatusForbidden {
+		t.Fatalf("update hidden status = %d, want 403; body=%s", updRec.Code, updRec.Body.String())
+	}
+}
+
 func TestAPI_RBAC_UpdatePostActionRequiresPost(t *testing.T) {
 	doc := &metadata.Entity{
 		Name:    "Поступление",
