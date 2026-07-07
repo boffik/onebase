@@ -1634,7 +1634,7 @@ const tplReport = `
   {{if .ReportPresets}}
   <div class="form-group" style="margin-bottom:16px;max-width:360px">
     <label>{{t $.Lang "Вариант пользователя"}}</label>
-    <select name="__preset" onchange="var h=this.form.querySelector('input[name=__settings]');if(h)h.remove();this.form.submit()">
+    <select name="__preset" data-ob-report-preset-submit>
       <option value="__standard" {{if eq $.ActivePresetID "__standard"}}selected{{end}}>{{t $.Lang "Стандартные настройки"}}</option>
       {{range .ReportPresets}}<option value="{{.ID}}" {{if eq .ID $.ActivePresetID}}selected{{end}}>{{.Name}}{{if .IsDefault}} *{{end}}</option>{{end}}
     </select>
@@ -1643,7 +1643,7 @@ const tplReport = `
   {{if .Report.Variants}}
   <div class="form-group" style="margin-bottom:16px;max-width:320px">
     <label>{{t $.Lang "Вариант"}}</label>
-    <select name="__variant" onchange="var h=this.form.querySelector('input[name=__settings]');if(h)h.remove();var p=this.form.querySelector('select[name=__preset]');if(p)p.value='__standard';this.form.submit()">
+    <select name="__variant" data-ob-report-variant-submit>
       <option value="" {{if not $.ActiveVariant}}selected{{end}}>{{t $.Lang "Основной"}}</option>
       {{range .Report.Variants}}<option value="{{.Name}}" {{if eq .Name $.ActiveVariant}}selected{{end}}>{{.Name}}</option>{{end}}
     </select>
@@ -1678,8 +1678,8 @@ const tplReport = `
               <option value="{{index . "id"}}" {{if eq $pval (str (index . "id"))}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
-          <button type="button" onclick="openRefPicker('rp-{{$pname}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-          <button type="button" onclick="openRefCurrent('rp-{{$pname}}')" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
+          <button type="button" data-ob-ref-picker="rp-{{$pname}}" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+          <button type="button" data-ob-ref-current="rp-{{$pname}}" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
         </div>
       {{else}}
         <input type="text" name="{{$pname}}" value="{{$pval}}">
@@ -1696,13 +1696,13 @@ const tplReport = `
 {{if and .ReportCols .ReportSettingsJSON}}
 <details class="card report-block" data-block="settings" style="margin-bottom:16px">
 <summary>{{t $.Lang "Настройка отчёта"}}{{if .UserSettings}} <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600">{{t $.Lang "изменено"}}</span>{{end}}</summary>
-<form method="POST" onsubmit="return rsBeforeSubmit(event)">
+<form method="POST" data-ob-rs-before-submit>
   {{range .ReportParams}}<input type="hidden" name="{{.Name}}" value="{{str (index $.ParamValues .Name)}}">{{end}}
   <input type="hidden" name="__variant" value="{{.ActiveVariant}}">
   <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
     <div class="form-group" style="margin-bottom:0;min-width:220px">
       <label>{{t $.Lang "Вариант пользователя"}}</label>
-      <select name="__preset" onchange="rsChoosePreset(this)">
+      <select name="__preset" data-ob-rs-choose-preset>
         <option value="__standard" {{if eq $.ActivePresetID "__standard"}}selected{{end}}>{{t $.Lang "Стандартные настройки"}}</option>
         {{range .ReportPresets}}<option value="{{.ID}}" {{if eq .ID $.ActivePresetID}}selected{{end}}>{{.Name}}{{if .IsDefault}} *{{end}}</option>{{end}}
       </select>
@@ -1744,11 +1744,11 @@ const tplReport = `
           <option value="contains" {{if eq $f.Op "contains"}}selected{{end}}>{{t $.Lang "содержит"}}</option>
         </select>
         <input class="rs-f-value" type="text" value="{{$f.Value}}">
-        <button type="button" class="btn btn-sm" onclick="this.parentNode.remove()">×</button>
+        <button type="button" class="btn btn-sm" data-ob-remove-row=".rs-filter-row">×</button>
       </div>
       {{end}}{{end}}
     </div>
-    <button type="button" class="btn btn-sm" onclick="rsAddFilter()">+ {{t $.Lang "Отбор"}}</button>
+    <button type="button" class="btn btn-sm" data-ob-rs-add-filter>+ {{t $.Lang "Отбор"}}</button>
   </div>
   <template id="rs-filter-tpl">
     <div class="rs-filter-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
@@ -1763,7 +1763,7 @@ const tplReport = `
         <option value="contains">{{t $.Lang "содержит"}}</option>
       </select>
       <input class="rs-f-value" type="text" value="">
-      <button type="button" class="btn btn-sm" onclick="this.parentNode.remove()">×</button>
+      <button type="button" class="btn btn-sm" data-ob-remove-row=".rs-filter-row">×</button>
     </div>
   </template>
   <div class="rs-appearance" style="margin:12px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap">

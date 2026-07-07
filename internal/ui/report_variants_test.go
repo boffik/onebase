@@ -36,6 +36,12 @@ func TestReportVariantsSelect(t *testing.T) {
 	if !strings.Contains(out, `name="__variant"`) {
 		t.Fatalf("нет селектора вариантов __variant")
 	}
+	if !strings.Contains(out, `data-ob-report-variant-submit`) {
+		t.Fatalf("селектор вариантов не содержит delegated marker data-ob-report-variant-submit")
+	}
+	if strings.Contains(out, `onchange="var h=this.form.querySelector`) {
+		t.Fatalf("форма вариантов содержит старый inline onchange")
+	}
 	for _, want := range []string{"По складам", "Кросс"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в выводе нет варианта %q", want)
