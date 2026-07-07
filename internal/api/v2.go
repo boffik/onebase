@@ -201,11 +201,11 @@ func (h *handler) updateObjectV2(kind metadata.Kind) http.HandlerFunc {
 		if kind == metadata.KindDocument && isPostAction(body.Action) && !requireRESTPerm(w, r, kind, entityName, "post") {
 			return
 		}
-		if !h.rowAllowedID(r.Context(), entity, "write", id) {
+		if !h.rowAllowedUpdate(r.Context(), entity, "write", id, body.Fields) {
 			writeError(w, http.StatusForbidden, "forbidden", "", 0)
 			return
 		}
-		if kind == metadata.KindDocument && isPostAction(body.Action) && !h.rowAllowedID(r.Context(), entity, "post", id) {
+		if kind == metadata.KindDocument && isPostAction(body.Action) && !h.rowAllowedUpdate(r.Context(), entity, "post", id, body.Fields) {
 			writeError(w, http.StatusForbidden, "forbidden", "", 0)
 			return
 		}
@@ -447,14 +447,15 @@ func (h *handler) documentPostPayload(w http.ResponseWriter, r *http.Request, en
 		if !requireRESTPerm(w, r, metadata.KindDocument, entityName, "write") {
 			return nil, nil, false
 		}
-		if !h.rowAllowedID(r.Context(), entity, "write", id) {
-			writeError(w, http.StatusForbidden, "forbidden", "", 0)
-			return nil, nil, false
-		}
 		limitRESTBody(w, r)
 		body, err := decodeBody(r)
 		if err != nil {
 			writeDecodeError(w, err)
+			return nil, nil, false
+		}
+		if !h.rowAllowedUpdate(r.Context(), entity, "write", id, body.Fields) ||
+			!h.rowAllowedUpdate(r.Context(), entity, "post", id, body.Fields) {
+			writeError(w, http.StatusForbidden, "forbidden", "", 0)
 			return nil, nil, false
 		}
 		return body.Fields, body.TablePartRows, true

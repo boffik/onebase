@@ -51,6 +51,33 @@ func TestListParamsRowFilterAppliesToListAndCount(t *testing.T) {
 	}
 }
 
+func TestPredicateValuesEqualDoesNotCoerceNumbersThroughBool(t *testing.T) {
+	if valuesEqual(7, 1) {
+		t.Fatal("7 must not equal 1 through bool coercion")
+	}
+	if !valuesEqual(1, 1.0) {
+		t.Fatal("numeric equality must still compare numeric values")
+	}
+	if valuesEqual("да", "yes") {
+		t.Fatal("strings must not be compared as bool aliases")
+	}
+	if !valuesEqual(int64(1), true) {
+		t.Fatal("DB bool representation int64(1) must match true")
+	}
+}
+
+func TestPredicateSQLRejectsScalarInNotIn(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Owner", Type: metadata.FieldTypeString}},
+	}
+	_, _, _, err := PredicateSQL(SQLiteDialect{}, cat, &Predicate{Field: "Owner", Op: "not_in", Value: "u"}, 1)
+	if err == nil {
+		t.Fatal("scalar not_in must fail closed")
+	}
+}
+
 func TestRegFilterRowFilterAppliesBeforeMovementsAndBalances(t *testing.T) {
 	ctx := context.Background()
 	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "reg-rls.db"))

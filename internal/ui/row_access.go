@@ -88,6 +88,27 @@ func (s *Server) rowAllowedID(w http.ResponseWriter, r *http.Request, entity *me
 	return true
 }
 
+func (s *Server) rowAllowedUpdate(w http.ResponseWriter, r *http.Request, entity *metadata.Entity, op string, id uuid.UUID, fields map[string]any) bool {
+	dec, err := s.rowDecision(r.Context(), entity, op)
+	if err != nil || !dec.Allowed {
+		s.renderForbidden(w, r)
+		return false
+	}
+	if dec.Unrestricted {
+		return true
+	}
+	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
+	if err != nil || !storage.MatchPredicate(row, dec.Predicate) {
+		s.renderForbidden(w, r)
+		return false
+	}
+	if !storage.MatchPredicate(storage.MergeRowFields(row, fields), dec.Predicate) {
+		s.renderForbidden(w, r)
+		return false
+	}
+	return true
+}
+
 func (s *Server) rowAllowsOwnerID(r *http.Request, ownerKind, ownerName, op string, id uuid.UUID) bool {
 	entity := s.ownerEntity(ownerKind, ownerName)
 	if entity == nil {

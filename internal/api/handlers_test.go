@@ -296,6 +296,21 @@ func TestAPI_RowAccessFiltersListAndBlocksDirectRow(t *testing.T) {
 	if updRec.Code != http.StatusForbidden {
 		t.Fatalf("update hidden status = %d, want 403; body=%s", updRec.Code, updRec.Body.String())
 	}
+
+	moveBody := []byte(`{"Наименование":"A2","Owner":"other"}`)
+	moveReq := withUser(reqWithEntity(http.MethodPut, "/catalogs/Товар/"+ownID.String(), moveBody, map[string]string{"entity": "Товар", "id": ownID.String()}, nil), user)
+	moveRec := httptest.NewRecorder()
+	h.updateObject(metadata.KindCatalog)(moveRec, moveReq)
+	if moveRec.Code != http.StatusForbidden {
+		t.Fatalf("update own row out of scope status = %d, want 403; body=%s", moveRec.Code, moveRec.Body.String())
+	}
+	row, err := h.store.GetByID(ctx, cat.Name, ownID, cat)
+	if err != nil {
+		t.Fatalf("reload own row: %v", err)
+	}
+	if row["Owner"] != "u" {
+		t.Fatalf("row owner changed despite forbidden update: %#v", row)
+	}
 }
 
 func TestAPI_RBAC_UpdatePostActionRequiresPost(t *testing.T) {

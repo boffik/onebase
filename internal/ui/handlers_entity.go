@@ -524,6 +524,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	if !s.rowAllowed(w, r, entity, "write", obj.Fields) {
 		return
 	}
+	if entity.Posting && (action == "post" || action == "post_and_close") && !s.rowAllowed(w, r, entity, "post", obj.Fields) {
+		return
+	}
 
 	// Серверные события записи формы (ПередЗаписью/ПриЗаписи) — до Save. Бросок
 	// ВызватьИсключение в обработчике отменяет запись и перерисовывает форму.
@@ -1122,10 +1125,10 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.rowAllowedID(w, r, entity, "write", id) {
+	if !s.rowAllowedUpdate(w, r, entity, "write", id, obj.Fields) {
 		return
 	}
-	if entity.Posting && (action == "post" || action == "post_and_close") && !s.rowAllowedID(w, r, entity, "post", id) {
+	if entity.Posting && (action == "post" || action == "post_and_close") && !s.rowAllowedUpdate(w, r, entity, "post", id, obj.Fields) {
 		return
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // Predicate is a small structured row filter used by row-level access.
@@ -59,6 +60,8 @@ func predicateSQL(d Dialect, entity *metadata.Entity, p Predicate, nextArg int) 
 		if len(values) == 0 {
 			if list, ok := p.Value.([]any); ok {
 				values = list
+			} else {
+				return "", nil, nextArg, fmt.Errorf("row predicate op %q requires a list value", p.Op)
 			}
 		}
 		if len(values) == 0 {
@@ -261,6 +264,22 @@ func MatchPredicate(row map[string]any, p *Predicate) bool {
 	return matchPredicate(row, *p)
 }
 
+func MergeRowFields(row, fields map[string]any) map[string]any {
+	out := make(map[string]any, len(row)+len(fields))
+	for k, v := range row {
+		out[k] = v
+	}
+	for k, v := range fields {
+		for existing := range out {
+			if strings.EqualFold(existing, k) {
+				delete(out, existing)
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
+
 func matchPredicate(row map[string]any, p Predicate) bool {
 	if len(p.All) > 0 {
 		for _, item := range p.All {
@@ -331,15 +350,56 @@ func predicateValues(p Predicate) []any {
 }
 
 func valuesEqual(a, b any) bool {
-	if ab, ok := parseAnyBool(a); ok {
-		if bb, ok := parseAnyBool(b); ok {
-			return ab == bb
-		}
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	if isBoolValue(a) || isBoolValue(b) {
+		ab, aok := parseAnyBool(a)
+		bb, bok := parseAnyBool(b)
+		return aok && bok && ab == bb
 	}
 	if au, ok := parseAnyUUID(a); ok {
 		if bu, ok := parseAnyUUID(b); ok {
 			return au == bu
 		}
 	}
+	if ad, ok := numericDecimal(a); ok {
+		if bd, ok := numericDecimal(b); ok {
+			return ad.Equal(bd)
+		}
+		return false
+	}
+	if _, ok := numericDecimal(b); ok {
+		return false
+	}
+	as, aok := a.(string)
+	bs, bok := b.(string)
+	if aok || bok {
+		return aok && bok && as == bs
+	}
 	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+}
+
+func isBoolValue(v any) bool {
+	_, ok := v.(bool)
+	return ok
+}
+
+func numericDecimal(v any) (decimal.Decimal, bool) {
+	switch t := v.(type) {
+	case decimal.Decimal:
+		return t, true
+	case int:
+		return decimal.NewFromInt(int64(t)), true
+	case int32:
+		return decimal.NewFromInt(int64(t)), true
+	case int64:
+		return decimal.NewFromInt(t), true
+	case float32:
+		return decimal.NewFromFloat32(t), true
+	case float64:
+		return decimal.NewFromFloat(t), true
+	default:
+		return decimal.Decimal{}, false
+	}
 }

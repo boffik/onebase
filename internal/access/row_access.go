@@ -102,6 +102,11 @@ func compilePolicy(p auth.RowPolicy, u *auth.User, meta *metadata.Entity) (stora
 	if !fieldAllowed(meta, field) {
 		return storage.Predicate{}, fmt.Errorf("row policy references unknown field %q", field)
 	}
+	if (p.Op == "in" || p.Op == "not_in") && len(p.Value.List) == 0 {
+		if _, ok := p.Value.Literal.([]any); !ok {
+			return storage.Predicate{}, fmt.Errorf("row policy op %q requires list value", p.Op)
+		}
+	}
 	value, values, err := resolveValue(p.Value, u)
 	if err != nil {
 		return storage.Predicate{}, err

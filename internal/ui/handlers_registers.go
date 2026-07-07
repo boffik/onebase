@@ -321,6 +321,11 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 
 	dims := parseInfoRegFields(r, ir.Dimensions)
 	resources := parseInfoRegFields(r, ir.Resources)
+	if existing, ok := s.infoRegExistingPolicyRow(r.Context(), ir, dims, periodPtr); ok {
+		if !s.rowAllowedFor(w, r, "inforeg", ir.Name, "write", storage.InfoRegisterPredicateEntity(ir), existing) {
+			return
+		}
+	}
 	row := infoRegPolicyRow(ir, dims, resources, periodPtr)
 	if !s.rowAllowedFor(w, r, "inforeg", ir.Name, "write", storage.InfoRegisterPredicateEntity(ir), row) {
 		return
@@ -362,7 +367,7 @@ func (s *Server) infoRegDelete(w http.ResponseWriter, r *http.Request) {
 		periodPtr = &t
 	}
 	dims := parseInfoRegFields(r, ir.Dimensions)
-	row := s.infoRegExistingPolicyRow(r.Context(), ir, dims, periodPtr)
+	row, _ := s.infoRegExistingPolicyRow(r.Context(), ir, dims, periodPtr)
 	if !s.rowAllowedFor(w, r, "inforeg", ir.Name, "delete", storage.InfoRegisterPredicateEntity(ir), row) {
 		return
 	}
@@ -400,7 +405,7 @@ func infoRegPolicyRow(ir *metadata.InfoRegister, dims, resources map[string]any,
 	return row
 }
 
-func (s *Server) infoRegExistingPolicyRow(ctx context.Context, ir *metadata.InfoRegister, dims map[string]any, period *time.Time) map[string]any {
+func (s *Server) infoRegExistingPolicyRow(ctx context.Context, ir *metadata.InfoRegister, dims map[string]any, period *time.Time) (map[string]any, bool) {
 	flt := storage.RegFilter{Dims: map[string]string{}}
 	for k, v := range dims {
 		if v != nil {
@@ -416,9 +421,9 @@ func (s *Server) infoRegExistingPolicyRow(ctx context.Context, ir *metadata.Info
 		if period != nil {
 			rows[0]["period"] = *period
 		}
-		return rows[0]
+		return rows[0], true
 	}
-	return infoRegPolicyRow(ir, dims, nil, period)
+	return infoRegPolicyRow(ir, dims, nil, period), false
 }
 
 func parseInfoRegFieldValue(f metadata.Field, val string) any {
