@@ -5,6 +5,7 @@ package ui
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,15 +93,18 @@ func (s *Server) logo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	// Режим вкладок: входная страница уводит в оболочку /ui/app (issue #129/#130).
 	if s.store.EffectiveFormOpenMode(r.Context(), currentUserLogin(r)) == storage.FormModeTabs {
-		target := "/ui/app"
-		// subsystem передаётся «как есть» — той же конвенцией, что в ссылках
-		// меню (server.go/templates) и в шиме /ui/app (tabs.go).
+		q := url.Values{"home": []string{"1"}}
 		if sub := r.URL.Query().Get("subsystem"); sub != "" {
-			target += "?subsystem=" + sub
+			q.Set("subsystem", sub)
 		}
+		target := "/ui/app?" + q.Encode()
 		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
+	s.render(w, r, "page-index", s.homeDashboardData(r))
+}
+
+func (s *Server) homeDashboardData(r *http.Request) map[string]any {
 	hp := s.reg.HomePage()
 	if sub := r.URL.Query().Get("subsystem"); sub != "" {
 		if ss := s.reg.GetSubsystem(sub); ss != nil && ss.HomePage != nil {
@@ -153,12 +157,12 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.render(w, r, "page-index", map[string]any{
+	return map[string]any{
 		"HomeTitle":     title,
 		"WidgetRows":    rows,
 		"WidgetResults": flat,
 		"DefaultedHome": defaulted,
-	})
+	}
 }
 
 // homePageWidgetGroups resolves the dashboard layout into ordered groups of
