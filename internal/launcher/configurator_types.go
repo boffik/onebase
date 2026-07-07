@@ -109,6 +109,60 @@ type saveAccountReg struct {
 	Resources []saveField       `yaml:"resources,omitempty"`
 }
 
+func saveFieldsAsMetadata(fields []saveField) []metadata.Field {
+	out := make([]metadata.Field, 0, len(fields))
+	for _, f := range fields {
+		out = append(out, metadata.Field{Name: f.Name})
+	}
+	return out
+}
+
+func validateEntityFieldEdit(entityName, entityKind string, fields []saveField, tpFields map[string][]saveField) error {
+	kind := metadata.KindCatalog
+	if entityKind == "Документ" {
+		kind = metadata.KindDocument
+	}
+	ent := &metadata.Entity{
+		Name:   entityName,
+		Kind:   kind,
+		Fields: saveFieldsAsMetadata(fields),
+	}
+	for name, fields := range tpFields {
+		ent.TableParts = append(ent.TableParts, metadata.TablePart{
+			Name:   name,
+			Fields: saveFieldsAsMetadata(fields),
+		})
+	}
+	return metadata.ValidateIdentifiers([]*metadata.Entity{ent}, nil, nil, nil, nil, nil)
+}
+
+func validateRegisterFieldEdit(regName string, dims, res, attrs []saveField) error {
+	reg := &metadata.Register{
+		Name:       regName,
+		Dimensions: saveFieldsAsMetadata(dims),
+		Resources:  saveFieldsAsMetadata(res),
+		Attributes: saveFieldsAsMetadata(attrs),
+	}
+	return metadata.ValidateIdentifiers(nil, []*metadata.Register{reg}, nil, nil, nil, nil)
+}
+
+func validateInfoRegFieldEdit(reg saveInfoReg) error {
+	ir := &metadata.InfoRegister{
+		Name:       reg.Name,
+		Dimensions: saveFieldsAsMetadata(reg.Dimensions),
+		Resources:  saveFieldsAsMetadata(reg.Resources),
+	}
+	return metadata.ValidateIdentifiers(nil, nil, []*metadata.InfoRegister{ir}, nil, nil, nil)
+}
+
+func validateAccountRegFieldEdit(reg saveAccountReg) error {
+	ar := &metadata.AccountRegister{
+		Name:      reg.Name,
+		Resources: saveFieldsAsMetadata(reg.Resources),
+	}
+	return metadata.ValidateIdentifiers(nil, nil, nil, []*metadata.AccountRegister{ar}, nil, nil)
+}
+
 // applyAccountRegFields точечно правит редактируемые в форме ключи плана счетов
 // прямо в дереве YAML, сохраняя блок subconto, многоязычные titles и любые
 // прочие поля (раньше свежий marshal saveAccountReg стирал subconto и titles).

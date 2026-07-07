@@ -497,10 +497,7 @@ func parseRegSection(r *http.Request, prefix string) []saveField {
 		sf.Titles = parseMapForm(r, keyBase+".titles")
 		fields = append(fields, sf)
 	}
-	for i := 0; i < 500; i++ {
-		if strings.TrimSpace(r.FormValue(fmt.Sprintf("%s.%d.name", prefix, i))) == "" {
-			break
-		}
+	for _, i := range formRowIndices(r, prefix) {
 		add(fmt.Sprintf("%s.%d", prefix, i))
 	}
 	for _, i := range formRowIndices(r, "new_"+prefix) {
@@ -589,10 +586,10 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 	}
 
 	var fields []saveField
-	for i := 0; i < 500; i++ {
+	for _, i := range formRowIndices(r, "field") {
 		name := r.FormValue(fmt.Sprintf("field.%d.name", i))
-		if name == "" {
-			break
+		if strings.TrimSpace(name) == "" {
+			continue
 		}
 		typ := r.FormValue(fmt.Sprintf("field.%d.type", i))
 		ref := r.FormValue(fmt.Sprintf("field.%d.ref", i))
@@ -625,7 +622,7 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		fields = append(fields, sf)
 	}
 	// new fields added via "+ Добавить поле"
-	for i := 1; i <= 500; i++ {
+	for _, i := range formRowIndices(r, "new_field") {
 		name := strings.TrimSpace(r.FormValue(fmt.Sprintf("new_field.%d.name", i)))
 		if name == "" {
 			continue
@@ -679,10 +676,10 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 	tpFields := make(map[string][]saveField)
 	for _, tpName := range tpNames {
 		var f []saveField
-		for i := 0; i < 500; i++ {
+		for _, i := range formRowIndices(r, "tp."+tpName+".field") {
 			name := r.FormValue(fmt.Sprintf("tp.%s.field.%d.name", tpName, i))
-			if name == "" {
-				break
+			if strings.TrimSpace(name) == "" {
+				continue
 			}
 			typ := r.FormValue(fmt.Sprintf("tp.%s.field.%d.type", tpName, i))
 			ref := r.FormValue(fmt.Sprintf("tp.%s.field.%d.ref", tpName, i))
@@ -762,6 +759,13 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 	if formHasMapField(r, "titles") {
 		tm := parseMapForm(r, "titles")
 		objTitles = &tm
+	}
+
+	if err := validateEntityFieldEdit(entityName, entityKind, fields, tpFields); err != nil {
+		data := h.loadCfgData(r.Context(), b, "tree")
+		data.Error = tr(lang, "Ошибка проверки") + ": " + err.Error()
+		renderCfg(w, r, data)
+		return
 	}
 
 	var saveErr error

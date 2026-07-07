@@ -135,15 +135,57 @@ func CheckDir(dir string) (issues, warnings []Issue) {
 		check  func(path string) error
 	}
 	groups := []yamlGroup{
-		{"catalogs", "Справочник", func(p string) error { _, err := metadata.LoadFile(p, metadata.KindCatalog); return err }},
-		{"documents", "Документ", func(p string) error { _, err := metadata.LoadFile(p, metadata.KindDocument); return err }},
-		{"registers", "Регистр", func(p string) error { _, err := metadata.LoadRegisterFile(p); return err }},
-		{"inforegs", "Регистр сведений", func(p string) error { _, err := metadata.LoadInfoRegisterFile(p); return err }},
-		{"enums", "Перечисление", func(p string) error { _, err := metadata.LoadEnumFile(p); return err }},
-		{"constants", "Константы", func(p string) error { _, err := metadata.LoadConstantsFile(p); return err }},
+		{"catalogs", "Справочник", func(p string) error {
+			e, err := metadata.LoadFile(p, metadata.KindCatalog)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers([]*metadata.Entity{e}, nil, nil, nil, nil, nil)
+		}},
+		{"documents", "Документ", func(p string) error {
+			e, err := metadata.LoadFile(p, metadata.KindDocument)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers([]*metadata.Entity{e}, nil, nil, nil, nil, nil)
+		}},
+		{"registers", "Регистр", func(p string) error {
+			r, err := metadata.LoadRegisterFile(p)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers(nil, []*metadata.Register{r}, nil, nil, nil, nil)
+		}},
+		{"inforegs", "Регистр сведений", func(p string) error {
+			ir, err := metadata.LoadInfoRegisterFile(p)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers(nil, nil, []*metadata.InfoRegister{ir}, nil, nil, nil)
+		}},
+		{"enums", "Перечисление", func(p string) error {
+			en, err := metadata.LoadEnumFile(p)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers(nil, nil, nil, nil, []*metadata.Enum{en}, nil)
+		}},
+		{"constants", "Константы", func(p string) error {
+			constants, err := metadata.LoadConstantsFile(p)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers(nil, nil, nil, nil, nil, constants)
+		}},
 		{"widgets", "Виджет", func(p string) error { _, err := metadata.LoadWidgetFile(p); return err }},
 		{"accounts", "План счетов", func(p string) error { _, err := metadata.LoadChartOfAccountsFile(p); return err }},
-		{"accountregs", "Регистр бухгалтерии", func(p string) error { _, err := metadata.LoadAccountRegisterFile(p); return err }},
+		{"accountregs", "Регистр бухгалтерии", func(p string) error {
+			ar, err := metadata.LoadAccountRegisterFile(p)
+			if err != nil {
+				return err
+			}
+			return metadata.ValidateIdentifiers(nil, nil, nil, []*metadata.AccountRegister{ar}, nil, nil)
+		}},
 		{"journals", "Журнал", func(p string) error { _, err := metadata.LoadJournalFile(p); return err }},
 		{"subsystems", "Подсистема", func(p string) error { _, err := metadata.LoadSubsystemFile(p); return err }},
 		{"scheduled", "Регламентное задание", func(p string) error { _, err := metadata.LoadScheduledFile(p); return err }},
@@ -164,6 +206,7 @@ func CheckDir(dir string) (issues, warnings []Issue) {
 					Object:  strings.TrimSuffix(e.Name(), ".yaml"),
 					Kind:    g.kind,
 					Message: err.Error(),
+					Line:    lineForDiagnosticValue(path, err.Error()),
 				})
 			}
 		}
@@ -290,6 +333,75 @@ func CheckDir(dir string) (issues, warnings []Issue) {
 	}
 
 	return issues, warnings
+}
+
+func lineForDiagnosticValue(path, msg string) int {
+	values := quotedValues(msg)
+	for i := len(values) - 1; i >= 0; i-- {
+		if line := yamlScalarLine(path, values[i]); line > 0 {
+			return line
+		}
+	}
+	return 0
+}
+
+func quotedValues(msg string) []string {
+	var out []string
+	for i := 0; i < len(msg); i++ {
+		if msg[i] != '"' {
+			continue
+		}
+		j := i + 1
+		escaped := false
+		for ; j < len(msg); j++ {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if msg[j] == '\\' {
+				escaped = true
+				continue
+			}
+			if msg[j] == '"' {
+				break
+			}
+		}
+		if j >= len(msg) {
+			break
+		}
+		if v, err := strconv.Unquote(msg[i : j+1]); err == nil {
+			out = append(out, v)
+		}
+		i = j
+	}
+	return out
+}
+
+func yamlScalarLine(path, value string) int {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return 0
+	}
+	var walk func(*yaml.Node) int
+	walk = func(n *yaml.Node) int {
+		if n == nil {
+			return 0
+		}
+		if n.Kind == yaml.ScalarNode && n.Value == value {
+			return n.Line
+		}
+		for _, child := range n.Content {
+			if line := walk(child); line > 0 {
+				return line
+			}
+		}
+		return 0
+	}
+	return walk(&doc)
 }
 
 // CheckQueries compiles every query in widgets and reports. Compilation needs
