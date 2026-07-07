@@ -8,27 +8,32 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { u, CATALOG_COUNTERPARTY, GET_HEADERS, createCounterparty } from '../lib/common.js';
+import { envDuration, envFloat, envInt } from '../lib/env.js';
+
+const CATALOG_LIST_LIMIT = envInt('CATALOG_LIST_LIMIT', 100);
 
 export const options = {
   scenarios: {
     crud: {
       executor: 'constant-vus',
-      vus: 30,
-      duration: '2m',
+      vus: envInt('CATALOG_VUS', 30),
+      duration: envDuration('CATALOG_DURATION', '2m'),
     },
   },
   thresholds: {
-    http_req_duration: ['p(95)<300'],
-    http_req_failed: ['rate<0.01'],
+    http_req_duration: [`p(95)<${envInt('CATALOG_P95_MS', 300)}`],
+    http_req_failed: [`rate<${envFloat('CATALOG_ERROR_RATE', 0.01)}`],
   },
 };
 
 export default function () {
   // 70% чтений, 30% записей — типичный профиль справочника.
   if (Math.random() < 0.7) {
-    // Список возвращает полный набор (REST-список не пагинируется), с сортировкой.
-    const res = http.get(u(`/catalogs/${CATALOG_COUNTERPARTY}?sort=${encodeURIComponent('Наименование')}&dir=asc`), GET_HEADERS);
-    check(res, { 'список 200': (r) => r.status === 200 });
+    const res = http.get(u(`/catalogs/${CATALOG_COUNTERPARTY}?limit=${CATALOG_LIST_LIMIT}&offset=0&sort=${encodeURIComponent('Наименование')}&dir=asc`), GET_HEADERS);
+    check(res, {
+      'список 200': (r) => r.status === 200,
+      'есть X-Limit': (r) => r.headers['X-Limit'] !== undefined,
+    });
   } else {
     createCounterparty(`${__VU}-${__ITER}`);
   }

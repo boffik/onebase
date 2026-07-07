@@ -153,12 +153,33 @@ background export UX: 2026-07-07.
 
 - `loadtest/docker-compose.yml` поднимает PostgreSQL, onebase, Prometheus,
   Grafana и k6 runner;
+- `loadtest/run-postgres-validation.sh` запускает smoke/validation профиль
+  поверх docker-compose;
 - `loadtest/seed/main.go` наполняет базу через REST;
 - `loadtest/k6/scenarios/post_document.js` создает и проводит документы;
 - `loadtest/k6/scenarios/catalog_crud.js` проверяет справочник;
 - `loadtest/k6/scenarios/list_query.js` проверяет чтение списков.
 
-Базовый запуск через Docker:
+Короткая PostgreSQL-проверка:
+
+```bash
+./loadtest/run-postgres-validation.sh smoke
+```
+
+Более длинный профиль с дефолтными целями сценариев:
+
+```bash
+./loadtest/run-postgres-validation.sh validation
+```
+
+Runner оставляет стенд поднятым, чтобы открыть Prometheus/Grafana и HTML-отчёты.
+Для автоматической очистки:
+
+```bash
+CLEANUP=1 ./loadtest/run-postgres-validation.sh smoke
+```
+
+Ручной запуск через Docker:
 
 ```bash
 docker compose -f loadtest/docker-compose.yml up -d --build
@@ -237,6 +258,9 @@ docker compose -f loadtest/docker-compose.yml run --rm --service-ports \
   `onebase_operation_duration_seconds`, `onebase_slow_operation_total`,
   `onebase_limited_operation_total`, `onebase_webhook_inflight`,
   `onebase_webhook_retry_total`.
+- PostgreSQL pool: `onebase_db_pool_acquired_conns`,
+  `onebase_db_pool_max_conns`, `onebase_db_pool_empty_acquire_total`,
+  `onebase_db_pool_canceled_acquire_total`.
 
 Ориентир:
 
@@ -288,11 +312,12 @@ docker compose -f loadtest/docker-compose.yml run --rm --service-ports \
 
 Минимальный список:
 
-1. Сделать атомарную optimistic locking операцию для PostgreSQL.
-2. Определить стратегию row-level security, если пользователи не должны видеть
+1. Определить стратегию row-level security, если пользователи не должны видеть
    чужие строки.
-3. Настроить PostgreSQL pool и индексы под реальные списки.
-4. Обновить k6-профили под реальные пользовательские сценарии проекта.
+2. Настроить PostgreSQL pool и индексы под реальные списки.
+3. Обновить k6-профили под реальные пользовательские сценарии проекта.
+4. Для горизонтального режима вынести background export jobs/realtime/files во
+   внешние хранилища или явно остаться на single-process.
 5. За reverse proxy/HTTPS выставлять cookie только по защищенному каналу.
 
 Развёрнутый план работ зафиксирован в `Plans/76-multi-user-scale-readiness.md`.

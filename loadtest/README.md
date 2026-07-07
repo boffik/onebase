@@ -16,6 +16,7 @@
 loadtest/
 ├── Dockerfile            # образ onebase для стенда (контекст сборки — корень репо)
 ├── docker-compose.yml    # PostgreSQL + onebase + Prometheus + Grafana + k6
+├── run-postgres-validation.sh # smoke/validation runner поверх docker-compose
 ├── prometheus.yml        # scrape-конфиг (/metrics закрыт токеном — шлём ?token=)
 ├── seed/main.go          # Go-сидер: наполняет базу через REST, пишет id в JSON
 └── k6/
@@ -31,6 +32,44 @@ loadtest/
 `k6/lib/common.js` и `seed/main.go`.
 
 ## Быстрый старт (Docker)
+
+Одной командой для короткой проверки PostgreSQL-стенда:
+
+```bash
+./loadtest/run-postgres-validation.sh smoke
+```
+
+`smoke` поднимает compose-стенд, сидит небольшой набор данных, прогоняет
+`post_document`, `list_query` и `catalog_crud`, пишет HTML-отчёты в
+`loadtest/reports/` и печатает краткую Prometheus-сводку по пулу/лимитам.
+Prometheus поднимается всегда; Grafana для быстрого smoke не обязательна и
+стартует только по `START_GRAFANA=1`.
+Для более длинного профиля используйте:
+
+```bash
+./loadtest/run-postgres-validation.sh validation
+```
+
+Ограничить набор сценариев можно так:
+
+```bash
+SCENARIOS="list_query post_document" ./loadtest/run-postgres-validation.sh smoke
+```
+
+После прогона стенд остаётся поднятым для просмотра Prometheus и, если включали,
+Grafana. Удалить его можно вручную или сразу после прогона:
+
+```bash
+CLEANUP=1 ./loadtest/run-postgres-validation.sh smoke
+```
+
+Запустить на чистой базе, удалив старые контейнеры/volume перед стартом:
+
+```bash
+RESET_STACK=1 ./loadtest/run-postgres-validation.sh smoke
+```
+
+Ручной запуск тех же шагов:
 
 ```bash
 # 1. Поднять стенд (PostgreSQL + onebase + Prometheus + Grafana)
@@ -123,10 +162,20 @@ Prometheus в `docker-compose.yml` уже запущен с
 
 - `post_document.js` — ramping-vus 0→20→50, порог `p95<800мс`, ошибок `<1%`.
 - `catalog_crud.js` — постоянные 30 VU, 70% чтений / 30% записей, `p95<300мс`.
-- `list_query.js` — ramping-arrival-rate до 200 rps, `p95<500мс`, `p99<1500мс`.
+- `list_query.js` — ramping-arrival-rate до 200 rps, `p95<500мс`, `p99<1500мс`;
+  запросы идут с `limit`/`offset` и проверяют `X-Limit`/`X-Offset`/
+  `X-Total-Count`.
 
-Пороги в `options.thresholds` каждого файла — правьте под свои SLA. Для сайзинга
-поднимайте `target`/`stages` ступенями и смотрите, где p95 пробивает SLA.
+Пороги и длительности можно менять env-переменными без правки JS:
+
+- `POST_TARGET_1`, `POST_TARGET_2`, `POST_P95_MS`, `POST_RAMP_1`,
+  `POST_HOLD_1`, `POST_RAMP_2`, `POST_HOLD_2`, `POST_SLEEP`;
+- `LIST_START_RPS`, `LIST_TARGET_1`, `LIST_TARGET_2`, `LIST_LIMIT`,
+  `LIST_P95_MS`, `LIST_P99_MS`;
+- `CATALOG_VUS`, `CATALOG_DURATION`, `CATALOG_P95_MS`.
+
+Для сайзинга поднимайте target/stages ступенями и смотрите, где p95 пробивает
+SLA или растёт `onebase_db_pool_empty_acquire_total`.
 
 ## Поиск узких мест
 
@@ -142,3 +191,11 @@ go tool pprof "http://localhost:8080/debug/pprof/heap?token=loadtest"
 В Prometheus/Grafana смотрите `onebase_http_request_duration_seconds` (латентность
 по маршрутам) и `onebase_db_pool_*` (насыщение пула соединений pgx) — это
 разделяет «упёрлись в интерпретатор/CPU» и «упёрлись в БД/пул».
+
+`run-postgres-validation.sh` после сценариев печатает быстрый срез:
+
+- `max_over_time(onebase_db_pool_acquired_conns[30m])`;
+- `max_over_time(onebase_db_pool_max_conns[30m])`;
+- `increase(onebase_db_pool_empty_acquire_total[30m])`;
+- `increase(onebase_limited_operation_total[30m])`;
+- `increase(onebase_slow_operation_total[30m])`.

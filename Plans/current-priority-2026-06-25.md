@@ -10,9 +10,9 @@
    indexes + tablepart/register indexes, server-side reference picker,
    bounded parent-folder options, runtime limits/backpressure, metrics и
    PostgreSQL advisory locks для `БлокировкаДанных` в Save-хуках. UI-кнопки
-   Excel/PDF отчётов уже запускают background export job со страницей статуса.
-   В очереди остаются нагрузочная валидация на PostgreSQL и документирование
-   остаточных лимитов.
+   Excel/PDF отчётов уже запускают background export job со страницей статуса,
+   а k6 PostgreSQL validation получил smoke/validation runner. В очереди
+   остаются future horizontal scale и row-level security как отдельные решения.
 
 2. **План 60B — marketplace конфигураций.**
    Версионирование конфигурации в БД и UI истории уже реализованы, а shipped
@@ -39,8 +39,8 @@
   активного списка.
 - **План 76 стоит зафиксировать как следующий guardrail-план.** Текущий REST API,
   большие списки, reference-options, конкурентная запись и тяжёлые отчёты
-  требуют ограничителей; core-срез A/B/C/D/E/F и background export UX уже
-  реализованы, остатки описаны выше.
+  требуют ограничителей; core-срез A/B/C/D/E/F, background export UX и k6
+  PostgreSQL validation runner уже реализованы, остатки описаны выше.
 - **`onebase lint` по shipped examples/templates теперь закреплен в CI.**
   PR #263 собирает CLI и прогоняет `onebase lint --json` по `examples/*` и
   `templates/*`, падая на любых issues/warnings.

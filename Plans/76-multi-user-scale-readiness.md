@@ -271,6 +271,18 @@ Acceptance:
 - slow operation log для отчётов пишет `sql_hash`, duration, rows, route/user;
 - обновлён `docs/users-load-limits.md`.
 
+Реализация load validation 2026-07-07:
+- k6-сценарии параметризованы env-переменными для короткого `smoke` и более
+  длинного `validation` профиля;
+- `list_query` ходит с `limit`/`offset` и проверяет REST pagination headers;
+- добавлен `loadtest/run-postgres-validation.sh`, который поднимает PostgreSQL
+  compose-стенд, сидит данные, запускает выбранные k6-сценарии и печатает
+  Prometheus-сводку по pool/limited/slow operation metrics.
+- Локальный `RESET_STACK=1 ./loadtest/run-postgres-validation.sh smoke` прошёл:
+  `post_document` p95 13.55ms, `list_query` p95 7.65ms / p99 9.1ms,
+  `catalog_crud` p95 5.62ms, failures 0%; pool high-water 5/8 connections,
+  limited/slow operation metrics без данных.
+
 ### Этап G — путь к горизонтальному масштабированию (future)
 
 Это не нужно для MVP 100 активных пользователей, но важно для архитектурного
@@ -302,11 +314,11 @@ Acceptance:
 
 ## Рекомендуемый порядок после текущего `onebase lint`
 
-1. **Load validation:** k6 PostgreSQL прогон на демо/реальной конфигурации с
-   проверкой p95/p99, pool saturation и runtime operation metrics.
-2. **G future:** shared file storage, external pub-sub и scheduler leader
+1. **G future:** shared file storage, external pub-sub и scheduler leader
    election только когда один процесс с PostgreSQL и настроенным пулом перестанет
    хватать.
+2. **Row-level security:** отдельная платформенная модель строковых ограничений,
+   если продуктовые сценарии требуют "видит только свои строки".
 
 ## Связанные планы
 
