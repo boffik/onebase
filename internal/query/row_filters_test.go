@@ -153,28 +153,56 @@ func TestCompile_RowFiltersSkipNestedWhereBeforeOuterScope(t *testing.T) {
 	}
 }
 
-// TestCompile_RowFiltersSubqueryInFromFailClosed: у ограниченного источника,
-// оказавшегося главной таблицей внутри подзапроса ИЗ, отложенный фильтр нельзя
-// корректно поместить в outer WHERE (раньше выходил битый SQL). Теперь — явный
-// fail-closed отказ, а не тихая утечка/поломка.
-func TestCompile_RowFiltersSubqueryInFromFailClosed(t *testing.T) {
+func TestCompile_RowFiltersSubqueryInFromScoped(t *testing.T) {
 	cat := &metadata.Entity{
 		Name:   "Товар",
 		Kind:   metadata.KindCatalog,
 		Fields: []metadata.Field{{Name: "Owner", Type: metadata.FieldTypeString}},
 	}
-	_, err := query.Compile(`ВЫБРАТЬ * ИЗ (ВЫБРАТЬ Ссылка ИЗ Справочник.Товар) КАК П`, query.CompileOpts{
+	res, err := query.Compile(`ВЫБРАТЬ * ИЗ (ВЫБРАТЬ Ссылка ИЗ Справочник.Товар) КАК П`, query.CompileOpts{
 		Entities: []*metadata.Entity{cat},
 		Dialect:  storage.SQLiteDialect{},
 		RowFilters: map[query.SourceRef]*storage.Predicate{
 			{Kind: "catalog", Name: "Товар"}: {Field: "Owner", Op: "eq", Value: "u"},
 		},
 	})
-	if err == nil {
-		t.Fatal("restricted source inside a FROM subquery must fail closed, got nil error")
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
 	}
-	if !strings.Contains(err.Error(), "подзапрос") {
-		t.Fatalf("error must explain the FROM-subquery limitation, got: %v", err)
+	if !strings.Contains(res.SQL, "SELECT id FROM (SELECT * FROM товар WHERE owner = ?) AS товар") {
+		t.Fatalf("restricted source inside FROM subquery must be scoped, got:\n%s", res.SQL)
+	}
+	if len(res.Args) != 1 || res.Args[0] != "u" {
+		t.Fatalf("args = %#v, want row filter arg", res.Args)
+	}
+}
+
+func TestCompile_RowFiltersSubqueryInFromScopedAliasAndWhere(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	res, err := query.Compile(`ВЫБРАТЬ П.Наименование
+ИЗ (ВЫБРАТЬ Т.Наименование ИЗ Справочник.Товар КАК Т ГДЕ Т.Наименование <> &Пусто) КАК П`, query.CompileOpts{
+		Entities: []*metadata.Entity{cat},
+		Params:   map[string]any{"Пусто": ""},
+		Dialect:  storage.SQLiteDialect{},
+		RowFilters: map[query.SourceRef]*storage.Predicate{
+			{Kind: "catalog", Name: "Товар"}: {Field: "Owner", Op: "eq", Value: "u"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(res.SQL, "FROM (SELECT * FROM товар WHERE owner = ?) AS т WHERE т.наименование <> ?") {
+		t.Fatalf("restricted aliased source inside FROM subquery must be scoped before local WHERE, got:\n%s", res.SQL)
+	}
+	if len(res.Args) != 2 || res.Args[0] != "u" || res.Args[1] != "" {
+		t.Fatalf("args = %#v, want row filter arg before local WHERE arg", res.Args)
 	}
 }
 

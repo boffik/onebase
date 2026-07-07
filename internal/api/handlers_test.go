@@ -898,6 +898,55 @@ func TestAPIV2_ReportRequiresReadOnQuerySourcesAndAppliesRowAccess(t *testing.T)
 	}
 }
 
+func TestAPIV2_ReportRowAccessScopesFromSubquery(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	rep := &reportpkg.Report{
+		Name: "ТоварыПодзапрос",
+		Query: `ВЫБРАТЬ П.Наименование
+ИЗ (ВЫБРАТЬ Т.Наименование ИЗ Справочник.Товар КАК Т) КАК П
+УПОРЯДОЧИТЬ ПО П.Наименование`,
+	}
+	h, ctx := newAPITestHandlerWithReports(t, []*metadata.Entity{cat}, []*reportpkg.Report{rep}, nil)
+	for _, row := range []map[string]any{
+		{"Наименование": "Allowed", "Owner": "u"},
+		{"Наименование": "Hidden", "Owner": "other"},
+	} {
+		if err := h.store.Upsert(ctx, cat.Name, uuid.New(), row, cat); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	req := reqWithEntity("GET", "/api/v2/report/ТоварыПодзапрос", nil, map[string]string{"name": "ТоварыПодзапрос"}, nil)
+	req = withUser(req, apiUser("u", auth.Permission{
+		Reports:  map[string][]string{"ТоварыПодзапрос": {"run"}},
+		Catalogs: map[string][]string{"Товар": {"read"}},
+		RowAccess: auth.RowAccess{Catalogs: map[string]auth.RowPolicies{
+			"Товар": {"read": {Field: "Owner", Op: "eq", Value: auth.RowValue{User: "login"}}},
+		}},
+	}))
+	rec := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0]["наименование"] != "Allowed" {
+		t.Fatalf("RLS report subquery rows = %#v", resp.Data)
+	}
+}
+
 func TestAPIV2_ReportParamsAndRBAC(t *testing.T) {
 	rep := &reportpkg.Report{
 		Name: "Сумма",

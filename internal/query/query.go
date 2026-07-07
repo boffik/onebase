@@ -584,13 +584,11 @@ func (tr *translator) addPendingRowFilter(typeUpper, name, alias string) error {
 	if pred == nil {
 		return nil
 	}
-	// Отложенный фильтр главной таблицы внедряется в outer WHERE. Если источник
-	// оказался первым, но лежит внутри подзапроса ИЗ (parenDepth>0), внешний
-	// WHERE ссылался бы на таблицу вне области видимости — раньше это давало
-	// битый SQL. Отказываем явно (fail-closed): alias-aware внедрение в
-	// подзапросы — отдельный этап (план 79, 79E).
+	// Отложенный фильтр главной таблицы внедряется в outer WHERE. Источники,
+	// встреченные внутри скобок, должны идти через rowFilteredSourceSQL: внешний
+	// WHERE ссылался бы на таблицу вне области видимости.
 	if tr.parenDepth > 0 {
-		return fmt.Errorf("строковая политика источника %s.%s: фильтрация подзапроса в ИЗ пока не поддерживается", kind, name)
+		return fmt.Errorf("строковая политика источника %s.%s: фильтрация вложенного источника не была скоупирована", kind, name)
 	}
 	meta := tr.predicateEntityForSource(typeUpper, name)
 	if meta == nil {
@@ -2067,7 +2065,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					}
 				}
 			}
-			if !isMain {
+			if !isMain || tr.parenDepth > 0 {
 				filtered, ok, err := tr.rowFilteredSourceSQL(upper, entity.val, tableName, sourceAlias)
 				if err != nil {
 					return Result{}, err

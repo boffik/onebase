@@ -18,13 +18,17 @@ import (
 // runAIQuery выполняет запрос к справочнику Товар от имени user (nil = открытый
 // деплой без пользователей).
 func runAIQuery(s *Server, user *auth.User) llm.ToolResult {
+	return runAIQueryText(s, user, "ВЫБРАТЬ Наименование ИЗ Справочник.Товар")
+}
+
+func runAIQueryText(s *Server, user *auth.User, query string) llm.ToolResult {
 	ctx := context.Background()
 	if user != nil {
 		ctx = auth.ContextWithUser(ctx, user)
 	}
 	return s.aiRunQuery(ctx, llm.ToolCall{
 		ID:    "q",
-		Input: map[string]any{"запрос": "ВЫБРАТЬ Наименование ИЗ Справочник.Товар"},
+		Input: map[string]any{"запрос": query},
 	})
 }
 
@@ -87,6 +91,40 @@ func TestAIRunQuery_RowAccessFiltersRows(t *testing.T) {
 	}
 	if !strings.Contains(res.Content, "Allowed") || strings.Contains(res.Content, "Hidden") {
 		t.Fatalf("RLS не отфильтровал строки: %s", res.Content)
+	}
+}
+
+func TestAIRunQuery_RowAccessFiltersFromSubquery(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	s, ctx := newSubmitTestServer(t, []*metadata.Entity{cat})
+	if err := s.store.Upsert(ctx, cat.Name, uuid.New(), map[string]any{"Наименование": "Allowed", "Owner": "u"}, cat); err != nil {
+		t.Fatalf("upsert allowed: %v", err)
+	}
+	if err := s.store.Upsert(ctx, cat.Name, uuid.New(), map[string]any{"Наименование": "Hidden", "Owner": "other"}, cat); err != nil {
+		t.Fatalf("upsert hidden: %v", err)
+	}
+
+	user := &auth.User{Login: "u", Roles: []*auth.Role{{
+		Permissions: auth.Permission{
+			Catalogs: map[string][]string{"Товар": {"read"}},
+			RowAccess: auth.RowAccess{Catalogs: map[string]auth.RowPolicies{
+				"Товар": {"read": {Field: "Owner", Op: "eq", Value: auth.RowValue{User: "login"}}},
+			}},
+		},
+	}}}
+	res := runAIQueryText(s, user, `ВЫБРАТЬ П.Наименование
+ИЗ (ВЫБРАТЬ Т.Наименование ИЗ Справочник.Товар КАК Т) КАК П`)
+	if res.IsError {
+		t.Fatalf("row_access в подзапросе должен фильтровать запрос, а не падать: %s", res.Content)
+	}
+	if !strings.Contains(res.Content, "Allowed") || strings.Contains(res.Content, "Hidden") {
+		t.Fatalf("RLS не отфильтровал строки подзапроса: %s", res.Content)
 	}
 }
 
