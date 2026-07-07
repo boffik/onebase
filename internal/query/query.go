@@ -473,6 +473,7 @@ type translator struct {
 	sources     []SourceRef                   // объекты-источники запроса (для RBAC, план 54)
 	rowFilters  []pendingRowFilter            // RLS-фильтры обычных источников, внедряемые в WHERE
 	rowsScoped  bool                          // true после внедрения rowFilters в outer WHERE
+	rowApplied  []SourceRef                   // источники, к которым RLS-предикат реально внедрён (для финальной сверки)
 }
 
 type pendingRowFilter struct {
@@ -507,6 +508,46 @@ func (tr *translator) sourceRowFilter(kind, name string) *storage.Predicate {
 	for src, pred := range tr.opts.RowFilters {
 		if src.Kind == kind && strings.EqualFold(src.Name, name) {
 			return pred
+		}
+	}
+	return nil
+}
+
+// markRowApplied фиксирует, что RLS-предикат источника реально внедрён в SQL.
+// Матчинг по kind+EqualFold(name) — как в sourceRowFilter, чтобы регистр имени
+// источника (токен запроса vs metadata) не расходился со сверкой.
+func (tr *translator) markRowApplied(kind, name string) {
+	if tr.rowFilterApplied(kind, name) {
+		return
+	}
+	tr.rowApplied = append(tr.rowApplied, SourceRef{Kind: kind, Name: name})
+}
+
+func (tr *translator) rowFilterApplied(kind, name string) bool {
+	for _, s := range tr.rowApplied {
+		if s.Kind == kind && strings.EqualFold(s.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// assertRowFiltersApplied — финальная защита: если у источника запроса есть
+// активная строковая политика, но предикат не был внедрён ни одним из путей
+// (главная таблица / скоуп-подзапрос джойна / условие авто-JOIN), запрос
+// отклоняется. Так неучтённая форма запроса даёт fail-closed отказ, а не тихую
+// утечку чужих строк в отчётах/AI, где object-gate ограниченный источник
+// пропускает (право read у пользователя есть). См. план 79, этап 79E.
+func (tr *translator) assertRowFiltersApplied() error {
+	if len(tr.opts.RowFilters) == 0 {
+		return nil
+	}
+	for _, src := range tr.sources {
+		if tr.sourceRowFilter(src.Kind, src.Name) == nil {
+			continue
+		}
+		if !tr.rowFilterApplied(src.Kind, src.Name) {
+			return fmt.Errorf("строковая политика источника %s.%s не внедрена в запрос", src.Kind, src.Name)
 		}
 	}
 	return nil
@@ -552,6 +593,7 @@ func (tr *translator) addPendingRowFilter(typeUpper, name, alias string) error {
 		meta:   meta,
 		filter: pred,
 	})
+	tr.markRowApplied(kind, name)
 	return nil
 }
 
@@ -568,6 +610,7 @@ func (tr *translator) rowFilterCondition(kind, name string, meta *metadata.Entit
 		return "", err
 	}
 	tr.args = append(tr.args, args...)
+	tr.markRowApplied(kind, name)
 	return sql, nil
 }
 
@@ -586,6 +629,7 @@ func (tr *translator) rowFilteredSourceSQL(typeUpper, name, tableName, alias str
 		return "", false, fmt.Errorf("row filter %s.%s: %w", kind, name, err)
 	}
 	tr.args = append(tr.args, args...)
+	tr.markRowApplied(kind, name)
 	return fmt.Sprintf("(SELECT * FROM %s WHERE %s) AS %s", tableName, sql, alias), true, nil
 }
 
@@ -2220,6 +2264,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		tr.advance()
 	}
 	if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+		return Result{}, err
+	}
+	if err := tr.assertRowFiltersApplied(); err != nil {
 		return Result{}, err
 	}
 	return Result{SQL: tr.build(), Args: tr.args, Sources: tr.sources}, nil
