@@ -112,3 +112,49 @@ func TestCompile_RowFiltersJoinedSourceScopedBeforeOn(t *testing.T) {
 		t.Fatalf("args = %#v, want one joined row filter arg", res.Args)
 	}
 }
+
+// TestCompile_RowFiltersSubqueryInFromFailClosed: у ограниченного источника,
+// оказавшегося главной таблицей внутри подзапроса ИЗ, отложенный фильтр нельзя
+// корректно поместить в outer WHERE (раньше выходил битый SQL). Теперь — явный
+// fail-closed отказ, а не тихая утечка/поломка.
+func TestCompile_RowFiltersSubqueryInFromFailClosed(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Owner", Type: metadata.FieldTypeString}},
+	}
+	_, err := query.Compile(`ВЫБРАТЬ * ИЗ (ВЫБРАТЬ Ссылка ИЗ Справочник.Товар) КАК П`, query.CompileOpts{
+		Entities: []*metadata.Entity{cat},
+		Dialect:  storage.SQLiteDialect{},
+		RowFilters: map[query.SourceRef]*storage.Predicate{
+			{Kind: "catalog", Name: "Товар"}: {Field: "Owner", Op: "eq", Value: "u"},
+		},
+	})
+	if err == nil {
+		t.Fatal("restricted source inside a FROM subquery must fail closed, got nil error")
+	}
+	if !strings.Contains(err.Error(), "подзапрос") {
+		t.Fatalf("error must explain the FROM-subquery limitation, got: %v", err)
+	}
+}
+
+// TestCompile_SubqueryInFromOpenDeployment: без активных строковых политик
+// подзапрос в ИЗ по-прежнему компилируется (отказ касается только ограниченных
+// источников — pred!=nil).
+func TestCompile_SubqueryInFromOpenDeployment(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+	}
+	res, err := query.Compile(`ВЫБРАТЬ * ИЗ (ВЫБРАТЬ Ссылка ИЗ Справочник.Товар) КАК П`, query.CompileOpts{
+		Entities: []*metadata.Entity{cat},
+		Dialect:  storage.SQLiteDialect{},
+	})
+	if err != nil {
+		t.Fatalf("open deployment must still compile FROM subqueries: %v", err)
+	}
+	if !strings.Contains(res.SQL, "SELECT id FROM товар") {
+		t.Fatalf("FROM subquery must survive without row filters, got:\n%s", res.SQL)
+	}
+}

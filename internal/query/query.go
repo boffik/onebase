@@ -474,6 +474,7 @@ type translator struct {
 	rowFilters  []pendingRowFilter            // RLS-фильтры обычных источников, внедряемые в WHERE
 	rowsScoped  bool                          // true после внедрения rowFilters в outer WHERE
 	rowApplied  []SourceRef                   // источники, к которым RLS-предикат реально внедрён (для финальной сверки)
+	parenDepth  int                           // глубина незакрытых '(' в основном потоке (VT-аргументы считает parseVTArgs)
 }
 
 type pendingRowFilter struct {
@@ -582,6 +583,14 @@ func (tr *translator) addPendingRowFilter(typeUpper, name, alias string) error {
 	pred := tr.sourceRowFilter(kind, name)
 	if pred == nil {
 		return nil
+	}
+	// Отложенный фильтр главной таблицы внедряется в outer WHERE. Если источник
+	// оказался первым, но лежит внутри подзапроса ИЗ (parenDepth>0), внешний
+	// WHERE ссылался бы на таблицу вне области видимости — раньше это давало
+	// битый SQL. Отказываем явно (fail-closed): alias-aware внедрение в
+	// подзапросы — отдельный этап (план 79, 79E).
+	if tr.parenDepth > 0 {
+		return fmt.Errorf("строковая политика источника %s.%s: фильтрация подзапроса в ИЗ пока не поддерживается", kind, name)
 	}
 	meta := tr.predicateEntityForSource(typeUpper, name)
 	if meta == nil {
@@ -2148,6 +2157,15 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		// Punctuation
 		if t.kind == tComma || t.kind == tLParen || t.kind == tRParen {
 			tr.prevWasDot = false
+			// Считаем глубину подзапросов/группировок: источник ИЗ, встреченный
+			// при parenDepth>0, лежит внутри подзапроса, а не в верхнем FROM.
+			// (Скобки виртуальных таблиц регистров съедает parseVTArgs — сюда не
+			// попадают, баланс не нарушают.)
+			if t.kind == tLParen {
+				tr.parenDepth++
+			} else if t.kind == tRParen && tr.parenDepth > 0 {
+				tr.parenDepth--
+			}
 			tr.advance()
 			tr.emit(t.val)
 			continue
