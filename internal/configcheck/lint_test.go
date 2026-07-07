@@ -272,6 +272,107 @@ elements:
 	}
 }
 
+func TestLintYAML_RoleRowAccessKeysKnown(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "roles", "manager.yaml"), `name: Manager
+permissions:
+  ai_data_access: true
+  catalogs:
+    Клиент: [read]
+  row_access:
+    catalogs:
+      Клиент:
+        read:
+          field: Owner
+          op: eq
+          value: { user: login }
+`)
+	for _, is := range CheckLintYAML(dir) {
+		if is.Code == "metadata.unvalidated-key" {
+			t.Fatalf("row_access/ai_data_access роли должны быть известны YAML-линту, получено: %+v", is)
+		}
+	}
+}
+
+func TestLintRoles_RowAccessDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "catalogs", "клиент.yaml"), `name: Клиент
+fields:
+  - name: Owner
+    type: string
+`)
+	mkFile(t, filepath.Join(dir, "roles", "manager.yaml"), `name: Manager
+permissions:
+  catalogs:
+    Клиент: [read, delete]
+  row_access:
+    catalogs:
+      Клиент:
+        read:
+          field: НетТакогоПоля
+          op: eq
+          value: { user: login }
+        write:
+          field: Owner
+          op: eq
+          value: { user: login }
+        delete:
+          same_as: missing
+      Несуществующий:
+        read:
+          field: Owner
+          op: eq
+          value: { user: login }
+`)
+
+	res := RunFullWithOptions(dir, Options{Lint: true})
+	if !res.OK {
+		t.Fatalf("row_access lint warnings should not fail check: %+v", res.Issues)
+	}
+	got := map[string]int{}
+	for _, w := range res.Warnings {
+		got[w.Code]++
+	}
+	for _, code := range []string{"rls.invalid-policy", "rls.policy-without-permission", "rls.unknown-object"} {
+		if got[code] == 0 {
+			t.Fatalf("expected %s warning, got codes=%+v warnings=%+v", code, got, res.Warnings)
+		}
+	}
+	if got["rls.invalid-policy"] < 2 {
+		t.Fatalf("expected invalid field and invalid same_as warnings, got codes=%+v warnings=%+v", got, res.Warnings)
+	}
+}
+
+func TestLintRoles_RowAccessValid(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "catalogs", "клиент.yaml"), `name: Клиент
+fields:
+  - name: Owner
+    type: string
+`)
+	mkFile(t, filepath.Join(dir, "roles", "manager.yaml"), `name: Manager
+permissions:
+  catalogs:
+    Клиент: [read, write]
+  row_access:
+    catalogs:
+      Клиент:
+        read:
+          field: Owner
+          op: eq
+          value: { user: login }
+        write:
+          same_as: read
+`)
+
+	res := RunFullWithOptions(dir, Options{Lint: true})
+	for _, w := range res.Warnings {
+		if strings.HasPrefix(w.Code, "rls.") {
+			t.Fatalf("unexpected rls lint warning: %+v", w)
+		}
+	}
+}
+
 func TestLintCrossScopeRead(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "processors", "касса.yaml"), `name: Касса

@@ -30,7 +30,9 @@
 - расширения политик вроде `{ user_attr: ... }`, условий по реквизитам ссылок и
   автоустановки владельца при создании;
 - явная модель для trusted DSL/server-code путей и внешних обработок;
-- UI-редактор политик и отдельный lint/diagnostics экран;
+- UI-редактор политик и отдельный diagnostics экран; базовые `onebase check
+  --lint` warnings `rls.*` уже проверяют unknown object, invalid policy и
+  policy без object-level права;
 - PostgreSQL native RLS как дополнительный defense-in-depth слой, не как
   единственный источник истины.
 

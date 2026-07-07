@@ -65,6 +65,18 @@ func HasRestrictedPolicy(u *auth.User, kind, entity, op string) bool {
 	return restricted
 }
 
+// ValidatePolicy checks a row policy with the same compiler path used at
+// runtime. It is intended for diagnostics/lint: callers pass already resolved
+// same_as policies.
+func ValidatePolicy(p auth.RowPolicy, meta *metadata.Entity) error {
+	pred, err := compilePolicy(p, &auth.User{ID: "_lint_user_id", Login: "_lint_user_login"}, meta)
+	if err != nil {
+		return err
+	}
+	_, _, _, err = storage.PredicateSQL(storage.SQLiteDialect{}, meta, &pred, 1)
+	return err
+}
+
 func compilePolicy(p auth.RowPolicy, u *auth.User, meta *metadata.Entity) (storage.Predicate, error) {
 	if len(p.All) > 0 {
 		out := storage.Predicate{All: make([]storage.Predicate, 0, len(p.All))}

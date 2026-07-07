@@ -142,6 +142,17 @@ func TestDecide_InvalidPolicyFieldFailsClosed(t *testing.T) {
 	}
 }
 
+func TestValidatePolicyRejectsUnknownOperator(t *testing.T) {
+	err := access.ValidatePolicy(auth.RowPolicy{
+		Field: "Ответственный",
+		Op:    "starts_with",
+		Value: auth.RowValue{User: "login"},
+	}, dealEntity())
+	if err == nil {
+		t.Fatal("unknown row policy operator must be rejected")
+	}
+}
+
 func TestHasRestrictedPolicy(t *testing.T) {
 	restricted := &auth.User{ID: "u1", Roles: []*auth.Role{docRole("Сделка", []string{"read"}, respPolicy())}}
 	if !access.HasRestrictedPolicy(restricted, "document", "Сделка", "read") {
@@ -173,7 +184,7 @@ func TestQueryRowFilters_OnlyRestrictedSources(t *testing.T) {
 		ID: "u1",
 		Roles: []*auth.Role{
 			docRole("Сделка", []string{"read"}, respPolicy()), // restricted
-			docRole("Заявка", []string{"read"}, nil),           // granted, unrestricted
+			docRole("Заявка", []string{"read"}, nil),          // granted, unrestricted
 		},
 	}
 	filters, err := access.QueryRowFilters(u, []*metadata.Entity{deal, other}, nil, nil, nil)

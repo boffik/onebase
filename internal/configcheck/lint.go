@@ -8,11 +8,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ivantit66/onebase/internal/access"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/token"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -56,7 +58,7 @@ func CheckLintYAML(dir string) []Issue {
 func CheckLintProject(dir string, proj *project.Project, roles []*auth.Role) []Issue {
 	var issues []Issue
 	issues = append(issues, CheckLintDSL(dir, proj)...)
-	issues = append(issues, CheckLintRoles(proj, roles)...)
+	issues = append(issues, CheckLintRoles(dir, proj, roles)...)
 	issues = append(issues, CheckLintIndexes(proj)...)
 	return issues
 }
@@ -382,12 +384,14 @@ func reportYAMLSchema() *yamlLintSchema {
 
 func roleYAMLSchema() *yamlLintSchema {
 	perm := with(obj(), map[string]*yamlLintSchema{
-		"catalogs":   freeMap(),
-		"documents":  freeMap(),
-		"registers":  freeMap(),
-		"inforegs":   freeMap(),
-		"reports":    freeMap(),
-		"processors": freeMap(),
+		"ai_data_access": freeMap(),
+		"catalogs":       freeMap(),
+		"documents":      freeMap(),
+		"registers":      freeMap(),
+		"inforegs":       freeMap(),
+		"reports":        freeMap(),
+		"processors":     freeMap(),
+		"row_access":     freeMap(),
 	})
 	return with(obj("name", "description"), map[string]*yamlLintSchema{"permissions": perm})
 }
@@ -1272,7 +1276,7 @@ func collectDSLCallNamesExpr(expr ast.Expr, calls map[string]bool) {
 	}
 }
 
-func CheckLintRoles(proj *project.Project, roles []*auth.Role) []Issue {
+func CheckLintRoles(dir string, proj *project.Project, roles []*auth.Role) []Issue {
 	if len(roles) == 0 {
 		return nil
 	}
@@ -1348,7 +1352,167 @@ func CheckLintRoles(proj *project.Project, roles []*auth.Role) []Issue {
 			}
 		}
 	}
+	issues = append(issues, CheckLintRowAccess(dir, proj, roles)...)
 	return issues
+}
+
+type rowAccessLintTarget struct {
+	name       string
+	meta       *metadata.Entity
+	objectKind string
+}
+
+func CheckLintRowAccess(dir string, proj *project.Project, roles []*auth.Role) []Issue {
+	if proj == nil || len(roles) == 0 {
+		return nil
+	}
+	targets := rowAccessLintTargets(proj)
+	roleFiles := roleFileLabels(dir)
+	var issues []Issue
+	for _, role := range roles {
+		if role == nil || role.Permissions.RowAccess.IsZero() {
+			continue
+		}
+		file := roleFiles[strings.ToLower(role.Name)]
+		if file == "" {
+			file = "roles"
+		}
+		addSection := func(kind, section string, policies map[string]auth.RowPolicies) {
+			for object, ops := range policies {
+				target, ok := targets[rowAccessTargetKey(kind, object)]
+				if !ok {
+					issues = append(issues, Issue{
+						File:         file,
+						Object:       role.Name,
+						Kind:         "Роль",
+						Code:         "rls.unknown-object",
+						Message:      fmt.Sprintf("row_access.%s.%s в роли %q ссылается на несуществующий объект", section, object, role.Name),
+						SuggestedFix: "Исправьте имя объекта в permissions.row_access или удалите устаревшую policy.",
+					})
+					continue
+				}
+				for op, raw := range ops {
+					if !auth.PermissionHas(role.Permissions, kind, object, op) {
+						issues = append(issues, Issue{
+							File:         file,
+							Object:       role.Name,
+							Kind:         "Роль",
+							Code:         "rls.policy-without-permission",
+							Message:      fmt.Sprintf("row_access.%s.%s.%s в роли %q не применяется: роль не даёт object-level право %q на %s %q", section, object, op, role.Name, op, target.objectKind, target.name),
+							SuggestedFix: fmt.Sprintf("Добавьте `%s` в permissions.%s.%s или удалите эту row_access policy.", op, section, object),
+						})
+					}
+					if err := validateRoleRowPolicy(ops, op, raw, target.meta); err != nil {
+						issues = append(issues, Issue{
+							File:         file,
+							Object:       role.Name,
+							Kind:         "Роль",
+							Code:         "rls.invalid-policy",
+							Message:      fmt.Sprintf("row_access.%s.%s.%s в роли %q невалидна: %v", section, object, op, role.Name, err),
+							SuggestedFix: "Исправьте field/op/value/same_as в policy; `onebase check --lint` проверяет её тем же компилятором, что runtime.",
+						})
+					}
+				}
+			}
+		}
+		addSection("catalog", "catalogs", role.Permissions.RowAccess.Catalogs)
+		addSection("document", "documents", role.Permissions.RowAccess.Documents)
+		addSection("register", "registers", role.Permissions.RowAccess.Registers)
+		addSection("inforeg", "inforegs", role.Permissions.RowAccess.InfoRegs)
+	}
+	return issues
+}
+
+func rowAccessLintTargets(proj *project.Project) map[string]rowAccessLintTarget {
+	out := map[string]rowAccessLintTarget{}
+	add := func(kind, name string, meta *metadata.Entity, objectKind string) {
+		out[rowAccessTargetKey(kind, name)] = rowAccessLintTarget{
+			name:       name,
+			meta:       meta,
+			objectKind: objectKind,
+		}
+	}
+	for _, ent := range proj.Entities {
+		if ent == nil {
+			continue
+		}
+		if ent.Kind == metadata.KindCatalog {
+			add("catalog", ent.Name, ent, "справочник")
+		} else {
+			add("document", ent.Name, ent, "документ")
+		}
+	}
+	for _, reg := range proj.Registers {
+		if reg != nil {
+			add("register", reg.Name, storage.RegisterPredicateEntity(reg), "регистр")
+		}
+	}
+	for _, ar := range proj.AccountRegisters {
+		if ar != nil {
+			add("register", ar.Name, storage.AccountRegisterPredicateEntity(ar), "регистр бухгалтерии")
+		}
+	}
+	for _, ir := range proj.InfoRegisters {
+		if ir != nil {
+			add("inforeg", ir.Name, storage.InfoRegisterPredicateEntity(ir), "регистр сведений")
+		}
+	}
+	return out
+}
+
+func rowAccessTargetKey(kind, name string) string {
+	return strings.ToLower(strings.TrimSpace(kind)) + "\x00" + strings.ToLower(strings.TrimSpace(name))
+}
+
+func roleFileLabels(dir string) map[string]string {
+	out := map[string]string{}
+	if dir == "" {
+		return out
+	}
+	root := filepath.Join(dir, "roles")
+	entries, _ := os.ReadDir(root)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".yaml") {
+			continue
+		}
+		label := filepath.ToSlash(filepath.Join("roles", e.Name()))
+		role, err := auth.LoadRoleFile(filepath.Join(root, e.Name()))
+		if err != nil || role == nil || strings.TrimSpace(role.Name) == "" {
+			continue
+		}
+		out[strings.ToLower(role.Name)] = label
+	}
+	return out
+}
+
+func validateRoleRowPolicy(policies auth.RowPolicies, op string, raw auth.RowPolicy, meta *metadata.Entity) error {
+	if raw.SameAs != "" {
+		if err := validateRowPolicySameAs(policies, op); err != nil {
+			return err
+		}
+		resolved, _ := policies.Resolve(op)
+		return access.ValidatePolicy(resolved, meta)
+	}
+	return access.ValidatePolicy(raw, meta)
+}
+
+func validateRowPolicySameAs(policies auth.RowPolicies, op string) error {
+	seen := map[string]bool{}
+	cur := strings.ToLower(strings.TrimSpace(op))
+	for {
+		if seen[cur] {
+			return fmt.Errorf("same_as образует цикл на операции %q", cur)
+		}
+		seen[cur] = true
+		p, ok := policies[cur]
+		if !ok {
+			return fmt.Errorf("same_as ссылается на отсутствующую операцию %q", cur)
+		}
+		if p.SameAs == "" {
+			return nil
+		}
+		cur = strings.ToLower(strings.TrimSpace(p.SameAs))
+	}
 }
 
 func CheckLintIndexes(proj *project.Project) []Issue {

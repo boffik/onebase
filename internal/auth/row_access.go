@@ -34,6 +34,13 @@ type RowValue struct {
 	List    []any  `yaml:"list,omitempty" json:"list,omitempty"`
 }
 
+func (policies RowPolicies) Resolve(op string) (RowPolicy, bool) {
+	if policies == nil {
+		return RowPolicy{}, false
+	}
+	return resolveRowPolicy(policies, strings.ToLower(strings.TrimSpace(op)), map[string]bool{})
+}
+
 func normalizeRowAccess(in RowAccess) RowAccess {
 	return RowAccess{
 		Catalogs:  normalizeRowPolicyMap(in.Catalogs),
@@ -114,7 +121,7 @@ func (ra RowAccess) Policy(kind, entity, op string) (RowPolicy, bool) {
 	if policies == nil {
 		return RowPolicy{}, false
 	}
-	return resolveRowPolicy(policies, strings.ToLower(strings.TrimSpace(op)), map[string]bool{})
+	return policies.Resolve(op)
 }
 
 func (ra RowAccess) HasPolicy(kind, entity, op string) bool {
