@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"html/template"
 	"net/http"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/mailer"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/ivantit66/onebase/internal/metrics"
 	"github.com/ivantit66/onebase/internal/realtime"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/scheduler"
@@ -57,6 +59,8 @@ type Config struct {
 	// Используется basic-auth HTTP-сервисов для защиты от брутфорса. nil →
 	// New создаёт собственный, чтобы поле никогда не было пустым.
 	LoginLimit *auth.LoginLimiter
+	Limits     RuntimeLimits
+	Metrics    *metrics.Registry
 }
 
 type Server struct {
@@ -81,6 +85,8 @@ type Server struct {
 	extprocessors    *extform.ProcessorRepo // внешний контур: обработки из БД
 	tmpl             *template.Template
 	hub              *realtime.Hub // real-time-шина уведомлений сервер→браузер (план 74)
+	ops              *operationLimiter
+	exportJobs       *exportJobStore
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -92,7 +98,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if loginLimit == nil {
 		loginLimit = auth.NewLoginLimiter(5, time.Minute)
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub()}
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub(), ops: newOperationLimiter(), exportJobs: newExportJobStore(defaultExportJobTTL)}
 	s.entitySvc = &entityservice.Service{
 		Store:  store,
 		Reg:    reg,
@@ -108,8 +114,8 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		// MakeThis — обёртка над *runtime.Object с поддержкой методов ТЧ
 		// (this.Товары.Добавить() и т.п.). Без неё ОбработкаЗаполнения не
 		// смогла бы построить строки табличной части в приёмнике.
-		MakeThis: func(obj *runtime.Object, e *metadata.Entity) interpreter.This {
-			return &formObjectThis{obj: obj, entity: e}
+		MakeThis: func(ctx context.Context, obj *runtime.Object, e *metadata.Entity) interpreter.This {
+			return s.newFormObjectThis(ctx, obj, e, nil)
 		},
 		// Исходящие веб-хуки (план 29): save/post диспетчеризуются из Save.
 		Hooks: cfg.Webhooks,
@@ -139,6 +145,15 @@ func (s *Server) Messages() *MessageStore { return s.messages }
 // проведение по той же логике, что и UI submit/submitEdit — иначе бизнес-
 // правила работали бы только через web-форму.
 func (s *Server) EntitySvc() *entityservice.Service { return s.entitySvc }
+
+// SSESubscriberCount returns the number of currently connected realtime
+// subscribers.
+func (s *Server) SSESubscriberCount() int {
+	if s == nil || s.hub == nil {
+		return 0
+	}
+	return s.hub.SubscriberCount()
+}
 
 // InvalidateWidgetCache drops every cached widget result. The dev/reload path
 // calls this so users see fresh data after metadata changes.
@@ -257,6 +272,11 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/admin/sessions/limit", s.adminSessionLimit)
 	r.Post("/ui/admin/sessions/{login}/kick", s.adminKickUser)
 
+	// Admin: REST API v2 integration tokens
+	r.Get("/ui/admin/api-tokens", s.adminAPITokens)
+	r.Post("/ui/admin/api-tokens", s.adminAPITokenCreate)
+	r.Post("/ui/admin/api-tokens/{id}/revoke", s.adminAPITokenRevoke)
+
 	// Admin: roles
 	r.Get("/ui/admin/roles", s.adminRoles)
 	r.Get("/ui/admin/users/{id}/roles", s.adminUserRoles)
@@ -346,6 +366,9 @@ func (s *Server) Mount(r chi.Router) {
 
 	// PDF export отчётов (issue #218) — реальный бинарный PDF, как у печатных форм.
 	r.Get("/ui/report/{name}/pdf", s.reportPDF)
+	r.Get("/ui/report/{name}/export/{format}", s.reportExportJobStart)
+	r.Get("/ui/export-jobs/{id}", s.exportJobStatus)
+	r.Get("/ui/export-jobs/{id}/download", s.exportJobDownload)
 
 	// Journals
 	r.Get("/ui/journal/{name}", s.journalList)

@@ -77,6 +77,21 @@ func (db *DB) MigrateRegisters(ctx context.Context, registers []*metadata.Regist
 				return fmt.Errorf("migrate register %s.%s: %w", reg.Name, f.Name, err)
 			}
 		}
+		if err := db.ensureRegisterIndexes(ctx, reg); err != nil {
+			return fmt.Errorf("migrate register %s indexes: %w", reg.Name, err)
+		}
+	}
+	return nil
+}
+
+func (db *DB) ensureRegisterIndexes(ctx context.Context, reg *metadata.Register) error {
+	if _, err := db.Exec(ctx, CreateRegisterPeriodIndexSQL(reg.Name)); err != nil {
+		return err
+	}
+	if sql := CreateRegisterDimPeriodIndexSQL(reg); sql != "" {
+		if _, err := db.Exec(ctx, sql); err != nil {
+			return err
+		}
 	}
 	return nil
 }

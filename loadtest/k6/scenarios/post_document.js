@@ -8,13 +8,15 @@
 //          -e SEED_FILE=../../seed/counterparties.json \
 //          loadtest/k6/scenarios/post_document.js
 
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 import { SharedArray } from 'k6/data';
 import { createCounterparty, postReceipt } from '../lib/common.js';
+import { envDuration, envFloat, envInt } from '../lib/env.js';
 
 // Загружаем id контрагентов из seed-файла. open() — только в init-контексте,
 // поэтому оборачиваем в try/catch: без файла упадём на fallback в setup().
 const SEED_FILE = __ENV.SEED_FILE || '../../seed/counterparties.json';
+const POST_SLEEP = envFloat('POST_SLEEP', 0);
 const seeded = new SharedArray('counterparties', function () {
   try {
     return JSON.parse(open(SEED_FILE));
@@ -29,19 +31,19 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '30s', target: 20 },  // разгон
-        { duration: '1m', target: 20 },   // плато
-        { duration: '30s', target: 50 },  // ступень выше — ищем предел
-        { duration: '1m', target: 50 },
-        { duration: '20s', target: 0 },   // остывание
+        { duration: envDuration('POST_RAMP_1', '30s'), target: envInt('POST_TARGET_1', 20) },
+        { duration: envDuration('POST_HOLD_1', '1m'), target: envInt('POST_TARGET_1', 20) },
+        { duration: envDuration('POST_RAMP_2', '30s'), target: envInt('POST_TARGET_2', 50) },
+        { duration: envDuration('POST_HOLD_2', '1m'), target: envInt('POST_TARGET_2', 50) },
+        { duration: envDuration('POST_RAMP_DOWN', '20s'), target: 0 },
       ],
       gracefulRampDown: '10s',
     },
   },
   thresholds: {
     // SLA: 95% проведений быстрее 800 мс, ошибок < 1%.
-    http_req_duration: ['p(95)<800'],
-    http_req_failed: ['rate<0.01'],
+    http_req_duration: [`p(95)<${envInt('POST_P95_MS', 800)}`],
+    http_req_failed: [`rate<${envFloat('POST_ERROR_RATE', 0.01)}`],
   },
 };
 
@@ -63,4 +65,7 @@ export default function (data) {
       try { return !!r.json('id'); } catch (_) { return false; }
     },
   });
+  if (POST_SLEEP > 0) {
+    sleep(POST_SLEEP);
+  }
 }

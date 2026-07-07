@@ -153,6 +153,10 @@ func TestDispatcher_RetriesOn5xx(t *testing.T) {
 	if e.StatusCode != 200 || e.Webhook != "r" || e.Event != "document.save" {
 		t.Fatalf("лог: %+v", e)
 	}
+	m := d.Metrics()
+	if m.Inflight != 0 || m.Dispatched != 1 || m.Retries != 2 || m.Failed != 0 {
+		t.Fatalf("metrics = %+v, want inflight=0 dispatched=1 retries=2 failed=0", m)
+	}
 }
 
 func TestDispatcher_LogsFailure(t *testing.T) {
@@ -168,6 +172,9 @@ func TestDispatcher_LogsFailure(t *testing.T) {
 	e := <-logged
 	if e.Error == "" {
 		t.Fatalf("ожидалась ошибка в логе, получено %+v", e)
+	}
+	if m := d.Metrics(); m.Failed != 1 {
+		t.Fatalf("failed metric = %d, want 1", m.Failed)
 	}
 }
 

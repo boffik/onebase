@@ -325,6 +325,13 @@ func (i *Interpreter) execStmt(s ast.Stmt, e *env) {
 					break
 				}
 			}
+		case interface{ IterateThis() []This }:
+			for _, item := range items.IterateThis() {
+				e.set(v.Var.Literal, item)
+				if !i.execLoopBody(v.Body, e) {
+					break
+				}
+			}
 		default:
 			// Поддержка прокси-объектов вроде *formTpProxy: если у значения
 			// есть метод IterateRows() — итерируемся по нему. Без этого
@@ -478,6 +485,12 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 			return o.CallMethod("получить", []any{idx})
 		}
 		return nil
+	case *ast.ArrayLit:
+		items := make([]any, 0, len(v.Elements))
+		for _, elem := range v.Elements {
+			items = append(items, i.evalExpr(elem, e))
+		}
+		return NewArray(items)
 	case *ast.NewExpr:
 		return i.evalNew(v, e)
 	case *ast.UnaryExpr:

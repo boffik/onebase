@@ -56,6 +56,7 @@ func CheckLintProject(dir string, proj *project.Project, roles []*auth.Role) []I
 	var issues []Issue
 	issues = append(issues, CheckLintDSL(dir, proj)...)
 	issues = append(issues, CheckLintRoles(proj, roles)...)
+	issues = append(issues, CheckLintIndexes(proj)...)
 	return issues
 }
 
@@ -179,7 +180,7 @@ func with(base *yamlLintSchema, nested map[string]*yamlLintSchema) *yamlLintSche
 }
 
 func fieldYAMLSchema() *yamlLintSchema {
-	return with(obj("name", "title", "type", "allow_inline_create"), map[string]*yamlLintSchema{
+	return with(obj("name", "title", "label", "type", "allow_inline_create"), map[string]*yamlLintSchema{
 		"titles": freeMap(),
 	})
 }
@@ -196,7 +197,7 @@ func indexYAMLSchema() *yamlLintSchema {
 }
 
 func entityYAMLSchema() *yamlLintSchema {
-	return with(obj("name", "title", "posting", "hierarchical", "hierarchy_kind", "list_form", "item_form", "based_on", "list_mode"), map[string]*yamlLintSchema{
+	return with(obj("name", "title", "description", "posting", "hierarchical", "hierarchy_kind", "list_form", "item_form", "based_on", "list_mode"), map[string]*yamlLintSchema{
 		"titles":     freeMap(),
 		"fields":     seq(fieldYAMLSchema()),
 		"tableparts": seq(tablePartYAMLSchema()),
@@ -238,7 +239,7 @@ func constantsYAMLSchema() *yamlLintSchema {
 }
 
 func widgetYAMLSchema() *yamlLintSchema {
-	return with(obj("name", "type", "title", "query", "format", "compare_to", "limit", "chart_kind", "x_field", "y_fields", "entities", "scope"), map[string]*yamlLintSchema{
+	return with(obj("name", "type", "title", "query", "format", "compare_to", "limit", "chart_kind", "chart_type", "x_field", "y_fields", "entities", "scope"), map[string]*yamlLintSchema{
 		"titles": freeMap(),
 		"params": freeMap(),
 		"columns": seq(with(obj("field", "label", "format", "align"), map[string]*yamlLintSchema{
@@ -319,7 +320,7 @@ func journalYAMLSchema() *yamlLintSchema {
 	return with(obj("name", "title", "documents"), map[string]*yamlLintSchema{
 		"titles":                 freeMap(),
 		"columns":                seq(column),
-		"filters":                seq(obj("field", "type")),
+		"filters":                seq(with(obj("field", "label", "type"), map[string]*yamlLintSchema{"labels": freeMap()})),
 		"conditional":            seq(conditional),
 		"conditional_formatting": seq(conditional),
 	})
@@ -374,7 +375,7 @@ func formModuleYAMLSchema() *yamlLintSchema {
 		"id", "name", "kind", "field", "table_part", "visible", "enabled", "required",
 		"original_id", "data_path", "picture", "values_picture", "width", "height",
 		"halign", "valign", "readonly", "use_grid", "no_grid", "auto_sum", "hint", "mask",
-		"format", "display_format", "type", "choice", "unknown_xml", "view",
+		"multiline", "format", "display_format", "type", "choice", "unknown_xml", "view",
 	} {
 		element.keys[k] = nil
 	}
@@ -664,6 +665,10 @@ func collectReadIdentTokensExpr(expr ast.Expr, out map[string]token.Token) {
 	case *ast.NewExpr:
 		for _, arg := range v.Args {
 			collectReadIdentTokensExpr(arg, out)
+		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			collectReadIdentTokensExpr(elem, out)
 		}
 	case *ast.IndexExpr:
 		collectReadIdentTokensExpr(v.Object, out)
@@ -1055,6 +1060,10 @@ func collectDSLReadsExpr(expr ast.Expr, reads map[string]int) {
 		for _, arg := range v.Args {
 			collectDSLReadsExpr(arg, reads)
 		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			collectDSLReadsExpr(elem, reads)
+		}
 	case *ast.IndexExpr:
 		collectDSLReadsExpr(v.Object, reads)
 		collectDSLReadsExpr(v.Index, reads)
@@ -1124,6 +1133,10 @@ func collectDSLCallNamesExpr(expr ast.Expr, calls map[string]bool) {
 	case *ast.NewExpr:
 		for _, arg := range v.Args {
 			collectDSLCallNamesExpr(arg, calls)
+		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			collectDSLCallNamesExpr(elem, calls)
 		}
 	case *ast.IndexExpr:
 		collectDSLCallNamesExpr(v.Object, calls)
@@ -1212,6 +1225,67 @@ func CheckLintRoles(proj *project.Project, roles []*auth.Role) []Issue {
 		}
 	}
 	return issues
+}
+
+func CheckLintIndexes(proj *project.Project) []Issue {
+	if proj == nil {
+		return nil
+	}
+	var issues []Issue
+	for _, ent := range proj.Entities {
+		if ent == nil || len(ent.ListForm) == 0 {
+			continue
+		}
+		for _, fieldName := range ent.ListForm {
+			f := findLintEntityField(ent, fieldName)
+			if f == nil || !lintFieldNeedsIndex(*f) || hasLeadingIndex(ent, f.Name) {
+				continue
+			}
+			kindDir, kindName := "catalogs", "Справочник"
+			if ent.Kind == metadata.KindDocument {
+				kindDir, kindName = "documents", "Документ"
+			}
+			issues = append(issues, Issue{
+				File:         kindDir + "/" + ent.Name + ".yaml",
+				Object:       ent.Name,
+				Kind:         kindName,
+				Code:         "metadata.list-field-without-index",
+				Message:      fmt.Sprintf("поле %q используется в list_form, но не покрыто ведущим полем indexes:", f.Name),
+				SuggestedFix: fmt.Sprintf("Добавьте в %s/%s.yaml блок `indexes: - fields: [%s]` или составной индекс, где %s идёт первым.", kindDir, ent.Name, f.Name, f.Name),
+			})
+		}
+	}
+	return issues
+}
+
+func findLintEntityField(ent *metadata.Entity, name string) *metadata.Field {
+	for i := range ent.Fields {
+		if strings.EqualFold(ent.Fields[i].Name, name) {
+			return &ent.Fields[i]
+		}
+	}
+	return nil
+}
+
+func lintFieldNeedsIndex(f metadata.Field) bool {
+	if f.RefEntity != "" {
+		return true
+	}
+	switch f.Type {
+	case metadata.FieldTypeString, metadata.FieldTypeDate, metadata.FieldTypeNumber, metadata.FieldTypeBool:
+		return true
+	default:
+		return false
+	}
+}
+
+func hasLeadingIndex(ent *metadata.Entity, fieldName string) bool {
+	for _, idx := range ent.Indexes {
+		if len(idx.Fields) > 0 && strings.EqualFold(idx.Fields[0], fieldName) {
+			return true
+		}
+	}
+	return false
 }
 
 func programLabel(dir string, prog *ast.Program) string {

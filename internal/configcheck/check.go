@@ -756,5 +756,9 @@ func walkExpr(e ast.Expr, known map[string]struct{}, label string, issues *[]Iss
 		for _, arg := range v.Args {
 			walkExpr(arg, known, label, issues)
 		}
+	case *ast.ArrayLit:
+		for _, elem := range v.Elements {
+			walkExpr(elem, known, label, issues)
+		}
 	}
 }

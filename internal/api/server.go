@@ -36,7 +36,15 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// троттлятся вместе, чтобы брутфорс нельзя было размазать по двум каналам.
 	loginLimit := auth.NewLoginLimiter(5, time.Minute)
 	uiCfg.LoginLimit = loginLimit
+	var metricsReg *metrics.Registry
+	if debugToken != "" {
+		metricsReg = metrics.New()
+		uiCfg.Metrics = metricsReg
+	}
 	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
+	if metricsReg != nil {
+		registerRuntimeMetrics(metricsReg, authRepo, uiSrv, sched, uiCfg.Webhooks)
+	}
 	h := &handler{reg: reg, store: store, interp: interp, entitySvc: uiSrv.EntitySvc()}
 	r := chi.NewRouter()
 	r.Use(requestLogger()) // как middleware.Logger, но режет токены/коды из URI (план 53)
@@ -47,9 +55,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// Сбор HTTP-метрик включаем тем же знаком, что и debug-поверхность: если
 	// задан ONEBASE_DEBUG_TOKEN. Middleware ставим до маршрутов, чтобы он
 	// оборачивал весь роутер; сам /metrics монтируется ниже под токен-гейтом.
-	var metricsReg *metrics.Registry
 	if debugToken != "" {
-		metricsReg = metrics.New()
 		r.Use(metricsReg.Middleware)
 	}
 
@@ -84,6 +90,14 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// (none/basic/session/token/hmac), поэтому публичные приёмники вебхуков
 	// работают без cookie, а защищённые проверяют свой механизм внутри.
 	uiSrv.MountServices(r)
+
+	// REST API v2 accepts either an integration Bearer token or the existing
+	// browser session cookie. Keep it outside the UI/session-only group so
+	// headless clients do not need a cookie.
+	r.Group(func(r chi.Router) {
+		r.Use(authRepo.APITokenOrSessionMiddleware)
+		h.mountV2(r)
+	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
@@ -148,8 +162,17 @@ func csrfExceptServices(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if (r.URL.Path == "/api/v2" || strings.HasPrefix(r.URL.Path, "/api/v2/")) && hasBearerAuthorization(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		protected.ServeHTTP(w, r)
 	})
+}
+
+func hasBearerAuthorization(r *http.Request) bool {
+	parts := strings.Fields(r.Header.Get("Authorization"))
+	return len(parts) > 0 && strings.EqualFold(parts[0], "Bearer")
 }
 
 func (s *Server) Handler() http.Handler { return s.handler }

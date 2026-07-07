@@ -84,6 +84,8 @@ func getExprLocation(expr ast.Expr) (string, int, int) {
 		return e.TypeName.File, e.TypeName.Line, e.TypeName.Col
 	case *ast.IndexExpr:
 		return getExprLocation(e.Object)
+	case *ast.ArrayLit:
+		return e.Tok.File, e.Tok.Line, e.Tok.Col
 	default:
 		return "", 0, 0
 	}

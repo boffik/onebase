@@ -214,7 +214,7 @@ func (s *Server) loadRefOptionsWithMode(ctx context.Context, entity *metadata.En
 		if refEntity == nil {
 			continue
 		}
-		rows, err := s.referenceOptions(ctx, refEntity, mode)
+		rows, err := s.initialReferenceOptions(ctx, refEntity, mode, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +281,7 @@ func (s *Server) loadTPRefOptions(ctx context.Context, entity *metadata.Entity) 
 			if refEntity == nil {
 				continue
 			}
-			rows, err := s.referenceOptions(ctx, refEntity, refOptionsChoice)
+			rows, err := s.initialReferenceOptions(ctx, refEntity, refOptionsChoice, nil)
 			if err != nil {
 				continue
 			}
@@ -726,6 +726,13 @@ func formValues(r *http.Request, entity *metadata.Entity) map[string]string {
 	for _, f := range entity.Fields {
 		vals[f.Name] = r.FormValue(f.Name)
 	}
+	if entity.Hierarchical {
+		vals["parent_id"] = r.FormValue("parent_id")
+		vals["is_folder"] = "false"
+		if r.FormValue("is_folder") == "true" {
+			vals["is_folder"] = "true"
+		}
+	}
 	return vals
 }
 
@@ -783,34 +790,46 @@ func (s *Server) enrichTPRowsWithRefs(ctx context.Context, tp metadata.TablePart
 		if refEntity == nil {
 			continue
 		}
-		// collect unique IDs
-		seen := map[string]bool{}
+		idsByString := map[string]uuid.UUID{}
 		for _, row := range rows {
-			if v := row[f.Name]; v != nil {
-				seen[fmt.Sprintf("%v", v)] = true
+			if _, v, ok := lookupMapCI(row, f.Name); ok {
+				idStr, id, ok := uuidFromValue(v)
+				if ok {
+					idsByString[idStr] = id
+				}
 			}
 		}
-		// resolve each unique ID to a display label
-		labels := make(map[string]string, len(seen))
-		for idStr := range seen {
-			id, err := uuid.Parse(idStr)
-			if err != nil {
-				continue
-			}
-			refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
-			if err != nil {
-				continue
-			}
+		if len(idsByString) == 0 {
+			continue
+		}
+		ids := make([]uuid.UUID, 0, len(idsByString))
+		for _, id := range idsByString {
+			ids = append(ids, id)
+		}
+		refRows, err := s.store.GetFieldsByIDs(ctx, refEntity, ids, displayField(refEntity))
+		if err != nil {
+			continue
+		}
+		labels := make(map[string]string, len(refRows))
+		for idStr, refRow := range refRows {
 			labels[idStr] = firstStringField(refRow, refEntity)
 		}
 		// replace plain UUID strings with *interpreter.Ref{UUID, Name, Manager}
 		mgr := s.refManagerFor(refEntity, ctx)
 		for _, row := range rows {
-			if v := row[f.Name]; v != nil {
-				idStr := fmt.Sprintf("%v", v)
-				if name, ok := labels[idStr]; ok {
-					row[f.Name] = &interpreter.Ref{UUID: idStr, Name: name, Type: refEntity.Name, Manager: mgr}
-				}
+			matchKey, v, ok := lookupMapCI(row, f.Name)
+			if !ok || v == nil {
+				continue
+			}
+			if _, isRef := v.(*interpreter.Ref); isRef {
+				continue
+			}
+			idStr, _, ok := uuidFromValue(v)
+			if !ok {
+				continue
+			}
+			if name, ok := labels[idStr]; ok {
+				row[matchKey] = &interpreter.Ref{UUID: idStr, Name: name, Type: refEntity.Name, Manager: mgr}
 			}
 		}
 	}
@@ -855,8 +874,12 @@ func (s *Server) enrichHeaderRefs(ctx context.Context, entity *metadata.Entity, 
 		if err != nil {
 			continue
 		}
-		refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
+		refRows, err := s.store.GetFieldsByIDs(ctx, refEntity, []uuid.UUID{id}, displayField(refEntity))
 		if err != nil {
+			continue
+		}
+		refRow := refRows[id.String()]
+		if refRow == nil {
 			continue
 		}
 		obj.Fields[matchKey] = &interpreter.Ref{
@@ -892,9 +915,12 @@ func (s *Server) buildHierarchyBreadcrumbs(ctx context.Context, entity *metadata
 	return crumbs
 }
 
-// loadFolderOptions returns all folder items for a hierarchical catalog (for parent select).
-func (s *Server) loadFolderOptions(ctx context.Context, entity *metadata.Entity) []map[string]any {
-	rows, err := s.store.List(ctx, entity.Name, entity, storage.ListParams{})
+// loadFolderOptions returns a bounded folder list for a hierarchical catalog parent select.
+func (s *Server) loadFolderOptions(ctx context.Context, entity *metadata.Entity, selected ...string) []map[string]any {
+	rows, err := s.store.List(ctx, entity.Name, entity, storage.ListParams{
+		Limit:       refPickerDefaultLimit,
+		OnlyFolders: true,
+	})
 	if err != nil {
 		return nil
 	}
@@ -905,7 +931,34 @@ func (s *Server) loadFolderOptions(ctx context.Context, entity *metadata.Entity)
 			folders = append(folders, row)
 		}
 	}
-	return folders
+	return s.appendSelectedFolderOptions(ctx, folders, entity, selected)
+}
+
+func (s *Server) appendSelectedFolderOptions(ctx context.Context, rows []map[string]any, entity *metadata.Entity, selected []string) []map[string]any {
+	seen := make(map[string]bool, len(rows)+len(selected))
+	for _, row := range rows {
+		if id := refValueString(row["id"]); id != "" {
+			seen[id] = true
+		}
+	}
+	for _, idStr := range selected {
+		idStr = strings.TrimSpace(idStr)
+		if idStr == "" || seen[idStr] {
+			continue
+		}
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			continue
+		}
+		row, err := s.store.GetByID(ctx, entity.Name, id, entity)
+		if err != nil || row == nil || !asBool(row["is_folder"]) {
+			continue
+		}
+		row["_label"] = firstStringField(row, entity)
+		rows = append(rows, row)
+		seen[idStr] = true
+	}
+	return rows
 }
 
 func listURL(entity *metadata.Entity) string {

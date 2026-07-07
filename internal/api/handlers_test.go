@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dslvars"
 	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/metadata"
+	reportpkg "github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -29,6 +31,10 @@ import (
 // через JSON, optimistic locking через If-Match, проведение через /post.
 
 func newAPITestHandler(t *testing.T, entities []*metadata.Entity, programs map[string]*ast.Program) (*handler, context.Context) {
+	return newAPITestHandlerWithReports(t, entities, nil, programs)
+}
+
+func newAPITestHandlerWithReports(t *testing.T, entities []*metadata.Entity, reports []*reportpkg.Report, programs map[string]*ast.Program) (*handler, context.Context) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
@@ -42,7 +48,7 @@ func newAPITestHandler(t *testing.T, entities []*metadata.Entity, programs map[s
 	}
 
 	registry := runtime.NewRegistry()
-	registry.Load(runtime.LoadOptions{Entities: entities, Programs: programs})
+	registry.Load(runtime.LoadOptions{Entities: entities, Reports: reports, Programs: programs})
 
 	interp := interpreter.New()
 	interp.LookupProc = registry.GetModuleProc
@@ -115,6 +121,17 @@ func withUser(r *http.Request, u *auth.User) *http.Request {
 	return r.WithContext(auth.ContextWithUser(r.Context(), u))
 }
 
+func apiUser(login string, permissions auth.Permission) *auth.User {
+	return &auth.User{
+		ID:    "u-" + login,
+		Login: login,
+		Roles: []*auth.Role{{
+			Name:        "role-" + login,
+			Permissions: permissions,
+		}},
+	}
+}
+
 // БЫЛО (до миграции): POST /catalogs/X с OnWrite, который зовёт Сообщить(),
 // падал с 422 «неизвестная функция Сообщить». СТАЛО: success + сообщение
 // возвращается в JSON.
@@ -185,6 +202,41 @@ func TestAPI_RBAC_DeniesCreateWithoutWrite(t *testing.T) {
 	}
 }
 
+func TestAPI_RBAC_DeniesListAndGetWithoutRead(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, "Товар", id, map[string]any{"Наименование": "Молоток"}, cat); err != nil {
+		t.Fatal(err)
+	}
+	user := apiUser("writer", auth.Permission{
+		Catalogs: map[string][]string{"Товар": {"write"}},
+	})
+
+	listReq := reqWithEntity("GET", "/catalogs/Товар", nil, map[string]string{"entity": "Товар"}, nil)
+	listReq = withUser(listReq, user)
+	listRec := httptest.NewRecorder()
+	h.listObjects(metadata.KindCatalog).ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusForbidden {
+		t.Fatalf("list: expected 403, got %d: %s", listRec.Code, listRec.Body.String())
+	}
+
+	getReq := reqWithEntity("GET", "/catalogs/Товар/"+id.String(), nil,
+		map[string]string{"entity": "Товар", "id": id.String()}, nil)
+	getReq = withUser(getReq, user)
+	getRec := httptest.NewRecorder()
+	h.getObject(metadata.KindCatalog).ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusForbidden {
+		t.Fatalf("get: expected 403, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+}
+
 func TestAPI_RBAC_UpdatePostActionRequiresPost(t *testing.T) {
 	doc := &metadata.Entity{
 		Name:    "Поступление",
@@ -214,6 +266,91 @@ func TestAPI_RBAC_UpdatePostActionRequiresPost(t *testing.T) {
 	r = withUser(r, user)
 	w := httptest.NewRecorder()
 	h.updateObject(metadata.KindDocument).ServeHTTP(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPI_RBAC_DeniesDeleteWithoutDelete(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, "Товар", id, map[string]any{"Наименование": "Молоток"}, cat); err != nil {
+		t.Fatal(err)
+	}
+	user := apiUser("writer", auth.Permission{
+		Catalogs: map[string][]string{"Товар": {"read", "write"}},
+	})
+
+	r := reqWithEntity("DELETE", "/catalogs/Товар/"+id.String(), nil,
+		map[string]string{"entity": "Товар", "id": id.String()}, nil)
+	r = withUser(r, user)
+	w := httptest.NewRecorder()
+	h.deleteObject(metadata.KindCatalog).ServeHTTP(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := h.store.GetByID(ctx, "Товар", id, cat); err != nil {
+		t.Fatalf("object was deleted despite missing delete permission: %v", err)
+	}
+}
+
+func TestAPI_RBAC_PostDocumentRequiresPost(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{doc}, nil)
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, "Поступление", id, map[string]any{"Номер": "1"}, doc); err != nil {
+		t.Fatal(err)
+	}
+	user := apiUser("writer", auth.Permission{
+		Documents: map[string][]string{"Поступление": {"read", "write"}},
+	})
+
+	r := reqWithEntity("POST", "/documents/Поступление/"+id.String()+"/post", nil,
+		map[string]string{"entity": "Поступление", "id": id.String()}, nil)
+	r = withUser(r, user)
+	w := httptest.NewRecorder()
+	h.postDocument().ServeHTTP(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPI_RBAC_PostDocumentWithBodyRequiresWrite(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{doc}, nil)
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, "Поступление", id, map[string]any{"Номер": "1"}, doc); err != nil {
+		t.Fatal(err)
+	}
+	user := apiUser("poster", auth.Permission{
+		Documents: map[string][]string{"Поступление": {"read", "post"}},
+	})
+
+	r := reqWithEntity("POST", "/documents/Поступление/"+id.String()+"/post", []byte(`{"Номер":"2"}`),
+		map[string]string{"entity": "Поступление", "id": id.String()}, nil)
+	r = withUser(r, user)
+	w := httptest.NewRecorder()
+	h.postDocument().ServeHTTP(w, r)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
@@ -309,6 +446,469 @@ func TestAPI_List_InvalidLimit(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPIV2_ListEnvelopePageAndFilter(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+	for _, name := range []string{"Молоток 1", "Молоток 2", "Гвоздь"} {
+		if err := h.store.Upsert(ctx, "Товар", uuid.New(), map[string]any{"Наименование": name}, cat); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	target := "/api/v2/catalog/Товар?limit=1&page=2&sort=" + url.QueryEscape("Наименование") +
+		"&filter%5B" + url.QueryEscape("Наименование") + "%5D=" + url.QueryEscape("Молоток")
+	r := reqWithEntity("GET", target, nil, map[string]string{"name": "Товар"}, nil)
+	w := httptest.NewRecorder()
+	h.listObjectsV2(metadata.KindCatalog).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data []map[string]any `json:"data"`
+		Meta restV2Meta       `json:"meta"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Data) != 1 {
+		t.Fatalf("len(data) = %d, want 1: %#v", len(resp.Data), resp.Data)
+	}
+	if resp.Data[0]["Наименование"] != "Молоток 2" {
+		t.Fatalf("second page row = %#v, want Молоток 2", resp.Data[0])
+	}
+	if resp.Meta.Total != 2 || resp.Meta.Page != 2 || resp.Meta.Limit != 1 || resp.Meta.TotalPages != 2 {
+		t.Fatalf("bad meta: %+v", resp.Meta)
+	}
+}
+
+func TestAPIV2_CRUDRoundTripEnvelope(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+
+	createReq := reqWithEntity("POST", "/api/v2/catalog/Товар", []byte(`{"Наименование":"Молоток"}`), map[string]string{"name": "Товар"}, nil)
+	createRec := httptest.NewRecorder()
+	h.createObjectV2(metadata.KindCatalog).ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("create: expected 200, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.ID == "" {
+		t.Fatal("create returned empty id")
+	}
+
+	getReq := reqWithEntity("GET", "/api/v2/catalog/Товар/"+created.Data.ID, nil, map[string]string{"name": "Товар", "id": created.Data.ID}, nil)
+	getRec := httptest.NewRecorder()
+	h.getObjectV2(metadata.KindCatalog).ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+	var got struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Data["Наименование"] != "Молоток" {
+		t.Fatalf("get data = %#v", got.Data)
+	}
+
+	updateReq := reqWithEntity("PUT", "/api/v2/catalog/Товар/"+created.Data.ID, []byte(`{"Наименование":"Дрель"}`), map[string]string{"name": "Товар", "id": created.Data.ID}, nil)
+	updateRec := httptest.NewRecorder()
+	h.updateObjectV2(metadata.KindCatalog).ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d: %s", updateRec.Code, updateRec.Body.String())
+	}
+
+	id := uuid.MustParse(created.Data.ID)
+	row, err := h.store.GetByID(ctx, "Товар", id, cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row["Наименование"] != "Дрель" {
+		t.Fatalf("stored name = %#v", row)
+	}
+
+	deleteReq := reqWithEntity("DELETE", "/api/v2/catalog/Товар/"+created.Data.ID, nil, map[string]string{"name": "Товар", "id": created.Data.ID}, nil)
+	deleteRec := httptest.NewRecorder()
+	h.deleteObjectV2(metadata.KindCatalog).ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("delete: expected 204, got %d: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+	if _, err := h.store.GetByID(ctx, "Товар", id, cat); err == nil {
+		t.Fatal("deleted object is still readable")
+	}
+}
+
+func TestAPIV2_RBAC_DeniesListWithoutRead(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+	if err := h.store.Upsert(ctx, "Товар", uuid.New(), map[string]any{"Наименование": "Молоток"}, cat); err != nil {
+		t.Fatal(err)
+	}
+	user := apiUser("writer", auth.Permission{
+		Catalogs: map[string][]string{"Товар": {"write"}},
+	})
+
+	r := reqWithEntity("GET", "/api/v2/catalog/Товар", nil, map[string]string{"name": "Товар"}, nil)
+	r = withUser(r, user)
+	w := httptest.NewRecorder()
+	h.listObjectsV2(metadata.KindCatalog).ServeHTTP(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPIV2_UnpostDocument(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{doc}, nil)
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, "Поступление", id, map[string]any{"Номер": "1"}, doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.SetPosted(ctx, "Поступление", id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	r := reqWithEntity("POST", "/api/v2/document/Поступление/"+id.String()+"/unpost", nil, map[string]string{"name": "Поступление", "id": id.String()}, nil)
+	w := httptest.NewRecorder()
+	h.unpostDocumentV2().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	row, err := h.store.GetByID(ctx, "Поступление", id, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row["posted"] != false {
+		t.Fatalf("posted = %#v, want false; row=%#v", row["posted"], row)
+	}
+}
+
+func TestAPIV2_OpenAPIIncludesPathsAndSchemas(t *testing.T) {
+	cat := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+	}
+	doc := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	rep := &reportpkg.Report{
+		Name:  "Остатки",
+		Query: "ВЫБРАТЬ 1 КАК Количество",
+		Params: []reportpkg.Param{
+			{Name: "НаДату", Type: "date"},
+		},
+	}
+	spec := buildOpenAPIV2([]*metadata.Entity{cat, doc}, []*reportpkg.Report{rep})
+
+	if spec["openapi"] != "3.0.3" {
+		t.Fatalf("openapi = %#v", spec["openapi"])
+	}
+	paths := spec["paths"].(map[string]any)
+	if _, ok := paths["/api/v2/catalog/{name}"]; !ok {
+		t.Fatalf("missing catalog path: %#v", paths)
+	}
+	if _, ok := paths["/api/v2/document/{name}/{id}/unpost"]; !ok {
+		t.Fatalf("missing unpost path: %#v", paths)
+	}
+	reportPath := paths["/api/v2/report/{name}"].(map[string]any)
+	reportGet := reportPath["get"].(map[string]any)
+	if reportGet["operationId"] != "runReport" {
+		t.Fatalf("report operationId = %#v", reportGet["operationId"])
+	}
+	reportParams := reportGet["parameters"].([]any)
+	if !openAPIHasQueryParam(reportParams, "composition") || !openAPIHasQueryParam(reportParams, "variant") {
+		t.Fatalf("report parameters must include composition and variant: %#v", reportParams)
+	}
+	components := spec["components"].(map[string]any)
+	securitySchemes := components["securitySchemes"].(map[string]any)
+	if _, ok := securitySchemes["bearerAuth"]; !ok {
+		t.Fatalf("missing bearerAuth security scheme: %#v", securitySchemes)
+	}
+	schemas := components["schemas"].(map[string]any)
+	schema := schemas["catalog_Товар"].(map[string]any)
+	props := schema["properties"].(map[string]any)
+	if _, ok := props["Наименование"]; !ok {
+		t.Fatalf("catalog schema lacks field: %#v", props)
+	}
+	reportSchema := schemas["report_Остатки"].(map[string]any)
+	reportProps := reportSchema["properties"].(map[string]any)
+	param := reportProps["НаДату"].(map[string]any)
+	if param["format"] != "date" {
+		t.Fatalf("report param schema = %#v", param)
+	}
+	if _, err := json.Marshal(spec); err != nil {
+		t.Fatalf("openapi spec must be JSON-serializable: %v", err)
+	}
+}
+
+func openAPIHasQueryParam(params []any, name string) bool {
+	for _, p := range params {
+		pm, ok := p.(map[string]any)
+		if ok && pm["name"] == name && pm["in"] == "query" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestAPIV2_ReportRunsQueryEnvelope(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+		},
+	}
+	rep := &reportpkg.Report{
+		Name:  "СписокТоваров",
+		Query: `ВЫБРАТЬ Наименование ИЗ Справочник.Товар УПОРЯДОЧИТЬ ПО Наименование`,
+	}
+	h, ctx := newAPITestHandlerWithReports(t, []*metadata.Entity{cat}, []*reportpkg.Report{rep}, nil)
+	for _, name := range []string{"Дрель", "Молоток"} {
+		if err := h.store.Upsert(ctx, "Товар", uuid.New(), map[string]any{"Наименование": name}, cat); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r := reqWithEntity("GET", "/api/v2/report/СписокТоваров?limit=1", nil, map[string]string{"name": "СписокТоваров"}, nil)
+	w := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data []map[string]any `json:"data"`
+		Meta restV2Meta       `json:"meta"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0]["наименование"] != "Дрель" {
+		t.Fatalf("bad report data: %#v", resp.Data)
+	}
+	if resp.Meta.Total != 1 || resp.Meta.Limit != 1 || !resp.Meta.Truncated {
+		t.Fatalf("bad report meta: %+v", resp.Meta)
+	}
+	if len(resp.Meta.Columns) != 1 || resp.Meta.Columns[0] != "наименование" {
+		t.Fatalf("columns = %#v", resp.Meta.Columns)
+	}
+}
+
+func TestAPIV2_ReportParamsAndRBAC(t *testing.T) {
+	rep := &reportpkg.Report{
+		Name: "Сумма",
+		Params: []reportpkg.Param{
+			{Name: "Значение", Type: "number"},
+		},
+		Query: `ВЫБРАТЬ &Значение КАК Значение`,
+	}
+	h, _ := newAPITestHandlerWithReports(t, nil, []*reportpkg.Report{rep}, nil)
+	user := apiUser("reader", auth.Permission{
+		Reports: map[string][]string{"Другой": {"run"}},
+	})
+
+	deniedReq := reqWithEntity("GET", "/api/v2/report/Сумма?Значение=7", nil, map[string]string{"name": "Сумма"}, nil)
+	deniedReq = withUser(deniedReq, user)
+	deniedRec := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(deniedRec, deniedReq)
+	if deniedRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", deniedRec.Code, deniedRec.Body.String())
+	}
+
+	allowedReq := reqWithEntity("GET", "/api/v2/report/Сумма?Значение=7", nil, map[string]string{"name": "Сумма"}, nil)
+	allowedReq = withUser(allowedReq, apiUser("runner", auth.Permission{
+		Reports: map[string][]string{"Сумма": {"run"}},
+	}))
+	allowedRec := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(allowedRec, allowedReq)
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", allowedRec.Code, allowedRec.Body.String())
+	}
+	var resp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(allowedRec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0]["значение"] == nil {
+		t.Fatalf("bad report data: %#v", resp.Data)
+	}
+}
+
+func TestAPIV2_ReportUsesBearerTokenRBAC(t *testing.T) {
+	rep := &reportpkg.Report{
+		Name: "Сумма",
+		Params: []reportpkg.Param{
+			{Name: "Значение", Type: "number"},
+		},
+		Query: `ВЫБРАТЬ &Значение КАК Значение`,
+	}
+	h, ctx := newAPITestHandlerWithReports(t, nil, []*reportpkg.Report{rep}, nil)
+	authRepo := auth.NewRepo(h.store)
+	if err := authRepo.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	allowedUser, _ := authRepo.Create(ctx, "runner", "pass", "", false)
+	deniedUser, _ := authRepo.Create(ctx, "reader", "pass", "", false)
+	role := []*auth.Role{{
+		Name: "report-runner",
+		Permissions: auth.Permission{
+			Reports: map[string][]string{"Сумма": {"run"}},
+		},
+	}}
+	if err := authRepo.SyncRoles(ctx, role); err != nil {
+		t.Fatal(err)
+	}
+	if err := authRepo.AssignRole(ctx, allowedUser.ID, role[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	_, allowedRaw, err := authRepo.CreateAPIToken(ctx, "allowed", allowedUser.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, deniedRaw, err := authRepo.CreateAPIToken(ctx, "denied", deniedUser.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	router := chi.NewRouter()
+	router.Use(authRepo.APITokenOrSessionMiddleware)
+	h.mountV2(router)
+	target := "/api/v2/report/" + url.PathEscape("Сумма") + "?Значение=7"
+
+	noAuth := httptest.NewRecorder()
+	router.ServeHTTP(noAuth, httptest.NewRequest(http.MethodGet, target, nil))
+	if noAuth.Code != http.StatusUnauthorized {
+		t.Fatalf("no auth expected 401, got %d: %s", noAuth.Code, noAuth.Body.String())
+	}
+
+	deniedReq := httptest.NewRequest(http.MethodGet, target, nil)
+	deniedReq.Header.Set("Authorization", "Bearer "+deniedRaw)
+	deniedRec := httptest.NewRecorder()
+	router.ServeHTTP(deniedRec, deniedReq)
+	if deniedRec.Code != http.StatusForbidden {
+		t.Fatalf("denied token expected 403, got %d: %s", deniedRec.Code, deniedRec.Body.String())
+	}
+
+	allowedReq := httptest.NewRequest(http.MethodGet, target, nil)
+	allowedReq.Header.Set("Authorization", "Bearer "+allowedRaw)
+	allowedRec := httptest.NewRecorder()
+	router.ServeHTTP(allowedRec, allowedReq)
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("allowed token expected 200, got %d: %s", allowedRec.Code, allowedRec.Body.String())
+	}
+	var resp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(allowedRec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0]["значение"] == nil {
+		t.Fatalf("bad report data: %#v", resp.Data)
+	}
+}
+
+func TestAPIV2_ReportCompositionEnvelope(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Категория", Type: metadata.FieldTypeString},
+			{Name: "Количество", Type: metadata.FieldTypeNumber},
+		},
+	}
+	rep := &reportpkg.Report{
+		Name:  "Свод",
+		Query: `ВЫБРАТЬ Категория, Количество ИЗ Справочник.Товар УПОРЯДОЧИТЬ ПО Категория`,
+		Composition: &reportpkg.Composition{
+			Groupings: []string{"Категория"},
+			Measures:  []reportpkg.Measure{{Field: "Количество", Agg: "sum"}},
+			Detail:    true,
+		},
+	}
+	h, ctx := newAPITestHandlerWithReports(t, []*metadata.Entity{cat}, []*reportpkg.Report{rep}, nil)
+	for _, row := range []map[string]any{
+		{"Категория": "Инструмент", "Количество": 2},
+		{"Категория": "Инструмент", "Количество": 3},
+	} {
+		if err := h.store.Upsert(ctx, "Товар", uuid.New(), row, cat); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r := reqWithEntity("GET", "/api/v2/report/Свод?composition=1", nil, map[string]string{"name": "Свод"}, nil)
+	w := httptest.NewRecorder()
+	h.runReportV2().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Kind   string `json:"kind"`
+			Result struct {
+				Groups []struct {
+					Field     string         `json:"field"`
+					Key       any            `json:"key"`
+					Subtotals map[string]any `json:"subtotals"`
+					Details   []any          `json:"details"`
+				} `json:"groups"`
+				RowCount int `json:"row_count"`
+			} `json:"result"`
+		} `json:"data"`
+		Meta restV2Meta `json:"meta"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Data.Kind != "tree" || !resp.Meta.Composed || resp.Meta.Kind != "tree" {
+		t.Fatalf("bad composition markers: data=%+v meta=%+v", resp.Data, resp.Meta)
+	}
+	if len(resp.Data.Result.Groups) != 1 || resp.Data.Result.Groups[0].Field != "Категория" || resp.Data.Result.Groups[0].Key != "Инструмент" {
+		t.Fatalf("bad composition groups: %+v", resp.Data.Result.Groups)
+	}
+	if resp.Data.Result.RowCount != 2 || len(resp.Data.Result.Groups[0].Details) != 2 {
+		t.Fatalf("bad composition row/detail counts: %+v", resp.Data.Result)
 	}
 }
 

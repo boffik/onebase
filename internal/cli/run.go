@@ -250,6 +250,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		if appCfg.Attachments != nil && appCfg.Attachments.MaxFileSizeMB > 0 {
 			uiCfg.MaxFileSizeMB = appCfg.Attachments.MaxFileSizeMB
 		}
+		uiCfg.Limits = runtimeLimitsFromApp(appCfg.Limits)
 	}
 
 	bundle, err := i18n.Load(i18n.EmbeddedLocales, filepath.Join(proj.Dir, "locales"))
@@ -470,4 +471,24 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	err = srv.Shutdown(shutdownCtx)
 	<-schedDone
 	return err
+}
+
+func runtimeLimitsFromApp(l *project.LimitsConfig) ui.RuntimeLimits {
+	if l == nil {
+		return ui.RuntimeLimits{}
+	}
+	return ui.RuntimeLimits{
+		RequestTimeoutSec:      l.RequestTimeoutSec,
+		ReportTimeoutSec:       l.ReportTimeoutSec,
+		ReportMaxRows:          l.ReportMaxRows,
+		ReportConcurrency:      l.ReportConcurrency,
+		ExportTimeoutSec:       l.ExportTimeoutSec,
+		ExportMaxRows:          l.ExportMaxRows,
+		ExportConcurrency:      l.ExportConcurrency,
+		ProcessorTimeoutSec:    l.ProcessorTimeoutSec,
+		ProcessorConcurrency:   l.ProcessorConcurrency,
+		HTTPServiceTimeoutSec:  l.HTTPServiceTimeoutSec,
+		HTTPServiceConcurrency: l.HTTPServiceConcurrency,
+		SlowOperationMS:        l.SlowOperationMS,
+	}
 }

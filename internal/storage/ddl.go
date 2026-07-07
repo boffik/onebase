@@ -42,6 +42,13 @@ func boolFalseLit(d Dialect) string {
 	return "FALSE"
 }
 
+func boolTrueLit(d Dialect) string {
+	if d.Name() == "sqlite" {
+		return "1"
+	}
+	return "TRUE"
+}
+
 func CreateTablePartSQL(d Dialect, e *metadata.Entity, tp metadata.TablePart) string {
 	var sb strings.Builder
 	table := metadata.TablePartTableName(e.Name, tp.Name)
@@ -78,6 +85,36 @@ func CreateEntityIndexSQL(table string, cols []string, unique bool) string {
 func CreateTablePartParentIndexSQL(entityName, tpName string) string {
 	table := metadata.TablePartTableName(entityName, tpName)
 	return CreateEntityIndexSQL(table, []string{"parent_id", "строка"}, false)
+}
+
+func CreateRegisterPeriodIndexSQL(regName string) string {
+	table := metadata.RegisterTableName(regName)
+	return CreateEntityIndexSQL(table, []string{"period"}, false)
+}
+
+func CreateRegisterDimPeriodIndexSQL(reg *metadata.Register) string {
+	table := metadata.RegisterTableName(reg.Name)
+	cols := registerDimPeriodIndexColumns(reg)
+	if len(cols) == 0 {
+		return ""
+	}
+	return CreateEntityIndexSQL(table, cols, false)
+}
+
+func registerDimPeriodIndexColumns(reg *metadata.Register) []string {
+	if reg == nil || len(reg.Dimensions) == 0 {
+		return nil
+	}
+	limit := len(reg.Dimensions)
+	if limit > 3 {
+		limit = 3
+	}
+	cols := make([]string, 0, limit+1)
+	for _, f := range reg.Dimensions[:limit] {
+		cols = append(cols, metadata.ColumnName(f))
+	}
+	cols = append(cols, "period")
+	return cols
 }
 
 func stableIndexName(table string, cols []string, unique bool) string {

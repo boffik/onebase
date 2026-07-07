@@ -315,6 +315,16 @@ func (s *Scheduler) Jobs() []*metadata.ScheduledJob {
 	return result
 }
 
+// ActiveRunCount returns the number of scheduled jobs currently executing.
+func (s *Scheduler) ActiveRunCount() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.activeRuns)
+}
+
 func (s *Scheduler) GetJob(name string) *metadata.ScheduledJob {
 	nl := strings.ToLower(name)
 	s.mu.Lock()

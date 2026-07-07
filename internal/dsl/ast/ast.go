@@ -150,6 +150,12 @@ type IndexExpr struct {
 	Index  Expr
 }
 
+// ArrayLit — краткий литерал массива: [A, B, C].
+type ArrayLit struct {
+	Tok      token.Token
+	Elements []Expr
+}
+
 // BoolLit — Истина / Ложь
 type BoolLit struct {
 	Tok   token.Token
@@ -201,6 +207,7 @@ func (*NumberLit) nodeType() string      { return "NumberLit" }
 func (*BinaryExpr) nodeType() string     { return "BinaryExpr" }
 func (*NewExpr) nodeType() string        { return "NewExpr" }
 func (*IndexExpr) nodeType() string      { return "IndexExpr" }
+func (*ArrayLit) nodeType() string       { return "ArrayLit" }
 func (*BoolLit) nodeType() string        { return "BoolLit" }
 func (*UnaryExpr) nodeType() string      { return "UnaryExpr" }
 func (*TernaryExpr) nodeType() string    { return "TernaryExpr" }
@@ -228,6 +235,7 @@ func (*NumberLit) exprNode()   {}
 func (*BinaryExpr) exprNode()  {}
 func (*NewExpr) exprNode()     {}
 func (*IndexExpr) exprNode()   {}
+func (*ArrayLit) exprNode()    {}
 func (*BoolLit) exprNode()     {}
 func (*UnaryExpr) exprNode()   {}
 func (*TernaryExpr) exprNode() {}

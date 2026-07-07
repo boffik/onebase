@@ -70,6 +70,9 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	if err := r.EnsureRolesSchema(ctx); err != nil {
 		return err
 	}
+	if err := r.EnsureAPITokenSchema(ctx); err != nil {
+		return err
+	}
 	// idempotent migrations: add columns if missing
 	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN deny_passwd_change %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
 	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN show_in_list %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
@@ -222,6 +225,9 @@ func scanBool(v any) bool {
 }
 
 func scanTime(v any) time.Time {
+	if t := storage.ParseDBTime(v); !t.IsZero() {
+		return t
+	}
 	if t, ok := v.(time.Time); ok {
 		return t
 	}
@@ -472,6 +478,17 @@ func scanString(v any) string {
 		return string(t)
 	}
 	return ""
+}
+
+// ActiveSessionCount returns the number of non-expired sessions.
+func (r *Repo) ActiveSessionCount(ctx context.Context) (int, error) {
+	d := r.db.Dialect()
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM _sessions WHERE expires_at > %s`, d.Now())
+	var count int
+	if err := r.db.QueryRow(ctx, q).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // parseSessionTime normalises an expires_at column value to time.Time.

@@ -150,6 +150,14 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 		// Запуск внешней обработки (исполнение DSL-кода) всегда логируем.
 		s.auditExtProcRun(r, proc.Name)
 	}
+	opCtx, finish, ok := s.beginOperation(r, opProcessorRun, proc.Name)
+	if !ok {
+		http.Error(w, "слишком много одновременно выполняемых обработок, повторите позже", http.StatusTooManyRequests)
+		return
+	}
+	opStatus := "ok"
+	defer func() { finish(opStatus, 0, false) }()
+
 	r.ParseMultipartForm(32 << 20) // 32 MB max
 	paramValues := map[string]any{}
 	for _, p := range proc.Params {
@@ -200,15 +208,21 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 
 	paramsThis := &interpreter.MapThis{M: paramValues}
 	mc := runtime.NewMovementsCollector("processor", uuid.Nil)
-	dslVars := s.buildDSLVars(r.Context(), mc)
+	dslVars := s.buildDSLVars(opCtx, mc)
 	dslVars["Параметры"] = paramsThis
 	dslVars["Сообщить"] = msgFunc
 	dslVars["Message"] = msgFunc
 	interpreter.InjectMaket(dslVars, proc.Layout)
-	err := s.interp.Run(procDecl, paramsThis, dslVars)
+	var err error
+	if timeout := s.operationTimeout(opProcessorRun); timeout > 0 {
+		err = s.interp.RunSandboxed(procDecl, paramsThis, interpreter.SandboxProfile{MaxWallClock: timeout}, nil, dslVars)
+	} else {
+		err = s.interp.Run(procDecl, paramsThis, dslVars)
+	}
 
 	var runErr string
 	if err != nil {
+		opStatus = operationStatus(opCtx, err)
 		runErr = err.Error()
 	}
 

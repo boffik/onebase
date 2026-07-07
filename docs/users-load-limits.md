@@ -1,6 +1,8 @@
 # Пользователи, ограничения и нагрузочное тестирование
 
 Дата анализа: 2026-06-23.
+Обновлено по runtime-лимитам, метрикам, bounded reference/folder options и
+background export UX: 2026-07-07.
 
 Документ фиксирует текущие практические ограничения onebase для базы с несколькими
 пользователями и способ проверить это нагрузочным тестом.
@@ -33,7 +35,7 @@
 - Каждая защищенная HTTP-операция проверяет наличие пользователей, сессию и роли.
   На 10 пользователях это не должно быть главным узким местом.
 - Главные риски: тяжелые формы, отчеты, проведения документов, большие списки без
-  индексов, загрузка всех reference-options в UI.
+  индексов, неверные размеры пулов и пользовательские DSL-обработчики.
 
 ## Что происходит при 100 пользователях
 
@@ -72,9 +74,9 @@
 - Обычный пользователь без ролей фактически не имеет прав на объекты/отчеты/
   обработки.
 - UI в основном проверяет RBAC на сервере.
-- REST API находится под session middleware, но сами REST handlers сейчас не
-  проверяют роли на операции create/list/get/update/delete/post. Это важное
-  ограничение для защищенной многопользовательской эксплуатации.
+- REST API проверяет роли на операции list/get/create/update/delete/post:
+  `read`, `write`, `delete`, `post`. Если пользователей в базе нет, маршруты
+  остаются открытыми так же, как UI.
 - Общего row-level security по данным нет. Для разграничения строк нужны
   проектные правила, серверные события форм или отдельная доработка.
 
@@ -86,30 +88,51 @@
   пула надо задавать DSN-параметрами, например `pool_max_conns=20`.
 - Автонумерация сделана атомарно через `INSERT ... ON CONFLICT DO UPDATE ...
   RETURNING`.
-- Оптимистическая блокировка сейчас проверяет версию отдельным `SELECT`, потом
-  делает `Upsert`. Для PostgreSQL под настоящей конкуренцией это не полностью
-  атомарно; надежнее делать `UPDATE ... WHERE id=? AND _version=?`.
-- DSL `LockManager` процесс-локальный. При нескольких экземплярах приложения
-  нужны блокировки на уровне PostgreSQL, например row locks или advisory locks.
+- Оптимистическая блокировка для UI/REST редактирования использует
+  `UpsertVersioned`: один `UPDATE ... WHERE id=? AND _version=?` с инкрементом
+  `_version`. Если клиент не передал ожидаемую версию, сохраняется старый путь
+  совместимости без проверки.
+- DSL `LockManager` остаётся process-local для SQLite/single-process режима.
+  В Save-хуках `БлокировкаДанных` на PostgreSQL дополнительно берёт
+  transaction-scoped advisory locks внутри транзакции записи/проведения.
 
 ### Производительность UI и данных
 
 - UI-списки пагинируются: обычный размер страницы 100, максимум 1000.
-- REST list сейчас возвращает полный набор, поэтому read-heavy REST-сценарии
-  могут быстро стать тяжелыми на больших справочниках.
+- REST list пагинируется: default `limit=100`, максимум `1000`, есть `offset`,
+  `sort`, `dir` и заголовки `X-Total-Count` / `X-Limit` / `X-Offset`.
 - Поиск через `LIKE "%..."` и сортировки по произвольным полям требуют индексов
   и аккуратного дизайна списков.
-- В нескольких UI-путях reference-options грузятся целиком. Для больших
-  справочников это станет заметным.
-- Деревья и отдельные настройки отчетов тоже могут загружать много данных сразу.
+- Reference-options в UI грузятся через bounded initial options и server-side
+  picker `/ui/_ref-options/{entity}`. Выбранные значения вне первой страницы
+  добавляются точечно.
+- Деревья иерархических справочников грузят детей узла лениво. Select
+  родительской группы тоже ограничен первой страницей папок и добавляет текущего
+  родителя отдельно.
 - Аудит индексирован по record/user/time, но журнал будет расти, если включены
   create/update/delete/post события.
 
 ### Тяжелые операции
 
-- У интерпретатора есть лимит циклов и глубины рекурсии, но обычные UI CRUD,
-  отчеты и процессоры не имеют общего wall-clock timeout.
-- Тяжелый DSL, отчет или SQL может занять goroutine, CPU и connection из пула.
+- У интерпретатора есть лимит циклов и глубины рекурсии.
+- Для тяжелых runtime-контуров можно задать `limits:` в `config/app.yaml`:
+  `request_timeout_sec`, `report_timeout_sec`, `report_max_rows`,
+  `report_concurrency`, `export_timeout_sec`, `export_max_rows`,
+  `export_concurrency`, `processor_timeout_sec`, `processor_concurrency`,
+  `http_service_timeout_sec`, `http_service_concurrency`,
+  `slow_operation_ms`.
+- Отчеты и экспорт выполняются с контекстными timeout. Если задан
+  `report_max_rows`/`export_max_rows`, SQL без явного верхнеуровневого `LIMIT`
+  получает серверный `LIMIT max+1`; дополнительно чтение результата обрезается в
+  Go. На экране отчета показывается предупреждение об усечении, экспорт при
+  превышении лимита возвращает понятную ошибку.
+- `report_concurrency`, `export_concurrency`, `processor_concurrency` и
+  `http_service_concurrency` включают backpressure. Обычные тяжелые операции
+  сверх лимита получают 429; фоновые Excel/PDF выгрузки отчётов ждут свободный
+  `export_concurrency`-слот в статусе `queued`.
+- UI-кнопки Excel/PDF отчётов запускают in-process background job и ведут на
+  страницу статуса `/ui/export-jobs/{id}`. Готовый файл доступен по download URL
+  30 минут; прямые `/ui/report/{name}/excel` и `/pdf` сохранены для совместимости.
 - HTTP server имеет `ReadHeaderTimeout` и `IdleTimeout`, но без общего
   `ReadTimeout/WriteTimeout`, что сделано ради длинных операций вроде restore,
   SSE и download.
@@ -121,7 +144,8 @@
   token cap.
 - AI tools возвращают максимум 100 строк.
 - Горизонтальное масштабирование требует отдельной работы: часть состояния
-  процесс-локальная, файлы по умолчанию локальные, locks не распределенные.
+  процесс-локальная, файлы по умолчанию локальные, background export jobs
+  in-process, realtime hub внутрипроцессный.
 
 ## Как запустить нагрузочное тестирование
 
@@ -129,12 +153,33 @@
 
 - `loadtest/docker-compose.yml` поднимает PostgreSQL, onebase, Prometheus,
   Grafana и k6 runner;
+- `loadtest/run-postgres-validation.sh` запускает smoke/validation профиль
+  поверх docker-compose;
 - `loadtest/seed/main.go` наполняет базу через REST;
 - `loadtest/k6/scenarios/post_document.js` создает и проводит документы;
 - `loadtest/k6/scenarios/catalog_crud.js` проверяет справочник;
 - `loadtest/k6/scenarios/list_query.js` проверяет чтение списков.
 
-Базовый запуск через Docker:
+Короткая PostgreSQL-проверка:
+
+```bash
+./loadtest/run-postgres-validation.sh smoke
+```
+
+Более длинный профиль с дефолтными целями сценариев:
+
+```bash
+./loadtest/run-postgres-validation.sh validation
+```
+
+Runner оставляет стенд поднятым, чтобы открыть Prometheus/Grafana и HTML-отчёты.
+Для автоматической очистки:
+
+```bash
+CLEANUP=1 ./loadtest/run-postgres-validation.sh smoke
+```
+
+Ручной запуск через Docker:
 
 ```bash
 docker compose -f loadtest/docker-compose.yml up -d --build
@@ -207,15 +252,29 @@ docker compose -f loadtest/docker-compose.yml run --rm --service-ports \
 - `http_req_duration p(99)`: хвосты, которые пользователи будут замечать как
   случайные подвисания;
 - количество dropped/failed iterations, если сценарий arrival-rate;
-- в Prometheus: длительность HTTP-запросов onebase и насыщение пула БД.
+- в Prometheus: длительность HTTP-запросов onebase и насыщение пула БД;
+- runtime-метрики: `onebase_active_sessions`, `onebase_sse_subscribers`,
+  `onebase_active_scheduled_jobs`, `onebase_active_operations`,
+  `onebase_operation_duration_seconds`, `onebase_slow_operation_total`,
+  `onebase_limited_operation_total`, `onebase_webhook_inflight`,
+  `onebase_webhook_retry_total`.
+- PostgreSQL pool: `onebase_db_pool_acquired_conns`,
+  `onebase_db_pool_max_conns`, `onebase_db_pool_empty_acquire_total`,
+  `onebase_db_pool_canceled_acquire_total`.
 
 Ориентир:
 
 - если p95 растет, а CPU приложения высокое, смотреть DSL/отчеты/сериализацию;
 - если p95 растет вместе с ожиданием connections, увеличивать и настраивать
   PostgreSQL pool/БД;
-- если только list-сценарии плохие, смотреть индексы, пагинацию, reference-options
-  и REST list, который возвращает весь набор.
+- если растет `onebase_limited_operation_total`, расширять соответствующий
+  concurrency-лимит только после проверки БД/CPU или менять пользовательский
+  сценарий;
+- если растет `onebase_slow_operation_total`, смотреть структурные логи
+  компонента `runtime_ops`: там есть kind/name/status/duration/rows/route/user и
+  `sql_hash` для медленных отчетов;
+- если только list-сценарии плохие, смотреть индексы, пагинацию и выбранные
+  лимиты picker/tree/export.
 
 ## Если в базе есть пользователи
 
@@ -253,13 +312,13 @@ docker compose -f loadtest/docker-compose.yml run --rm --service-ports \
 
 Минимальный список:
 
-1. Добавить RBAC-проверки в REST API.
-2. Сделать атомарную optimistic locking операцию для PostgreSQL.
-3. Определить стратегию row-level security, если пользователи не должны видеть
+1. Определить стратегию row-level security, если пользователи не должны видеть
    чужие строки.
-4. Настроить PostgreSQL pool и индексы под реальные списки.
-5. Обновить k6-профили под реальные пользовательские сценарии проекта.
-6. За reverse proxy/HTTPS выставлять cookie только по защищенному каналу.
+2. Настроить PostgreSQL pool и индексы под реальные списки.
+3. Обновить k6-профили под реальные пользовательские сценарии проекта.
+4. Для горизонтального режима вынести background export jobs/realtime/files во
+   внешние хранилища или явно остаться на single-process.
+5. За reverse proxy/HTTPS выставлять cookie только по защищенному каналу.
 
 Развёрнутый план работ зафиксирован в `Plans/76-multi-user-scale-readiness.md`.
 
@@ -273,8 +332,12 @@ docker compose -f loadtest/docker-compose.yml run --rm --service-ports \
 - `internal/storage/pg.go`
 - `internal/storage/crud.go`
 - `internal/storage/optimistic_lock.go`
+- `internal/storage/query.go`
 - `internal/runtime/locks.go`
 - `internal/ui/handlers.go`
+- `internal/ui/ops.go`
+- `internal/metrics/metrics.go`
+- `internal/webhook/webhook.go`
 - `internal/api/handlers.go`
 - `loadtest/README.md`
 - `loadtest/docker-compose.yml`

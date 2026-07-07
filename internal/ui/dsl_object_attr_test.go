@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -23,12 +26,16 @@ func TestObjectAttributeValue(t *testing.T) {
 
 	контрагент := &metadata.Entity{
 		Name: "Контрагент", Kind: metadata.KindCatalog,
-		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "ИНН", Type: metadata.FieldTypeString},
+		},
 	}
 	номенклатура := &metadata.Entity{
 		Name: "Номенклатура", Kind: metadata.KindCatalog,
 		Fields: []metadata.Field{
 			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Артикул", Type: metadata.FieldTypeString},
 			{Name: "СтавкаНДС", Type: metadata.FieldTypeNumber},
 			{Name: "Поставщик", Type: "reference:Контрагент", RefEntity: "Контрагент"},
 		},
@@ -52,9 +59,10 @@ func TestObjectAttributeValue(t *testing.T) {
 		return w.CallMethod("записать", nil).(*interpreter.Ref)
 	}
 
-	постРеф := create("Контрагент", map[string]any{"Наименование": "ООО Поставщик"})
+	постРеф := create("Контрагент", map[string]any{"Наименование": "ООО Поставщик", "ИНН": "7701234567"})
 	номРеф := create("Номенклатура", map[string]any{
 		"Наименование": "Стул",
+		"Артикул":      "A-1",
 		"СтавкаНДС":    float64(20),
 		"Поставщик":    постРеф,
 	})
@@ -88,6 +96,95 @@ func TestObjectAttributeValue(t *testing.T) {
 	}
 	if chained != "ООО Поставщик" {
 		t.Errorf("цепочка дала %q, ожидалось «ООО Поставщик»", chained)
+	}
+
+	bulk, err := s.objectAttributeValues(ctx, []any{
+		interpreter.NewArray([]any{номРеф}),
+		"Номенклатура",
+		interpreter.NewArray([]any{"Наименование", "Поставщик"}),
+	})
+	if err != nil {
+		t.Fatalf("ЗначенияРеквизитовОбъектов: %v", err)
+	}
+	bulkMap, ok := bulk.(*interpreter.Map)
+	if !ok {
+		t.Fatalf("bulk → %T, ожидался *interpreter.Map", bulk)
+	}
+	bulkRow, ok := bulkMap.CallMethod("получить", []any{номРеф}).(*interpreter.Struct)
+	if !ok {
+		t.Fatalf("bulk row → %T, ожидалась *interpreter.Struct", bulkMap.CallMethod("получить", []any{номРеф}))
+	}
+	if got := bulkRow.Get("Наименование"); got != "Стул" {
+		t.Errorf("bulk Наименование = %v, ожидалось Стул", got)
+	}
+	bulkProvider, ok := bulkRow.Get("Поставщик").(*interpreter.Ref)
+	if !ok {
+		t.Fatalf("bulk Поставщик → %T, ожидался *interpreter.Ref", bulkRow.Get("Поставщик"))
+	}
+	if bulkProvider.Name != "ООО Поставщик" || bulkProvider.Type != "Контрагент" {
+		t.Errorf("bulk ссылка-реквизит: name=%q type=%q", bulkProvider.Name, bulkProvider.Type)
+	}
+
+	src := `Функция Тест()
+  Ссылки = [СсылкаНом];
+  Реквизиты = ЗначенияРеквизитовОбъектов(Ссылки, "Номенклатура", ["Наименование", "Поставщик"]);
+  Возврат Реквизиты[СсылкаНом].Поставщик.Наименование;
+КонецФункции`
+	l := lexer.New(src, "test.os")
+	p := parser.New(l)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatalf("parse DSL bulk sample: %v", err)
+	}
+	interp := interpreter.New()
+	vars := s.buildDSLVars(ctx, runtime.NewMovementsCollector("test", uuid.Nil))
+	vars["СсылкаНом"] = номРеф
+	var result any
+	if err := interp.RunWithResult(prog.Procedures[0], nil, &result, vars); err != nil {
+		t.Fatalf("run DSL bulk sample: %v", err)
+	}
+	if result != "ООО Поставщик" {
+		t.Errorf("DSL sample result = %v, ожидалось ООО Поставщик", result)
+	}
+
+	doc := &metadata.Entity{
+		Name: "ЗаказПокупателя", Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "ОсновнаяНоменклатура", Type: "reference:Номенклатура", RefEntity: "Номенклатура"},
+		},
+		TableParts: []metadata.TablePart{{
+			Name: "Товары",
+			Fields: []metadata.Field{
+				{Name: "Номенклатура", Type: "reference:Номенклатура", RefEntity: "Номенклатура"},
+			},
+		}},
+	}
+	obj := runtime.NewObject(doc.Name, doc.Kind)
+	obj.Fields["ОсновнаяНоменклатура"] = номРеф
+	obj.TablePartRows["Товары"] = []map[string]any{{"Номенклатура": номРеф}}
+	thisObj := s.newFormObjectThis(ctx, obj, doc, nil)
+	src = `Функция Тест()
+  Рез = Объект.ОсновнаяНоменклатура.Артикул;
+  Для Каждого Стр Из Объект.Товары Цикл
+    Рез = Рез + "|" + Стр.Номенклатура.Артикул;
+    Если Стр.Номенклатура.Поставщик.ИНН <> Неопределено Тогда
+      Рез = "double-deref";
+    КонецЕсли;
+  КонецЦикла;
+  Возврат Рез;
+КонецФункции`
+	l = lexer.New(src, "test.os")
+	p = parser.New(l)
+	prog, err = p.ParseProgram()
+	if err != nil {
+		t.Fatalf("parse DSL ref attr sample: %v", err)
+	}
+	result = nil
+	if err := interp.RunWithResult(prog.Procedures[0], thisObj, &result, map[string]any{"Объект": thisObj}); err != nil {
+		t.Fatalf("run DSL ref attr sample: %v", err)
+	}
+	if result != "A-1|A-1" {
+		t.Errorf("DSL ref attr sample result = %v, ожидалось A-1|A-1", result)
 	}
 
 	// Неизвестный реквизит → ошибка, а не тихий nil.

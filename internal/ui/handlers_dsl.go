@@ -72,7 +72,7 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	// #2 managed locks: builtin БлокировкаДанных() возвращает свежий LockObject,
 	// привязанный к глобальному менеджеру server'а.
 	lockFactory := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
-		return runtime.NewLockObject(s.lockMgr), nil
+		return runtime.NewLockObjectWithCollector(s.lockMgr, runtime.LockCollectorFromContext(ctx)), nil
 	})
 
 	// API текущего пользователя для персональных настроек.
@@ -99,6 +99,9 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	// поэтому видит данные открытой DSL-транзакции.
 	attrValueFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
 		return s.objectAttributeValue(txState.Ctx(), args)
+	})
+	attrValuesFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+		return s.objectAttributeValues(txState.Ctx(), args)
 	})
 
 	// СохранитьКартинку(ДанныеBase64, ТипMIME="") → UUID бинарника в blob-хранилище.
@@ -172,6 +175,8 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	vars["UserName"] = userNameFn
 	vars["ЗначениеРеквизитаОбъекта"] = attrValueFn
 	vars["ObjectAttributeValue"] = attrValueFn
+	vars["ЗначенияРеквизитовОбъектов"] = attrValuesFn
+	vars["ObjectAttributeValues"] = attrValuesFn
 	vars["СохранитьКартинку"] = putImageFn
 	vars["PutImage"] = putImageFn
 

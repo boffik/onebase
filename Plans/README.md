@@ -18,25 +18,28 @@
 > **57** (ИИ-конфигуратор, этапы 0–3) — тоже реализованы, хотя были помечены ⬜.
 > Сверка 2026-06-25: **43.2** (graceful shutdown scheduler), **60A** (UI истории
 > конфигурации), **65** (richtext), **74** (AI/dev tools 2.0) фактически закрыты.
+> Сверка 2026-07-07: **34 F3** (автодоступ к реквизитам ссылок `this.X.Y` /
+> `Стр.X.Y`) закрыт PR #261 через безопасный single-hop доступ с предзагрузкой
+> и кэшем; **76 A/B/C/D/E/F core**, background export UX и k6 PostgreSQL
+> validation runner закрыты текущей серией работ,
+> кроме future horizontal scale и row-level security;
+> мультисессионность из плана 76 пока отложена.
 
-## Текущий приоритет, 2026-06-25
+## Текущий приоритет, 2026-07-07
 
 Источник: [`current-priority-2026-06-25.md`](current-priority-2026-06-25.md).
 
-1. **Стабилизационный спринт: lint-clean shipped examples/templates.** Новый
-   `onebase lint` показывает предупреждения в поставляемых конфигурациях; до
-   включения общего lint-gate нужно привести examples/templates к нулю
-   предупреждений или явно поддержать нужные YAML-алиасы.
-2. **План 76:** готовность к многопользовательской нагрузке. Первый срез:
-   REST RBAC, лимиты/пагинация REST list, атомарная optimistic locking запись,
-   индексы под табличные части/списки и server-side reference picker.
-3. **План 34 F3:** автодоступ к полям ссылок (`this.X.Y`, `Стр.X.Y`). Это
-   закрывает разрыв между ожидаемой 1С-подобной моделью и текущим обходным
-   `ЗначениеРеквизитаОбъекта(...)`.
-4. **План 60B:** marketplace конфигураций. Часть A (история/diff/rollback/UI)
-   уже реализована; marketplace лучше делать после lint-clean examples/templates.
-5. **План 26:** REST API v2 после guardrails из плана 76, чтобы v2 сразу
-   наследовал RBAC, токены, пагинацию, OpenAPI и лимиты.
+1. **План 76:** остатки не-сессионных guardrails нагрузки. Уже закрыты REST
+   RBAC/list limits, optimistic locking, индексы, server-side reference picker,
+   bounded parent-folder options, runtime limits/backpressure, metrics и
+   PostgreSQL advisory locks для Save-хуков, а также background export UX для
+   Excel/PDF отчётов и k6 PostgreSQL validation runner. Остались future
+   horizontal scale и row-level security как отдельные решения.
+2. **План 60B:** marketplace конфигураций. Часть A (история/diff/rollback/UI)
+   уже реализована, shipped examples/templates проходят CI lint-gate.
+3. **План 55, этап 3:** разбор монолитных UI templates/JS.
+4. **Row-level access plan:** отдельная модель строковых ограничений поверх
+   объектного RBAC.
 
 Ниже по очереди: `55` этап 3 (inline-JS из `ui/templates.go`) делать при
 следующей работе с этим фронтом; `46` store wrapper и остатки i18n/PWA — скорее
@@ -108,7 +111,7 @@
 
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
-| 26 | [26-rest-api-v2.md](26-rest-api-v2.md) | REST API v2 (фильтры, пагинация, OpenAPI) | 5–7 дней | ⬜ Не начато |
+| 26 | [26-rest-api-v2.md](26-rest-api-v2.md) | REST API v2 (фильтры, пагинация, OpenAPI) | 5–7 дней | ✅ Реализовано: CRUD v2, отчёты JSON/композиция, OpenAPI, Bearer API-токены + admin UI |
 | 27 | [27-web-configurator.md](27-web-configurator.md) | Веб-конфигуратор (редактирование схемы в браузере) | 5–6 дней | ✅ Реализовано (в `internal/launcher/`, `/bases/{id}/configurator/` — перекрыт сверх плана) |
 | 28 | [28-auto-backup.md](28-auto-backup.md) | Автобэкап по расписанию с ротацией | 3 дня | 🟡 Ядро реализовано: `backup:` в `app.yaml`, задание `AutoBackup`, ротация `keep_last`, атомарная запись дампов; отдельная `_backups`-таблица не вводилась |
 | 29 | [29-webhooks.md](29-webhooks.md) | Webhook-уведомления на события | 4–5 дней | ✅ Реализовано |
