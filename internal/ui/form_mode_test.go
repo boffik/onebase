@@ -53,8 +53,8 @@ func TestIndex_RedirectsToTabsWhenTabsMode(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("ожидался 303, получено %d", rec.Code)
 	}
-	if loc := rec.Header().Get("Location"); loc != "/ui/app?subsystem=Sales" {
-		t.Errorf("Location = %q, ожидалось /ui/app?subsystem=Sales", loc)
+	if loc := rec.Header().Get("Location"); loc != "/ui/app?home=1&subsystem=Sales" {
+		t.Errorf("Location = %q, ожидалось /ui/app?home=1&subsystem=Sales", loc)
 	}
 }
 

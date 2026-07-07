@@ -2,8 +2,12 @@ package ui
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Оболочка вкладок (issue #129/#130, фаза 1) должна рендериться, переиспользуя
@@ -39,9 +43,49 @@ func TestAppShell_Render(t *testing.T) {
 		`ob-tabmenu`,               // фаза 4: контекст-меню вкладки
 		`Закрыть другие`,           // пункт контекст-меню
 		`scrollIntoView`,           // автоскролл активной вкладки
+		`shellHomeURL`,             // переход по подсистемам строит URL через searchParams
+		`#ob-tabhome a[href]`,      // ссылки рабочего стола открываются через shell
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("оболочка вкладок не содержит %q", want)
+		}
+	}
+}
+
+func TestAppShell_RendersSubsystemDashboard(t *testing.T) {
+	s := newServerForFormMode(t)
+	s.reg.LoadWidgets([]*metadata.Widget{{
+		Name:  "SalesActions",
+		Type:  metadata.WidgetTypeActions,
+		Title: "Действия продаж",
+		Items: []metadata.WidgetAction{{Label: "Создать продажу", URL: "/ui/document/sale/new"}},
+	}})
+	s.reg.LoadSubsystems([]*metadata.Subsystem{{
+		Name:  "Sales",
+		Title: "Sales",
+		HomePage: &metadata.HomePage{
+			Title:  "Рабочий стол продаж",
+			Layout: "rows",
+			Rows:   []metadata.HomePageRow{{Widgets: []string{"SalesActions"}}},
+		},
+	}})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ui/app?home=1&subsystem=Sales", nil)
+	s.appShell(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ожидался 200, получено %d: %s", rec.Code, rec.Body.String())
+	}
+	html := rec.Body.String()
+	for _, want := range []string{
+		`id="ob-tabhome"`,
+		`Рабочий стол продаж`,
+		`Действия продаж`,
+		`Создать продажу`,
+		`id="ob-widget-charts"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("оболочка вкладок не содержит рабочий стол подсистемы: %q", want)
 		}
 	}
 }

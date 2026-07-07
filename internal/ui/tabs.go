@@ -17,13 +17,16 @@ import "net/http"
 // активна только во фрейме оболочки.
 
 // appShell отдаёт страницу-оболочку. Данные навигации (Nav/Subsystems/…)
-// заполняет s.render как для обычных страниц.
+// заполняет s.render как для обычных страниц, а рабочий стол раздела рендерим
+// прямо в оболочке — вкладки остаются для форм/списков, но активная подсистема
+// не выглядит пустой.
 func (s *Server) appShell(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "page-app-shell", nil)
+	s.render(w, r, "page-app-shell", s.homeDashboardData(r))
 }
 
 const tplAppShell = `{{define "page-app-shell"}}
 {{template "head" .}}{{template "nav" .}}
+{{template "dashboard-style" .}}
 <style>
 .ob-shell-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;padding:0}
 .ob-tabstrip{display:flex;gap:2px;background:#e2e8f0;padding:4px 6px 0;overflow-x:auto;flex-shrink:0;min-height:34px}
@@ -35,32 +38,40 @@ const tplAppShell = `{{define "page-app-shell"}}
 .ob-tab-dup:hover{color:#1a4a80;background:#dbeafe}
 .ob-tab-close{color:#94a3b8;font-size:14px;line-height:1;border-radius:3px;padding:0 3px}
 .ob-tab-close:hover{color:#dc2626;background:#fee2e2}
-.ob-tabbody{flex:1;position:relative;background:#fff;min-height:0}
+.ob-tabbody{flex:1;position:relative;background:#f5f5f5;min-height:0}
+.ob-tabhome{position:absolute;inset:0;overflow:auto;padding:28px;background:#f5f5f5}
 .ob-tabbody iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none}
 .ob-tabbody iframe.active{display:block}
 .ob-tabempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px;padding:20px;text-align:center}
 .ob-tabmenu{position:fixed;z-index:10000;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:150px;font-size:12px}
 .ob-tabmenu-item{padding:6px 14px;cursor:pointer;color:#334155}
 .ob-tabmenu-item:hover{background:#f0f4ff;color:#1a4a80}
+@media (max-width:820px){.ob-tabhome{padding:14px}}
 </style>
 <main class="ob-shell-main" id="ob-shell-main">
   <div class="ob-tabstrip" id="ob-tabstrip" role="tablist"></div>
   <div class="ob-tabbody" id="ob-tabbody">
-    <div class="ob-tabempty" id="ob-tabempty">{{t $.Lang "Откройте объект из меню слева"}}</div>
+    <div class="ob-tabhome" id="ob-tabhome">{{template "dashboard-body" .}}</div>
+    <div class="ob-tabempty" id="ob-tabempty" style="display:none">{{t $.Lang "Откройте объект из меню слева"}}</div>
   </div>
 </main>
+{{template "dashboard-scripts" .}}
 <script>
 (function(){
   var strip=document.getElementById('ob-tabstrip');
   var body=document.getElementById('ob-tabbody');
   var empty=document.getElementById('ob-tabempty');
+  var home=document.getElementById('ob-tabhome');
   var tabs=[]; var active=null; var STORE='obTabs';
+  var SHOW_HOME=false;
+  try{ SHOW_HOME = new URLSearchParams(location.search).get('home')==='1'; }catch(e){}
 
   function persist(){ try{ sessionStorage.setItem(STORE, JSON.stringify(tabs.map(function(t){return {url:t.url,title:t.title};}))); }catch(e){} }
-  function syncEmpty(){ if(empty) empty.style.display = tabs.length ? 'none' : ''; }
+  function syncEmpty(){ if(empty) empty.style.display = (!home && !tabs.length) ? '' : 'none'; }
   function setActive(t){
     active=t||null;
     tabs.forEach(function(x){ x.btn.classList.toggle('active',x===t); x.frame.classList.toggle('active',x===t); });
+    if(home) home.style.display = t ? 'none' : '';
     if(active && active.btn.scrollIntoView) active.btn.scrollIntoView({inline:'nearest',block:'nearest'}); // фаза 4: активная вкладка в видимую область
     syncEmpty();
   }
@@ -118,16 +129,28 @@ const tplAppShell = `{{define "page-app-shell"}}
 
   function openable(href){
     if(!/^\/ui\//.test(href))return false;
-    if(/^\/ui\/(admin|about|logout|login|logo|debug)\b/.test(href))return false;
+    if(/^\/ui\/(admin|about|logout|login|logo|debug|app|_)/.test(href))return false;
     return true;
+  }
+  function shellHomeURL(href){
+    try{
+      var u=new URL(href, location.origin);
+      if(u.origin!==location.origin)return '';
+      if(u.pathname!=='/ui'&&u.pathname!=='/ui/')return '';
+      var t=new URL('/ui/app', location.origin);
+      t.searchParams.set('home','1');
+      var sub=u.searchParams.get('subsystem');
+      if(sub)t.searchParams.set('subsystem',sub);
+      return t.pathname+t.search;
+    }catch(e){return '';}
   }
   document.addEventListener('click',function(e){
     if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
-    var a=e.target.closest?e.target.closest('#ob-nav a[href], .subsys-bar a[href]'):null;
+    var a=e.target.closest?e.target.closest('#ob-nav a[href], .subsys-bar a[href], #ob-tabhome a[href]'):null;
     if(!a)return;
     var href=a.getAttribute('href')||'';
-    var m=href.match(/^\/ui\/?(?:\?subsystem=([^&]*))?$/);
-    if(m){ e.preventDefault(); location.href='/ui/app'+(m[1]?('?subsystem='+m[1]):''); return; }
+    var shellHome=shellHomeURL(href);
+    if(shellHome){ e.preventDefault(); location.href=shellHome; return; }
     if(!openable(href))return;
     e.preventDefault();
     openTab(href,(a.getAttribute('title')||a.textContent||'').replace(/\s+/g,' ').trim()||'Форма');
@@ -136,7 +159,7 @@ const tplAppShell = `{{define "page-app-shell"}}
   try{
     var saved=JSON.parse(sessionStorage.getItem(STORE)||'[]');
     saved.forEach(function(s){ if(s&&s.url) openTab(String(s.url), s.title?String(s.title):'Форма'); });
-    if(tabs.length) setActive(tabs[0]);
+    if(tabs.length && !SHOW_HOME) setActive(tabs[0]); else setActive(null);
   }catch(e){}
   syncEmpty();
 

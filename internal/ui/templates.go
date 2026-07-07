@@ -856,8 +856,7 @@ const tplNav = `
 `
 
 const tplIndex = `
-{{define "page-index"}}
-{{template "head" .}}{{template "nav" .}}
+{{define "dashboard-style"}}
 <style>
 .dash{display:flex;flex-direction:column;gap:14px;max-width:1280px}
 .dash-row{display:flex;gap:14px;flex-wrap:wrap}
@@ -890,7 +889,9 @@ const tplIndex = `
 .w-empty{color:#94a3b8;font-size:13px;padding:6px 0;font-style:italic}
 .w-default-hint{color:#64748b;font-size:13px;margin:6px 0 14px}
 </style>
-<main>
+{{end}}
+
+{{define "dashboard-body"}}
   <h2 style="margin-bottom:14px">{{.HomeTitle}}</h2>
   {{if .DefaultedHome}}<div class="w-default-hint">Стартовая страница не настроена — показаны последние документы из аудита. Создайте <code>config/home_page.yaml</code> и виджеты в <code>widgets/</code>, чтобы оформить дашборд.</div>{{end}}
   <div class="dash">
@@ -900,9 +901,20 @@ const tplIndex = `
     </div>
     {{end}}
   </div>
-</main></div>
+{{end}}
+
+{{define "dashboard-scripts"}}
 <script type="application/json" id="ob-widget-charts">{{widgetChartsJSON .WidgetResults}}</script>
 <script src="/vendor/echarts/echarts.min.js"></script>
+{{end}}
+
+{{define "page-index"}}
+{{template "head" .}}{{template "nav" .}}
+{{template "dashboard-style" .}}
+<main>
+  {{template "dashboard-body" .}}
+</main></div>
+{{template "dashboard-scripts" .}}
 </body></html>
 {{end}}
 
