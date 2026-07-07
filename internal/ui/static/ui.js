@@ -395,6 +395,55 @@ window.rsAddFilter = function () {
   rows.appendChild(tpl.content.cloneNode(true));
 };
 
+function obReportRemoveSettingsInput(form) {
+  if (!form) return;
+  var hidden = form.querySelector('input[name="__settings"]');
+  if (hidden) hidden.remove();
+}
+
+function obReportSubmitSelect(sel, resetPreset) {
+  if (!sel || !sel.form) return;
+  obReportRemoveSettingsInput(sel.form);
+  if (resetPreset) {
+    var preset = sel.form.querySelector('select[name="__preset"]');
+    if (preset) preset.value = '__standard';
+  }
+  sel.form.submit();
+}
+
+function obInitReportDelegates() {
+  if (window.__obReportDelegates) return;
+  window.__obReportDelegates = true;
+  document.addEventListener('change', function (e) {
+    if (!e.target.closest) return;
+    var preset = e.target.closest('[data-ob-report-preset-submit]');
+    if (preset) {
+      obReportSubmitSelect(preset, false);
+      return;
+    }
+    var variant = e.target.closest('[data-ob-report-variant-submit]');
+    if (variant) {
+      obReportSubmitSelect(variant, true);
+      return;
+    }
+    var rsPreset = e.target.closest('[data-ob-rs-choose-preset]');
+    if (rsPreset) window.rsChoosePreset(rsPreset);
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    var addFilter = e.target.closest('[data-ob-rs-add-filter]');
+    if (addFilter) {
+      e.preventDefault();
+      window.rsAddFilter();
+    }
+  });
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || !form.matches || !form.matches('[data-ob-rs-before-submit]')) return;
+    if (window.rsBeforeSubmit(e) === false) e.preventDefault();
+  }, true);
+}
+
 function obInitReportCompositionControls() {
   function rcEscape(key) {
     return (window.CSS && CSS.escape) ? CSS.escape(key) : key.replace(/["\\\]]/g, '\\$&');
@@ -463,6 +512,7 @@ function obInitReportBlocks() {
 }
 
 obReady(function () {
+  obInitReportDelegates();
   obPresetReportSettings();
   obInitReportCompositionControls();
   obInitReportBlocks();

@@ -385,11 +385,28 @@ func TestReportSettingsPanel(t *testing.T) {
 	if !strings.Contains(out, `name="__settings"`) {
 		t.Fatalf("нет скрытого поля __settings")
 	}
-	if !strings.Contains(out, `onsubmit="return rsBeforeSubmit(event)"`) {
-		t.Fatalf("форма настроек не вызывает static rsBeforeSubmit")
+	for _, want := range []string{
+		`data-ob-rs-before-submit`,
+		`data-ob-rs-choose-preset`,
+		`data-ob-rs-add-filter`,
+		`data-ob-remove-row=".rs-filter-row"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("форма настроек не содержит delegated marker %q", want)
+		}
 	}
 	if strings.Contains(out, `window.rsBeforeSubmit=function`) {
 		t.Fatalf("панель настроек снова содержит inline JS-функции")
+	}
+	for _, old := range []string{
+		`onsubmit="return rsBeforeSubmit(event)"`,
+		`onchange="rsChoosePreset(this)"`,
+		`onclick="rsAddFilter()"`,
+		`onclick="this.parentNode.remove()"`,
+	} {
+		if strings.Contains(out, old) {
+			t.Fatalf("панель настроек содержит старый inline handler %q", old)
+		}
 	}
 	for _, want := range []string{`name="__preset"`, `Мой вариант`, `name="__preset_action" value="save"`, `name="__preset_action" value="save_as"`} {
 		if !strings.Contains(out, want) {
@@ -496,8 +513,10 @@ func TestReportParamsFormKeepsActiveSettings(t *testing.T) {
 	var buf bytes.Buffer
 	data := map[string]any{
 		"Report":             rep,
-		"ParamValues":        map[string]any{"Начало": "2026-07-01"},
-		"ReportParams":       []reportParamUI{{Name: "Начало", Label: "С даты", Type: "date", IsDate: true}},
+		"ParamValues":        map[string]any{"Начало": "2026-07-01", "Контрагент": "c1"},
+		"ReportParams":       []reportParamUI{{Name: "Начало", Label: "С даты", Type: "date", IsDate: true}, {Name: "Контрагент", Label: "Контрагент", Type: "reference:Контрагент", IsRef: true, RefEntity: "Контрагент", Opts: []map[string]any{{"id": "c1", "_label": "Ромашка"}}}},
+		"ReportPresets":      []storage.ReportPreset{{ID: "p1", Name: "Мой вариант"}},
+		"ActivePresetID":     "p1",
 		"UserSettings":       settings,
 		"ReportSettingsJSON": reportSettingsPanelJSON(rep, settings),
 		"Cfg":                Config{},
@@ -509,6 +528,24 @@ func TestReportParamsFormKeepsActiveSettings(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, `name="__settings"`) || !strings.Contains(out, "ВаловаяПрибыль") {
 		t.Fatalf("форма параметров не сохраняет активные настройки: %s", out)
+	}
+	for _, want := range []string{
+		`data-ob-report-preset-submit`,
+		`data-ob-ref-picker="rp-Контрагент"`,
+		`data-ob-ref-current="rp-Контрагент"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("форма параметров не содержит delegated marker %q", want)
+		}
+	}
+	for _, old := range []string{
+		`onchange="var h=this.form.querySelector`,
+		`onclick="openRefPicker('rp-`,
+		`onclick="openRefCurrent('rp-`,
+	} {
+		if strings.Contains(out, old) {
+			t.Fatalf("форма параметров содержит старый inline handler %q", old)
+		}
 	}
 }
 
