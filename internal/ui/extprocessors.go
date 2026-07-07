@@ -290,7 +290,7 @@ const tplAdminExtProcessors = `{{define "admin-extprocessors"}}` + adminHead + `
         <button class="btn btn-sm btn-secondary" type="submit">{{if .Trusted}}Снять доверие{{else}}Доверять{{end}}</button>
       </form>
       <a class="btn btn-sm btn-secondary" href="/ui/admin/extprocessors/{{.ID}}/export">Экспорт</a>
-      <form method="POST" action="/ui/admin/extprocessors/{{.ID}}/delete" onsubmit="return confirm('Удалить обработку {{.Name}}?')" style="margin:0">
+      <form method="POST" action="/ui/admin/extprocessors/{{.ID}}/delete" data-ob-confirm="Удалить обработку {{.Name}}?" style="margin:0">
         <button class="btn btn-sm btn-danger" type="submit">Удалить</button>
       </form>
     </div>

@@ -180,7 +180,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		},
 		// hasHandler — есть ли у элемента обработчик указанного события
 		// (план 37, этап 8). Если есть — шаблон управляемой формы навешивает
-		// onclick/onchange="obFire(...)" вызывающий /ui/{kind}/{entity}/form-event.
+		// Inline event attributes вызывают /ui/{kind}/{entity}/form-event через obFire.
 		"hasHandler": func(el *metadata.FormElement, eventName string) bool {
 			if el == nil || el.Handlers == nil {
 				return false
