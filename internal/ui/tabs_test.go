@@ -56,17 +56,25 @@ func TestHead_EmbeddedChromeHidden(t *testing.T) {
 	}
 	html := buf.String()
 	for _, want := range []string{
-		`window.__obEmbedded = (window.self !== window.top)`,
+		`src="/static/ui.js"`,
 		`ob-embedded`,
 		`.ob-embedded .topbar,.ob-embedded .subsys-bar,.ob-embedded #ob-nav{display:none`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("head не содержит embedded-подключение %q", want)
+		}
+	}
+	js := string(uiJS)
+	for _, want := range []string{
+		`window.__obEmbedded = window.self !== window.top`,
 		`obOpenableForm`,                           // фаза 2: перехват открытия форм во вкладку
 		`window.obOpenInShell`,                     // общий helper для ссылок и JS-открытий списков
 		`source: 'obOpenTab'`,                      // постит запрос родителю-оболочке
 		`window.parent && window.parent.obOpenTab`, // guard: только если родитель — оболочка
 		`source: 'obDirty'`,                        // фаза 3: трекер несохранённых правок
 	} {
-		if !strings.Contains(html, want) {
-			t.Errorf("head не содержит embedded-логику %q", want)
+		if !strings.Contains(js, want) {
+			t.Errorf("ui.js не содержит embedded-логику %q", want)
 		}
 	}
 }

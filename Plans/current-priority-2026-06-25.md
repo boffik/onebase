@@ -4,31 +4,34 @@
 
 ## Рекомендуемый порядок
 
-1. **План 76 — остатки не-сессионных guardrails готовности к нагрузке.**
-   Мультисессионность пока вынесена из очереди и делается отдельно. Закрыты
-   REST RBAC/list limits, атомарная optimistic locking запись, declarative
-   indexes + tablepart/register indexes, server-side reference picker,
-   bounded parent-folder options, runtime limits/backpressure, metrics и
-   PostgreSQL advisory locks для `БлокировкаДанных` в Save-хуках. UI-кнопки
-   Excel/PDF отчётов уже запускают background export job со страницей статуса,
-   а k6 PostgreSQL validation получил smoke/validation runner. В очереди
-   остаются future horizontal scale и row-level security как отдельные решения.
+1. **План 76/78 — guardrails готовности к нагрузке и сессии закрыты для
+   single-process PostgreSQL.** Закрыты REST RBAC/list limits, атомарная
+   optimistic locking запись, declarative indexes + tablepart/register indexes,
+   server-side reference picker, bounded parent-folder options, runtime
+   limits/backpressure, metrics, PostgreSQL advisory locks для
+   `БлокировкаДанных` в Save-хуках, background export job для Excel/PDF,
+   k6 PostgreSQL validation runner, параллельные сессии, админка активных
+   сессий, изолированные окна Предприятия и нативные WebView2-профили на
+   Windows. В очереди остаются future horizontal scale и row-level security как
+   отдельные решения.
 
 2. **План 60B — marketplace конфигураций.**
    Версионирование конфигурации в БД и UI истории уже реализованы, а shipped
    examples/templates теперь проходят CI lint-gate. Marketplace можно брать как
    следующий продуктовый слой над этими конфигурациями.
 
-3. **План 55, этап 3 — разбор монолитных UI templates/JS.**
-   Не блокирует продукт, но после guardrails это хороший стабилизационный долг:
-   уменьшит риск правок в `internal/ui/templates.go`, где сейчас живут большие
-   шаблоны и клиентские сценарии.
+3. **План 55, этап 3 — остаток разбора template-bound UI JS.**
+   Фаза 3a уже вынесла глобальные UI-скрипты и reference picker в
+   `/static/ui.js`; дальше стоит выносить скрипты списков/форм/отчётов только
+   через явный bootstrap JSON, потому что они завязаны на Go-template данные.
 
-4. **Row-level access plan для данных.**
+4. **План 79 — row-level access для данных.**
    Объектный RBAC уже закрывает права на справочник/документ целиком, но
    сценарии "менеджер видит только свои сделки" требуют отдельной платформенной
-   модели row filters. Не делать скрыто через PostgreSQL RLS без единой модели
-   для SQLite/dev и PostgreSQL/prod.
+   модели row filters. Проект зафиксирован в
+   [`79-row-level-access.md`](79-row-level-access.md): app-level policy поверх
+   RBAC, SQL-side фильтры для UI/REST и fail-closed контур для отчетов/AI до
+   alias-aware внедрения policy в query compiler.
 
 ## Зафиксированные находки аудита
 
@@ -39,8 +42,9 @@
   активного списка.
 - **План 76 стоит зафиксировать как следующий guardrail-план.** Текущий REST API,
   большие списки, reference-options, конкурентная запись и тяжёлые отчёты
-  требуют ограничителей; core-срез A/B/C/D/E/F, background export UX и k6
-  PostgreSQL validation runner уже реализованы, остатки описаны выше.
+  требуют ограничителей; core-срез A/B/C/D/E/F, background export UX, k6
+  PostgreSQL validation runner и сессионная часть Plan 78 уже реализованы,
+  остатки описаны выше.
 - **`onebase lint` по shipped examples/templates теперь закреплен в CI.**
   PR #263 собирает CLI и прогоняет `onebase lint --json` по `examples/*` и
   `templates/*`, падая на любых issues/warnings.
@@ -60,5 +64,6 @@
   вывод richtext в HTML/PDF печатных формах.
 - **План 74 AI/dev tools** реализован: `fmt`, schema/describe/query/eval/MCP,
   impact/refactor helpers, tool trace и rollback через snapshots.
-- **План 55, этап 3** полезен как рефакторинг, но не блокирует продукт.
+- **План 55, этап 3** частично закрыт: глобальный UI JS вынесен в
+  `/static/ui.js`; остаток — template-bound скрипты.
 - **План 46** относится скорее к упаковке и маркетингу PWA.

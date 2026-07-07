@@ -297,9 +297,13 @@ func TestTelephony_PanelRenders(t *testing.T) {
 // скрин-поп не виден ни на одной странице (страницы JS не инжектят).
 func TestTelephony_LayoutHasCallToast(t *testing.T) {
 	src := templateSource()
+	if !strings.Contains(src, `src="/static/ui.js"`) {
+		t.Fatalf("layout не подключает общий ui.js")
+	}
+	js := string(uiJS)
 	for _, want := range []string{"onebase:звонок.входящий", "callToast"} {
-		if !strings.Contains(src, want) {
-			t.Errorf("layout не содержит %q (глобальная всплывашка входящего звонка)", want)
+		if !strings.Contains(js, want) {
+			t.Errorf("ui.js не содержит %q (глобальная всплывашка входящего звонка)", want)
 		}
 	}
 }
