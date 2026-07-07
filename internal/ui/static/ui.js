@@ -1272,6 +1272,11 @@ function obInitFormDelegates() {
   window.__obFormDelegates = true;
   document.addEventListener('click', function (e) {
     if (!e.target.closest) return;
+    var selectOnClick = e.target.closest('[data-ob-select-on-click]');
+    if (selectOnClick && selectOnClick.select) {
+      selectOnClick.select();
+      return;
+    }
     var popupCancel = e.target.closest('[data-ob-popup-cancel]');
     if (popupCancel) {
       e.preventDefault();

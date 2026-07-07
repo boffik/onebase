@@ -41,7 +41,7 @@ const tplAdminUsers = `{{define "admin-users"}}` + adminHead + `
     <div style="display:flex;gap:4px">
       <a class="btn btn-sm btn-secondary" href="/ui/admin/users/{{.ID}}">Карточка</a>
       <a class="btn btn-sm btn-secondary" href="/ui/admin/users/{{.ID}}/roles">Роли</a>
-      <form method="POST" action="/ui/admin/users/{{.ID}}/delete" onsubmit="return confirm('Удалить пользователя {{.Login}}?')" style="margin:0">
+      <form method="POST" action="/ui/admin/users/{{.ID}}/delete" data-ob-confirm="Удалить пользователя {{.Login}}?" style="margin:0">
         <button class="btn btn-sm btn-danger" type="submit">Удалить</button>
       </form>
     </div>
@@ -169,6 +169,7 @@ const tplAdminUserForm = `{{define "admin-user-form"}}` + adminHead + `
 
 const adminHead = `<!DOCTYPE html>
 <html lang="ru"><head><meta charset="UTF-8"><title>Администрирование — onebase</title>
+<script src="/static/ui.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#f5f5f5;padding:32px}
@@ -937,7 +938,7 @@ const tplAdminPasswd = `{{define "admin-passwd"}}` + adminHead + `
   <h3 style="margin-bottom:8px">Сессии</h3>
   {{if .OthersOut}}<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:10px;border-radius:7px;margin-bottom:12px;font-size:13px">Остальные сессии завершены.</div>{{end}}
   <p style="color:#64748b;font-size:13px;margin-bottom:12px">Завершить все ваши сессии на других устройствах и в других окнах. Текущее окно продолжит работать.</p>
-  <form method="POST" action="/ui/profile/logout-others" onsubmit="return confirm('Выйти со всех устройств, кроме текущего?')">
+  <form method="POST" action="/ui/profile/logout-others" data-ob-confirm="Выйти со всех устройств, кроме текущего?">
     <button class="btn" type="submit" style="background:#fee2e2;color:#b91c1c">Выйти со всех устройств</button>
   </form>
 </div>
@@ -998,14 +999,14 @@ const tplAdminSessions = `{{define "admin-sessions"}}` + adminHead + `
     <div style="display:flex;gap:4px">
       {{if .PublicID}}
       <form method="POST" action="/ui/admin/sessions/kick" style="margin:0"
-            onsubmit="return confirm('Завершить эту сессию {{.Login}}?')">
+            data-ob-confirm="Завершить эту сессию {{.Login}}?">
         <input type="hidden" name="public_id" value="{{.PublicID}}">
         <input type="hidden" name="login" value="{{.Login}}">
         <button class="btn btn-sm btn-danger" type="submit">Завершить</button>
       </form>
       {{end}}
       <form method="POST" action="/ui/admin/sessions/{{.Login}}/kick" style="margin:0"
-            onsubmit="return confirm('Принудительно завершить все сессии {{.Login}}?')">
+            data-ob-confirm="Принудительно завершить все сессии {{.Login}}?">
         <button class="btn btn-sm" type="submit" style="background:#fee2e2;color:#b91c1c" title="Завершить все сессии пользователя">Все</button>
       </form>
     </div>
@@ -1032,7 +1033,7 @@ const tplAdminAPITokens = `{{define "admin-api-tokens"}}` + adminHead + `
 {{if .CreatedToken}}
 <div style="background:#f0fdf4;border:1px solid #86efac;color:#166534;padding:14px 16px;border-radius:7px;margin-bottom:16px;font-size:14px;max-width:1000px">
   <div style="font-weight:700;margin-bottom:8px">Токен создан. Скопируйте его сейчас: позже он не будет показан.</div>
-  <input type="text" value="{{.CreatedToken}}" readonly onclick="this.select()" style="font-family:monospace">
+  <input type="text" value="{{.CreatedToken}}" readonly data-ob-select-on-click style="font-family:monospace">
 </div>
 {{end}}
 
@@ -1079,7 +1080,7 @@ const tplAdminAPITokens = `{{define "admin-api-tokens"}}` + adminHead + `
     {{if .RevokedAt}}
     <span style="color:#cbd5e1">—</span>
     {{else}}
-    <form method="POST" action="/ui/admin/api-tokens/{{.ID}}/revoke" onsubmit="return confirm('Отозвать API-токен {{.Name}}?')" style="margin:0">
+    <form method="POST" action="/ui/admin/api-tokens/{{.ID}}/revoke" data-ob-confirm="Отозвать API-токен {{.Name}}?" style="margin:0">
       <button class="btn btn-sm btn-danger" type="submit">Отозвать</button>
     </form>
     {{end}}
@@ -1245,7 +1246,7 @@ const tplAdminCleanup = `{{define "admin-cleanup"}}` + adminHead + `
 </table>
 </div>
 <form method="POST" action="/ui/admin/cleanup"
-      onsubmit="return confirm('Удалить все осиротевшие движения?')">
+      data-ob-confirm="Удалить все осиротевшие движения?">
   <button class="btn btn-danger" type="submit">Удалить осиротевшие движения</button>
   <a class="btn" href="/ui" style="background:#e2e8f0;color:#475569;margin-left:8px">Отмена</a>
 </form>

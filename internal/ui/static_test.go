@@ -54,6 +54,7 @@ func TestStaticUIJS(t *testing.T) {
 		"data-ob-rs-before-submit",
 		"data-ob-report-variant-submit",
 		"data-ob-attachments",
+		"data-ob-select-on-click",
 		"window.onebaseDevice",
 		"onebase:звонок.входящий",
 	} {

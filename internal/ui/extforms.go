@@ -256,7 +256,7 @@ const tplAdminExtForms = `{{define "admin-extforms"}}` + adminHead + `
         <button class="btn btn-sm btn-secondary" type="submit">{{if .Enabled}}Выключить{{else}}Включить{{end}}</button>
       </form>
       <a class="btn btn-sm btn-secondary" href="/ui/admin/extforms/{{.ID}}/export">Экспорт</a>
-      <form method="POST" action="/ui/admin/extforms/{{.ID}}/delete" onsubmit="return confirm('Удалить форму {{.Name}}?')" style="margin:0">
+      <form method="POST" action="/ui/admin/extforms/{{.ID}}/delete" data-ob-confirm="Удалить форму {{.Name}}?" style="margin:0">
         <button class="btn btn-sm btn-danger" type="submit">Удалить</button>
       </form>
     </div>

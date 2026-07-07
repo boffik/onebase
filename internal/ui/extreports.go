@@ -269,7 +269,7 @@ const tplAdminExtReports = `{{define "admin-extreports"}}` + adminHead + `
         <button class="btn btn-sm btn-secondary" type="submit">{{if .Enabled}}Выключить{{else}}Включить{{end}}</button>
       </form>
       <a class="btn btn-sm btn-secondary" href="/ui/admin/extreports/{{.ID}}/export">Экспорт</a>
-      <form method="POST" action="/ui/admin/extreports/{{.ID}}/delete" onsubmit="return confirm('Удалить отчёт {{.Name}}?')" style="margin:0">
+      <form method="POST" action="/ui/admin/extreports/{{.ID}}/delete" data-ob-confirm="Удалить отчёт {{.Name}}?" style="margin:0">
         <button class="btn btn-sm btn-danger" type="submit">Удалить</button>
       </form>
     </div>
