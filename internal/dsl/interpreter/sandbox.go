@@ -144,6 +144,14 @@ func (i *Interpreter) RunSandboxed(proc *ast.ProcedureDecl, this This, p Sandbox
 	for k, v := range p.Vars() {
 		e.set(k, v)
 	}
+	if i.StrictLexicalScope {
+		if result != nil {
+			*result = i.callEntryProc(proc, e, nil)
+		} else {
+			i.callEntryProc(proc, e, nil)
+		}
+		return nil
+	}
 	i.execBlock(proc.Body, e)
 	return nil
 }

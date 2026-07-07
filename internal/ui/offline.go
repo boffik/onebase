@@ -41,6 +41,9 @@ func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage
 	interp.LookupProc = reg.GetModuleProc
 	interp.LookupSiblingProc = reg.GetSiblingProc
 	interp.LookupModuleProc = reg.GetModuleNamespacedProc
+	if appCfg, _ := project.LoadConfig(proj.Dir); appCfg != nil && appCfg.DSL != nil {
+		interp.StrictLexicalScope = appCfg.DSL.StrictLexicalScope
+	}
 
 	s := &Server{
 		store:    db,

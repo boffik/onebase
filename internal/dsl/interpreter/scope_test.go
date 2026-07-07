@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/dsl/ast"
@@ -343,5 +344,102 @@ func TestScope_FirstAssignInExceptVisibleOutside(t *testing.T) {
 КонецФункции`
 	if got := runScopeFunc(t, code); got != "поймано" {
 		t.Errorf("expected \"поймано\", got %v", got)
+	}
+}
+
+func runScopeProgramResult(t *testing.T, code string, strict bool, extra map[string]any) (any, error) {
+	t.Helper()
+	l := lexer.New(code, "<test>")
+	p := parser.New(l)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(prog.Procedures) == 0 {
+		t.Fatal("no procedures parsed")
+	}
+	procs := make(map[string]*ast.ProcedureDecl, len(prog.Procedures))
+	for _, pr := range prog.Procedures {
+		procs[strings.ToLower(pr.Name.Literal)] = pr
+	}
+	i := New()
+	i.StrictLexicalScope = strict
+	i.LookupSiblingProc = func(_, name string) *ast.ProcedureDecl {
+		return procs[strings.ToLower(name)]
+	}
+	var result any
+	err = i.RunWithResult(prog.Procedures[0], &MapThis{M: map[string]any{}}, &result, extra)
+	return result, err
+}
+
+func TestStrictLexicalScope_LegacyKeepsCallerLocalVisible(t *testing.T) {
+	code := `Функция Тест()
+  Секрет = "caller";
+  Возврат Помощник();
+КонецФункции
+
+Функция Помощник()
+  Возврат ?(Секрет = Неопределено, "hidden", Секрет);
+КонецФункции`
+	got, err := runScopeProgramResult(t, code, false, nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got != "caller" {
+		t.Fatalf("legacy scope result = %v, want caller", got)
+	}
+}
+
+func TestStrictLexicalScope_HidesCallerLocalFromHelper(t *testing.T) {
+	code := `Функция Тест()
+  Секрет = "caller";
+  Возврат Помощник();
+КонецФункции
+
+Функция Помощник()
+  Возврат ?(Секрет = Неопределено, "hidden", Секрет);
+КонецФункции`
+	got, err := runScopeProgramResult(t, code, true, nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got != "hidden" {
+		t.Fatalf("strict scope result = %v, want hidden", got)
+	}
+}
+
+func TestStrictLexicalScope_HelperSeesRootExtraVars(t *testing.T) {
+	code := `Функция Тест()
+  Глобальная = "caller";
+  Возврат Помощник();
+КонецФункции
+
+Функция Помощник()
+  Возврат Глобальная;
+КонецФункции`
+	got, err := runScopeProgramResult(t, code, true, map[string]any{"Глобальная": "root"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got != "root" {
+		t.Fatalf("strict helper global = %v, want root", got)
+	}
+}
+
+func TestStrictLexicalScope_DefaultParamDoesNotReadCallerLocal(t *testing.T) {
+	code := `Функция Тест()
+  Секрет = "caller";
+  Возврат Помощник();
+КонецФункции
+
+Функция Помощник(Значение = Секрет)
+  Возврат ?(Значение = Неопределено, "hidden", Значение);
+КонецФункции`
+	got, err := runScopeProgramResult(t, code, true, nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got != "hidden" {
+		t.Fatalf("strict default param result = %v, want hidden", got)
 	}
 }

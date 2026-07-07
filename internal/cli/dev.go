@@ -204,6 +204,7 @@ func runDev(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(os.Stdout, "[dev] reloaded")
 	}
 	load()
+	interp.StrictLexicalScope = appDSLStrictLexicalScope(appCfg)
 
 	if configSource == "file" && watchDir != "" {
 		if err := devserver.Watch(watchDir, load); err != nil {

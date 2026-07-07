@@ -119,6 +119,11 @@ type LimitsConfig struct {
 	SlowOperationMS        int `yaml:"slow_operation_ms,omitempty"`
 }
 
+// DSLConfig holds opt-in compatibility switches for the DSL runtime.
+type DSLConfig struct {
+	StrictLexicalScope bool `yaml:"strict_lexical_scope,omitempty"`
+}
+
 // AppConfig holds the optional config/app.yaml metadata.
 type AppConfig struct {
 	Name    string `yaml:"name"`
@@ -137,6 +142,7 @@ type AppConfig struct {
 	Backup      *BackupConfig      `yaml:"backup,omitempty"`
 	AI          *AIConfig          `yaml:"ai,omitempty"`
 	Limits      *LimitsConfig      `yaml:"limits,omitempty"`
+	DSL         *DSLConfig         `yaml:"dsl,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в

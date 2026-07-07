@@ -263,6 +263,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	interp.LookupProc = reg.GetModuleProc
 	interp.LookupSiblingProc = reg.GetSiblingProc
 	interp.LookupModuleProc = reg.GetModuleNamespacedProc
+	interp.StrictLexicalScope = appDSLStrictLexicalScope(appCfg)
 
 	if err := db.EnsureScheduledRunsTable(ctx); err != nil {
 		return fmt.Errorf("scheduled runs schema: %w", err)

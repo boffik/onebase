@@ -71,6 +71,7 @@ func (ec *execCtx) checkDeadline() {
 type env struct {
 	vars   map[string]any
 	parent *env
+	root   *env
 	this   This
 	ec     *execCtx
 	// depth — глубина вызова процедур/функций (корень = 1). Растёт на каждый
@@ -80,11 +81,28 @@ type env struct {
 }
 
 func newEnv(this This) *env {
-	return &env{vars: make(map[string]any), this: this, ec: &execCtx{}, depth: 1}
+	e := &env{vars: make(map[string]any), this: this, ec: &execCtx{}, depth: 1}
+	e.root = e
+	return e
 }
 
 func (e *env) child() *env {
-	return &env{vars: make(map[string]any), parent: e, this: e.this, ec: e.ec, depth: e.depth + 1}
+	return e.frame(e, e.depth+1)
+}
+
+func (e *env) frame(parent *env, depth int) *env {
+	root := e.root
+	if root == nil {
+		root = e
+	}
+	return &env{vars: make(map[string]any), parent: parent, root: root, this: e.this, ec: e.ec, depth: depth}
+}
+
+func (e *env) rootEnv() *env {
+	if e != nil && e.root != nil {
+		return e.root
+	}
+	return e
 }
 
 func (e *env) get(name string) (any, bool) {

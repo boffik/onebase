@@ -91,6 +91,10 @@ type Interpreter struct {
 	// 0 = defaultMaxRecursionDepth. Поле (а не глобальная константа), чтобы порог
 	// можно было задать per-Interpreter и понизить в тестах стража рекурсии.
 	MaxRecursionDepth int
+	// StrictLexicalScope включает opt-in режим, где вызванная процедура видит
+	// только свои параметры/локальные переменные и root-env запуска (extraVars,
+	// factories, This), но не локальные переменные caller-процедуры.
+	StrictLexicalScope bool
 }
 
 // startEnv создаёт корневое окружение запуска и захватывает debug hook
@@ -163,6 +167,14 @@ func (i *Interpreter) RunWithResult(proc *ast.ProcedureDecl, this This, result *
 			e.set(k, v)
 		}
 	}
+	if i.StrictLexicalScope {
+		if result != nil {
+			*result = i.callEntryProc(proc, e, nil)
+		} else {
+			i.callEntryProc(proc, e, nil)
+		}
+		return nil
+	}
 	i.execBlock(proc.Body, e)
 	return nil
 }
@@ -189,6 +201,10 @@ func (i *Interpreter) Run(proc *ast.ProcedureDecl, this This, extraVars ...map[s
 		for k, v := range m {
 			e.set(k, v)
 		}
+	}
+	if i.StrictLexicalScope {
+		i.callEntryProc(proc, e, nil)
+		return nil
 	}
 	i.execBlock(proc.Body, e)
 	return nil
@@ -253,6 +269,9 @@ func (i *Interpreter) beforeStmt(s ast.Stmt, e *env) {
 }
 
 func stackDepth(e *env) int {
+	if e != nil && e.depth > 0 {
+		return e.depth
+	}
 	d := 0
 	for e != nil {
 		d++
@@ -753,6 +772,14 @@ func (i *Interpreter) evalEvalBuiltin(args []any, e *env) any {
 }
 
 func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args []any) (retVal any) {
+	return i.callUserProcAtDepth(proc, callEnv, args, callEnv.depth+1)
+}
+
+func (i *Interpreter) callEntryProc(proc *ast.ProcedureDecl, root *env, args []any) (retVal any) {
+	return i.callUserProcAtDepth(proc, root, args, root.depth)
+}
+
+func (i *Interpreter) callUserProcAtDepth(proc *ast.ProcedureDecl, callEnv *env, args []any, frameDepth int) (retVal any) {
 	// Страж рекурсии: env нового кадра будет на уровень глубже вызывающего.
 	// Обрываем ДО создания кадра и проброса в отладчик, иначе бесконечная
 	// рекурсия переполнит стек горутины и аварийно уронит процесс (мимо Попытки).
@@ -760,7 +787,7 @@ func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args [
 	if limit <= 0 {
 		limit = defaultMaxRecursionDepth
 	}
-	if callEnv.depth+1 > limit {
+	if frameDepth > limit {
 		RaiseUserError(fmt.Sprintf("Превышена максимальная глубина рекурсии (%d) — вероятно, бесконечный вызов процедуры/функции", limit))
 	}
 	if hook := callEnv.ec.debug; hook != nil {
@@ -777,18 +804,25 @@ func (i *Interpreter) callUserProc(proc *ast.ProcedureDecl, callEnv *env, args [
 			}
 		}
 	}()
-	child := callEnv.child()
+	parentEnv := callEnv
+	defaultEnv := callEnv
+	if i.StrictLexicalScope {
+		parentEnv = callEnv.rootEnv()
+		defaultEnv = parentEnv
+	}
+	child := callEnv.frame(parentEnv, frameDepth)
 	for idx, param := range proc.Params {
 		if idx < len(args) {
 			child.set(param.Literal, args[idx])
 			continue
 		}
-		// Параметр без переданного значения — пробуем дефолт (
-		// Дефолт вычисляется в callEnv, чтобы видеть глобальные/модульные
-		// идентификаторы. child ещё не имеет других параметров — это
-		// сознательно: не даём дефолтам ссылаться на «соседей» (1С-семантика).
+			// Параметр без переданного значения — пробуем дефолт. В legacy
+			// дефолт вычисляется в callEnv; в strict lexical — в root-env, чтобы
+			// не оставлять обходной доступ к локальным переменным caller-а. child
+			// ещё не имеет других параметров — сознательно не даём дефолтам
+			// ссылаться на «соседей» (1С-семантика).
 		if idx < len(proc.Defaults) && proc.Defaults[idx] != nil {
-			child.set(param.Literal, i.evalExpr(proc.Defaults[idx], callEnv))
+			child.set(param.Literal, i.evalExpr(proc.Defaults[idx], defaultEnv))
 		} else {
 			child.set(param.Literal, nil)
 		}

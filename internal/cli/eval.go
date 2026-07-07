@@ -72,6 +72,9 @@ func runEval(cmd *cobra.Command, args []string) error {
 	interp.LookupProc = reg.GetModuleProc
 	interp.LookupSiblingProc = reg.GetSiblingProc
 	interp.LookupModuleProc = reg.GetModuleNamespacedProc
+	if appCfg, _ := project.LoadConfig(proj.Dir); appCfg != nil {
+		interp.StrictLexicalScope = appDSLStrictLexicalScope(appCfg)
+	}
 
 	messages := []string{}
 	msgFunc := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
