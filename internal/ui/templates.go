@@ -1838,7 +1838,7 @@ const tplRegister = `
         <option value="">— {{t $.Lang "все"}} —</option>
         {{$cur := index $flt .Name}}{{range index $refOpts .Name}}<option value="{{index . "id"}}" {{if eq (str (index . "id")) $cur}}selected{{end}}>{{index . "_label"}}</option>{{end}}
       </select>
-      <button type="button" onclick="openRefPicker('regflt-{{.Name}}')" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+      <button type="button" data-ob-ref-picker="regflt-{{.Name}}" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;cursor:pointer;font-size:12px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
     </div>
     {{else}}
     <input type="text" name="flt_{{.Name}}" value="{{index $flt .Name}}" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
@@ -1939,7 +1939,7 @@ const tplDeleteMarked = `
 </tbody></table>
 </div>
 <form method="POST" action="/ui/delete-marked"
-      onsubmit="return confirm('{{t $.Lang "Удалить все помеченные записи без ссылок?"}}')">
+      data-ob-confirm="{{t $.Lang "Удалить все помеченные записи без ссылок?"}}">
   <button class="btn btn-danger" type="submit">{{t $.Lang "Удалить помеченные без ссылок"}}</button>
   <a class="btn btn-secondary" href="/ui" style="margin-left:8px">{{t $.Lang "Отмена"}}</a>
 </form>
@@ -1996,8 +1996,8 @@ const tplProcessor = `
             <option value="">{{t $.Lang "— выбрать —"}}</option>
             {{with index $.RefOptions $pname}}{{range .}}<option value="{{index . "id"}}" {{if eq (index . "id") (index $.ParamValues $pname)}}selected{{end}}>{{index . "_label"}}</option>{{end}}{{end}}
           </select>
-          <button type="button" onclick="openRefPicker('pp-{{$pname}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-          <button type="button" onclick="openRefCurrent('pp-{{$pname}}')" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
+          <button type="button" data-ob-ref-picker="pp-{{$pname}}" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+          <button type="button" data-ob-ref-current="pp-{{$pname}}" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
         </div>
       {{else}}
         <input type="text" name="{{$pname}}" value="{{index $.ParamValues $pname}}">
@@ -2318,7 +2318,7 @@ const tplInfoReg = `
   {{range $.InfoReg.Resources}}<td style="font-weight:600">{{$lbl := index $row (printf "%s_label" .Name)}}{{if $lbl}}{{$lbl}}{{else}}{{index $row .Name}}{{end}}</td>{{end}}
   {{if $.CanDelete}}<td>
     <form method="POST" action="/ui/inforeg/{{lower $.InfoReg.Name}}/delete" style="display:inline"
-          onsubmit="return confirm('{{t $.Lang "Удалить запись?"}}')">
+          data-ob-confirm="{{t $.Lang "Удалить запись?"}}">
       {{if $.InfoReg.Periodic}}<input type="hidden" name="period" value="{{index $row "period_key"}}">{{end}}
       {{range $.InfoReg.Dimensions}}<input type="hidden" name="{{.Name}}" value="{{index $row .Name}}">{{end}}
       <button class="btn btn-danger btn-sm" type="submit">×</button>
@@ -2353,8 +2353,8 @@ const tplInfoReg = `
         <option value="">{{t $.Lang "— выбрать —"}}</option>
         {{range index $.RefOpts $dn}}<option value="{{index . "id"}}" {{if eq (index $.Values $dn) (index . "id")}}selected{{end}}>{{index . "_label"}}</option>{{end}}
       </select>
-      <button type="button" onclick="openRefPicker('ird-{{$dn}}')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-      <button type="button" onclick="openRefCurrent('ird-{{$dn}}')" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
+      <button type="button" data-ob-ref-picker="ird-{{$dn}}" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+      <button type="button" data-ob-ref-current="ird-{{$dn}}" style="padding:6px 9px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
     </div>
     {{else}}
     <input type="text" name="{{$dn}}" value="{{index $.Values $dn}}">
@@ -2396,8 +2396,8 @@ const tplConstants = `
         <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $c.Name)}}selected{{end}}>{{index . "_label"}}</option>
         {{end}}
       </select>
-      <button type="button" onclick="openRefPicker('const-{{$c.Name}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
-      <button type="button" onclick="openRefCurrent('const-{{$c.Name}}')" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
+      <button type="button" data-ob-ref-picker="const-{{$c.Name}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
+      <button type="button" data-ob-ref-current="const-{{$c.Name}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
     </div>
   {{else if eq (str .Type) "date"}}
     <input type="date" name="{{.Name}}" value="{{index $.Values .Name}}">
