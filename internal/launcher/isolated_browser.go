@@ -20,25 +20,52 @@ import (
 
 const maxIsolatedProfiles = 50
 
-// isolatedBrowser абстрагирует запуск внешнего браузера; в тестах подменяется
-// фейком, чтобы не открывать реальные окна.
+// Режимы открытия изолированного окна (план 78, п. 4.2). auto — нативное
+// WebView2-окно, если сборка умеет (GUI под Windows), иначе внешний Chromium.
+const (
+	isolatedModeAuto    = "auto"
+	isolatedModeNative  = "native"
+	isolatedModeBrowser = "browser"
+)
+
+// isolatedBrowser абстрагирует запуск изолированного окна; в тестах
+// подменяется фейком, чтобы не открывать реальные окна.
 type isolatedBrowser interface {
-	// Open запускает окно браузера с профилем profileDir на url.
-	Open(profileDir, url string) error
+	// Open открывает окно с профилем profileDir на url в заданном режиме
+	// (isolatedMode*; пустая строка = auto).
+	Open(profileDir, url, mode string) error
 }
 
-// systemBrowser — боевая реализация: находит установленный Chromium-браузер
-// (платформенный isolatedBrowserCommand) и запускает его отсоединённо.
-//
-// Нативные WebView2-окна вместо внешнего браузера (план 78, п. 4.2) остаются
-// отдельной подзадачей: кандидат с переменной окружения
-// WEBVIEW2_USER_DATA_FOLDER проверен и НЕ работает — vendored webview.h
-// (webview_go) сам вычисляет userDataFolder как %APPDATA%\<имя exe> и передаёт
-// его явным параметром CreateCoreWebView2EnvironmentWithOptions, который
-// сильнее переменной. Нужен патч/форк биндинга.
+// NativeIsolatedSupported сообщает, умеет ли эта сборка нативные
+// WebView2-окна (GUI под Windows). Используется CLI-командой `window` и UI.
+func NativeIsolatedSupported() bool { return nativeIsolatedSupported() }
+
+// systemBrowser — боевая реализация. Нативный путь: запуск самого себя
+// (`window --url ...`) с ONEBASE_WEBVIEW_PROFILE — переменную читает наш патч
+// webview.h в third_party/webview_go (оригинал жёстко брал %APPDATA%\<exe>,
+// а стандартная WEBVIEW2_USER_DATA_FOLDER игнорируется из-за явного параметра).
+// Браузерный путь: установленный Chromium-браузер с --user-data-dir.
 type systemBrowser struct{}
 
-func (systemBrowser) Open(profileDir, url string) error {
+func (systemBrowser) Open(profileDir, url, mode string) error {
+	if mode == "" {
+		mode = isolatedModeAuto
+	}
+	if mode == isolatedModeNative && !nativeIsolatedSupported() {
+		return i18nerr.Errorf("нативные окна доступны только в GUI-сборке под Windows — выберите «Окно браузера»")
+	}
+	if mode != isolatedModeBrowser && nativeIsolatedSupported() {
+		if cmd, ok := nativeIsolatedCommand(profileDir, url); ok {
+			err := cmd.Start()
+			if err == nil {
+				return nil
+			}
+			if mode == isolatedModeNative {
+				return err // явный запрос нативного окна — честная ошибка
+			}
+			// auto: нативное окно не стартовало — падаем на внешний Chromium.
+		}
+	}
 	cmd, err := isolatedBrowserCommand(profileDir, url)
 	if err != nil {
 		return err

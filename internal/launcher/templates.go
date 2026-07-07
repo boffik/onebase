@@ -91,9 +91,16 @@ const tplIndex = `
   <a class="tbtn" href="/bases/{{.Selected.ID}}/start" onclick="return startBase(this,'{{.Selected.ID}}')">
     <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> {{t $.Lang "Предприятие"}}
   </a>
-  <a class="tbtn" href="/bases/{{.Selected.ID}}/start-isolated" onclick="return startIsolated(this,'{{.Selected.ID}}')" title="{{t $.Lang "Отдельное окно с изолированным профилем браузера — можно войти под другим пользователем"}}">
-    <svg viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg> {{t $.Lang "Новое окно"}}
-  </a>
+  <div style="position:relative;display:flex">
+    <a class="tbtn" href="/bases/{{.Selected.ID}}/start-isolated" onclick="return startIsolated(this,'{{.Selected.ID}}','')" title="{{t $.Lang "Отдельное окно с изолированным профилем — можно войти под другим пользователем"}}" style="border-top-right-radius:0;border-bottom-right-radius:0">
+      <svg viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg> {{t $.Lang "Новое окно"}}
+    </a>
+    <a class="tbtn" href="#" onclick="return toggleIsoMenu(event)" title="{{t $.Lang "Выбрать способ открытия"}}" style="padding-left:5px;padding-right:5px;border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px">▾</a>
+    <div id="iso-menu" style="display:none;position:absolute;top:100%;left:0;z-index:50;background:#fff;border:1px solid #ACA899;border-radius:2px;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:230px">
+      {{if .NativeOK}}<a href="#" onclick="return startIsolated(this,'{{.Selected.ID}}','native')" style="display:block;padding:7px 12px;font-size:12px;color:#333;text-decoration:none">{{t $.Lang "Нативное окно"}}</a>{{end}}
+      <a href="#" onclick="return startIsolated(this,'{{.Selected.ID}}','browser')" style="display:block;padding:7px 12px;font-size:12px;color:#333;text-decoration:none">{{t $.Lang "Окно браузера (Edge/Chrome)"}}</a>
+    </div>
+  </div>
   <a class="tbtn" href="/bases/{{.Selected.ID}}/configurator">
     <svg viewBox="0 0 24 24"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14z"/><path d="M6 13h5v4H6zm6-6h4v3h-4zm0 4h4v6h-4zM6 7h5v5H6z"/></svg> {{t $.Lang "Конфигуратор"}}
   </a>
@@ -208,11 +215,22 @@ function quitLauncher() {
   setTimeout(function(){ window.close(); }, 200);
   return false;
 }
-function startIsolated(el, id) {
+function toggleIsoMenu(ev) {
+  if (ev) { if (ev.preventDefault) ev.preventDefault(); if (ev.stopPropagation) ev.stopPropagation(); }
+  var m = document.getElementById('iso-menu');
+  if (m) m.style.display = (m.style.display === 'block') ? 'none' : 'block';
+  return false;
+}
+document.addEventListener('click', function(){
+  var m = document.getElementById('iso-menu');
+  if (m && m.style.display === 'block') m.style.display = 'none';
+});
+function startIsolated(el, id, mode) {
   el.preventDefault ? el.preventDefault() : (el.returnValue = false);
-  // Окно открывает сервер лаунчера (внешний браузер с отдельным профилем),
-  // window.open здесь не нужен — работает и из GUI-режима (WebView).
-  fetch('/bases/' + id + '/start-isolated', {method:'POST'})
+  var m = document.getElementById('iso-menu'); if (m) m.style.display = 'none';
+  // Окно открывает сервер лаунчера (нативное WebView2 или внешний браузер с
+  // отдельным профилем), window.open не нужен — работает и из GUI-режима.
+  fetch('/bases/' + id + '/start-isolated' + (mode ? ('?mode=' + mode) : ''), {method:'POST'})
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d && d.error) { alert('Ошибка запуска:\n' + d.error); }

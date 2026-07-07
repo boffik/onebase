@@ -371,6 +371,16 @@ macOS:
 
 Это не включать в первый PR, чтобы не раздувать задачу.
 
+**Реализовано (2026-07-07, ветка `feature/78-native-webview-windows`)** первым
+вариантом: `webview_go` завендорен в `third_party/webview_go` с патчем
+`webview.h` (переменная `ONEBASE_WEBVIEW_PROFILE` при вычислении userDataFolder,
+`replace` в go.mod), скрытая команда `onebase window --url ...`, режимы
+`auto|native|browser` у `POST /bases/{id}/start-isolated` и сплит-кнопка
+«Новое окно ▾» с выбором «Нативное окно» / «Окно браузера». Auto: нативное окно
+в GUI-сборке под Windows, иначе внешний Chromium; при отказе нативного —
+фолбэк на браузер. Проверено вживую: профиль WebView2 (EBWebView) создаётся в
+каталоге окна, lock-детекция занятости работает.
+
 ## Фаза 5. Документация
 
 Файлы:

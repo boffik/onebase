@@ -45,7 +45,16 @@ func isolatedBrowserCommand(profileDir, url string) (*exec.Cmd, error) {
 // время жизни браузера. Windows не даёт удалить открытый файл, поэтому
 // пробуем удалить: ошибка — профиль занят; успех или отсутствие файла —
 // свободен (stale-lock после падения браузера безвреден, он пересоздастся).
+// У нативных WebView2-окон Chromium-профиль лежит в подкаталоге EBWebView —
+// проверяем оба расположения.
 func profileInUse(dir string) bool {
-	err := os.Remove(filepath.Join(dir, "lockfile"))
-	return err != nil && !os.IsNotExist(err)
+	for _, lock := range []string{
+		filepath.Join(dir, "lockfile"),
+		filepath.Join(dir, "EBWebView", "lockfile"),
+	} {
+		if err := os.Remove(lock); err != nil && !os.IsNotExist(err) {
+			return true
+		}
+	}
+	return false
 }
