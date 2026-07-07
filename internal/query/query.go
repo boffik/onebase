@@ -2113,8 +2113,10 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 
 		// Multi-word: СГРУППИРОВАТЬ ПО / УПОРЯДОЧИТЬ ПО
 		if t.kind == tIdent && (upper == "СГРУППИРОВАТЬ" || upper == "УПОРЯДОЧИТЬ") {
-			if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
-				return Result{}, err
+			if tr.parenDepth == 0 {
+				if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+					return Result{}, err
+				}
 			}
 			tr.advance()
 			if upper == "УПОРЯДОЧИТЬ" {
@@ -2207,13 +2209,17 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				case "WHERE":
 					tr.emit("WHERE")
 					tr.section = sectionWhere
-					if err := tr.emitPendingRowFiltersAfterWhere(); err != nil {
-						return Result{}, err
+					if tr.parenDepth == 0 {
+						if err := tr.emitPendingRowFiltersAfterWhere(); err != nil {
+							return Result{}, err
+						}
 					}
 					continue
 				case "GROUP", "HAVING", "ORDER":
-					if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
-						return Result{}, err
+					if tr.parenDepth == 0 {
+						if err := tr.emitPendingRowFiltersAsWhere(); err != nil {
+							return Result{}, err
+						}
 					}
 				}
 				tr.emit(kw)
