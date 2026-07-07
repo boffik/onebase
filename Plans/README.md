@@ -21,28 +21,33 @@
 > Сверка 2026-07-07: **34 F3** (автодоступ к реквизитам ссылок `this.X.Y` /
 > `Стр.X.Y`) закрыт PR #261 через безопасный single-hop доступ с предзагрузкой
 > и кэшем; **76 A/B/C/D/E/F core**, background export UX и k6 PostgreSQL
-> validation runner закрыты текущей серией работ,
-> кроме future horizontal scale и row-level security;
-> мультисессионность из плана 76 пока отложена.
+> validation runner закрыты текущей серией работ; **78** (параллельные сессии,
+> изолированные окна Предприятия и нативные WebView2-профили на Windows) влит
+> PR #255/#270. Остатки нагрузки: future horizontal scale и row-level security
+> (проект в плане **79**).
 
 ## Текущий приоритет, 2026-07-07
 
 Источник: [`current-priority-2026-06-25.md`](current-priority-2026-06-25.md).
 
-1. **План 76:** остатки не-сессионных guardrails нагрузки. Уже закрыты REST
+1. **План 76/78:** guardrails нагрузки и сессионная часть для single-process
+   PostgreSQL. Уже закрыты REST
    RBAC/list limits, optimistic locking, индексы, server-side reference picker,
    bounded parent-folder options, runtime limits/backpressure, metrics и
    PostgreSQL advisory locks для Save-хуков, а также background export UX для
-   Excel/PDF отчётов и k6 PostgreSQL validation runner. Остались future
-   horizontal scale и row-level security как отдельные решения.
+   Excel/PDF отчётов, k6 PostgreSQL validation runner, параллельные сессии и
+   изолированные окна. Остались future horizontal scale и row-level security
+   (план `79`) как отдельные решения.
 2. **План 60B:** marketplace конфигураций. Часть A (история/diff/rollback/UI)
    уже реализована, shipped examples/templates проходят CI lint-gate.
-3. **План 55, этап 3:** разбор монолитных UI templates/JS.
-4. **Row-level access plan:** отдельная модель строковых ограничений поверх
-   объектного RBAC.
+3. **План 55, этап 3:** остаток разбора template-bound UI JS. Фаза 3a
+   вынесла глобальные UI-скрипты и reference picker в `/static/ui.js`.
+4. **План 79:** отдельная модель строковых ограничений поверх объектного RBAC:
+   app-level policy, SQL-side фильтры для CRUD и безопасный fail-closed путь для
+   отчетов/AI до расширения query compiler.
 
-Ниже по очереди: `55` этап 3 (inline-JS из `ui/templates.go`) делать при
-следующей работе с этим фронтом; `46` store wrapper и остатки i18n/PWA — скорее
+Ниже по очереди: остаток `55` этапа 3 (template-bound inline-JS из
+`ui/templates.go`) делать при следующей работе с этим фронтом; `46` store wrapper и остатки i18n/PWA — скорее
 приёмка и маркетинг, чем ядро.
 
 ## Реализованные этапы
@@ -163,6 +168,7 @@
 | 62 | [62-network-safety-switch.md](62-network-safety-switch.md) | Предохранитель сети: галочка `net.enabled` лочит хуки/HTTP/сервисы/email; сброс при restore | 0.5 дня | ✅ Реализовано |
 | 67 | [67-exec-command.md](67-exec-command.md) | Выполнение команд ОС из DSL (`ВыполнитьКоманду`) за флагом `AllowExec` (выкл. по умолчанию, без shell, таймаут, аудит) | 1–1.5 дня | ✅ Реализовано |
 | 76 | [76-multi-user-scale-readiness.md](76-multi-user-scale-readiness.md) | Готовность к 100+ активным пользователям: REST RBAC, лимиты, индексы, reference picker, атомарная запись, observability и путь к горизонтальному масштабированию | 2–4 недели по этапам | ⬜ Запланировано |
+| 79 | [79-row-level-access.md](79-row-level-access.md) | Строковые политики доступа поверх RBAC: декларативные row filters в ролях, SQL-side фильтрация UI/REST/picker и безопасный контур отчетов/AI | 1–2 недели по этапам | ⬜ Проект |
 
 ### Направление Г — Интеграции и экосистема (продолжение)
 
