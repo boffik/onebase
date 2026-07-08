@@ -193,6 +193,25 @@ func (sr *statusRecorder) Write(b []byte) (int, error) {
 	return sr.ResponseWriter.Write(b)
 }
 
+// Flush проксирует http.Flusher к обёрнутому writer'у. Без него обёртка
+// «съедала» бы интерфейс Flusher (проверка w.(http.Flusher) в SSE-эндпоинтах
+// возвращала бы false), и потоковые ответы падали бы с «стриминг не
+// поддерживается сервером»: real-time-уведомления (/ui/events, план 74) и поток
+// сканера ШК. Проявлялось только на базах, запущенных с ONEBASE_DEBUG_TOKEN
+// (лаунчер/GUI включает этот middleware), а плоский `onebase run` — нет.
+func (sr *statusRecorder) Flush() {
+	if f, ok := sr.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap открывает нижележащий writer для http.ResponseController (Go 1.20+),
+// чтобы прочие возможности (Hijack, SetWriteDeadline и т.п.) оставались
+// доступны сквозь обёртку.
+func (sr *statusRecorder) Unwrap() http.ResponseWriter {
+	return sr.ResponseWriter
+}
+
 // Middleware записывает по каждому запросу счётчик и латентность. Метку route
 // берём из chi RoutePattern (доступен после маршрутизации) — это шаблон вида
 // «/documents/{entity}/{id}/post», что держит кардинальность меток низкой
