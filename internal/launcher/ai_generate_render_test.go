@@ -61,6 +61,12 @@ func TestAISettings_ModelEditorUXWired(t *testing.T) {
 		"commitActiveEditors()",
 		"modelEndpoint(m)",
 		"setModelEndpoint(m, ep.value)",
+		"MODEL_COLS = [3, 2, 1, 1, ACTION_W]",
+		"rowHTML(['Имя', 'Провайдер', 'Vision', 'MaxTokens', ''], true, MODEL_COLS)",
+		"actionText('Готово'",
+		"actionText('Отмена'",
+		"function restore()",
+		"original.profiles",
 	} {
 		if !strings.Contains(js, sub) {
 			t.Errorf("в ai-settings.js нет %q — UX добавления/редактирования моделей может снова сломаться", sub)
