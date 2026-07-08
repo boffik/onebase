@@ -247,11 +247,36 @@ type Register struct {
 	Dimensions []Field // form the grouping key for balances
 	Resources  []Field // accumulated (summed with sign based on movement type)
 	Attributes []Field // extra data, stored but not aggregated
+	Totals     RegisterTotals // предрасчёт итогов (план 80)
+}
+
+// RegisterTotals — настройки предрасчёта итогов регистра накопления (план 80).
+// Enabled включает таблицу текущих итогов итоги_<рег>: чистый знаковый остаток
+// ресурсов по каждому набору измерений, поддерживаемый в той же транзакции, что
+// и движения (см. storage.WriteMovements). Ускоряет текущие Остатки() с
+// O(все движения) до O(число комбинаций измерений). Периодические итоги (для
+// Остатки(&Момент)/ОстаткиИОбороты) — следующий этап плана 80.
+type RegisterTotals struct {
+	Enabled bool
 }
 
 // IsTurnover сообщает, что регистр оборотный (его нельзя сворачивать в остаток).
 func (r *Register) IsTurnover() bool {
 	return r.Kind == RegisterKindTurnover
+}
+
+// TotalsEnabled сообщает, что итоги включены пользователем и регистр балансовый
+// (оборотные остатков не имеют).
+func (r *Register) TotalsEnabled() bool {
+	return r.Totals.Enabled && !r.IsTurnover()
+}
+
+// TotalsUsable сообщает, применимы ли итоги к регистру на текущем этапе плана 80:
+// включены, регистр балансовый и без атрибутов. Атрибуты (MIN(attr) в остатках)
+// таблица итогов не хранит, поэтому регистр с атрибутами использует расчёт на
+// лету — и итоги для него не ведутся, чтобы не платить за поддержку без пользы.
+func (r *Register) TotalsUsable() bool {
+	return r.TotalsEnabled() && len(r.Attributes) == 0
 }
 
 // DisplayName возвращает заголовок регистра накопления с учётом языка.
@@ -292,6 +317,16 @@ func (ir *InfoRegister) DisplayName(lang string) string {
 func RegisterTableName(regName string) string {
 	return "рег_" + strings.ToLower(regName)
 }
+
+// RegisterTotalsTableName — таблица предрасчитанных итогов регистра (план 80).
+func RegisterTotalsTableName(regName string) string {
+	return "итоги_" + strings.ToLower(regName)
+}
+
+// RegisterTotalsMonthCol — колонка месяц-ключа (YYYY-MM) в таблице итогов.
+// Итоги хранят помесячный оборот; ключ совпадает по формату с
+// time.Format("2006-01"), чтобы границу момента можно было вычислить в Go.
+const RegisterTotalsMonthCol = "месяц"
 
 func InfoRegTableName(regName string) string {
 	return "инфо_" + strings.ToLower(regName)

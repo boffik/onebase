@@ -1174,6 +1174,25 @@ func (tr *translator) genAccountTurnovers(ar *metadata.AccountRegister, args [][
 func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string, string, error) {
 	tableName := metadata.RegisterTableName(reg.Name)
 	alias := "остатки_" + strings.ToLower(reg.Name)
+
+	// План 80: быстрый путь через предрасчитанные помесячные итоги вместо SUM по
+	// всей истории. Включается только когда заведомо эквивалентен on-the-fly:
+	// итоги применимы (включены, регистр балансовый и без атрибутов), нет отбора
+	// в аргументах (args[1]) и нет активной строковой политики (её применяет
+	// обычный путь). Текущие остатки — SUM по всем месяцам; Остатки(&Момент) —
+	// месяцы до момента + хвост движений месяца момента.
+	if reg.TotalsUsable() && !hasFilterArg(args) && tr.sourceRowFilter("register", reg.Name) == nil {
+		if !anyArgTokens(args) {
+			return tr.genBalancesFromTotals(reg), alias, nil
+		}
+		if sql, ok, err := tr.genBalancesFromTotalsAtMoment(reg, args[0]); err != nil {
+			return "", "", err
+		} else if ok {
+			return sql, alias, nil
+		}
+		// момент/дата не распознаны как значение — обычный путь ниже
+	}
+
 	dims := dimCols(reg.Dimensions)       // actual col names for GROUP BY / WHERE
 	selDims := dimSelCols(reg.Dimensions) // aliased names for SELECT
 
@@ -1224,6 +1243,123 @@ func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string,
 	}
 
 	return sb.String(), alias, nil
+}
+
+// anyArgTokens сообщает, есть ли у виртуальной таблицы непустые аргументы
+// (момент времени или условие отбора). Пусто → «текущие остатки».
+func anyArgTokens(args [][]tok) bool {
+	for _, a := range args {
+		if len(a) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// hasFilterArg сообщает, передан ли виртуальной таблице отбор (args[1]).
+// При отборе быстрый путь итогов не используется — работает обычный расчёт.
+func hasFilterArg(args [][]tok) bool {
+	return len(args) >= 2 && len(args[1]) > 0
+}
+
+func monthStartOf(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+}
+
+// genBalancesFromTotals — текущие остатки из помесячных итогов: SUM оборотов по
+// всем месяцам. Колонки совпадают с обычным genBalances (измерения +
+// <ресурс>остаток), чтобы внешний запрос не различал источник.
+func (tr *translator) genBalancesFromTotals(reg *metadata.Register) string {
+	cols := append([]string{}, dimSelCols(reg.Dimensions)...)
+	for _, r := range reg.Resources {
+		col := strings.ToLower(r.Name)
+		cols = append(cols, "SUM("+col+") AS "+col+"остаток")
+	}
+	sql := "SELECT " + strings.Join(cols, ", ") + " FROM " + metadata.RegisterTotalsTableName(reg.Name)
+	if len(reg.Dimensions) > 0 {
+		sql += " GROUP BY " + strings.Join(dimCols(reg.Dimensions), ", ")
+	}
+	return sql
+}
+
+// firstArgDate распознаёт первый аргумент VT как &Param со значением time.Time
+// (простая дата, не момент времени). Нужен для быстрого пути Остатки(&Дата).
+func (tr *translator) firstArgDate(args []tok) (time.Time, bool) {
+	if len(args) != 1 || args[0].kind != tParam {
+		return time.Time{}, false
+	}
+	if t, ok := tr.paramValues[args[0].val].(time.Time); ok {
+		return t, true
+	}
+	return time.Time{}, false
+}
+
+// genBalancesFromTotalsAtMoment строит остатки на момент времени из итогов:
+// обороты месяцев СТРОГО ДО месяца момента (из итоги_*) + знаковый хвост
+// движений внутри месяца момента до самого момента (из рег_*). Границу месяца
+// (месяц-ключ и его начало) вычисляем в Go из значения момента/даты, поэтому в
+// SQL нет диалектных функций дат. ok=false — момент/дата не распознаны как
+// значение (вызывающий падает на обычный путь).
+func (tr *translator) genBalancesFromTotalsAtMoment(reg *metadata.Register, arg0 []tok) (string, bool, error) {
+	d := dialectOrDefault(tr.opts.Dialect)
+
+	emit := func(period time.Time, condSQL func() string) string {
+		// Порядок добавления аргументов = порядку плейсхолдеров в SQL:
+		// сначала месяц-ключ (prior), затем начало месяца (tail), затем условие
+		// момента (его аргументы добавляет condSQL).
+		tr.args = append(tr.args, period.Format("2006-01"))
+		mkPH := d.Placeholder(len(tr.args))
+		tr.args = append(tr.args, monthStartOf(period))
+		msPH := d.Placeholder(len(tr.args))
+		cond := condSQL()
+		return tr.buildTotalsMomentSQL(reg, mkPH, msPH, cond)
+	}
+
+	if mt := tr.firstArgMoment(arg0); mt != nil {
+		period, _ := mt.PointInTime()
+		return emit(period, func() string { return tr.momentTimeCondition(mt) }), true, nil
+	}
+	if dt, ok := tr.firstArgDate(arg0); ok {
+		return emit(dt, func() string {
+			tr.args = append(tr.args, dt)
+			return "period <= " + d.Placeholder(len(tr.args))
+		}), true, nil
+	}
+	return "", false, nil
+}
+
+// buildTotalsMomentSQL собирает подзапрос «prior UNION ALL tail» и внешнюю
+// агрегацию. Внутренние ресурсы приводятся к алиасам r0, r1… (знаковый оборот),
+// внешний SELECT суммирует их в <ресурс>остаток — колонки как у genBalances.
+func (tr *translator) buildTotalsMomentSQL(reg *metadata.Register, mkPH, msPH, condSQL string) string {
+	totals := metadata.RegisterTotalsTableName(reg.Name)
+	src := metadata.RegisterTableName(reg.Name)
+	dims := dimCols(reg.Dimensions)
+
+	priorCols := append([]string{}, dims...)
+	tailCols := append([]string{}, dims...)
+	for i, r := range reg.Resources {
+		rescol := strings.ToLower(r.Name)
+		ri := fmt.Sprintf("r%d", i)
+		priorCols = append(priorCols, rescol+" AS "+ri)
+		tailCols = append(tailCols, "CASE WHEN вид_движения = 'Приход' THEN "+rescol+" ELSE -"+rescol+" END AS "+ri)
+	}
+	prior := "SELECT " + strings.Join(priorCols, ", ") + " FROM " + totals +
+		" WHERE " + metadata.RegisterTotalsMonthCol + " < " + mkPH
+	tail := "SELECT " + strings.Join(tailCols, ", ") + " FROM " + src +
+		" WHERE period >= " + msPH + " AND " + condSQL
+	inner := prior + " UNION ALL " + tail
+
+	outerCols := append([]string{}, dimSelCols(reg.Dimensions)...)
+	for i, r := range reg.Resources {
+		rescol := strings.ToLower(r.Name)
+		outerCols = append(outerCols, "SUM(r"+fmt.Sprint(i)+") AS "+rescol+"остаток")
+	}
+	sql := "SELECT " + strings.Join(outerCols, ", ") + " FROM (" + inner + ") AS итоги_мт"
+	if len(dims) > 0 {
+		sql += " GROUP BY " + strings.Join(dims, ", ")
+	}
+	return sql
 }
 
 func (tr *translator) genTurnovers(reg *metadata.Register, args [][]tok) (string, string, error) {
