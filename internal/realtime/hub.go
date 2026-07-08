@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // rolePrefix — адрес вида "роль:Оператор" доставляет событие всем подписчикам с
@@ -18,6 +19,7 @@ const rolePrefix = "роль:"
 // Event — одно уведомление: имя события и произвольные данные (сериализуются в
 // JSON на стороне SSE-эндпоинта).
 type Event struct {
+	ID   int64
 	Name string
 	Data any
 }
@@ -25,6 +27,10 @@ type Event struct {
 // subscriberBuffer — ёмкость канала одного подписчика. При переполнении кадры
 // дропаются (см. Publish), издатель не блокируется медленным клиентом.
 const subscriberBuffer = 32
+
+const recentTTL = 15 * time.Second
+
+const recentLimit = 64
 
 type subscriber struct {
 	id    string
@@ -35,9 +41,16 @@ type subscriber struct {
 
 // Hub — потокобезопасный реестр подписчиков.
 type Hub struct {
-	mu   sync.Mutex
-	subs map[string]*subscriber
-	seq  int
+	mu     sync.Mutex
+	subs   map[string]*subscriber
+	seq    int64
+	recent []recentEvent
+}
+
+type recentEvent struct {
+	target string
+	ev     Event
+	at     time.Time
 }
 
 // NewHub создаёт пустую шину.
@@ -49,12 +62,20 @@ func NewHub() *Hub {
 // отписки. cancel закрывает канал и удаляет подписчика; вызывать при завершении
 // SSE-соединения.
 func (h *Hub) Subscribe(userID, login string, roles []string) (id string, ch <-chan Event, cancel func()) {
+	return h.SubscribeSince(userID, login, roles, 0)
+}
+
+// SubscribeSince регистрирует подписчика и сразу отдаёт ему недавние события,
+// которые он мог пропустить при перезагрузке страницы. lastID берётся из
+// Last-Event-ID SSE-клиента; 0 означает новую страницу без истории.
+func (h *Hub) SubscribeSince(userID, login string, roles []string, lastID int64) (id string, ch <-chan Event, cancel func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.seq++
-	id = "s" + strconv.Itoa(h.seq)
+	id = "s" + strconv.FormatInt(h.seq, 10)
 	s := &subscriber{id: id, login: login, roles: roles, ch: make(chan Event, subscriberBuffer)}
 	h.subs[id] = s
+	h.replayLocked(s, lastID, time.Now())
 	return id, s.ch, func() { h.unsubscribe(id) }
 }
 
@@ -79,12 +100,44 @@ func (h *Hub) unsubscribe(id string) {
 func (h *Hub) Publish(target string, ev Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.seq++
+	ev.ID = h.seq
+	now := time.Now()
+	h.appendRecentLocked(target, ev, now)
 	for _, s := range h.subs {
 		if matches(s, target) {
 			select {
 			case s.ch <- ev:
 			default: // буфер полон — дропаем кадр, не блокируем издателя
 			}
+		}
+	}
+}
+
+func (h *Hub) appendRecentLocked(target string, ev Event, now time.Time) {
+	cutoff := now.Add(-recentTTL)
+	dst := h.recent[:0]
+	for _, item := range h.recent {
+		if item.at.After(cutoff) {
+			dst = append(dst, item)
+		}
+	}
+	h.recent = append(dst, recentEvent{target: target, ev: ev, at: now})
+	if len(h.recent) > recentLimit {
+		h.recent = h.recent[len(h.recent)-recentLimit:]
+	}
+}
+
+func (h *Hub) replayLocked(s *subscriber, lastID int64, now time.Time) {
+	cutoff := now.Add(-recentTTL)
+	for _, item := range h.recent {
+		if item.ev.ID <= lastID || item.at.Before(cutoff) || !matches(s, item.target) {
+			continue
+		}
+		select {
+		case s.ch <- item.ev:
+		default:
+			return
 		}
 	}
 }

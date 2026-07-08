@@ -77,6 +77,39 @@ func TestHub_Broadcast_DeliversToAll(t *testing.T) {
 	}
 }
 
+func TestHub_SubscribeSince_ReplaysRecentMatchingEvents(t *testing.T) {
+	h := NewHub()
+	h.Publish("*", Event{Name: "уведомление", Data: "пока страница перезагружалась"})
+
+	_, ch, cancel := h.SubscribeSince("u1", "ivan", nil, 0)
+	defer cancel()
+
+	ev, ok := recv(t, ch)
+	if !ok {
+		t.Fatal("недавнее широковещательное событие не переиграно новому подписчику")
+	}
+	if ev.ID == 0 || ev.Name != "уведомление" || ev.Data != "пока страница перезагружалась" {
+		t.Fatalf("неожиданное replay-событие: %+v", ev)
+	}
+}
+
+func TestHub_SubscribeSince_SkipsAlreadySeenEvents(t *testing.T) {
+	h := NewHub()
+	_, ch, cancel := h.Subscribe("u1", "ivan", nil)
+	h.Publish("ivan", Event{Name: "личное", Data: 1})
+	ev, ok := recv(t, ch)
+	if !ok {
+		t.Fatal("первое событие не доставлено")
+	}
+	cancel()
+
+	_, ch2, cancel2 := h.SubscribeSince("u1", "ivan", nil, ev.ID)
+	defer cancel2()
+	if !empty(t, ch2) {
+		t.Fatal("событие с Last-Event-ID не должно переигрываться повторно")
+	}
+}
+
 func TestHub_PublishToLogin_SkipsOtherUsers(t *testing.T) {
 	h := NewHub()
 	_, chIvan, c1 := h.Subscribe("u1", "ivan", nil)

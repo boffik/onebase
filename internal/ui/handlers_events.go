@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/ivantit66/onebase/internal/auth"
@@ -50,7 +51,8 @@ func (s *Server) eventsStream(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_, ch, cancel := s.hub.Subscribe(userID, login, roles)
+	lastID, _ := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64)
+	_, ch, cancel := s.hub.SubscribeSince(userID, login, roles, lastID)
 	defer cancel()
 
 	h := w.Header()
@@ -82,6 +84,11 @@ func (s *Server) eventsStream(w http.ResponseWriter, r *http.Request) {
 			frame, err := json.Marshal(map[string]any{"name": ev.Name, "data": ev.Data})
 			if err != nil {
 				continue
+			}
+			if ev.ID > 0 {
+				if _, err := fmt.Fprintf(w, "id: %d\n", ev.ID); err != nil {
+					return
+				}
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", frame); err != nil {
 				return

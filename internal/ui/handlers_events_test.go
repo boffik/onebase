@@ -7,11 +7,21 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/dsl/lexer"
+	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/realtime"
+	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // TestEventsStream_StreamsBroadcastFrame проверяет сквозной путь SSE: подписка
@@ -58,6 +68,128 @@ func TestEventsStream_StreamsBroadcastFrame(t *testing.T) {
 	}
 	if frame.Data != "привет" {
 		t.Fatalf("data = %v, ожидалось «привет»", frame.Data)
+	}
+}
+
+func TestEventsStream_ReplaysRecentFrame(t *testing.T) {
+	hub := realtime.NewHub()
+	hub.Publish("*", realtime.Event{Name: "уведомление", Data: "после reload"})
+	s := &Server{hub: hub}
+	srv := httptest.NewServer(http.HandlerFunc(s.eventsStream))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /ui/events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	frameJSON := readDataFrame(t, resp.Body)
+	var frame struct {
+		Name string `json:"name"`
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(frameJSON), &frame); err != nil {
+		t.Fatalf("кадр не разобрался как JSON: %v (%q)", err, frameJSON)
+	}
+	if frame.Name != "уведомление" || frame.Data != "после reload" {
+		t.Fatalf("неожиданный replay-кадр: %+v", frame)
+	}
+}
+
+// TestProcessorRun_PublishesRealtimeToast проверяет реальный путь из обработки:
+// HTTP POST /ui/processor/{name} → DSL ОтправитьУведомление → SSE /ui/events.
+func TestProcessorRun_PublishesRealtimeToast(t *testing.T) {
+	ctx := context.Background()
+	hub := realtime.NewHub()
+	registry := runtime.NewRegistry()
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+
+	src := `
+Процедура Выполнить()
+    Текст = Параметры.Текст;
+    ОтправитьУведомление("*", "уведомление", Текст);
+КонецПроцедуры
+`
+	prog, err := parser.New(lexer.New(src, "ТестПуш.proc.os")).ParseProgram()
+	if err != nil {
+		t.Fatalf("parse processor: %v", err)
+	}
+	registry.Load(runtime.LoadOptions{Programs: map[string]*ast.Program{"ТестПуш": prog}})
+	registry.LoadProcessors([]*processor.Processor{{
+		Name: "ТестПуш",
+		Params: []processor.Param{{
+			Name: "Текст",
+			Type: "string",
+		}},
+	}})
+
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx, nil); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	s := &Server{
+		hub:      hub,
+		reg:      registry,
+		interp:   interp,
+		store:    db,
+		messages: NewMessageStore(),
+		lockMgr:  runtime.NewLockManager(),
+	}
+	r := chi.NewRouter()
+	s.Mount(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/ui/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /ui/events: %v", err)
+	}
+	defer resp.Body.Close()
+	waitSubscriber(t, hub)
+
+	postResp, err := http.PostForm(srv.URL+"/ui/processor/%d1%82%d0%b5%d1%81%d1%82%d0%bf%d1%83%d1%88", url.Values{
+		"Текст": {"push из обработки"},
+	})
+	if err != nil {
+		t.Fatalf("POST processor: %v", err)
+	}
+	postResp.Body.Close()
+	if postResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST processor status = %d", postResp.StatusCode)
+	}
+
+	frameJSON := readDataFrame(t, resp.Body)
+	var frame struct {
+		Name string `json:"name"`
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(frameJSON), &frame); err != nil {
+		t.Fatalf("кадр не разобрался как JSON: %v (%q)", err, frameJSON)
+	}
+	if frame.Name != "уведомление" || frame.Data != "push из обработки" {
+		t.Fatalf("неожиданный SSE-кадр: %+v", frame)
+	}
+}
+
+func waitSubscriber(t *testing.T, hub *realtime.Hub) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for hub.SubscriberCount() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("подписчик не зарегистрировался за 2с")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

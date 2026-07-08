@@ -56,6 +56,11 @@ func TestStaticUIJS(t *testing.T) {
 		"data-ob-attachments",
 		"data-ob-select-on-click",
 		"window.onebaseDevice",
+		"new EventSource('/ui/events')",
+		"window.requestAnimationFrame ||",
+		"document.createEvent('CustomEvent')",
+		"msg.name === 'уведомление'",
+		"msg.name === 'notify'",
 		"onebase:звонок.входящий",
 	} {
 		if !strings.Contains(body, want) {

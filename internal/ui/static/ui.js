@@ -2016,6 +2016,21 @@ window.onebaseDevice = {
 (function () {
   if (window.__obEventsInit) return;
   window.__obEventsInit = true;
+  function afterPaint(fn) {
+    var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); };
+    raf(fn);
+  }
+  function emitOnebaseEvent(name, data) {
+    try {
+      if (typeof window.CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent(name, { detail: data }));
+        return;
+      }
+      var ev = document.createEvent('CustomEvent');
+      ev.initCustomEvent(name, false, false, data);
+      window.dispatchEvent(ev);
+    } catch (_) {}
+  }
   function toast(text) {
     var box = document.getElementById('ob-toasts');
     if (!box) {
@@ -2028,7 +2043,7 @@ window.onebaseDevice = {
     el.style.cssText = 'background:#1f2937;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.25);font-size:14px;line-height:1.35;opacity:0;transition:opacity .2s';
     el.textContent = text;
     box.appendChild(el);
-    requestAnimationFrame(function () { el.style.opacity = '1'; });
+    afterPaint(function () { el.style.opacity = '1'; });
     setTimeout(function () {
       el.style.opacity = '0';
       setTimeout(function () { el.remove(); }, 250);
@@ -2089,7 +2104,7 @@ window.onebaseDevice = {
         return;
       }
       if (!msg || !msg.name) return;
-      window.dispatchEvent(new CustomEvent('onebase:' + msg.name, { detail: msg.data }));
+      emitOnebaseEvent('onebase:' + msg.name, msg.data);
       if (msg.name === 'уведомление' || msg.name === 'notify') {
         toast(typeof msg.data === 'string' ? msg.data : JSON.stringify(msg.data));
       }
