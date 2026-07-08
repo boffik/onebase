@@ -246,7 +246,7 @@ func dedupTuples(tuples [][]any) [][]any {
 	seen := make(map[string]bool, len(tuples))
 	var out [][]any
 	for _, t := range tuples {
-		key := fmt.Sprintf("%v", t)
+		key := tupleKey(t)
 		if seen[key] {
 			continue
 		}
@@ -254,4 +254,12 @@ func dedupTuples(tuples [][]any) [][]any {
 		out = append(out, t)
 	}
 	return out
+}
+
+func tupleKey(tuple []any) string {
+	var sb strings.Builder
+	for _, v := range tuple {
+		fmt.Fprintf(&sb, "%T:%#v\x00", v, v)
+	}
+	return sb.String()
 }

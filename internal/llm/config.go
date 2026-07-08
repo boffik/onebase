@@ -173,7 +173,10 @@ func maskKey(k string) string {
 // .obz/git). Тот же синтаксис использует project-загрузчик для app.yaml.
 var envRefPattern = regexp.MustCompile(`\$\{env:([^}]+)\}`)
 
-func isEnvRef(s string) bool { return envRefPattern.MatchString(s) }
+func isEnvRef(s string) bool {
+	s = strings.TrimSpace(s)
+	return s != "" && envRefPattern.FindString(s) == s
+}
 
 // expandSecretEnv разыменовывает все ${env:VAR} в строке. Отсутствующая
 // переменная → пустая подстановка (как в project-загрузчике app.yaml).

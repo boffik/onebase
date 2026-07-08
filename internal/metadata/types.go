@@ -244,9 +244,9 @@ type Register struct {
 	// RegisterKindTurnover (обороты). Оборотный регистр накапливает обороты за
 	// период; свернуть его в один остаток нельзя — свёртка (план 74) его минует.
 	Kind       string
-	Dimensions []Field // form the grouping key for balances
-	Resources  []Field // accumulated (summed with sign based on movement type)
-	Attributes []Field // extra data, stored but not aggregated
+	Dimensions []Field        // form the grouping key for balances
+	Resources  []Field        // accumulated (summed with sign based on movement type)
+	Attributes []Field        // extra data, stored but not aggregated
 	Totals     RegisterTotals // предрасчёт итогов (план 80)
 }
 

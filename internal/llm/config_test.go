@@ -71,6 +71,14 @@ func TestRedactedKeepsEnvRef(t *testing.T) {
 	}
 }
 
+func TestRedactedMasksMixedEnvRefString(t *testing.T) {
+	cfg := Config{Endpoints: []Endpoint{{Name: "e", APIKey: "sk-${env:MY_LLM_KEY}"}}}
+	red := cfg.Redacted()
+	if red.Endpoints[0].APIKey == cfg.Endpoints[0].APIKey || !strings.HasPrefix(red.Endpoints[0].APIKey, "****") {
+		t.Errorf("смешанная строка с env-ссылкой должна маскироваться как обычный ключ: %q", red.Endpoints[0].APIKey)
+	}
+}
+
 func TestParseConfig_ModelProviderAlias(t *testing.T) {
 	c, err := ParseConfig(`{
 		"enabled": true,

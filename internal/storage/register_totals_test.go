@@ -234,6 +234,20 @@ func TestRegisterTotals_Randomized(t *testing.T) {
 	}
 }
 
+func TestRegisterTotals_DedupTuplesNoStringCollision(t *testing.T) {
+	tuples := [][]any{
+		{"a b", "c"},
+		{"a", "b c"},
+		{"a", "b c"},
+		{nil, "x"},
+		{nil, "x"},
+	}
+	got := dedupTuples(tuples)
+	if len(got) != 3 {
+		t.Fatalf("dedupTuples collapsed distinct tuples: got %d tuples: %#v", len(got), got)
+	}
+}
+
 // TestRegisterTotals_NoDimensions — регистр без измерений: единственная строка
 // итога (или её отсутствие при нулевой истории).
 func TestRegisterTotals_NoDimensions(t *testing.T) {

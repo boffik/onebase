@@ -181,11 +181,11 @@ func TestBalancesTotals_MomentMatchesOnTheFly(t *testing.T) {
 	}
 
 	moments := []*momentValue{
-		{period: d(2026, 1, 1)},                      // до всех
-		{period: d(2026, 1, 31)},                     // после января
-		{period: d(2026, 2, 28)},                     // после февраля
-		{period: d(2026, 3, 31)},                     // после марта
-		{period: time.Now().UTC()},                   // текущий
+		{period: d(2026, 1, 1)},                        // до всех
+		{period: d(2026, 1, 31)},                       // после января
+		{period: d(2026, 2, 28)},                       // после февраля
+		{period: d(2026, 3, 31)},                       // после марта
+		{period: time.Now().UTC()},                     // текущий
 		{period: d(2026, 2, 15), docID: rec2.String()}, // момент фев с исключением rec2
 	}
 	for i, mt := range moments {
