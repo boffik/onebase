@@ -1461,53 +1461,77 @@ func filterArg(idx int, periodLevel string, args [][]tok) []tok {
 	return nil
 }
 
+// filterPresent сообщает, задан ли аргумент-условие (граница/отбор) непусто и
+// не «пусто» (одиночный &Param с nil/пустым списком). Проверяет структурно, БЕЗ
+// трансляции — чтобы не добавить аргумент раньше времени (иначе плейсхолдеры и
+// аргументы разъедутся при повторной трансляции границ).
+func (tr *translator) filterPresent(tokens []tok) bool {
+	if len(tokens) == 0 {
+		return false
+	}
+	if len(tokens) == 1 && tokens[0].kind == tParam {
+		v := tr.paramValues[tokens[0].val]
+		if v == nil {
+			return false
+		}
+		if arr, ok := v.([]any); ok && len(arr) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (tr *translator) genBalancesAndTurnovers(reg *metadata.Register, args [][]tok) (string, string, error) {
 	tableName := metadata.RegisterTableName(reg.Name)
 	alias := "остаткиоборотов_" + strings.ToLower(reg.Name)
 	dims := dimCols(reg.Dimensions)
 	selDims := dimSelCols(reg.Dimensions)
 
-	var startSQL, endSQL, filterSQL string
-	if len(args) > 0 && len(args[0]) > 0 {
-		if s := tr.translateFilterTokens(args[0]); s != "NULL" {
-			startSQL = s
+	// Границы начало/конец транслируются заново на КАЖДОЕ вхождение (start()/
+	// end()/periodCond()), а не один раз. На SQLite плейсхолдер '?' анонимный и
+	// позиционный: один startSQL/endSQL, вставленный в SQL многократно, давал бы
+	// больше '?', чем привязанных аргументов, — запрос падал с «missing
+	// argument». Повторная трансляция добавляет аргумент под каждый плейсхолдер;
+	// порядок добавления совпадает с порядком плейсхолдеров в собираемом SQL
+	// (столбцы SELECT слева направо, затем WHERE). На PostgreSQL это лишь
+	// дублирует значение под разными $N — результат тот же.
+	hasStart := len(args) > 0 && tr.filterPresent(args[0])
+	hasEnd := len(args) > 1 && tr.filterPresent(args[1])
+	hasFilter := len(args) > 2 && tr.filterPresent(args[2])
+	start := func() string { return tr.translateFilterTokens(args[0]) }
+	end := func() string { return tr.translateFilterTokens(args[1]) }
+	periodCond := func() string {
+		switch {
+		case hasStart && hasEnd:
+			return " AND period >= " + start() + " AND period <= " + end()
+		case hasStart:
+			return " AND period >= " + start()
+		case hasEnd:
+			return " AND period <= " + end()
 		}
-	}
-	if len(args) > 1 && len(args[1]) > 0 {
-		if s := tr.translateFilterTokens(args[1]); s != "NULL" {
-			endSQL = s
-		}
-	}
-	if len(args) > 2 && len(args[2]) > 0 {
-		filterSQL = tr.translateFilterTokens(args[2])
+		return ""
 	}
 
 	var cols []string
 	cols = append(cols, selDims...)
 	for _, r := range reg.Resources {
 		col := strings.ToLower(r.Name)
-		if startSQL != "" {
+		if hasStart {
 			cols = append(cols,
-				"SUM(CASE WHEN вид_движения = 'Приход' AND period < "+startSQL+
-					" THEN "+col+" WHEN вид_движения = 'Расход' AND period < "+startSQL+
+				"SUM(CASE WHEN вид_движения = 'Приход' AND period < "+start()+
+					" THEN "+col+" WHEN вид_движения = 'Расход' AND period < "+start()+
 					" THEN -"+col+" ELSE 0 END) AS "+col+"начальный")
 		}
-		periodCond := ""
-		if startSQL != "" && endSQL != "" {
-			periodCond = " AND period >= " + startSQL + " AND period <= " + endSQL
-		} else if startSQL != "" {
-			periodCond = " AND period >= " + startSQL
-		} else if endSQL != "" {
-			periodCond = " AND period <= " + endSQL
-		}
+		// periodCond() вызывается отдельно для прихода и расхода — каждый со
+		// своими плейсхолдерами (нельзя переиспользовать одну строку на SQLite).
 		cols = append(cols,
-			"SUM(CASE WHEN вид_движения = 'Приход'"+periodCond+" THEN "+col+" ELSE 0 END) AS "+col+"приход",
-			"SUM(CASE WHEN вид_движения = 'Расход'"+periodCond+" THEN "+col+" ELSE 0 END) AS "+col+"расход",
+			"SUM(CASE WHEN вид_движения = 'Приход'"+periodCond()+" THEN "+col+" ELSE 0 END) AS "+col+"приход",
+			"SUM(CASE WHEN вид_движения = 'Расход'"+periodCond()+" THEN "+col+" ELSE 0 END) AS "+col+"расход",
 		)
-		if endSQL != "" {
+		if hasEnd {
 			cols = append(cols,
-				"SUM(CASE WHEN вид_движения = 'Приход' AND period <= "+endSQL+
-					" THEN "+col+" WHEN вид_движения = 'Расход' AND period <= "+endSQL+
+				"SUM(CASE WHEN вид_движения = 'Приход' AND period <= "+end()+
+					" THEN "+col+" WHEN вид_движения = 'Расход' AND period <= "+end()+
 					" THEN -"+col+" ELSE 0 END) AS "+col+"конечный")
 		}
 	}
@@ -1520,11 +1544,11 @@ func (tr *translator) genBalancesAndTurnovers(reg *metadata.Register, args [][]t
 	sb.WriteString(tableName)
 
 	var conds []string
-	if endSQL != "" {
-		conds = append(conds, "period <= "+endSQL)
+	if hasEnd {
+		conds = append(conds, "period <= "+end())
 	}
-	if filterSQL != "" {
-		conds = append(conds, filterSQL)
+	if hasFilter {
+		conds = append(conds, tr.translateFilterTokens(args[2]))
 	}
 	if s, err := tr.rowFilterCondition("register", reg.Name, storage.RegisterPredicateEntity(reg), ""); err != nil {
 		return "", "", fmt.Errorf("row filter %s: %w", reg.Name, err)
