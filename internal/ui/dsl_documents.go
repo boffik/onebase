@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -31,7 +32,7 @@ func (s *Server) refManagerFor(entity *metadata.Entity, ctx context.Context) int
 	ctxSrc := interpreter.NewStaticCtx(ctx)
 	switch entity.Kind {
 	case metadata.KindCatalog:
-		return interpreter.NewCatalogProxy(entity, s.store, ctxSrc)
+		return interpreter.NewCatalogProxy(entity, s.store, ctxSrc).WithRowAccessChecker(s.dslRowAccessChecker())
 	case metadata.KindDocument:
 		return &docProxy{s: s, ctxSrc: ctxSrc, entity: entity}
 	}
@@ -200,6 +201,16 @@ func (p *docProxy) findByField(field, value string, raw any) any {
 	if !found {
 		return nil
 	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		interpreter.RaiseUserError("Найти(" + p.entity.Name + "." + field + "): неверный идентификатор найденной записи")
+	}
+	if err := p.s.checkDSLRowAccess(p.ctx(), p.entity, "read", id, nil); err != nil {
+		if errors.Is(err, interpreter.ErrRowAccessDenied) {
+			return nil
+		}
+		interpreter.RaiseUserError("Найти(" + p.entity.Name + "." + field + "): " + err.Error())
+	}
 	return &interpreter.Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
 }
 
@@ -213,7 +224,19 @@ func (p *docProxy) matchByField(field string, raw any) any {
 	}
 	var ref *interpreter.Ref
 	if count == 1 {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): неверный идентификатор найденной записи")
+		}
+		if err := p.s.checkDSLRowAccess(p.ctx(), p.entity, "read", id, nil); err != nil {
+			if errors.Is(err, interpreter.ErrRowAccessDenied) {
+				return interpreter.NewMatchResultStruct(nil, 0)
+			}
+			interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
+		}
 		ref = &interpreter.Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
+	} else if count > 1 && p.s.rowAccessRestricted(p.ctx(), p.entity, "read") {
+		interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): row_access требует точной проверки найденных строк")
 	}
 	return interpreter.NewMatchResultStruct(ref, count)
 }
@@ -230,6 +253,9 @@ func (p *docProxy) DeleteRef(uuidStr string) error {
 		return fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
 	ctx := p.ctx()
+	if err := p.s.checkDSLRowAccess(ctx, p.entity, "delete", id, nil); err != nil {
+		return err
+	}
 	if p.entity.Posting {
 		if err := p.s.clearMovements(ctx, p.entity.Name, id); err != nil {
 			return fmt.Errorf("очистка движений: %w", err)
@@ -247,6 +273,9 @@ func (p *docProxy) unpostRef(uuidStr string) error {
 		return fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
 	ctx := p.ctx()
+	if err := p.s.checkDSLRowAccess(ctx, p.entity, "unpost", id, nil); err != nil {
+		return err
+	}
 	if p.entity.Posting {
 		if err := p.s.clearMovements(ctx, p.entity.Name, id); err != nil {
 			return fmt.Errorf("очистка движений: %w", err)
@@ -262,6 +291,9 @@ func (p *docProxy) markRef(uuidStr string, mark bool) error {
 	if err != nil {
 		return fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
+	if err := p.s.checkDSLRowAccess(p.ctx(), p.entity, "delete", id, nil); err != nil {
+		return err
+	}
 	return p.s.markForDeletion(p.ctx(), p.entity, id, mark)
 }
 
@@ -272,6 +304,9 @@ func (p *docProxy) LoadObject(uuidStr string) (any, error) {
 	id, err := uuid.Parse(uuidStr)
 	if err != nil {
 		return nil, fmt.Errorf("неверный идентификатор ссылки: %q", uuidStr)
+	}
+	if err := p.s.checkDSLRowAccess(p.ctx(), p.entity, "read", id, nil); err != nil {
+		return nil, err
 	}
 	// loadRuntimeObject грузит шапку + ТЧ и обогащает ссылочные поля до
 	// *Ref{…,Manager}, чтобы DSL мог писать Док.СсылочноеПоле.ПолучитьОбъект().
@@ -336,6 +371,9 @@ func (w *docWriter) CallMethod(method string, args []any) any {
 		}
 		return w.ref()
 	case "провести", "post":
+		if err := w.s.checkDSLRowAccess(w.ctx(), w.entity, "post", w.accessID(), w.obj.Fields); err != nil {
+			interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
+		}
 		if err := w.write(); err != nil {
 			interpreter.RaiseUserError("Провести/Записать(" + w.entity.Name + "): " + err.Error())
 		}
@@ -372,6 +410,9 @@ func (w *docWriter) CallMethod(method string, args []any) any {
 // (Документ.Прочитать()). Использует тот же путь загрузки, что и
 // Ссылка.ПолучитьОбъект().
 func (w *docWriter) read() error {
+	if err := w.s.checkDSLRowAccess(w.ctx(), w.entity, "read", w.obj.ID, nil); err != nil {
+		return err
+	}
 	row, err := w.s.store.GetByID(w.ctx(), w.entity.Name, w.obj.ID, w.entity)
 	if err != nil {
 		return err
@@ -477,6 +518,9 @@ func (w *docWriter) autoNumber() {
 // участвует в ней; иначе автокоммит.
 func (w *docWriter) write() error {
 	ctx := w.ctx()
+	if err := w.s.checkDSLRowAccess(ctx, w.entity, "write", w.accessID(), w.obj.Fields); err != nil {
+		return err
+	}
 	w.autoNumber()
 	mc := runtime.NewMovementsCollector(w.entity.Name, w.obj.ID)
 	setPeriodFromFields(mc, w.entity, w.obj.Fields)
@@ -498,10 +542,20 @@ func (w *docWriter) write() error {
 	return nil
 }
 
+func (w *docWriter) accessID() uuid.UUID {
+	if w.loaded || w.saved {
+		return w.obj.ID
+	}
+	return uuid.Nil
+}
+
 // post запускает OnPost, собирает движения и фиксирует проведение —
 // та же логика, что в postDocument (UI-проведение).
 func (w *docWriter) post() error {
 	ctx := w.ctx()
+	if err := w.s.checkDSLRowAccess(ctx, w.entity, "post", w.obj.ID, w.obj.Fields); err != nil {
+		return err
+	}
 	// Инвариант: помеченный на удаление документ нельзя провести (как в 1С).
 	if marked, err := w.s.store.IsMarkedForDeletion(ctx, w.entity.Name, w.obj.ID); err != nil {
 		return err

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -51,6 +52,12 @@ func (s *Server) objectAttributeValue(ctx context.Context, args []any) (any, err
 	if err != nil {
 		return nil, fmt.Errorf("ЗначениеРеквизитаОбъекта: неверный идентификатор ссылки %q", ref.UUID)
 	}
+	if err := s.checkDSLRowAccess(ctx, entity, "read", id, nil); err != nil {
+		if errors.Is(err, interpreter.ErrRowAccessDenied) {
+			return nil, nil
+		}
+		return nil, err
+	}
 	row, err := s.store.GetByID(ctx, entity.Name, id, entity)
 	if err != nil || row == nil {
 		return nil, nil // запись не найдена
@@ -88,6 +95,10 @@ func (s *Server) objectAttributeValues(ctx context.Context, args []any) (any, er
 		return nil, err
 	}
 	refs, ids, err := s.collectBulkObjectRefs(ctx, args[0], entity)
+	if err != nil {
+		return nil, err
+	}
+	refs, ids, err = s.filterReadableBulkObjectRefs(ctx, entity, refs)
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +184,26 @@ func (s *Server) collectBulkObjectRefs(ctx context.Context, raw any, entity *met
 		}
 	}
 	return refs, ids, nil
+}
+
+func (s *Server) filterReadableBulkObjectRefs(ctx context.Context, entity *metadata.Entity, refs []bulkObjectRef) ([]bulkObjectRef, []uuid.UUID, error) {
+	filtered := make([]bulkObjectRef, 0, len(refs))
+	ids := make([]uuid.UUID, 0, len(refs))
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		if err := s.checkDSLRowAccess(ctx, entity, "read", ref.id, nil); err != nil {
+			if errors.Is(err, interpreter.ErrRowAccessDenied) {
+				continue
+			}
+			return nil, nil, err
+		}
+		filtered = append(filtered, ref)
+		if !seen[ref.idStr] {
+			ids = append(ids, ref.id)
+			seen[ref.idStr] = true
+		}
+	}
+	return filtered, ids, nil
 }
 
 func objectAttributeFields(entity *metadata.Entity, raw any, funcName string) ([]metadata.Field, error) {
@@ -285,7 +316,13 @@ func (s *Server) bulkReferenceNames(ctx context.Context, rows map[string]map[str
 		}
 		ids := make([]uuid.UUID, 0, len(idSet))
 		for _, id := range idSet {
+			if err := s.checkDSLRowAccess(ctx, refEntity, "read", id, nil); err != nil {
+				continue
+			}
 			ids = append(ids, id)
+		}
+		if len(ids) == 0 {
+			continue
 		}
 		refRows, err := s.store.GetFieldsByIDs(ctx, refEntity, ids, displayField(refEntity))
 		if err != nil {
@@ -353,8 +390,10 @@ func (s *Server) refFromValue(ctx context.Context, refEntityName string, raw any
 	var refEntity = s.reg.GetEntity(refEntityName)
 	if refEntity != nil {
 		if id, err := uuid.Parse(idStr); err == nil {
-			if rr, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity); err == nil && rr != nil {
-				name = firstStringField(rr, refEntity)
+			if err := s.checkDSLRowAccess(ctx, refEntity, "read", id, nil); err == nil {
+				if rr, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity); err == nil && rr != nil {
+					name = firstStringField(rr, refEntity)
+				}
 			}
 		}
 	}

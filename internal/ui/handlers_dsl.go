@@ -64,7 +64,10 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	// Caller подключается ДО создания CatalogsRoot.WithManagerCaller —
 	// он использует ctx как контекст для вызова процедур менеджера.
 	mgrCaller := &managerCaller{s: s, ctx: ctx}
-	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg).WithManagerCaller(mgrCaller)
+	rowAccess := s.dslRowAccessChecker()
+	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg).
+		WithManagerCaller(mgrCaller).
+		WithRowAccessChecker(rowAccess)
 	// Документы.X.Создать()/.Записать()/.Провести() из обработки.
 	documents := newDocsRoot(s, txState)
 	// РегистрыНакопления.X.Остатки()/.Движения()/.ВыбратьПоРегистратору(Док).
@@ -179,6 +182,9 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	vars["ObjectAttributeValues"] = attrValuesFn
 	vars["СохранитьКартинку"] = putImageFn
 	vars["PutImage"] = putImageFn
+	queryFactory := interpreter.NewQueryFactoryWithCompiler(txState.Ctx(), s.store, s.reg, s.compileDSLQueryWithRowAccess)
+	vars["__factory_Запрос"] = queryFactory
+	vars["__factory_Query"] = queryFactory
 
 	// транзакции из DSL (обработки/проведение). Раньше NewTxFunctions
 	// использовался только в тестах — отсюда «unknown function
@@ -234,6 +240,7 @@ func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *run
 	if proc == nil {
 		return "", nil
 	}
+	ctx = trustedDSLContext(ctx)
 	// Симметрично runOnPostCtx: ссылки в полях шапки из формы приходят
 	// сырыми UUID — обогащаем до *Ref{UUID,Name}, чтобы ЗначениеРеквизитаОбъекта
 	// и Строка(ref) работали в ПриЗаписи так же, как при проведении.
@@ -286,6 +293,7 @@ func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runt
 	if proc == nil {
 		return "", nil
 	}
+	ctx = trustedDSLContext(ctx)
 	// Симметрично табличным частям: ссылки в полях шапки из формы приходят
 	// сырыми UUID — обогащаем до *Ref{UUID,Name}, чтобы string-измерения
 	// (Склад, Касса, Контрагент) фильтровались по имени, как при проведении

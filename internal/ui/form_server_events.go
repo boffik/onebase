@@ -94,6 +94,7 @@ func (s *Server) runFormReadHook(ctx context.Context, entity *metadata.Entity, f
 	if decl == nil {
 		return nil
 	}
+	ctx = trustedDSLContext(ctx)
 
 	// Обработчик объявлен — RLS-хук ОБЯЗАН отработать. Если объект не загрузился,
 	// отказываем в доступе (fail-closed), а не отдаём форму без проверки.
@@ -147,6 +148,7 @@ func (s *Server) runFormWriteHook(ctx context.Context, entity *metadata.Entity, 
 	if decl == nil {
 		return nil
 	}
+	ctx = trustedDSLContext(ctx)
 
 	mc := runtime.NewMovementsCollector(entity.Name, obj.ID)
 	vars := s.buildDSLVarsWithMessages(ctx, mc, msgs)

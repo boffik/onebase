@@ -206,6 +206,27 @@ func (s *Server) compileQueryWithRowAccess(ctx context.Context, text string, par
 	})
 }
 
+func (s *Server) compileDSLQueryWithRowAccess(ctx context.Context, text string, params map[string]any) (query.Result, error) {
+	if isTrustedDSLContext(ctx) {
+		return query.Compile(text, query.CompileOpts{
+			Entities:    s.reg.Entities(),
+			Params:      params,
+			Registers:   s.reg.Registers(),
+			InfoRegs:    s.reg.InfoRegisters(),
+			AccountRegs: s.reg.AccountRegisters(),
+			Dialect:     s.store.Dialect(),
+		})
+	}
+	res, err := s.compileQueryWithRowAccess(ctx, text, params)
+	if err != nil {
+		return query.Result{}, err
+	}
+	if denied := s.deniedQuerySource(ctx, res.Sources); denied != "" {
+		return query.Result{}, fmt.Errorf("нет доступа к объекту: %s", denied)
+	}
+	return res, nil
+}
+
 func (s *Server) deniedQuerySource(ctx context.Context, sources []query.SourceRef) string {
 	return access.DeniedReadSource(auth.UserFromContext(ctx), sources)
 }

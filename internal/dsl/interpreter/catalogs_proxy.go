@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,6 +18,8 @@ const (
 	MatchStatusOne      = "НайденаОдна"
 	MatchStatusMultiple = "НайденоНесколько"
 )
+
+var ErrRowAccessDenied = errors.New("row access denied")
 
 // NewMatchResultStruct собирает результат safe-match в Структуру с полями
 // Статус / Ссылка / Количество. ref задаётся только при ровно одном совпадении.
@@ -89,6 +92,14 @@ type ManagerCaller interface {
 	CallManager(entityName, method string, args []any) (result any, found bool, err error)
 }
 
+// RowAccessChecker is provided by the host runtime to make DSL data proxies
+// respect the same row-level access decisions as UI/REST. A nil checker keeps
+// legacy trusted/server-code behavior for tests and headless callers.
+type RowAccessChecker interface {
+	CheckRowAccess(ctx context.Context, entity *metadata.Entity, op string, id uuid.UUID, fields map[string]any) error
+	IsRowAccessRestricted(ctx context.Context, entity *metadata.Entity, op string) bool
+}
+
 // CtxSource предоставляет «живой» контекст. Для обычного запуска это
 // статический контекст; при активной DSL-транзакции — *TxState, чей
 // Ctx() несёт открытую транзакцию — запись справочника
@@ -111,6 +122,7 @@ type CatalogsRoot struct {
 	lookup EntityLookup
 	ctxSrc CtxSource
 	caller ManagerCaller // optional — fallback к модулю менеджера в CallMethod
+	access RowAccessChecker
 }
 
 // NewCatalogsRoot creates the root object for injection as DSL extraVar.
@@ -126,12 +138,19 @@ func (r *CatalogsRoot) WithManagerCaller(c ManagerCaller) *CatalogsRoot {
 	return r
 }
 
+// WithRowAccessChecker attaches host row-level access checks to all catalog
+// proxies created from this root.
+func (r *CatalogsRoot) WithRowAccessChecker(c RowAccessChecker) *CatalogsRoot {
+	r.access = c
+	return r
+}
+
 func (r *CatalogsRoot) Get(entityName string) any {
 	entity := r.lookup.GetEntity(entityName)
 	if entity == nil {
 		return nil
 	}
-	return &CatalogProxy{entity: entity, db: r.db, ctxSrc: r.ctxSrc, caller: r.caller}
+	return &CatalogProxy{entity: entity, db: r.db, ctxSrc: r.ctxSrc, caller: r.caller, access: r.access}
 }
 
 func (r *CatalogsRoot) Set(_ string, _ any) {}
@@ -146,6 +165,7 @@ type CatalogProxy struct {
 	db     CatalogsDB
 	ctxSrc CtxSource
 	caller ManagerCaller // optional — для вызовов методов модуля менеджера
+	access RowAccessChecker
 }
 
 // NewCatalogProxy создаёт менеджера справочника для привязки к ссылкам,
@@ -154,6 +174,13 @@ type CatalogProxy struct {
 // шапки/ТЧ, а не только на ссылках, созданных через Справочники.X.НайтиПо…
 func NewCatalogProxy(entity *metadata.Entity, db CatalogsDB, ctxSrc CtxSource) *CatalogProxy {
 	return &CatalogProxy{entity: entity, db: db, ctxSrc: ctxSrc}
+}
+
+// WithRowAccessChecker attaches host row-level access checks to a standalone
+// catalog proxy, usually one used as a Ref manager for values loaded from DB.
+func (p *CatalogProxy) WithRowAccessChecker(c RowAccessChecker) *CatalogProxy {
+	p.access = c
+	return p
 }
 
 func (p *CatalogProxy) ctx() context.Context {
@@ -170,6 +197,16 @@ func (p *CatalogProxy) Get(itemName string) any {
 			id, err := p.db.GetPredefinedIDStr(p.ctx(), p.entity.Name, item.Name)
 			if err != nil || id == "" {
 				return nil
+			}
+			parsed, err := uuid.Parse(id)
+			if err != nil {
+				return nil
+			}
+			if err := p.checkRowAccess("read", parsed, nil); err != nil {
+				if errors.Is(err, ErrRowAccessDenied) {
+					return nil
+				}
+				RaiseUserError("Доступ к " + p.entity.Name + "." + item.Name + ": " + err.Error())
 			}
 			return &Ref{UUID: id, Name: item.Name, Type: p.entity.Name, Manager: p}
 		}
@@ -209,6 +246,7 @@ func (p *CatalogProxy) CallMethod(method string, args []any) any {
 			entity: p.entity,
 			db:     p.db,
 			ctxSrc: p.ctxSrc,
+			access: p.access,
 			fields: map[string]any{},
 		}
 	case "удалить", "delete":
@@ -243,6 +281,9 @@ func (p *CatalogProxy) DeleteRef(uuidStr string) error {
 	if err != nil {
 		return i18nerr.Errorf("неверный идентификатор ссылки: %q", uuidStr)
 	}
+	if err := p.checkRowAccess("delete", id, nil); err != nil {
+		return err
+	}
 	return p.db.Delete(p.ctx(), p.entity.Name, id)
 }
 
@@ -253,6 +294,9 @@ func (p *CatalogProxy) LoadObject(uuidStr string) (any, error) {
 	id, err := uuid.Parse(uuidStr)
 	if err != nil {
 		return nil, i18nerr.Errorf("неверный идентификатор ссылки: %q", uuidStr)
+	}
+	if err := p.checkRowAccess("read", id, nil); err != nil {
+		return nil, err
 	}
 	row, err := p.db.GetByID(p.ctx(), p.entity.Name, id, p.entity)
 	if err != nil {
@@ -268,6 +312,7 @@ func (p *CatalogProxy) LoadObject(uuidStr string) (any, error) {
 		entity: p.entity,
 		db:     p.db,
 		ctxSrc: p.ctxSrc,
+		access: p.access,
 		idStr:  uuidStr,
 		fields: fields,
 	}, nil
@@ -289,6 +334,16 @@ func (p *CatalogProxy) findByField(field string, args []any) any {
 	if err != nil || !found {
 		return nil
 	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RaiseUserError("Найти(" + p.entity.Name + "." + field + "): неверный идентификатор найденной записи")
+	}
+	if err := p.checkRowAccess("read", id, nil); err != nil {
+		if errors.Is(err, ErrRowAccessDenied) {
+			return nil
+		}
+		RaiseUserError("Найти(" + p.entity.Name + "." + field + "): " + err.Error())
+	}
 	return &Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
 }
 
@@ -302,9 +357,32 @@ func (p *CatalogProxy) matchByField(field string, raw any) any {
 	}
 	var ref *Ref
 	if count == 1 {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): неверный идентификатор найденной записи")
+		}
+		if err := p.checkRowAccess("read", id, nil); err != nil {
+			if errors.Is(err, ErrRowAccessDenied) {
+				return NewMatchResultStruct(nil, 0)
+			}
+			RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
+		}
 		ref = &Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
+	} else if count > 1 && p.rowAccessRestricted("read") {
+		RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): row_access требует точной проверки найденных строк")
 	}
 	return NewMatchResultStruct(ref, count)
+}
+
+func (p *CatalogProxy) checkRowAccess(op string, id uuid.UUID, fields map[string]any) error {
+	if p.access == nil {
+		return nil
+	}
+	return p.access.CheckRowAccess(p.ctx(), p.entity, op, id, fields)
+}
+
+func (p *CatalogProxy) rowAccessRestricted(op string) bool {
+	return p.access != nil && p.access.IsRowAccessRestricted(p.ctx(), p.entity, op)
 }
 
 // CatalogRecordWriter — записываемый объект справочника/документа,
@@ -318,6 +396,7 @@ type CatalogRecordWriter struct {
 	entity *metadata.Entity
 	db     CatalogsDB
 	ctxSrc CtxSource
+	access RowAccessChecker
 	idStr  string
 	fields map[string]any
 }
@@ -359,6 +438,9 @@ func (w *CatalogRecordWriter) Fields() []string {
 func (w *CatalogRecordWriter) CallMethod(method string, args []any) any {
 	switch strings.ToLower(method) {
 	case "записать", "write":
+		if err := w.checkWriteAccess(); err != nil {
+			RaiseUserError("Записать(" + w.entity.Name + "): " + err.Error())
+		}
 		id, err := w.db.WriteCatalogRecord(w.ctx(), w.entity, w.idStr, w.fields)
 		if err != nil {
 			RaiseUserError("Записать(" + w.entity.Name + "): " + err.Error())
@@ -370,7 +452,7 @@ func (w *CatalogRecordWriter) CallMethod(method string, args []any) any {
 		}
 		return &Ref{
 			UUID: id, Name: name, Type: w.entity.Name,
-			Manager: &CatalogProxy{entity: w.entity, db: w.db, ctxSrc: w.ctxSrc},
+			Manager: &CatalogProxy{entity: w.entity, db: w.db, ctxSrc: w.ctxSrc, access: w.access},
 		}
 	case "установитьзначение", "setvalue":
 		if len(args) >= 2 {
@@ -397,6 +479,9 @@ func (w *CatalogRecordWriter) read() {
 	if err != nil {
 		RaiseUserError("Прочитать(" + w.entity.Name + "): неверный идентификатор")
 	}
+	if err := w.checkReadAccess(id); err != nil {
+		RaiseUserError("Прочитать(" + w.entity.Name + "): " + err.Error())
+	}
 	row, err := w.db.GetByID(w.ctx(), w.entity.Name, id, w.entity)
 	if err != nil {
 		RaiseUserError("Прочитать(" + w.entity.Name + "): " + err.Error())
@@ -407,4 +492,26 @@ func (w *CatalogRecordWriter) read() {
 			w.fields[strings.ToLower(f.Name)] = v
 		}
 	}
+}
+
+func (w *CatalogRecordWriter) checkReadAccess(id uuid.UUID) error {
+	if w.access == nil {
+		return nil
+	}
+	return w.access.CheckRowAccess(w.ctx(), w.entity, "read", id, nil)
+}
+
+func (w *CatalogRecordWriter) checkWriteAccess() error {
+	if w.access == nil {
+		return nil
+	}
+	id := uuid.Nil
+	if strings.TrimSpace(w.idStr) != "" {
+		parsed, err := uuid.Parse(w.idStr)
+		if err != nil {
+			return i18nerr.Errorf("неверный идентификатор ссылки: %q", w.idStr)
+		}
+		id = parsed
+	}
+	return w.access.CheckRowAccess(w.ctx(), w.entity, "write", id, w.fields)
 }

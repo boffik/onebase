@@ -11,9 +11,10 @@ import (
 )
 
 // accumRegsRoot — DSL-глобал РегистрыНакопления / AccumulationRegisters.
-//   РегистрыНакопления.ОстаткиТоваров.Остатки()              → Массив строк остатков
-//   РегистрыНакопления.ОстаткиТоваров.Движения()             → все движения
-//   РегистрыНакопления.ОстаткиТоваров.ВыбратьПоРегистратору(Док) → движения документа
+//
+//	РегистрыНакопления.ОстаткиТоваров.Остатки()              → Массив строк остатков
+//	РегистрыНакопления.ОстаткиТоваров.Движения()             → все движения
+//	РегистрыНакопления.ОстаткиТоваров.ВыбратьПоРегистратору(Док) → движения документа
 //
 // Чтение использует существующий storage API (GetBalances/GetMovements/
 // GetDocumentMovements). Запись наборов записей и параметры периода/отбора у
@@ -56,13 +57,21 @@ func (p *accumRegProxy) ctx() context.Context {
 func (p *accumRegProxy) CallMethod(method string, args []any) any {
 	switch strings.ToLower(method) {
 	case "остатки", "balances":
-		rows, err := p.s.store.GetBalances(p.ctx(), p.reg.Name, p.reg, storage.RegFilter{})
+		filter, err := p.rowFilter()
+		if err != nil {
+			interpreter.RaiseUserError("Остатки(" + p.reg.Name + "): " + err.Error())
+		}
+		rows, err := p.s.store.GetBalances(p.ctx(), p.reg.Name, p.reg, filter)
 		if err != nil {
 			interpreter.RaiseUserError("Остатки(" + p.reg.Name + "): " + err.Error())
 		}
 		return rowsToArray(rows)
 	case "движения", "выбрать", "select":
-		rows, err := p.s.store.GetMovements(p.ctx(), p.reg.Name, p.reg, storage.RegFilter{})
+		filter, err := p.rowFilter()
+		if err != nil {
+			interpreter.RaiseUserError("Движения(" + p.reg.Name + "): " + err.Error())
+		}
+		rows, err := p.s.store.GetMovements(p.ctx(), p.reg.Name, p.reg, filter)
 		if err != nil {
 			interpreter.RaiseUserError("Движения(" + p.reg.Name + "): " + err.Error())
 		}
@@ -79,9 +88,44 @@ func (p *accumRegProxy) CallMethod(method string, args []any) any {
 		if err != nil {
 			interpreter.RaiseUserError("ВыбратьПоРегистратору(" + p.reg.Name + "): " + err.Error())
 		}
-		return rowsToArray(byReg[p.reg.Name])
+		rows, err := p.filterRows(byReg[p.reg.Name])
+		if err != nil {
+			interpreter.RaiseUserError("ВыбратьПоРегистратору(" + p.reg.Name + "): " + err.Error())
+		}
+		return rowsToArray(rows)
 	}
 	return nil
+}
+
+func (p *accumRegProxy) rowFilter() (storage.RegFilter, error) {
+	if isTrustedDSLContext(p.ctx()) {
+		return storage.RegFilter{}, nil
+	}
+	dec, err := p.s.rowDecisionFor(p.ctx(), "register", p.reg.Name, "read", storage.RegisterPredicateEntity(p.reg))
+	if err != nil {
+		return storage.RegFilter{}, err
+	}
+	if !dec.Allowed {
+		return storage.RegFilter{}, interpreter.ErrRowAccessDenied
+	}
+	if dec.Unrestricted {
+		return storage.RegFilter{}, nil
+	}
+	return storage.RegFilter{RowFilter: dec.Predicate}, nil
+}
+
+func (p *accumRegProxy) filterRows(rows []map[string]any) ([]map[string]any, error) {
+	filter, err := p.rowFilter()
+	if err != nil || filter.RowFilter == nil {
+		return rows, err
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		if storage.MatchPredicate(row, filter.RowFilter) {
+			out = append(out, row)
+		}
+	}
+	return out, nil
 }
 
 // rowsToArray оборачивает строки движений/остатков в Массив строк (*MapThis),

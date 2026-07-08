@@ -27,22 +27,33 @@ type QueryRegistry interface {
 // queryProxy реализует DSL-объект Новый Запрос.
 // Поддерживает свойство Текст (Get/Set) и методы УстановитьПараметр / Выполнить.
 type queryProxy struct {
-	text   string
-	params map[string]any
-	db     QueryDB
-	reg    QueryRegistry
-	ctx    context.Context
+	text     string
+	params   map[string]any
+	db       QueryDB
+	reg      QueryRegistry
+	ctx      context.Context
+	compiler QueryCompiler
 }
+
+type QueryCompiler func(ctx context.Context, text string, params map[string]any) (query.Result, error)
 
 // NewQueryProxy создаёт фабрику для инъекции через extraVars.
 // Использование: extraVars["__factory_Запрос"] = interpreter.NewQueryFactory(ctx, db, reg)
 func NewQueryFactory(ctx context.Context, db QueryDB, reg QueryRegistry) func(args []any) any {
+	return NewQueryFactoryWithCompiler(ctx, db, reg, nil)
+}
+
+// NewQueryFactoryWithCompiler creates a query factory that delegates compilation
+// to the host runtime. UI uses this to inject row-level access filters; callers
+// that pass nil keep the legacy direct query.Compile behavior.
+func NewQueryFactoryWithCompiler(ctx context.Context, db QueryDB, reg QueryRegistry, compiler QueryCompiler) func(args []any) any {
 	return func(args []any) any {
 		return &queryProxy{
-			params: make(map[string]any),
-			db:     db,
-			reg:    reg,
-			ctx:    ctx,
+			params:   make(map[string]any),
+			db:       db,
+			reg:      reg,
+			ctx:      ctx,
+			compiler: compiler,
 		}
 	}
 }
@@ -114,14 +125,21 @@ func (q *queryProxy) execute() *Array {
 	if strings.TrimSpace(q.text) == "" {
 		panic(userError{Msg: "Запрос.Текст не задан"})
 	}
-	res, err := query.Compile(q.text, query.CompileOpts{
-		Params:      unwrapArrayParams(q.params),
-		Registers:   q.reg.Registers(),
-		Entities:    q.reg.Entities(),
-		InfoRegs:    q.reg.InfoRegisters(),
-		AccountRegs: q.reg.AccountRegisters(),
-		Dialect:     q.db.Dialect(),
-	})
+	params := unwrapArrayParams(q.params)
+	var res query.Result
+	var err error
+	if q.compiler != nil {
+		res, err = q.compiler(q.ctx, q.text, params)
+	} else {
+		res, err = query.Compile(q.text, query.CompileOpts{
+			Params:      params,
+			Registers:   q.reg.Registers(),
+			Entities:    q.reg.Entities(),
+			InfoRegs:    q.reg.InfoRegisters(),
+			AccountRegs: q.reg.AccountRegisters(),
+			Dialect:     q.db.Dialect(),
+		})
+	}
 	if err != nil {
 		panic(userError{Msg: "Ошибка запроса: " + err.Error()})
 	}
