@@ -1174,6 +1174,17 @@ func (tr *translator) genAccountTurnovers(ar *metadata.AccountRegister, args [][
 func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string, string, error) {
 	tableName := metadata.RegisterTableName(reg.Name)
 	alias := "остатки_" + strings.ToLower(reg.Name)
+
+	// План 80: быстрый путь для текущих остатков — читаем предрасчитанные итоги
+	// вместо SUM по всей истории движений. Только когда путь заведомо
+	// эквивалентен on-the-fly: итоги включены, нет момента времени и отбора
+	// (args пусты), у регистра нет атрибутов (их итоги не хранят) и нет активной
+	// строковой политики (её применяет обычный путь через rowFilterCondition).
+	if reg.TotalsEnabled() && len(reg.Attributes) == 0 &&
+		!anyArgTokens(args) && tr.sourceRowFilter("register", reg.Name) == nil {
+		return tr.genBalancesFromTotals(reg), alias, nil
+	}
+
 	dims := dimCols(reg.Dimensions)       // actual col names for GROUP BY / WHERE
 	selDims := dimSelCols(reg.Dimensions) // aliased names for SELECT
 
@@ -1224,6 +1235,29 @@ func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string,
 	}
 
 	return sb.String(), alias, nil
+}
+
+// anyArgTokens сообщает, есть ли у виртуальной таблицы непустые аргументы
+// (момент времени или условие отбора). Пусто → «текущие остатки».
+func anyArgTokens(args [][]tok) bool {
+	for _, a := range args {
+		if len(a) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// genBalancesFromTotals строит подзапрос текущих остатков из таблицы итогов.
+// Колонки совпадают с обычным genBalances (измерения + <ресурс>остаток), чтобы
+// внешний запрос не различал источник.
+func (tr *translator) genBalancesFromTotals(reg *metadata.Register) string {
+	cols := append([]string{}, dimSelCols(reg.Dimensions)...)
+	for _, r := range reg.Resources {
+		col := strings.ToLower(r.Name)
+		cols = append(cols, col+" AS "+col+"остаток")
+	}
+	return "SELECT " + strings.Join(cols, ", ") + " FROM " + metadata.RegisterTotalsTableName(reg.Name)
 }
 
 func (tr *translator) genTurnovers(reg *metadata.Register, args [][]tok) (string, string, error) {
