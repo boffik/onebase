@@ -55,16 +55,24 @@ func onTheFlyBalances(ctx context.Context, t *testing.T, db *DB, reg *metadata.R
 	return scanBalances(ctx, t, db, q, len(dims), len(reg.Resources))
 }
 
-// storedTotals читает содержимое таблицы итогов в тот же формат.
+// storedTotals читает содержимое таблицы итогов, агрегируя помесячные обороты в
+// текущий остаток (SUM по всем месяцам на кортеж измерений) — так его можно
+// сравнить с расчётом остатков на лету.
 func storedTotals(ctx context.Context, t *testing.T, db *DB, reg *metadata.Register) map[string][]float64 {
 	t.Helper()
 	dims := dimColNames(reg.Dimensions)
 	var sel []string
 	sel = append(sel, dims...)
 	for _, r := range reg.Resources {
-		sel = append(sel, metadata.ColumnName(r))
+		sel = append(sel, "SUM("+metadata.ColumnName(r)+")")
 	}
 	q := "SELECT " + strings.Join(sel, ", ") + " FROM " + metadata.RegisterTotalsTableName(reg.Name)
+	if len(dims) > 0 {
+		q += " GROUP BY " + strings.Join(dims, ", ")
+	}
+	// HAVING COUNT(*)>0 — как в onTheFlyBalances: для регистра без измерений
+	// (нет GROUP BY) агрегат по пустой таблице иначе дал бы фиктивную строку.
+	q += " HAVING COUNT(*) > 0"
 	return scanBalances(ctx, t, db, q, len(dims), len(reg.Resources))
 }
 

@@ -8,32 +8,51 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 )
 
-// Итоги регистра накопления (план 80, этап 1): таблица итоги_<рег> хранит
-// текущий чистый знаковый остаток ресурсов по каждому набору измерений.
-// Поддерживается в той же транзакции, что и движения (WriteMovements), поэтому
-// всегда согласована с рег_<рег>. Знаковая сумма зеркалит query.genBalances
-// дословно (`SUM(CASE WHEN вид_движения='Приход' THEN r ELSE -r END)`), чтобы
-// быстрый путь Остатки() давал тот же результат, что расчёт на лету.
+// Итоги регистра накопления (план 80): таблица итоги_<рег> хранит чистый знаковый
+// оборот ресурсов по каждому набору измерений ЗА МЕСЯЦ (колонка «месяц» —
+// строковый ключ YYYY-MM). Поддерживается в той же транзакции, что и движения
+// (WriteMovements), поэтому всегда согласована с рег_<рег>. Знаковая сумма
+// зеркалит query.genBalances дословно.
 //
-// Итоги независимы от времени: ускоряют текущие Остатки() (без момента) с
-// O(все движения) до O(число комбинаций измерений) и корректны при проведении
-// задним числом. Остатки на дату/ОстаткиИОбороты (периодические итоги) — этап 2.
+// Помесячные обороты обслуживают оба сценария:
+//   - текущие Остатки() = SUM оборотов по всем месяцам (этап 1);
+//   - Остатки(&Момент) = SUM оборотов месяцев ДО месяца момента + хвост
+//     движений внутри месяца момента (этап 2).
+// Месяц-ключ строк итогов совпадает по формату с time.Format("2006-01")
+// (YYYY-MM), поэтому границу момента можно вычислить в Go и сравнивать строки
+// лексикографически (хронологически для YYYY-MM), без диалектных дат в запросе.
 
-// signedResourceSum возвращает выражение знаковой суммы ресурса (как в
-// genBalances). alias — псевдоним колонки в INSERT ... SELECT.
+// totalsMonthCol — колонка месяц-ключа в таблице итогов (общий идентификатор с
+// query — см. metadata.RegisterTotalsMonthCol).
+const totalsMonthCol = metadata.RegisterTotalsMonthCol
+
+// monthKeyExpr — SQL-выражение месяц-ключа YYYY-MM для колонки периода. Формат
+// совпадает с Go time.Format("2006-01"), чтобы границы момента (вычисленные в Go)
+// сравнивались со строками итогов согласованно на обоих диалектах.
+func monthKeyExpr(d Dialect, col string) string {
+	if d.Name() == "sqlite" {
+		// substr(...,1,19) отсекает возможный хвост таймзоны у старых баз
+		// (как в query.periodTruncSQL), иначе strftime вернул бы NULL.
+		return "strftime('%Y-%m', substr(" + col + ",1,19))"
+	}
+	return "to_char(" + col + ", 'YYYY-MM')"
+}
+
+// signedResourceSum возвращает выражение знаковой суммы ресурса (как в genBalances).
 func signedResourceSum(col string) string {
 	return "SUM(CASE WHEN вид_движения = 'Приход' THEN " + col + " ELSE -" + col + " END)"
 }
 
-// CreateRegisterTotalsSQL — DDL таблицы итогов: измерения (ключ) + ресурсы
-// (числовой остаток). Ресурсы объявлены NUMERIC, чтобы на SQLite, где сырые
-// колонки регистра могут иметь TEXT-аффинность, хранить именно числа.
+// CreateRegisterTotalsSQL — DDL таблицы итогов: измерения + месяц (ключ) +
+// ресурсы (числовой оборот). Ресурсы NUMERIC, чтобы на SQLite, где сырые колонки
+// регистра могут иметь TEXT-аффинность, хранить именно числа.
 func CreateRegisterTotalsSQL(d Dialect, reg *metadata.Register) string {
 	table := metadata.RegisterTotalsTableName(reg.Name)
 	var cols []string
 	for _, f := range reg.Dimensions {
 		cols = append(cols, metadata.ColumnName(f)+" "+fieldType(d, f))
 	}
+	cols = append(cols, totalsMonthCol+" TEXT NOT NULL")
 	for _, f := range reg.Resources {
 		cols = append(cols, metadata.ColumnName(f)+" NUMERIC")
 	}
@@ -42,11 +61,9 @@ func CreateRegisterTotalsSQL(d Dialect, reg *metadata.Register) string {
 	sb.WriteString(table)
 	sb.WriteString(" (\n    ")
 	sb.WriteString(strings.Join(cols, ",\n    "))
-	if len(reg.Dimensions) > 0 {
-		sb.WriteString(",\n    PRIMARY KEY (")
-		sb.WriteString(strings.Join(dimColNames(reg.Dimensions), ", "))
-		sb.WriteString(")")
-	}
+	sb.WriteString(",\n    PRIMARY KEY (")
+	sb.WriteString(strings.Join(append(dimColNames(reg.Dimensions), totalsMonthCol), ", "))
+	sb.WriteString(")")
 	sb.WriteString("\n)")
 	return sb.String()
 }
@@ -59,16 +76,21 @@ func dimColNames(dims []metadata.Field) []string {
 	return names
 }
 
-// insertTotalsSelectSQL строит `INSERT INTO итоги (dims, res) SELECT dims,
-// signedSum(res) FROM рег [WHERE ...] [GROUP BY dims] HAVING COUNT(*)>0`.
-// where — уже готовое условие отбора (по кортежу измерений) или пусто.
-func insertTotalsSelectSQL(reg *metadata.Register, where string) string {
+// insertTotalsSelectSQL строит INSERT в итоги: группировка движений по
+// (измерения, месяц) со знаковой суммой ресурсов. where — условие отбора по
+// кортежу измерений (или пусто для полного пересчёта).
+func insertTotalsSelectSQL(d Dialect, reg *metadata.Register, where string) string {
 	totals := metadata.RegisterTotalsTableName(reg.Name)
 	src := metadata.RegisterTableName(reg.Name)
 	dims := dimColNames(reg.Dimensions)
+	monthExpr := monthKeyExpr(d, "period")
 
 	insertCols := append([]string{}, dims...)
+	insertCols = append(insertCols, totalsMonthCol)
 	selectCols := append([]string{}, dims...)
+	selectCols = append(selectCols, monthExpr)
+	groupCols := append([]string{}, dims...)
+	groupCols = append(groupCols, monthExpr)
 	for _, f := range reg.Resources {
 		col := metadata.ColumnName(f)
 		insertCols = append(insertCols, col)
@@ -88,20 +110,15 @@ func insertTotalsSelectSQL(reg *metadata.Register, where string) string {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(where)
 	}
-	if len(dims) > 0 {
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(strings.Join(dims, ", "))
-	}
-	// HAVING COUNT(*)>0 отсекает пустой агрегат (для регистра без измерений
-	// SELECT по пустому источнику вернул бы одну строку из NULL).
+	sb.WriteString(" GROUP BY ")
+	sb.WriteString(strings.Join(groupCols, ", "))
+	// HAVING COUNT(*)>0 отсекает пустой агрегат (для отбора без строк).
 	sb.WriteString(" HAVING COUNT(*) > 0")
 	return sb.String()
 }
 
 // ensureRegisterTotals создаёт таблицу итогов и наполняет её при первом
-// включении. Если итоги уже ведутся (строки есть) — только создаёт таблицу
-// (idempotent). Если итоги пусты, а движения есть — полный пересчёт (переход
-// существующего регистра на итоги).
+// включении. Если итоги уже ведутся — только создаёт таблицу (idempotent).
 func (db *DB) ensureRegisterTotals(ctx context.Context, reg *metadata.Register) error {
 	if _, err := db.Exec(ctx, CreateRegisterTotalsSQL(db.dialect, reg)); err != nil {
 		return fmt.Errorf("create totals table %s: %w", reg.Name, err)
@@ -124,8 +141,6 @@ func (db *DB) ensureRegisterTotals(ctx context.Context, reg *metadata.Register) 
 }
 
 // RecalcRegisterTotals полностью пересчитывает итоги регистра из движений.
-// Идемпотентно: DELETE всех строк + INSERT SELECT. Используется командой
-// recalc-totals и при первом включении итогов (миграция).
 func (db *DB) RecalcRegisterTotals(ctx context.Context, reg *metadata.Register) error {
 	if !reg.TotalsUsable() {
 		return nil
@@ -134,7 +149,7 @@ func (db *DB) RecalcRegisterTotals(ctx context.Context, reg *metadata.Register) 
 	if err := db.exec(ctx, "DELETE FROM "+totals); err != nil {
 		return fmt.Errorf("recalc totals %s: clear: %w", reg.Name, err)
 	}
-	if err := db.exec(ctx, insertTotalsSelectSQL(reg, "")); err != nil {
+	if err := db.exec(ctx, insertTotalsSelectSQL(db.dialect, reg, "")); err != nil {
 		return fmt.Errorf("recalc totals %s: fill: %w", reg.Name, err)
 	}
 	return nil
@@ -190,9 +205,9 @@ func (db *DB) distinctDimTuples(ctx context.Context, reg *metadata.Register, rec
 	return tuples, rows.Err()
 }
 
-// recomputeTupleTotals пересчитывает строку итогов для одного кортежа измерений:
-// удаляет её и заново считает из движений. Если движений для кортежа не осталось
-// — строка просто исчезает (остаток 0 = отсутствие строки, как в genBalances).
+// recomputeTupleTotals пересчитывает все помесячные строки итогов одного кортежа
+// измерений: удаляет их и заново считает из движений. Если движений для кортежа
+// не осталось — строки просто исчезают.
 func (db *DB) recomputeTupleTotals(ctx context.Context, reg *metadata.Register, tuple []any) error {
 	totals := metadata.RegisterTotalsTableName(reg.Name)
 	where, args := dimTupleWhere(db.dialect, reg.Dimensions, tuple, 1)
@@ -203,19 +218,16 @@ func (db *DB) recomputeTupleTotals(ctx context.Context, reg *metadata.Register, 
 	if err := db.exec(ctx, delSQL, args...); err != nil {
 		return fmt.Errorf("totals %s: delete tuple: %w", reg.Name, err)
 	}
-	// INSERT ... SELECT с тем же условием кортежа. Плейсхолдеры условия идут
-	// после — но условие ссылается на исходную таблицу, а значения те же.
 	insWhere, insArgs := dimTupleWhere(db.dialect, reg.Dimensions, tuple, 1)
-	if err := db.exec(ctx, insertTotalsSelectSQL(reg, insWhere), insArgs...); err != nil {
+	if err := db.exec(ctx, insertTotalsSelectSQL(db.dialect, reg, insWhere), insArgs...); err != nil {
 		return fmt.Errorf("totals %s: recompute tuple: %w", reg.Name, err)
 	}
 	return nil
 }
 
 // updateTotalsForRecorder поддерживает итоги после замены движений
-// регистратора: пересчитывает кортежи измерений, затронутые старыми (oldTuples,
-// снятыми до удаления) и новыми движениями. Вызывается из WriteMovements внутри
-// той же транзакции.
+// регистратора: пересчитывает кортежи измерений, затронутые старыми (снятыми до
+// удаления) и новыми движениями. Вызывается из WriteMovements в той же транзакции.
 func (db *DB) updateTotalsForRecorder(ctx context.Context, reg *metadata.Register, recorderType string, recorderID any, oldTuples [][]any) error {
 	newTuples, err := db.distinctDimTuples(ctx, reg, recorderType, recorderID)
 	if err != nil {
@@ -229,8 +241,7 @@ func (db *DB) updateTotalsForRecorder(ctx context.Context, reg *metadata.Registe
 	return nil
 }
 
-// dedupTuples убирает повторяющиеся кортежи (по строковому представлению
-// значений). Порядок значений в кортеже фиксирован (порядок измерений).
+// dedupTuples убирает повторяющиеся кортежи (по строковому представлению).
 func dedupTuples(tuples [][]any) [][]any {
 	seen := make(map[string]bool, len(tuples))
 	var out [][]any

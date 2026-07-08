@@ -323,6 +323,11 @@ func RegisterTotalsTableName(regName string) string {
 	return "итоги_" + strings.ToLower(regName)
 }
 
+// RegisterTotalsMonthCol — колонка месяц-ключа (YYYY-MM) в таблице итогов.
+// Итоги хранят помесячный оборот; ключ совпадает по формату с
+// time.Format("2006-01"), чтобы границу момента можно было вычислить в Go.
+const RegisterTotalsMonthCol = "месяц"
+
 func InfoRegTableName(regName string) string {
 	return "инфо_" + strings.ToLower(regName)
 }
