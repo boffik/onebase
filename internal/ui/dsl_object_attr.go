@@ -94,11 +94,11 @@ func (s *Server) objectAttributeValues(ctx context.Context, args []any) (any, er
 	if err != nil {
 		return nil, err
 	}
-	refs, ids, err := s.collectBulkObjectRefs(ctx, args[0], entity)
+	refs, _, err := s.collectBulkObjectRefs(ctx, args[0], entity)
 	if err != nil {
 		return nil, err
 	}
-	refs, ids, err = s.filterReadableBulkObjectRefs(ctx, entity, refs)
+	refs, ids, err := s.filterReadableBulkObjectRefs(ctx, entity, refs)
 	if err != nil {
 		return nil, err
 	}
