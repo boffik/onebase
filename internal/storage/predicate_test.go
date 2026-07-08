@@ -51,6 +51,84 @@ func TestListParamsRowFilterAppliesToListAndCount(t *testing.T) {
 	}
 }
 
+func TestReferencePredicateAppliesToListCountAndMemoryMatch(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "rls-ref.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	defer db.Close()
+	client := &metadata.Entity{
+		Name: "Клиент",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	order := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+			{Name: "Клиент", Type: metadata.FieldTypeString, RefEntity: client.Name},
+		},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{client, order}); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	allowedClient := uuid.New()
+	hiddenClient := uuid.New()
+	if err := db.Upsert(ctx, client.Name, allowedClient, map[string]any{"Наименование": "A", "Owner": "u1"}, client); err != nil {
+		t.Fatalf("upsert allowed client: %v", err)
+	}
+	if err := db.Upsert(ctx, client.Name, hiddenClient, map[string]any{"Наименование": "B", "Owner": "u2"}, client); err != nil {
+		t.Fatalf("upsert hidden client: %v", err)
+	}
+	allowedOrder := uuid.New()
+	hiddenOrder := uuid.New()
+	if err := db.Upsert(ctx, order.Name, allowedOrder, map[string]any{"Номер": "1", "Клиент": allowedClient.String()}, order); err != nil {
+		t.Fatalf("upsert allowed order: %v", err)
+	}
+	if err := db.Upsert(ctx, order.Name, hiddenOrder, map[string]any{"Номер": "2", "Клиент": hiddenClient.String()}, order); err != nil {
+		t.Fatalf("upsert hidden order: %v", err)
+	}
+	pred := &Predicate{
+		Field:     "Клиент",
+		RefEntity: client,
+		RefPredicate: &Predicate{
+			Field: "Owner",
+			Op:    "eq",
+			Value: "u1",
+		},
+	}
+	params := ListParams{RowFilter: pred}
+	rows, err := db.List(ctx, order.Name, order, params)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["Номер"] != "1" {
+		t.Fatalf("rows = %#v", rows)
+	}
+	total, err := db.CountList(ctx, order.Name, order, params)
+	if err != nil {
+		t.Fatalf("CountList: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total = %d, want 1", total)
+	}
+	row, err := db.GetByID(ctx, order.Name, allowedOrder, order)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !MatchPredicateWithRefs(row, pred, func(entity *metadata.Entity, id uuid.UUID) (map[string]any, bool) {
+		refRow, err := db.GetByID(ctx, entity.Name, id, entity)
+		return refRow, err == nil
+	}) {
+		t.Fatalf("allowed row must match reference predicate: %#v", row)
+	}
+}
+
 func TestPredicateValuesEqualDoesNotCoerceNumbersThroughBool(t *testing.T) {
 	if valuesEqual(7, 1) {
 		t.Fatal("7 must not equal 1 through bool coercion")

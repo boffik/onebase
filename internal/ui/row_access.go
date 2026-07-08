@@ -22,7 +22,7 @@ func (s *Server) rowDecision(ctx context.Context, entity *metadata.Entity, op st
 }
 
 func (s *Server) rowDecisionFor(ctx context.Context, kind, name, op string, meta *metadata.Entity) (access.Decision, error) {
-	return access.Decide(auth.UserFromContext(ctx), kind, name, op, meta)
+	return access.DecideWithLookup(auth.UserFromContext(ctx), kind, name, op, meta, s.reg)
 }
 
 func (s *Server) applyRowFilter(w http.ResponseWriter, r *http.Request, entity *metadata.Entity, op string, params storage.ListParams) (storage.ListParams, bool) {
@@ -52,7 +52,7 @@ func (s *Server) renderRowDecision(w http.ResponseWriter, r *http.Request, dec a
 		s.renderForbidden(w, r)
 		return false
 	}
-	if dec.Unrestricted || storage.MatchPredicate(row, dec.Predicate) {
+	if dec.Unrestricted || s.matchRowPredicate(r.Context(), row, dec.Predicate) {
 		return true
 	}
 	s.renderForbidden(w, r)
@@ -81,7 +81,7 @@ func (s *Server) rowAllowedID(w http.ResponseWriter, r *http.Request, entity *me
 		return true
 	}
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
-	if err != nil || !storage.MatchPredicate(row, dec.Predicate) {
+	if err != nil || !s.matchRowPredicate(r.Context(), row, dec.Predicate) {
 		s.renderForbidden(w, r)
 		return false
 	}
@@ -98,11 +98,11 @@ func (s *Server) rowAllowedUpdate(w http.ResponseWriter, r *http.Request, entity
 		return true
 	}
 	row, err := s.store.GetByID(r.Context(), entity.Name, id, entity)
-	if err != nil || !storage.MatchPredicate(row, dec.Predicate) {
+	if err != nil || !s.matchRowPredicate(r.Context(), row, dec.Predicate) {
 		s.renderForbidden(w, r)
 		return false
 	}
-	if !storage.MatchPredicate(storage.MergeRowFields(row, fields), dec.Predicate) {
+	if !s.matchRowPredicate(r.Context(), storage.MergeRowFields(row, fields), dec.Predicate) {
 		s.renderForbidden(w, r)
 		return false
 	}
@@ -148,7 +148,7 @@ func (s *Server) rowAllowsID(ctx context.Context, entity *metadata.Entity, op st
 		return true
 	}
 	row, err := s.store.GetByID(ctx, entity.Name, id, entity)
-	return err == nil && storage.MatchPredicate(row, dec.Predicate)
+	return err == nil && s.matchRowPredicate(ctx, row, dec.Predicate)
 }
 
 func (s *Server) rowAccessRestricted(ctx context.Context, entity *metadata.Entity, op string) bool {
@@ -163,7 +163,7 @@ func (s *Server) rowAllowsSelected(ctx context.Context, entity *metadata.Entity,
 	if err != nil || !dec.Allowed {
 		return false
 	}
-	return dec.Unrestricted || storage.MatchPredicate(row, dec.Predicate)
+	return dec.Unrestricted || s.matchRowPredicate(ctx, row, dec.Predicate)
 }
 
 func (s *Server) rowFilterFor(ctx context.Context, entity *metadata.Entity, op string, params storage.ListParams) (storage.ListParams, error) {
@@ -181,12 +181,13 @@ func (s *Server) rowFilterFor(ctx context.Context, entity *metadata.Entity, op s
 }
 
 func (s *Server) queryRowFilters(ctx context.Context) (map[query.SourceRef]*storage.Predicate, error) {
-	return access.QueryRowFilters(
+	return access.QueryRowFiltersWithLookup(
 		auth.UserFromContext(ctx),
 		s.reg.Entities(),
 		s.reg.Registers(),
 		s.reg.InfoRegisters(),
 		s.reg.AccountRegisters(),
+		s.reg,
 	)
 }
 
@@ -229,4 +230,23 @@ func (s *Server) compileDSLQueryWithRowAccess(ctx context.Context, text string, 
 
 func (s *Server) deniedQuerySource(ctx context.Context, sources []query.SourceRef) string {
 	return access.DeniedReadSource(auth.UserFromContext(ctx), sources)
+}
+
+func (s *Server) matchRowPredicate(ctx context.Context, row map[string]any, p *storage.Predicate) bool {
+	return storage.MatchPredicateWithRefs(row, p, func(entity *metadata.Entity, id uuid.UUID) (map[string]any, bool) {
+		if entity == nil {
+			return nil, false
+		}
+		refRow, err := s.store.GetByID(ctx, entity.Name, id, entity)
+		return refRow, err == nil
+	})
+}
+
+func (s *Server) autoFillRowAccessFields(ctx context.Context, entity *metadata.Entity, op string, fields map[string]any) error {
+	dec, err := s.rowDecision(ctx, entity, op)
+	if err != nil || !dec.Allowed || dec.Unrestricted {
+		return err
+	}
+	access.AutoFillPredicateFields(dec.Predicate, fields, entity)
+	return nil
 }

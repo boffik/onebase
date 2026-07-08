@@ -521,6 +521,16 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := s.autoFillRowAccessFields(r.Context(), entity, "write", obj.Fields); err != nil {
+		s.renderForbidden(w, r)
+		return
+	}
+	if entity.Posting && (action == "post" || action == "post_and_close") {
+		if err := s.autoFillRowAccessFields(r.Context(), entity, "post", obj.Fields); err != nil {
+			s.renderForbidden(w, r)
+			return
+		}
+	}
 	if !s.rowAllowed(w, r, entity, "write", obj.Fields) {
 		return
 	}

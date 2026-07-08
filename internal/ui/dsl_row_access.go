@@ -35,6 +35,13 @@ func (c dslRowAccessChecker) IsRowAccessRestricted(ctx context.Context, entity *
 	return c.s != nil && c.s.rowAccessRestricted(ctx, entity, op)
 }
 
+func (c dslRowAccessChecker) AutoFillRowAccess(ctx context.Context, entity *metadata.Entity, op string, fields map[string]any) error {
+	if c.s == nil || isTrustedDSLContext(ctx) {
+		return nil
+	}
+	return c.s.autoFillRowAccessFields(ctx, entity, op, fields)
+}
+
 func (s *Server) dslRowAccessChecker() interpreter.RowAccessChecker {
 	return dslRowAccessChecker{s: s}
 }
@@ -54,7 +61,7 @@ func (s *Server) checkDSLRowAccess(ctx context.Context, entity *metadata.Entity,
 		return nil
 	}
 	if id == uuid.Nil {
-		if storage.MatchPredicate(fields, dec.Predicate) {
+		if s.matchRowPredicate(ctx, fields, dec.Predicate) {
 			return nil
 		}
 		return interpreter.ErrRowAccessDenied
@@ -63,10 +70,10 @@ func (s *Server) checkDSLRowAccess(ctx context.Context, entity *metadata.Entity,
 	if err != nil {
 		return err
 	}
-	if !storage.MatchPredicate(row, dec.Predicate) {
+	if !s.matchRowPredicate(ctx, row, dec.Predicate) {
 		return interpreter.ErrRowAccessDenied
 	}
-	if fields != nil && !storage.MatchPredicate(storage.MergeRowFields(row, fields), dec.Predicate) {
+	if fields != nil && !s.matchRowPredicate(ctx, storage.MergeRowFields(row, fields), dec.Predicate) {
 		return interpreter.ErrRowAccessDenied
 	}
 	return nil

@@ -1402,7 +1402,7 @@ func CheckLintRowAccess(dir string, proj *project.Project, roles []*auth.Role) [
 							SuggestedFix: fmt.Sprintf("Добавьте `%s` в permissions.%s.%s или удалите эту row_access policy.", op, section, object),
 						})
 					}
-					if err := validateRoleRowPolicy(ops, op, raw, target.meta); err != nil {
+					if err := validateRoleRowPolicy(ops, op, raw, target.meta, projEntityLookup(proj)); err != nil {
 						issues = append(issues, Issue{
 							File:         file,
 							Object:       role.Name,
@@ -1485,15 +1485,36 @@ func roleFileLabels(dir string) map[string]string {
 	return out
 }
 
-func validateRoleRowPolicy(policies auth.RowPolicies, op string, raw auth.RowPolicy, meta *metadata.Entity) error {
+func validateRoleRowPolicy(policies auth.RowPolicies, op string, raw auth.RowPolicy, meta *metadata.Entity, lookup access.EntityLookup) error {
 	if raw.SameAs != "" {
 		if err := validateRowPolicySameAs(policies, op); err != nil {
 			return err
 		}
 		resolved, _ := policies.Resolve(op)
-		return access.ValidatePolicy(resolved, meta)
+		return access.ValidatePolicyWithLookup(resolved, meta, lookup)
 	}
-	return access.ValidatePolicy(raw, meta)
+	return access.ValidatePolicyWithLookup(raw, meta, lookup)
+}
+
+type projectEntityLookup project.Project
+
+func projEntityLookup(proj *project.Project) access.EntityLookup {
+	if proj == nil {
+		return nil
+	}
+	return (*projectEntityLookup)(proj)
+}
+
+func (p *projectEntityLookup) GetEntity(name string) *metadata.Entity {
+	if p == nil {
+		return nil
+	}
+	for _, ent := range p.Entities {
+		if ent != nil && strings.EqualFold(ent.Name, name) {
+			return ent
+		}
+	}
+	return nil
 }
 
 func validateRowPolicySameAs(policies auth.RowPolicies, op string) error {

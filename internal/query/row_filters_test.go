@@ -37,6 +37,45 @@ func TestCompile_RowFiltersSimpleSourceAlias(t *testing.T) {
 	}
 }
 
+func TestCompile_RowFiltersReferenceAttribute(t *testing.T) {
+	client := &metadata.Entity{
+		Name:   "Клиент",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Owner", Type: metadata.FieldTypeString}},
+	}
+	order := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Клиент", Type: metadata.FieldTypeString, RefEntity: client.Name},
+		},
+	}
+	res, err := query.Compile(`ВЫБРАТЬ З.Ссылка ИЗ Документ.Заказ КАК З`, query.CompileOpts{
+		Entities: []*metadata.Entity{order, client},
+		Dialect:  storage.SQLiteDialect{},
+		RowFilters: map[query.SourceRef]*storage.Predicate{
+			{Kind: "document", Name: order.Name}: {
+				Field:     "Клиент",
+				RefEntity: client,
+				RefPredicate: &storage.Predicate{
+					Field: "Owner",
+					Op:    "eq",
+					Value: "u",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(res.SQL, "EXISTS (SELECT 1 FROM клиент rls_ref WHERE rls_ref.id = з.клиент_id AND (rls_ref.owner = ?))") {
+		t.Fatalf("reference row filter must compile to EXISTS, got:\n%s", res.SQL)
+	}
+	if len(res.Args) != 1 || res.Args[0] != "u" {
+		t.Fatalf("args = %#v, want owner value", res.Args)
+	}
+}
+
 func TestCompile_RowFiltersInsertedBeforeOrder(t *testing.T) {
 	cat := &metadata.Entity{
 		Name:   "Товар",

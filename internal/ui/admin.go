@@ -15,7 +15,7 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
-var adminTmpl = template.Must(template.New("admin").Parse(tplAdminUsers + tplAdminUserCard + tplAdminUserForm + tplAdminPasswd + tplAdminSessions + tplAdminAPITokens + tplAdminCleanup + tplAdminRoles + tplAdminUserRoles + tplAdminAudit + tplAdminWebhooks))
+var adminTmpl = template.Must(template.New("admin").Parse(tplAdminUsers + tplAdminUserCard + tplAdminUserForm + tplAdminPasswd + tplAdminSessions + tplAdminAPITokens + tplAdminCleanup + tplAdminRoles + tplAdminUserRoles + tplAdminAudit + tplAdminWebhooks + tplAdminRLS))
 
 const tplAdminUsers = `{{define "admin-users"}}` + adminHead + `
 <main>
@@ -1289,6 +1289,58 @@ const tplAdminWebhooks = `{{define "admin-webhooks"}}` + adminHead + `
 {{else}}
   <p class="empty">Вызовов веб-хуков ещё не было. Веб-хуки настраиваются в config/app.yaml (блок webhooks).</p>
 {{end}}
+</div>
+</main></body></html>
+{{end}}`
+
+const tplAdminRLS = `{{define "admin-rls"}}` + adminHead + `
+<main>
+<div class="row-top" style="max-width:1180px">
+  <h2>Диагностика RLS</h2>
+</div>
+
+<div class="card" style="max-width:1180px;margin-bottom:20px">
+<h3 style="font-size:16px;margin-bottom:12px;color:#1e293b">Row policies</h3>
+{{if .Rows}}
+<table style="font-size:13px">
+<thead><tr>
+  <th>Роль</th><th>Раздел</th><th>Объект</th><th>Операция</th><th>Field</th><th>Право</th><th>Статус</th><th>Auto-fill</th><th>Ошибка</th>
+</tr></thead>
+<tbody>
+{{range .Rows}}
+<tr>
+  <td style="font-weight:600">{{.Role}}</td>
+  <td>{{.Section}}</td>
+  <td>{{.Kind}} {{.Object}}</td>
+  <td><code>{{.Op}}</code></td>
+  <td><code>{{.Field}}</code></td>
+  <td>{{if .Permission}}<span style="color:#16a34a">да</span>{{else}}<span style="color:#dc2626">нет</span>{{end}}</td>
+  <td>{{if eq .Status "active"}}<span style="color:#16a34a">active</span>{{else if eq .Status "ignored"}}<span style="color:#b45309">ignored</span>{{else}}<span style="color:#dc2626">{{.Status}}</span>{{end}}</td>
+  <td>{{.AutoFill}}</td>
+  <td style="color:#dc2626;max-width:360px">{{.Error}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p class="empty">Row policies не настроены.</p>
+{{end}}
+</div>
+
+<div class="card" style="max-width:900px">
+<h3 style="font-size:16px;margin-bottom:12px;color:#1e293b">DSL paths</h3>
+<table style="font-size:13px">
+<thead><tr><th>Путь</th><th>Режим</th><th>Поведение</th></tr></thead>
+<tbody>
+{{range .DSLPaths}}
+<tr>
+  <td style="font-weight:600">{{.Path}}</td>
+  <td>{{if eq .Mode "trusted"}}<span style="color:#b45309">trusted</span>{{else}}<span style="color:#16a34a">user</span>{{end}}</td>
+  <td>{{.Detail}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
 </div>
 </main></body></html>
 {{end}}`

@@ -313,6 +313,111 @@ func TestAPI_RowAccessFiltersListAndBlocksDirectRow(t *testing.T) {
 	}
 }
 
+func TestAPI_RowAccessAutoFillsOwnerOnCreate(t *testing.T) {
+	cat := &metadata.Entity{
+		Name: "Товар",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{cat}, nil)
+	user := apiUser("u", auth.Permission{
+		Catalogs: map[string][]string{cat.Name: {"write", "read"}},
+		RowAccess: auth.RowAccess{Catalogs: map[string]auth.RowPolicies{
+			cat.Name: {
+				"write": {Field: "Owner", Op: "eq", Value: auth.RowValue{User: "login"}},
+				"read":  {SameAs: "write"},
+			},
+		}},
+	})
+	req := withUser(reqWithEntity(http.MethodPost, "/catalogs/Товар", []byte(`{"Наименование":"A"}`), map[string]string{"entity": cat.Name}, nil), user)
+	rec := httptest.NewRecorder()
+	h.createObject(metadata.KindCatalog)(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var res map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	id, err := uuid.Parse(res["id"])
+	if err != nil {
+		t.Fatalf("response id = %q", res["id"])
+	}
+	row, err := h.store.GetByID(ctx, cat.Name, id, cat)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if row["Owner"] != "u" {
+		t.Fatalf("auto-filled owner = %#v, want u", row["Owner"])
+	}
+}
+
+func TestAPI_RowAccessReferencePredicate(t *testing.T) {
+	client := &metadata.Entity{
+		Name: "Клиент",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	order := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+			{Name: "Клиент", Type: metadata.FieldTypeString, RefEntity: client.Name},
+		},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{client, order}, nil)
+	allowedClient := uuid.New()
+	hiddenClient := uuid.New()
+	if err := h.store.Upsert(ctx, client.Name, allowedClient, map[string]any{"Наименование": "A", "Owner": "u"}, client); err != nil {
+		t.Fatalf("upsert allowed client: %v", err)
+	}
+	if err := h.store.Upsert(ctx, client.Name, hiddenClient, map[string]any{"Наименование": "B", "Owner": "other"}, client); err != nil {
+		t.Fatalf("upsert hidden client: %v", err)
+	}
+	allowedOrder := uuid.New()
+	hiddenOrder := uuid.New()
+	if err := h.store.Upsert(ctx, order.Name, allowedOrder, map[string]any{"Номер": "1", "Клиент": allowedClient.String()}, order); err != nil {
+		t.Fatalf("upsert allowed order: %v", err)
+	}
+	if err := h.store.Upsert(ctx, order.Name, hiddenOrder, map[string]any{"Номер": "2", "Клиент": hiddenClient.String()}, order); err != nil {
+		t.Fatalf("upsert hidden order: %v", err)
+	}
+	user := apiUser("u", auth.Permission{
+		Documents: map[string][]string{order.Name: {"read"}},
+		RowAccess: auth.RowAccess{Documents: map[string]auth.RowPolicies{
+			order.Name: {"read": {Field: "Клиент.Owner", Op: "eq", Value: auth.RowValue{User: "login"}}},
+		}},
+	})
+
+	listReq := withUser(reqWithEntity(http.MethodGet, "/documents/Заказ", nil, map[string]string{"entity": order.Name}, nil), user)
+	listRec := httptest.NewRecorder()
+	h.listObjects(metadata.KindDocument)(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(listRec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["Номер"] != "1" {
+		t.Fatalf("rows = %#v", rows)
+	}
+
+	getReq := withUser(reqWithEntity(http.MethodGet, "/documents/Заказ/"+hiddenOrder.String(), nil, map[string]string{"entity": order.Name, "id": hiddenOrder.String()}, nil), user)
+	getRec := httptest.NewRecorder()
+	h.getObject(metadata.KindDocument)(getRec, getReq)
+	if getRec.Code != http.StatusForbidden {
+		t.Fatalf("hidden direct get status = %d, want 403; body=%s", getRec.Code, getRec.Body.String())
+	}
+}
+
 func TestAPI_RBAC_UpdatePostActionRequiresPost(t *testing.T) {
 	doc := &metadata.Entity{
 		Name:    "Поступление",

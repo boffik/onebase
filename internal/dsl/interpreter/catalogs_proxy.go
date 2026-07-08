@@ -98,6 +98,7 @@ type ManagerCaller interface {
 type RowAccessChecker interface {
 	CheckRowAccess(ctx context.Context, entity *metadata.Entity, op string, id uuid.UUID, fields map[string]any) error
 	IsRowAccessRestricted(ctx context.Context, entity *metadata.Entity, op string) bool
+	AutoFillRowAccess(ctx context.Context, entity *metadata.Entity, op string, fields map[string]any) error
 }
 
 // CtxSource предоставляет «живой» контекст. Для обычного запуска это
@@ -504,6 +505,11 @@ func (w *CatalogRecordWriter) checkReadAccess(id uuid.UUID) error {
 func (w *CatalogRecordWriter) checkWriteAccess() error {
 	if w.access == nil {
 		return nil
+	}
+	if strings.TrimSpace(w.idStr) == "" {
+		if err := w.access.AutoFillRowAccess(w.ctx(), w.entity, "write", w.fields); err != nil {
+			return err
+		}
 	}
 	id := uuid.Nil
 	if strings.TrimSpace(w.idStr) != "" {

@@ -26,6 +26,7 @@ var adminNavLinks = []string{
 	"/ui/admin/sessions",
 	"/ui/admin/api-tokens",
 	"/ui/admin/audit",
+	"/ui/admin/rls",
 	"/ui/admin/scheduled",
 	"/ui/delete-marked",
 	"/ui/admin/cleanup",

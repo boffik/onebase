@@ -12,15 +12,15 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 )
 
-func rowDecision(ctx context.Context, entity *metadata.Entity, op string) (access.Decision, error) {
+func (h *handler) rowDecision(ctx context.Context, entity *metadata.Entity, op string) (access.Decision, error) {
 	if entity == nil {
 		return access.Decision{}, nil
 	}
-	return access.Decide(auth.UserFromContext(ctx), string(entity.Kind), entity.Name, op, entity)
+	return access.DecideWithLookup(auth.UserFromContext(ctx), string(entity.Kind), entity.Name, op, entity, h.reg)
 }
 
-func applyRowFilter(ctx context.Context, entity *metadata.Entity, op string, params storage.ListParams) (storage.ListParams, error) {
-	dec, err := rowDecision(ctx, entity, op)
+func (h *handler) applyRowFilter(ctx context.Context, entity *metadata.Entity, op string, params storage.ListParams) (storage.ListParams, error) {
+	dec, err := h.rowDecision(ctx, entity, op)
 	if err != nil {
 		return params, err
 	}
@@ -34,15 +34,15 @@ func applyRowFilter(ctx context.Context, entity *metadata.Entity, op string, par
 }
 
 func (h *handler) rowAllowed(ctx context.Context, entity *metadata.Entity, op string, row map[string]any) bool {
-	dec, err := rowDecision(ctx, entity, op)
+	dec, err := h.rowDecision(ctx, entity, op)
 	if err != nil || !dec.Allowed {
 		return false
 	}
-	return dec.Unrestricted || storage.MatchPredicate(row, dec.Predicate)
+	return dec.Unrestricted || h.matchRowPredicate(ctx, row, dec.Predicate)
 }
 
 func (h *handler) rowAllowedID(ctx context.Context, entity *metadata.Entity, op string, id uuid.UUID) bool {
-	dec, err := rowDecision(ctx, entity, op)
+	dec, err := h.rowDecision(ctx, entity, op)
 	if err != nil || !dec.Allowed {
 		return false
 	}
@@ -50,11 +50,11 @@ func (h *handler) rowAllowedID(ctx context.Context, entity *metadata.Entity, op 
 		return true
 	}
 	row, err := h.store.GetByID(ctx, entity.Name, id, entity)
-	return err == nil && storage.MatchPredicate(row, dec.Predicate)
+	return err == nil && h.matchRowPredicate(ctx, row, dec.Predicate)
 }
 
 func (h *handler) rowAllowedUpdate(ctx context.Context, entity *metadata.Entity, op string, id uuid.UUID, fields map[string]any) bool {
-	dec, err := rowDecision(ctx, entity, op)
+	dec, err := h.rowDecision(ctx, entity, op)
 	if err != nil || !dec.Allowed {
 		return false
 	}
@@ -62,19 +62,20 @@ func (h *handler) rowAllowedUpdate(ctx context.Context, entity *metadata.Entity,
 		return true
 	}
 	row, err := h.store.GetByID(ctx, entity.Name, id, entity)
-	if err != nil || !storage.MatchPredicate(row, dec.Predicate) {
+	if err != nil || !h.matchRowPredicate(ctx, row, dec.Predicate) {
 		return false
 	}
-	return storage.MatchPredicate(storage.MergeRowFields(row, fields), dec.Predicate)
+	return h.matchRowPredicate(ctx, storage.MergeRowFields(row, fields), dec.Predicate)
 }
 
 func (h *handler) compileQueryWithRowAccess(ctx context.Context, text string, params map[string]any) (query.Result, error) {
-	rowFilters, err := access.QueryRowFilters(
+	rowFilters, err := access.QueryRowFiltersWithLookup(
 		auth.UserFromContext(ctx),
 		h.reg.Entities(),
 		h.reg.Registers(),
 		h.reg.InfoRegisters(),
 		h.reg.AccountRegisters(),
+		h.reg,
 	)
 	if err != nil {
 		return query.Result{}, err
@@ -92,4 +93,23 @@ func (h *handler) compileQueryWithRowAccess(ctx context.Context, text string, pa
 
 func (h *handler) deniedQuerySource(ctx context.Context, sources []query.SourceRef) string {
 	return access.DeniedReadSource(auth.UserFromContext(ctx), sources)
+}
+
+func (h *handler) matchRowPredicate(ctx context.Context, row map[string]any, p *storage.Predicate) bool {
+	return storage.MatchPredicateWithRefs(row, p, func(entity *metadata.Entity, id uuid.UUID) (map[string]any, bool) {
+		if entity == nil {
+			return nil, false
+		}
+		refRow, err := h.store.GetByID(ctx, entity.Name, id, entity)
+		return refRow, err == nil
+	})
+}
+
+func (h *handler) autoFillRowAccessFields(ctx context.Context, entity *metadata.Entity, op string, fields map[string]any) error {
+	dec, err := h.rowDecision(ctx, entity, op)
+	if err != nil || !dec.Allowed || dec.Unrestricted {
+		return err
+	}
+	access.AutoFillPredicateFields(dec.Predicate, fields, entity)
+	return nil
 }

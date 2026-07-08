@@ -1,6 +1,8 @@
 package access
 
 import (
+	"strings"
+
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
@@ -17,12 +19,23 @@ func QueryRowFilters(
 	infoRegs []*metadata.InfoRegister,
 	accountRegs []*metadata.AccountRegister,
 ) (map[query.SourceRef]*storage.Predicate, error) {
+	return QueryRowFiltersWithLookup(u, entities, registers, infoRegs, accountRegs, entitySliceLookup(entities))
+}
+
+func QueryRowFiltersWithLookup(
+	u *auth.User,
+	entities []*metadata.Entity,
+	registers []*metadata.Register,
+	infoRegs []*metadata.InfoRegister,
+	accountRegs []*metadata.AccountRegister,
+	lookup EntityLookup,
+) (map[query.SourceRef]*storage.Predicate, error) {
 	if u == nil || u.IsAdmin {
 		return nil, nil
 	}
 	out := map[query.SourceRef]*storage.Predicate{}
 	add := func(kind, name string, meta *metadata.Entity) error {
-		dec, err := Decide(u, kind, name, "read", meta)
+		dec, err := DecideWithLookup(u, kind, name, "read", meta, lookup)
 		if err != nil {
 			return err
 		}
@@ -63,6 +76,17 @@ func QueryRowFilters(
 		return nil, nil
 	}
 	return out, nil
+}
+
+type entitySliceLookup []*metadata.Entity
+
+func (l entitySliceLookup) GetEntity(name string) *metadata.Entity {
+	for _, e := range l {
+		if e != nil && strings.EqualFold(e.Name, name) {
+			return e
+		}
+	}
+	return nil
 }
 
 // DeniedReadSource returns the first query source the user cannot read.

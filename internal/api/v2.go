@@ -78,7 +78,7 @@ func (h *handler) listObjectsV2(kind metadata.Kind) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error(), "", 0)
 			return
 		}
-		params, err = applyRowFilter(r.Context(), entity, "read", params)
+		params, err = h.applyRowFilter(r.Context(), entity, "read", params)
 		if err != nil {
 			writeError(w, http.StatusForbidden, "forbidden", "", 0)
 			return
@@ -155,6 +155,16 @@ func (h *handler) createObjectV2(kind metadata.Kind) http.HandlerFunc {
 		}
 		if kind == metadata.KindDocument {
 			ensureDocumentNumber(r.Context(), h.store, entity, body.Fields)
+		}
+		if err := h.autoFillRowAccessFields(r.Context(), entity, "write", body.Fields); err != nil {
+			writeError(w, http.StatusForbidden, "forbidden", "", 0)
+			return
+		}
+		if kind == metadata.KindDocument && isPostAction(body.Action) {
+			if err := h.autoFillRowAccessFields(r.Context(), entity, "post", body.Fields); err != nil {
+				writeError(w, http.StatusForbidden, "forbidden", "", 0)
+				return
+			}
 		}
 		if !h.rowAllowed(r.Context(), entity, "write", body.Fields) {
 			writeError(w, http.StatusForbidden, "forbidden", "", 0)

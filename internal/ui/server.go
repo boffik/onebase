@@ -284,6 +284,7 @@ func (s *Server) Mount(r chi.Router) {
 
 	// Admin: audit log
 	r.Get("/ui/admin/audit", s.adminAudit)
+	r.Get("/ui/admin/rls", s.adminRLSDiagnostics)
 	r.Get("/ui/admin/webhooks", s.adminWebhooks)
 	r.Get("/ui/{kind}/{entity}/{id}/history", s.recordHistory)
 

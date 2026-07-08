@@ -13,13 +13,15 @@ import (
 // It is intentionally not SQL text: callers provide field/op/value and storage
 // renders placeholders for the active dialect.
 type Predicate struct {
-	Any    []Predicate
-	All    []Predicate
-	Not    *Predicate
-	Field  string
-	Op     string
-	Value  any
-	Values []any
+	Any          []Predicate
+	All          []Predicate
+	Not          *Predicate
+	Field        string
+	Op           string
+	Value        any
+	Values       []any
+	RefEntity    *metadata.Entity
+	RefPredicate *Predicate
 }
 
 // PredicateSQL compiles p to a SQL WHERE fragment and arguments. nextArg is
@@ -53,6 +55,9 @@ func predicateSQL(d Dialect, entity *metadata.Entity, p Predicate, nextArg int, 
 			return inner, args, next, err
 		}
 		return "NOT (" + inner + ")", args, next, nil
+	}
+	if p.RefPredicate != nil {
+		return referencePredicateSQL(d, entity, p, nextArg, qualifier)
 	}
 	col, field, ok := predicateColumn(entity, p.Field)
 	if !ok {
@@ -105,6 +110,31 @@ func predicateSQL(d Dialect, entity *metadata.Entity, p Predicate, nextArg int, 
 	default:
 		return "", nil, nextArg, fmt.Errorf("unknown row predicate op %q", p.Op)
 	}
+}
+
+func referencePredicateSQL(d Dialect, entity *metadata.Entity, p Predicate, nextArg int, qualifier string) (string, []any, int, error) {
+	if p.RefEntity == nil {
+		return "", nil, nextArg, fmt.Errorf("row predicate reference field %q has no target entity metadata", p.Field)
+	}
+	col, field, ok := predicateColumn(entity, p.Field)
+	if !ok {
+		return "", nil, nextArg, fmt.Errorf("unknown row predicate field %q", p.Field)
+	}
+	if field == nil || field.RefEntity == "" {
+		return "", nil, nextArg, fmt.Errorf("row predicate field %q is not a reference", p.Field)
+	}
+	col = qualifyPredicateColumn(qualifier, col)
+	alias := "rls_ref"
+	inner, args, next, err := predicateSQL(d, p.RefEntity, *p.RefPredicate, nextArg, alias)
+	if err != nil {
+		return "", nil, nextArg, err
+	}
+	if inner == "" {
+		return "", args, next, nil
+	}
+	sql := fmt.Sprintf("EXISTS (SELECT 1 FROM %s %s WHERE %s.id = %s AND (%s))",
+		metadata.TableName(p.RefEntity.Name), alias, alias, col, inner)
+	return sql, args, next, nil
 }
 
 func predicateGroupSQL(d Dialect, entity *metadata.Entity, items []Predicate, join string, nextArg int, qualifier string) (string, []any, int, error) {
@@ -246,6 +276,8 @@ func predicateStringLikeField(field *metadata.Field) bool {
 
 func parseAnyUUID(v any) (uuid.UUID, bool) {
 	switch t := v.(type) {
+	case uuidProvider:
+		return parseAnyUUID(t.GetRefUUID())
 	case uuid.UUID:
 		return t, true
 	case string:
@@ -282,10 +314,16 @@ func parseAnyBool(v any) (bool, bool) {
 // MatchPredicate evaluates p against an already loaded row. It is used for
 // direct get/update/delete checks where the row is loaded by id.
 func MatchPredicate(row map[string]any, p *Predicate) bool {
+	return MatchPredicateWithRefs(row, p, nil)
+}
+
+type PredicateRefResolver func(entity *metadata.Entity, id uuid.UUID) (map[string]any, bool)
+
+func MatchPredicateWithRefs(row map[string]any, p *Predicate, resolver PredicateRefResolver) bool {
 	if p == nil {
 		return true
 	}
-	return matchPredicate(row, *p)
+	return matchPredicate(row, *p, resolver)
 }
 
 func MergeRowFields(row, fields map[string]any) map[string]any {
@@ -304,10 +342,10 @@ func MergeRowFields(row, fields map[string]any) map[string]any {
 	return out
 }
 
-func matchPredicate(row map[string]any, p Predicate) bool {
+func matchPredicate(row map[string]any, p Predicate, resolver PredicateRefResolver) bool {
 	if len(p.All) > 0 {
 		for _, item := range p.All {
-			if !matchPredicate(row, item) {
+			if !matchPredicate(row, item, resolver) {
 				return false
 			}
 		}
@@ -315,14 +353,29 @@ func matchPredicate(row map[string]any, p Predicate) bool {
 	}
 	if len(p.Any) > 0 {
 		for _, item := range p.Any {
-			if matchPredicate(row, item) {
+			if matchPredicate(row, item, resolver) {
 				return true
 			}
 		}
 		return false
 	}
 	if p.Not != nil {
-		return !matchPredicate(row, *p.Not)
+		return !matchPredicate(row, *p.Not, resolver)
+	}
+	if p.RefPredicate != nil {
+		if resolver == nil || p.RefEntity == nil {
+			return false
+		}
+		actual, ok := rowValue(row, p.Field)
+		if !ok {
+			return false
+		}
+		id, ok := parseAnyUUID(actual)
+		if !ok {
+			return false
+		}
+		refRow, ok := resolver(p.RefEntity, id)
+		return ok && matchPredicate(refRow, *p.RefPredicate, resolver)
 	}
 	actual, ok := rowValue(row, p.Field)
 	op := strings.ToLower(strings.TrimSpace(p.Op))

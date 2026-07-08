@@ -111,3 +111,78 @@ func TestTrustedOnWriteDSL_BypassesRowAccess(t *testing.T) {
 		t.Fatalf("trusted OnWrite query count = %v, want 2", got)
 	}
 }
+
+func TestDSLCatalogWrite_AutoFillsOwner(t *testing.T) {
+	s, ctx, cat := dslRLSTestServer(t)
+	userCtx := auth.ContextWithUser(ctx, &auth.User{Login: "u", Roles: []*auth.Role{{
+		Permissions: auth.Permission{
+			Catalogs: map[string][]string{cat.Name: {"read", "write"}},
+			RowAccess: auth.RowAccess{Catalogs: map[string]auth.RowPolicies{
+				cat.Name: {
+					"read":  {Field: "Owner", Op: "eq", Value: auth.RowValue{User: "login"}},
+					"write": {SameAs: "read"},
+				},
+			}},
+		},
+	}}})
+
+	result := runDSLRowAccessFunc(t, s, userCtx, `Функция Проверка() Экспорт
+  Т = Справочники.Товар.Создать();
+  Т.Наименование = "Created";
+  С = Т.Записать();
+  Возврат ЗначениеРеквизитаОбъекта(С, "Owner");
+КонецФункции`)
+	if result != "u" {
+		t.Fatalf("auto-filled owner = %v, want u", result)
+	}
+}
+
+func TestDSLQuery_RowAccessReferencePredicate(t *testing.T) {
+	client := &metadata.Entity{
+		Name: "Клиент", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "Owner", Type: metadata.FieldTypeString},
+		},
+	}
+	order := &metadata.Entity{
+		Name: "Заказ", Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+			{Name: "Клиент", Type: metadata.FieldTypeString, RefEntity: client.Name},
+		},
+	}
+	s, ctx := newSubmitTestServer(t, []*metadata.Entity{client, order})
+	allowedClient := uuid.New()
+	hiddenClient := uuid.New()
+	if err := s.store.Upsert(ctx, client.Name, allowedClient, map[string]any{"Наименование": "A", "Owner": "u"}, client); err != nil {
+		t.Fatalf("upsert allowed client: %v", err)
+	}
+	if err := s.store.Upsert(ctx, client.Name, hiddenClient, map[string]any{"Наименование": "B", "Owner": "other"}, client); err != nil {
+		t.Fatalf("upsert hidden client: %v", err)
+	}
+	if err := s.store.Upsert(ctx, order.Name, uuid.New(), map[string]any{"Номер": "1", "Клиент": allowedClient.String()}, order); err != nil {
+		t.Fatalf("upsert allowed order: %v", err)
+	}
+	if err := s.store.Upsert(ctx, order.Name, uuid.New(), map[string]any{"Номер": "2", "Клиент": hiddenClient.String()}, order); err != nil {
+		t.Fatalf("upsert hidden order: %v", err)
+	}
+	userCtx := auth.ContextWithUser(ctx, &auth.User{Login: "u", Roles: []*auth.Role{{
+		Permissions: auth.Permission{
+			Documents: map[string][]string{order.Name: {"read"}},
+			RowAccess: auth.RowAccess{Documents: map[string]auth.RowPolicies{
+				order.Name: {"read": {Field: "Клиент.Owner", Op: "eq", Value: auth.RowValue{User: "login"}}},
+			}},
+		},
+	}}})
+
+	result := runDSLRowAccessFunc(t, s, userCtx, `Функция Проверка() Экспорт
+  З = Новый Запрос;
+  З.Текст = "ВЫБРАТЬ Номер ИЗ Документ.Заказ";
+  Р = З.Выполнить();
+  Возврат Р.Количество();
+КонецФункции`)
+	if result != float64(1) {
+		t.Fatalf("DSL query row count = %v, want 1", result)
+	}
+}

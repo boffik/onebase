@@ -449,7 +449,7 @@ func (r *Runner) runQuery(ctx context.Context, w *metadata.Widget) ([]map[string
 	}
 	params = scheduler.ResolveParamTemplates(params)
 
-	rowFilters, err := access.QueryRowFilters(r.User, r.Reg.Entities(), r.Reg.Registers(), r.Reg.InfoRegisters(), r.Reg.AccountRegisters())
+	rowFilters, err := access.QueryRowFiltersWithLookup(r.User, r.Reg.Entities(), r.Reg.Registers(), r.Reg.InfoRegisters(), r.Reg.AccountRegisters(), r.Reg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -476,7 +476,7 @@ func (r *Runner) canRead(kind, name string) bool {
 }
 
 func (r *Runner) rowAllowedID(ctx context.Context, entity *metadata.Entity, op string, id uuid.UUID) bool {
-	dec, err := access.Decide(r.User, string(entity.Kind), entity.Name, op, entity)
+	dec, err := access.DecideWithLookup(r.User, string(entity.Kind), entity.Name, op, entity, r.Reg)
 	if err != nil || !dec.Allowed {
 		return false
 	}
@@ -484,7 +484,13 @@ func (r *Runner) rowAllowedID(ctx context.Context, entity *metadata.Entity, op s
 		return true
 	}
 	row, err := r.Store.GetByID(ctx, entity.Name, id, entity)
-	return err == nil && storage.MatchPredicate(row, dec.Predicate)
+	return err == nil && storage.MatchPredicateWithRefs(row, dec.Predicate, func(entity *metadata.Entity, id uuid.UUID) (map[string]any, bool) {
+		if entity == nil {
+			return nil, false
+		}
+		refRow, err := r.Store.GetByID(ctx, entity.Name, id, entity)
+		return refRow, err == nil
+	})
 }
 
 func (r *Runner) deniedQuerySource(sources []query.SourceRef) string {

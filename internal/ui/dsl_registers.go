@@ -121,7 +121,7 @@ func (p *accumRegProxy) filterRows(rows []map[string]any) ([]map[string]any, err
 	}
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		if storage.MatchPredicate(row, filter.RowFilter) {
+		if p.s.matchRowPredicate(p.ctx(), row, filter.RowFilter) {
 			out = append(out, row)
 		}
 	}

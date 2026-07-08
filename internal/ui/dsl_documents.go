@@ -371,6 +371,14 @@ func (w *docWriter) CallMethod(method string, args []any) any {
 		}
 		return w.ref()
 	case "провести", "post":
+		if w.accessID() == uuid.Nil {
+			if err := w.s.autoFillRowAccessFields(w.ctx(), w.entity, "write", w.obj.Fields); err != nil {
+				interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
+			}
+			if err := w.s.autoFillRowAccessFields(w.ctx(), w.entity, "post", w.obj.Fields); err != nil {
+				interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
+			}
+		}
 		if err := w.s.checkDSLRowAccess(w.ctx(), w.entity, "post", w.accessID(), w.obj.Fields); err != nil {
 			interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
 		}
@@ -518,6 +526,11 @@ func (w *docWriter) autoNumber() {
 // участвует в ней; иначе автокоммит.
 func (w *docWriter) write() error {
 	ctx := w.ctx()
+	if w.accessID() == uuid.Nil {
+		if err := w.s.autoFillRowAccessFields(ctx, w.entity, "write", w.obj.Fields); err != nil {
+			return err
+		}
+	}
 	if err := w.s.checkDSLRowAccess(ctx, w.entity, "write", w.accessID(), w.obj.Fields); err != nil {
 		return err
 	}

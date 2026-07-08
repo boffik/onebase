@@ -9,6 +9,12 @@ import (
 	"github.com/ivantit66/onebase/internal/query"
 )
 
+type testEntityLookup map[string]*metadata.Entity
+
+func (l testEntityLookup) GetEntity(name string) *metadata.Entity {
+	return l[name]
+}
+
 func dealEntity() *metadata.Entity {
 	return &metadata.Entity{
 		Name: "Сделка",
@@ -194,6 +200,58 @@ func TestDecide_UnknownUserAttrFailsClosed(t *testing.T) {
 	_, err := access.Decide(u, "document", "Сделка", "read", dealEntity())
 	if err == nil {
 		t.Fatal("policy with missing user_attr must fail closed")
+	}
+}
+
+func TestDecide_ReferenceAttributePolicy(t *testing.T) {
+	client := &metadata.Entity{
+		Name: "Клиент", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Owner", Type: metadata.FieldTypeString}},
+	}
+	order := &metadata.Entity{
+		Name: "Заказ", Kind: metadata.KindDocument,
+		Fields: []metadata.Field{{Name: "Клиент", Type: metadata.FieldTypeString, RefEntity: client.Name}},
+	}
+	policies := auth.RowPolicies{"read": {
+		Field: "Клиент.Owner",
+		Op:    "eq",
+		Value: auth.RowValue{User: "login"},
+	}}
+	u := &auth.User{Login: "ivan", Roles: []*auth.Role{docRole(order.Name, []string{"read"}, policies)}}
+	dec, err := access.DecideWithLookup(u, "document", order.Name, "read", order, testEntityLookup{client.Name: client})
+	if err != nil {
+		t.Fatalf("DecideWithLookup: %v", err)
+	}
+	if dec.Predicate == nil || dec.Predicate.RefEntity == nil || dec.Predicate.RefEntity.Name != client.Name {
+		t.Fatalf("predicate must target referenced entity, got %+v", dec.Predicate)
+	}
+	if dec.Predicate.Field != "Клиент" || dec.Predicate.RefPredicate == nil ||
+		dec.Predicate.RefPredicate.Field != "Owner" || dec.Predicate.RefPredicate.Value != "ivan" {
+		t.Fatalf("reference predicate = %+v", dec.Predicate)
+	}
+}
+
+func TestAutoFillPredicateFields_SimpleOwner(t *testing.T) {
+	meta := dealEntity()
+	policies := auth.RowPolicies{"write": {
+		Field: "Ответственный",
+		Op:    "eq",
+		Value: auth.RowValue{User: "login"},
+	}}
+	u := &auth.User{Login: "ivan", Roles: []*auth.Role{docRole("Сделка", []string{"write"}, policies)}}
+	dec, err := access.Decide(u, "document", "Сделка", "write", meta)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	fields := map[string]any{}
+	filled := access.AutoFillPredicateFields(dec.Predicate, fields, meta)
+	if len(filled) != 1 || filled[0] != "Ответственный" || fields["Ответственный"] != "ivan" {
+		t.Fatalf("filled=%v fields=%#v, want Ответственный=ivan", filled, fields)
+	}
+	fields["Ответственный"] = "other"
+	access.AutoFillPredicateFields(dec.Predicate, fields, meta)
+	if fields["Ответственный"] != "other" {
+		t.Fatalf("explicit owner must not be overwritten: %#v", fields)
 	}
 }
 

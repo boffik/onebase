@@ -28,18 +28,23 @@
   object-level и row-level checks; платформенные server hooks `OnWrite/OnPost`
   и серверные события форм помечены как trusted server-code и сохраняют доступ
   с текущим пользователем в `ТекущийПользователь()`.
+- условия по реквизитам ссылок в формате `Ссылка.Реквизит` компилируются в
+  SQL `EXISTS` и применяются также в прямых проверках по ID/update через
+  in-memory resolver;
+- auto-owner для создания: простые `field eq value` / `all`-комбинации в
+  `write`/`post` policy автоматически заполняют пустые поля перед проверкой,
+  но не перезаписывают явно переданное конфликтующее значение;
+- админская диагностика `/ui/admin/rls` показывает row policies, статус
+  компиляции, наличие object-level права, auto-fill поля и trusted/user DSL paths.
 
 ## Оставшиеся этапы
 
 - расширять alias-aware внедрение row predicates в query compiler для оставшихся
   форм запросов (`UNION`, более богатая диагностика источников);
-- расширения политик вроде условий по реквизитам ссылок и автоустановки владельца
-  при создании (`user_attr` уже поддержан для встроенных атрибутов пользователя и
-  host-provided `User.Attrs`);
-- расширить диагностику trusted/user DSL путей на отдельный экран/отчёт;
-- UI-редактор политик и отдельный diagnostics экран; базовые `onebase check
-  --lint` warnings `rls.*` уже проверяют unknown object, invalid policy и
-  policy без object-level права;
+- более сложные auto-owner cases для `any/not` остаются намеренно выключенными
+  до явной модели разрешения неоднозначностей;
+- UI-редактор политик; базовые `onebase check --lint` warnings `rls.*` уже
+  проверяют unknown object, invalid policy и policy без object-level права;
 - PostgreSQL native RLS как дополнительный defense-in-depth слой, не как
   единственный источник истины.
 
