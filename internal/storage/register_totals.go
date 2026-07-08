@@ -127,7 +127,7 @@ func (db *DB) ensureRegisterTotals(ctx context.Context, reg *metadata.Register) 
 // Идемпотентно: DELETE всех строк + INSERT SELECT. Используется командой
 // recalc-totals и при первом включении итогов (миграция).
 func (db *DB) RecalcRegisterTotals(ctx context.Context, reg *metadata.Register) error {
-	if !reg.TotalsEnabled() {
+	if !reg.TotalsUsable() {
 		return nil
 	}
 	totals := metadata.RegisterTotalsTableName(reg.Name)

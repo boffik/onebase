@@ -1180,7 +1180,7 @@ func (tr *translator) genBalances(reg *metadata.Register, args [][]tok) (string,
 	// эквивалентен on-the-fly: итоги включены, нет момента времени и отбора
 	// (args пусты), у регистра нет атрибутов (их итоги не хранят) и нет активной
 	// строковой политики (её применяет обычный путь через rowFilterCondition).
-	if reg.TotalsEnabled() && len(reg.Attributes) == 0 &&
+	if reg.TotalsUsable() &&
 		!anyArgTokens(args) && tr.sourceRowFilter("register", reg.Name) == nil {
 		return tr.genBalancesFromTotals(reg), alias, nil
 	}

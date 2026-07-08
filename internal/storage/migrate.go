@@ -80,7 +80,7 @@ func (db *DB) MigrateRegisters(ctx context.Context, registers []*metadata.Regist
 		if err := db.ensureRegisterIndexes(ctx, reg); err != nil {
 			return fmt.Errorf("migrate register %s indexes: %w", reg.Name, err)
 		}
-		if reg.TotalsEnabled() {
+		if reg.TotalsUsable() {
 			if err := db.ensureRegisterTotals(ctx, reg); err != nil {
 				return fmt.Errorf("migrate register %s totals: %w", reg.Name, err)
 			}

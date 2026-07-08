@@ -135,3 +135,25 @@ func TestBalancesTotals_MomentFallsBack(t *testing.T) {
 		t.Errorf("Остатки(&Момент) должен читать движения %s, SQL: %s", metadata.RegisterTableName(reg.Name), r.SQL)
 	}
 }
+
+// Регистр с атрибутами не использует итоги (их таблица атрибуты не хранит):
+// Остатки() идёт обычным путём даже при totals.enabled — этап 1.
+func TestBalancesTotals_AttributesFallBack(t *testing.T) {
+	reg := &metadata.Register{
+		Name:       "ОстаткиСАтрибутом",
+		Dimensions: []metadata.Field{{Name: "Товар", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Кол", Type: metadata.FieldTypeNumber}},
+		Attributes: []metadata.Field{{Name: "Комментарий", Type: metadata.FieldTypeString}},
+		Totals:     metadata.RegisterTotals{Enabled: true},
+	}
+	r, err := query.Compile(
+		"ВЫБРАТЬ Товар, КолОстаток ИЗ РегистрНакопления.ОстаткиСАтрибутом.Остатки()",
+		query.CompileOpts{Registers: []*metadata.Register{reg}, Dialect: storage.SQLiteDialect{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(r.SQL, metadata.RegisterTotalsTableName(reg.Name)) {
+		t.Errorf("регистр с атрибутами не должен читать итоги, SQL: %s", r.SQL)
+	}
+}

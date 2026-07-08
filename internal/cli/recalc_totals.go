@@ -75,7 +75,7 @@ func runRecalcTotals(cmd *cobra.Command, _ []string) error {
 		if only != "" && reg.Name != only {
 			continue
 		}
-		if !reg.TotalsEnabled() {
+		if !reg.TotalsUsable() {
 			skipped++
 			continue
 		}

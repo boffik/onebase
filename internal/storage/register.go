@@ -178,7 +178,7 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 	// после записи их итоги пересчитываются (в этой же транзакции). Так строка
 	// итогов затронутого набора измерений остаётся согласованной с движениями.
 	var oldTuples [][]any
-	if reg.TotalsEnabled() {
+	if reg.TotalsUsable() {
 		var err error
 		if oldTuples, err = db.distinctDimTuples(ctx, reg, recorderType, idArg(d, recorderID)); err != nil {
 			return fmt.Errorf("totals %s: capture old tuples: %w", regName, err)
@@ -223,7 +223,7 @@ func (db *DB) WriteMovements(ctx context.Context, regName, recorderType string, 
 		}
 	}
 
-	if reg.TotalsEnabled() {
+	if reg.TotalsUsable() {
 		if err := db.updateTotalsForRecorder(ctx, reg, recorderType, idArg(d, recorderID), oldTuples); err != nil {
 			return fmt.Errorf("update totals %s: %w", regName, err)
 		}
