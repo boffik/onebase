@@ -239,6 +239,14 @@ var methodDescriptors = []Descriptor{
 		Doc:       "Ищет элемент справочника по коду; возвращает ссылку или Неопределено.",
 	},
 	{
+		Name: "найтипоидентификатору", Display: "НайтиПоИдентификатору", Aliases: []string{"FindByID"},
+		Kind: KindMethod, Object: "Справочники",
+		Signature: "Справочники.Имя.НайтиПоИдентификатору(UUID)",
+		Params:    []Param{{Name: "UUID", Type: "строка"}},
+		Returns:   "Ссылка",
+		Doc:       "Создаёт ссылку справочника по UUID, например из результата запроса Поле.Ссылка. Существование записи проверяется при ПолучитьОбъект().",
+	},
+	{
 		Name: "найтипореквизиту", Display: "НайтиПоРеквизиту", Aliases: []string{"FindByAttribute"},
 		Kind: KindMethod, Object: "Справочники",
 		Signature: "Справочники.Имя.НайтиПоРеквизиту(Реквизит, Значение)",
@@ -325,6 +333,14 @@ var methodDescriptors = []Descriptor{
 		Params:    []Param{{Name: "Номер", Type: "строка"}},
 		Returns:   "Ссылка",
 		Doc:       "Ищет документ по номеру; возвращает ссылку или Неопределено.",
+	},
+	{
+		Name: "найтипоидентификатору", Display: "НайтиПоИдентификатору", Aliases: []string{"FindByID"},
+		Kind: KindMethod, Object: "Документы",
+		Signature: "Документы.Имя.НайтиПоИдентификатору(UUID)",
+		Params:    []Param{{Name: "UUID", Type: "строка"}},
+		Returns:   "Ссылка",
+		Doc:       "Создаёт ссылку документа по UUID, например из результата запроса Ссылка. Существование записи проверяется при ПолучитьОбъект().",
 	},
 	{
 		Name: "найтипореквизиту", Display: "НайтиПоРеквизиту", Aliases: []string{"FindByAttribute"},

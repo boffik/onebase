@@ -546,6 +546,37 @@ func TestCompile_RefDim_AutoJoin(t *testing.T) {
 	}
 }
 
+func TestCompile_RefField_SsylkaSelectsUUID(t *testing.T) {
+	src := `ВЫБРАТЬ Проект.Ссылка КАК ПроектСсылка ИЗ Документ.Приход`
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Entities: []*metadata.Entity{
+			{
+				Name: "Приход",
+				Kind: metadata.KindDocument,
+				Fields: []metadata.Field{
+					{Name: "Проект", Type: "reference:Проект", RefEntity: "Проект"},
+				},
+			},
+			{
+				Name:   "Проект",
+				Kind:   metadata.KindCatalog,
+				Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := r.SQL
+	if !strings.Contains(sql, "ref_проект.id AS проектссылка") {
+		t.Errorf("expected Проект.Ссылка to select ref_проект.id, got: %s", sql)
+	}
+	if strings.Contains(sql, "ref_проект.наименование AS проектссылка") {
+		t.Errorf("Проект.Ссылка must not use display name: %s", sql)
+	}
+}
+
 // TestCompile_StringDim_NoIdSuffix ensures that a string-type dimension
 // in one register is not incorrectly mapped to _id when another register
 // in opts has a reference-type dimension with the same name.

@@ -268,6 +268,9 @@ func builtinToString(args []any, file string, line int) (any, error) {
 	if len(args) == 0 {
 		return "", nil
 	}
+	if s, ok := args[0].(string); ok {
+		return s, nil
+	}
 	if d, ok := args[0].(decimal.Decimal); ok {
 		return d.String(), nil
 	}

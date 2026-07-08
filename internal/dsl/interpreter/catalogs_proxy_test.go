@@ -219,6 +219,38 @@ func TestCatalogProxy_FindByName_NotFound(t *testing.T) {
 	}
 }
 
+func TestCatalogProxy_FindByID_ReturnsManagedRef(t *testing.T) {
+	root, db, _ := newCatalogsTestEnv()
+	cp := root.Get("ТипЦен").(*CatalogProxy)
+	id := "22222222-2222-2222-2222-222222222222"
+	db.stored = map[string]map[string]any{
+		"ТипЦен/" + id: {"Наименование": "Розничная"},
+	}
+
+	v := cp.CallMethod("найтипоидентификатору", []any{id})
+	ref, ok := v.(*Ref)
+	if !ok {
+		t.Fatalf("ожидался *Ref, получили %T", v)
+	}
+	if ref.UUID != id || ref.Type != "ТипЦен" || ref.Manager == nil {
+		t.Fatalf("неполная ссылка: %#v", ref)
+	}
+	if got := ref.CallMethod("получитьобъект", nil); got == nil {
+		t.Fatal("ПолучитьОбъект вернул nil")
+	}
+}
+
+func TestCatalogProxy_FindByID_InvalidUUID(t *testing.T) {
+	root, _, _ := newCatalogsTestEnv()
+	cp := root.Get("ТипЦен").(*CatalogProxy)
+	defer func() {
+		if recover() == nil {
+			t.Error("ожидалась ошибка: неверный UUID")
+		}
+	}()
+	cp.CallMethod("найтипоидентификатору", []any{"not-a-uuid"})
+}
+
 func TestCatalogProxy_UnknownEntity(t *testing.T) {
 	root, _, _ := newCatalogsTestEnv()
 	if v := root.Get("НетТакогоСправочника"); v != nil {

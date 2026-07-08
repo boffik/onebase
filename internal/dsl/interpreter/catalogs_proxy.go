@@ -224,6 +224,19 @@ func (p *CatalogProxy) CallMethod(method string, args []any) any {
 		return p.findByField("Наименование", args)
 	case "найтипокоду", "findbycode":
 		return p.findByField("Код", args)
+	case "найтипоидентификатору", "findbyid":
+		// Ссылка по строковому UUID — для строк результата запроса
+		// (ВЫБРАТЬ Поле.Ссылка КАК Ид), когда наименование/код не уникальны
+		// или лишний поиск по реквизиту нежелателен. Существование записи
+		// проверит ПолучитьОбъект().
+		if len(args) == 0 {
+			return nil
+		}
+		uuidStr := fmt.Sprint(args[0])
+		if _, err := uuid.Parse(uuidStr); err != nil {
+			RaiseUserError("НайтиПоИдентификатору(" + p.entity.Name + "): неверный идентификатор ссылки: " + uuidStr)
+		}
+		return &Ref{UUID: uuidStr, Name: uuidStr, Type: p.entity.Name, Manager: p}
 	case "найтипореквизиту", "findbyattribute":
 		if len(args) < 2 {
 			RaiseUserError("НайтиПоРеквизиту(" + p.entity.Name + "): нужны имя реквизита и значение")
