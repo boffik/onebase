@@ -96,6 +96,27 @@ jobs:
         with:
           version: latest
 
+  vuln:
+    # Сканирование известных уязвимостей в зависимостях и stdlib. govulncheck
+    # анализирует только достижимый код (call graph), поэтому шумит меньше, чем
+    # аудит всего go.sum: падает лишь когда уязвимая функция реально вызывается.
+    # Важно для платформы с сетевым egress (HTTP-клиент, email, LLM,
+    # ВыполнитьКоманду) — ловит уязвимые транзитивные зависимости и версию Go до
+    # релиза. На момент добавления достижимых advisory нет: модульные закрыты
+    # бампом (x/net, pgx/v5), stdlib — патчами в go-version toolchain'а ниже.
+    # Держите go-version актуальным (setup-go подтягивает свежий патч 1.26.x).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
   bench:
     # Контроль регрессий производительности: гоняем микробенчмарки горячих путей
     # (DSL-интерпретатор, storage CRUD, проведение документа) на PR и сравниваем
