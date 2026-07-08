@@ -21,6 +21,9 @@
   var editingEndpointIndex = -1;
   var editingModelIndex = -1;
   var activeEditors = [];
+  var ACTION_W = '132px';
+  var ENDPOINT_COLS = [2, 2, 3, 2, ACTION_W];
+  var MODEL_COLS = [3, 2, 1, 1, ACTION_W];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -50,7 +53,6 @@
   }
   function commitActiveEditors() {
     var editors = activeEditors.slice();
-    activeEditors = [];
     editors.forEach(function (commit) { commit(); });
   }
 
@@ -170,7 +172,7 @@
     top.appendChild(chips);
     var test = el('<span style="color:#2563eb;cursor:pointer">Проверить</span>');
     var out = el('<span id="ais-task-' + idx + '" style="font-size:11px"></span>');
-    test.onclick = function () { runTest(p.task, out); };
+    test.onclick = function () { commitActiveEditors(); runTest(p.task, out); };
     top.appendChild(test);
     top.appendChild(out);
     var edit = el('<span style="color:#94a3b8;cursor:pointer">✎</span>');
@@ -227,7 +229,7 @@
   // --- таблица провайдеров ---
   function renderEndpoints() {
     var t = el('<div style="border:1px solid #e2e8f0;border-top:none"></div>');
-    t.appendChild(rowHTML(['Имя', 'Тип', 'Base URL', 'Ключ', ''], true));
+    t.appendChild(rowHTML(['Имя', 'Тип', 'Base URL', 'Ключ', ''], true, ENDPOINT_COLS));
     cfg.endpoints.forEach(function (e, i) { t.appendChild(endpointRow(e, i)); });
     var add = el('<div style="padding:6px 8px;color:#2563eb;cursor:pointer;font-size:12px">+ добавить провайдера</div>');
     add.onclick = function () {
@@ -249,7 +251,7 @@
     r.appendChild(el('<span style="flex:2">' + esc(e.kind) + '</span>'));
     r.appendChild(el('<span style="flex:3">' + esc(e.base_url || '—') + '</span>'));
     r.appendChild(el('<span style="flex:2">' + esc(e.api_key || '') + '</span>'));
-    var act = el('<span style="width:46px;display:flex;gap:8px;justify-content:flex-end"></span>');
+    var act = actionCell();
     var edit = el('<span style="color:#94a3b8;cursor:pointer" title="редактировать">✎</span>');
     var del = el('<span style="color:#c00;cursor:pointer" title="удалить">🗑</span>');
     edit.onclick = function () { commitActiveEditors(); editingEndpointIndex = i; editingModelIndex = -1; openSections.endpoints = true; render(); };
@@ -260,6 +262,13 @@
   }
   function endpointEditRow(e, i) {
     var r = el('<div style="display:flex;padding:5px 8px;align-items:center;font-size:12px;background:#fffbeb"></div>');
+    var original = {
+      name: e.name,
+      kind: e.kind,
+      base_url: e.base_url,
+      api_key: e.api_key,
+      modelEndpoints: cfg.models.map(modelEndpoint)
+    };
     var oldName = e.name;
     var name = inp(e.name, 2), kind = sel(KINDS, e.kind, 2), url = inp(e.base_url, 3), key = inp(e.api_key, 2);
     [name, kind, url, key].forEach(function (x) { r.appendChild(x); });
@@ -275,19 +284,28 @@
       oldName = e.name;
       updateWarnings();
     }
+    function restore() {
+      e.name = original.name;
+      e.kind = original.kind;
+      e.base_url = original.base_url;
+      e.api_key = original.api_key;
+      cfg.models.forEach(function (m, idx) { setModelEndpoint(m, original.modelEndpoints[idx] || ''); });
+    }
     activeEditors.push(commit);
-    var ok = el('<span style="color:#16a34a;cursor:pointer">✓</span>');
-    var del = el('<span style="color:#c00;cursor:pointer;margin-left:6px" title="удалить">🗑</span>');
+    var ok = actionText('Готово', '#16a34a', 'закончить редактирование');
+    var cancel = actionText('Отмена', '#64748b', 'отменить правки строки');
+    var del = actionText('🗑', '#c00', 'удалить');
     ok.onclick = function () { commit(); editingEndpointIndex = -1; render(); };
+    cancel.onclick = function () { restore(); editingEndpointIndex = -1; render(); };
     del.onclick = function () { cfg.endpoints.splice(i, 1); editingEndpointIndex = -1; render(); };
-    r.appendChild(el('<span style="width:46px"></span>')).append(ok, del);
+    r.appendChild(actionCell()).append(ok, cancel, del);
     return r;
   }
 
   // --- таблица моделей ---
   function renderModels() {
     var t = el('<div style="border:1px solid #e2e8f0;border-top:none"></div>');
-    t.appendChild(rowHTML(['Имя', 'Провайдер', 'Vision', 'MaxTokens', ''], true));
+    t.appendChild(rowHTML(['Имя', 'Провайдер', 'Vision', 'MaxTokens', ''], true, MODEL_COLS));
     cfg.models.forEach(function (m, i) { t.appendChild(modelRow(m, i)); });
     var add = el('<div style="padding:6px 8px;color:#2563eb;cursor:pointer;font-size:12px">+ добавить модель</div>');
     add.onclick = function () {
@@ -310,7 +328,7 @@
     r.appendChild(el('<span style="flex:2">' + esc(modelEndpoint(m) || '—') + '</span>'));
     r.appendChild(el('<span style="flex:1">' + (m.vision ? '✓' : '—') + '</span>'));
     r.appendChild(el('<span style="flex:1">' + (m.max_tokens || '') + '</span>'));
-    var act = el('<span style="width:46px;display:flex;gap:8px;justify-content:flex-end"></span>');
+    var act = actionCell();
     var edit = el('<span style="color:#94a3b8;cursor:pointer" title="редактировать">✎</span>');
     var del = el('<span style="color:#c00;cursor:pointer" title="удалить">🗑</span>');
     edit.onclick = function () { commitActiveEditors(); editingModelIndex = i; editingEndpointIndex = -1; openSections.models = true; render(); };
@@ -321,6 +339,13 @@
   }
   function modelEditRow(m, i) {
     var r = el('<div style="display:flex;padding:5px 8px;align-items:center;font-size:12px;background:#fffbeb"></div>');
+    var original = {
+      name: m.name,
+      endpoint: modelEndpoint(m),
+      vision: !!m.vision,
+      max_tokens: m.max_tokens || 0,
+      profiles: cfg.profiles.map(function (p) { return { profile: p, models: (p.models || []).slice() }; })
+    };
     var oldName = m.name;
     var name = inp(m.name, 3);
     var epNames = cfg.endpoints.map(function (e) { return e.name; });
@@ -344,12 +369,21 @@
       oldName = m.name;
       updateWarnings();
     }
+    function restore() {
+      m.name = original.name;
+      setModelEndpoint(m, original.endpoint);
+      m.vision = original.vision;
+      m.max_tokens = original.max_tokens;
+      original.profiles.forEach(function (p) { p.profile.models = p.models.slice(); });
+    }
     activeEditors.push(commit);
-    var ok = el('<span style="color:#16a34a;cursor:pointer">✓</span>');
-    var del = el('<span style="color:#c00;cursor:pointer;margin-left:6px">🗑</span>');
+    var ok = actionText('Готово', '#16a34a', 'закончить редактирование');
+    var cancel = actionText('Отмена', '#64748b', 'отменить правки строки');
+    var del = actionText('🗑', '#c00', 'удалить');
     ok.onclick = function () { commit(); editingModelIndex = -1; render(); };
+    cancel.onclick = function () { restore(); editingModelIndex = -1; render(); };
     del.onclick = function () { cfg.models.splice(i, 1); editingModelIndex = -1; render(); };
-    var box = el('<span style="width:46px"></span>'); box.append(ok, del); r.appendChild(box);
+    var box = actionCell(); box.append(ok, cancel, del); r.appendChild(box);
     return r;
   }
 
@@ -361,10 +395,21 @@
     opts.forEach(function (o) { s.appendChild(el('<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>')); });
     return s;
   }
-  function rowHTML(cols, head) {
+  function actionCell() {
+    return el('<span style="width:' + ACTION_W + ';flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;align-items:center"></span>');
+  }
+  function actionText(text, color, title) {
+    return el('<span title="' + esc(title || '') + '" style="color:' + color + ';cursor:pointer;white-space:nowrap">' + esc(text) + '</span>');
+  }
+  function colStyle(spec) {
+    return typeof spec === 'number'
+      ? 'flex:' + spec + ';min-width:0'
+      : 'width:' + spec + ';flex-shrink:0';
+  }
+  function rowHTML(cols, head, flexes) {
     var r = el('<div style="display:flex;padding:4px 8px;font-size:12px' + (head ? ';background:#f8fafc;font-weight:600' : '') + '"></div>');
-    var flexes = [2, 2, 3, 2, 1];
-    cols.forEach(function (c, i) { r.appendChild(el('<span style="flex:' + (flexes[i] || 1) + '">' + esc(c) + '</span>')); });
+    flexes = flexes || ENDPOINT_COLS;
+    cols.forEach(function (c, i) { r.appendChild(el('<span style="' + colStyle(flexes[i] || 1) + '">' + esc(c) + '</span>')); });
     return r;
   }
 
