@@ -16,10 +16,14 @@ var uiJS []byte
 //go:embed static/managed.js
 var managedJS []byte
 
+//go:embed static/query-builder.js
+var queryBuilderJS []byte
+
 // ETag'и приложенческого JS считаются один раз при старте по содержимому.
 var (
-	uiJSETag      = assetETag(uiJS)
-	managedJSETag = assetETag(managedJS)
+	uiJSETag           = assetETag(uiJS)
+	managedJSETag      = assetETag(managedJS)
+	queryBuilderJSETag = assetETag(queryBuilderJS)
 )
 
 func assetETag(b []byte) string {
@@ -55,6 +59,9 @@ func mountStatic(r chi.Router) {
 	})
 	r.Get("/static/managed.js", func(w http.ResponseWriter, req *http.Request) {
 		serveAppJS(w, req, managedJS, managedJSETag)
+	})
+	r.Get("/static/query-builder.js", func(w http.ResponseWriter, req *http.Request) {
+		serveAppJS(w, req, queryBuilderJS, queryBuilderJSETag)
 	})
 	r.Handle("/vendor/echarts/*", http.StripPrefix("/vendor/echarts/", webassets.EChartsHandler()))
 	// Monaco editor — инструменты разработчика (консоль кода/запросов, отладчик)

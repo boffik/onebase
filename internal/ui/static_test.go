@@ -103,6 +103,37 @@ func TestStaticManagedJS(t *testing.T) {
 	}
 }
 
+func TestStaticQueryBuilderJS(t *testing.T) {
+	r := chi.NewRouter()
+	mountStatic(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/query-builder.js", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/static/query-builder.js status = %d", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
+		t.Fatalf("/static/query-builder.js content-type = %q", ct)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"function qbReadSchema",
+		"function qbGenerate",
+		"function qbInitDelegates",
+		"ob-query-builder-schema",
+		"data-ob-qb-action",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/static/query-builder.js не содержит %q", want)
+		}
+	}
+	if strings.Contains(body, "{{") {
+		t.Error("/static/query-builder.js содержит Go-template маркеры")
+	}
+}
+
 // TestStaticJSRevalidates проверяет, что приложенческий JS отдаётся с ETag и
 // ревалидацией (а не immutable-кэшем на год по неверсионированному пути): после
 // обновления билда клиент не должен залипнуть на старом скрипте.
@@ -110,7 +141,7 @@ func TestStaticJSRevalidates(t *testing.T) {
 	r := chi.NewRouter()
 	mountStatic(r)
 
-	for _, path := range []string{"/static/ui.js", "/static/managed.js"} {
+	for _, path := range []string{"/static/ui.js", "/static/managed.js", "/static/query-builder.js"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)

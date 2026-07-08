@@ -17,6 +17,8 @@ func TestDevQueryPagesUseDelegatedHandlers(t *testing.T) {
 			name: "page-query-builder",
 			data: map[string]any{"Schema": template.JS(`[]`)},
 			want: []string{
+				`id="ob-query-builder-schema"`,
+				`src="/static/query-builder.js"`,
 				`data-ob-qb-source`,
 				`data-ob-qb-main-alias`,
 				`data-ob-qb-vt-param`,
@@ -92,5 +94,28 @@ func TestDevQueryPagesUseDelegatedHandlers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestQueryBuilderRuntimeLivesInStaticAsset(t *testing.T) {
+	data := map[string]any{
+		"Cfg":    Config{},
+		"Lang":   "ru",
+		"Schema": template.JS(`[]`),
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "page-query-builder", data); err != nil {
+		t.Fatalf("execute page-query-builder: %v", err)
+	}
+	out := buf.String()
+	for _, old := range []string{
+		`var _schema =`,
+		`function qbGenerate`,
+		`function qbInitDelegates`,
+	} {
+		if strings.Contains(out, old) {
+			t.Fatalf("runtime query builder должен жить в /static/query-builder.js, но HTML содержит %q", old)
+		}
 	}
 }
