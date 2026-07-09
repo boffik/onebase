@@ -21,6 +21,12 @@ import "net/http"
 // прямо в оболочке — вкладки остаются для форм/списков, но активная подсистема
 // не выглядит пустой.
 func (s *Server) appShell(w http.ResponseWriter, r *http.Request) {
+	// Скрытая глобальная «Главная» (issue #304): прямой заход на /ui/app?home=1
+	// без раздела тоже уводим на первый раздел, а не показываем скрытый стол.
+	if target, ok := s.hiddenHomeRedirect(r, "/ui/app"); ok {
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
 	s.render(w, r, "page-app-shell", s.homeDashboardData(r))
 }
 

@@ -1280,6 +1280,13 @@ const cfgTabTree = `{{define "tab-tree"}}
         <input type="text" name="home_title" value="{{.GlobalHome.Title}}" placeholder="{{t $.Lang "Главная"}}">
       </div>
       {{if $.AvailableLangs}}{{template "titles-block" (dict "Lang" $.Lang "Langs" $.AvailableLangs "Prefix" "titles" "Values" .GlobalHome.Titles)}}{{end}}
+      <div class="fg" style="margin:10px 0">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" name="home_hidden" value="1" {{if .GlobalHome.Hidden}}checked{{end}}>
+          {{t $.Lang "Скрыть главную (навигация только по разделам)"}}
+        </label>
+        <div style="font-size:11px;color:#94a3b8;margin-top:3px">{{t $.Lang "Вход уводит на первый раздел, ведущая ссылка «Главная» скрыта. Нужны подсистемы."}}</div>
+      </div>
       {{if .Widgets}}
       <div class="fg" style="margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <label style="font-size:12px;color:#555">{{t $.Lang "Раскладка"}}</label>
@@ -1303,7 +1310,7 @@ const cfgTabTree = `{{define "tab-tree"}}
       <summary style="cursor:pointer;font-size:12px;color:#64748b;font-weight:600">{{t $.Lang "Расширенно (YAML)"}}</summary>
       <form method="POST" action="/bases/{{.Base.ID}}/configurator/home-page-yaml" style="margin-top:8px">
         <div style="font-size:12px;color:#64748b;margin:6px 0">
-          Поля: <code>title</code>, <code>layout</code> (<code>auto</code> / <code>rows</code> / <code>grid</code>), <code>rows[].widgets</code>, <code>titles</code>.
+          Поля: <code>title</code>, <code>layout</code> (<code>auto</code> / <code>rows</code> / <code>grid</code>), <code>rows[].widgets</code>, <code>titles</code>, <code>hidden</code> (скрыть главную — навигация только по разделам).
           Если файл пуст, на главной показываются все зарегистрированные виджеты.
         </div>
         <div class="code-wrap">

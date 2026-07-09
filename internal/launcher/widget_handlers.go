@@ -112,11 +112,15 @@ func (h *handler) configuratorSaveHomePage(w http.ResponseWriter, r *http.Reques
 		Title   string                      `yaml:"title,omitempty"`
 		Titles  map[string]string           `yaml:"titles,omitempty"`
 		Layout  string                      `yaml:"layout,omitempty"`
+		Hidden  bool                        `yaml:"hidden,omitempty"`
 		Rows    []metadata.HomePageRow      `yaml:"rows,omitempty"`
 		Widgets []metadata.HomePageWidget   `yaml:"widgets,omitempty"`
 		Nav     *metadata.SubsystemContents `yaml:"nav,omitempty"`
 	}
-	hp := yamlHomePage{Title: strings.TrimSpace(r.FormValue("home_title"))}
+	hp := yamlHomePage{
+		Title:  strings.TrimSpace(r.FormValue("home_title")),
+		Hidden: r.FormValue("home_hidden") == "1", // #304: скрыть глобальную «Главную»
+	}
 	// Titles: если форма содержит блок titles.* — берём из формы; иначе переносим
 	// из существующего файла (визуальный редактор раскладки их не должен терять).
 	if formHasMapField(r, "titles") {

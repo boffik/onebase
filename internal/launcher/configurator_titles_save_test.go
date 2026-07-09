@@ -365,3 +365,19 @@ func TestSaveHomePage_PersistsTitles(t *testing.T) {
 	}
 	assertFileContainsRv(t, cfgDir+"/config/home_page.yaml", "titles:", "en: Home")
 }
+
+// issue #304: чекбокс «Скрыть главную» (home_hidden) конфигуратора пишет
+// hidden: true в config/home_page.yaml.
+func TestSaveHomePage_PersistsHidden(t *testing.T) {
+	h, cfgDir := newFileBaseHandler(t)
+	h.runner = NewRunner()
+	form := url.Values{}
+	form.Set("home_title", "Главная")
+	form.Set("home_hidden", "1")
+
+	rec := postCfgRv(t, "test", "/bases/test/configurator/home-page", form, h.configuratorSaveHomePage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код %d: %s", rec.Code, rec.Body.String())
+	}
+	assertFileContainsRv(t, cfgDir+"/config/home_page.yaml", "hidden: true")
+}
