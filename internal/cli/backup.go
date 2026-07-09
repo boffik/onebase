@@ -11,30 +11,54 @@ import (
 )
 
 var (
-	backupDB  string
-	backupOut string
+	backupDB     string
+	backupSQLite string
+	backupOut    string
 )
 
 var backupCmd = &cobra.Command{
 	Use:   "backup",
-	Short: "Create a gzipped SQL backup of the database",
-	Example: "  onebase backup --db postgres://localhost/mydb --out ./backups/",
-	RunE:  runBackup,
+	Short: "Create a backup of the database (PostgreSQL → .sql.gz, SQLite → .db)",
+	Example: "  onebase backup --db postgres://localhost/mydb --out ./backups/\n" +
+		"  onebase backup --sqlite ./docflow.db --out ./backups/",
+	RunE: runBackup,
 }
 
 func init() {
-	backupCmd.Flags().StringVar(&backupDB, "db", "", "PostgreSQL connection string (required)")
+	backupCmd.Flags().StringVar(&backupDB, "db", "", "PostgreSQL connection string")
+	backupCmd.Flags().StringVar(&backupSQLite, "sqlite", "", "path to the SQLite database file")
 	backupCmd.Flags().StringVar(&backupOut, "out", ".", "output directory for the backup file")
-	_ = backupCmd.MarkFlagRequired("db")
+}
+
+// requireOneDBTarget проверяет, что задан ровно один источник БД: --db или --sqlite.
+func requireOneDBTarget(db, sqlite string) error {
+	switch {
+	case db == "" && sqlite == "":
+		return fmt.Errorf("укажите --db (PostgreSQL) или --sqlite (файл SQLite)")
+	case db != "" && sqlite != "":
+		return fmt.Errorf("--db и --sqlite взаимоисключающи; укажите только один")
+	default:
+		return nil
+	}
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
+	if err := requireOneDBTarget(backupDB, backupSQLite); err != nil {
+		return err
+	}
 	outDir, err := filepath.Abs(backupOut)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Создание бэкапа в %s ...\n", outDir)
-	path, err := backup.Dump(cmd.Context(), backupDB, outDir)
+	var path string
+	if backupSQLite != "" {
+		// SQLite бэкапится атомарным VACUUM INTO в обычный .db — восстановление
+		// простым копированием файла (см. internal/backup/sqlite.go).
+		path, err = backup.DumpSQLite(cmd.Context(), backupSQLite, outDir)
+	} else {
+		path, err = backup.Dump(cmd.Context(), backupDB, outDir)
+	}
 	if err != nil {
 		return err
 	}
@@ -43,28 +67,40 @@ func runBackup(cmd *cobra.Command, args []string) error {
 }
 
 var (
-	restoreDB   string
-	restoreFile string
+	restoreDB     string
+	restoreSQLite string
+	restoreFile   string
 )
 
 var restoreCmd = &cobra.Command{
 	Use:   "restore",
 	Short: "Restore database from a backup file",
-	Example: "  onebase restore --db postgres://localhost/mydb --file ./backups/backup_mydb_2026-05-06_14-30.sql.gz",
-	RunE:  runRestore,
+	Example: "  onebase restore --db postgres://localhost/mydb --file ./backups/backup_mydb_2026-05-06_14-30.sql.gz\n" +
+		"  onebase restore --sqlite ./docflow.db --file ./backups/backup_docflow_2026-05-06_14-30.db",
+	RunE: runRestore,
 }
 
 func init() {
-	restoreCmd.Flags().StringVar(&restoreDB, "db", "", "PostgreSQL connection string (required)")
-	restoreCmd.Flags().StringVar(&restoreFile, "file", "", "path to the .sql.gz backup file (required)")
-	_ = restoreCmd.MarkFlagRequired("db")
+	restoreCmd.Flags().StringVar(&restoreDB, "db", "", "PostgreSQL connection string")
+	restoreCmd.Flags().StringVar(&restoreSQLite, "sqlite", "", "path to the SQLite database file to restore into")
+	restoreCmd.Flags().StringVar(&restoreFile, "file", "", "path to the backup file (required)")
 	_ = restoreCmd.MarkFlagRequired("file")
 }
 
 func runRestore(cmd *cobra.Command, args []string) error {
-	fmt.Fprintf(os.Stdout, "Восстановление из %s ...\n", restoreFile)
-	if err := backup.Restore(cmd.Context(), restoreDB, restoreFile); err != nil {
+	if err := requireOneDBTarget(restoreDB, restoreSQLite); err != nil {
 		return err
+	}
+	fmt.Fprintf(os.Stdout, "Восстановление из %s ...\n", restoreFile)
+	if restoreSQLite != "" {
+		// Файл БД перезаписывается целиком — сервис базы должен быть остановлен.
+		if err := backup.RestoreSQLite(cmd.Context(), restoreSQLite, restoreFile); err != nil {
+			return err
+		}
+	} else {
+		if err := backup.Restore(cmd.Context(), restoreDB, restoreFile); err != nil {
+			return err
+		}
 	}
 	fmt.Fprintln(os.Stdout, "Восстановление завершено.")
 	return nil

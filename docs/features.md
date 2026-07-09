@@ -1558,6 +1558,33 @@ backup:
 бэкап вручную на вкладке «Бэкапы», затем проверьте, что старые `backup_*` файлы сверх
 лимита удаляются.
 
+## Бэкап и восстановление SQLite из CLI
+<!-- status: testing -->
+<!-- date: 2026-07-09 -->
+<!-- issue: 299 -->
+
+Команды `onebase backup` и `onebase restore` теперь умеют SQLite напрямую, а не только
+PostgreSQL. `onebase backup --sqlite ./base.db --out ./backups/` делает атомарный снимок
+через `VACUUM INTO` в обычный `.db` — восстановление простым копированием файла, без
+установленного `pg_dump`. Обратно: `onebase restore --sqlite ./base.db --file
+./backups/backup_base_….db` (база должна быть остановлена — файл перезаписывается целиком).
+
+**Как попробовать.** `onebase backup --sqlite <ваша-база>.db --out ./backups/` — в папке
+появится `backup_<имя>_<дата>.db`.
+
+## Проба готовности `/healthz`
+<!-- status: testing -->
+<!-- date: 2026-07-09 -->
+<!-- issue: 299 -->
+
+У сервера появился публичный readiness-эндпоинт `GET /healthz`: `200`, только если база
+данных отвечает, и `503`, если нет. В отличие от liveness-`/health` (всегда `200` —
+«процесс жив»), `/healthz` годится для health-check reverse-proxy, systemd `WatchdogSec`
+и проверки после обновления. Токен не требуется.
+
+**Как попробовать.** При запущенном сервере откройте `http://<host>:<port>/healthz` —
+вернётся `ok`.
+
 ## Свёртка базы
 <!-- status: testing -->
 <!-- date: 2026-06-24 -->

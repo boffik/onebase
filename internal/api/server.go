@@ -78,6 +78,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// cookie (401 JSON, без HTML-редиректа auth-мидлвары).
 	r.Post("/auth/one-time-code", authH.IssueOneTimeCode)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	r.Get("/healthz", healthzHandler(store))
 
 	// PWA-ассеты (manifest, service worker, offline-страница, иконки) — публичны.
 	// Браузер фечит manifest/иконки без credentials, а install-промпт работает
@@ -146,6 +147,24 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}}
+}
+
+// healthzHandler — readiness-проба: 200, только если БД отвечает, иначе 503.
+// Публична и без токена (в отличие от /metrics): её дёргают reverse-proxy,
+// systemd WatchdogSec и команда `onebase update` при проверке нового бинаря.
+// В отличие от liveness-/health (всегда 200), проверяет реальную доступность БД.
+func healthzHandler(store *storage.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
+		defer cancel()
+		if err := store.Ping(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("db unavailable\n"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	}
 }
 
 // csrfExceptServices применяет websec.CSRFProtect ко всему роутеру, КРОМЕ

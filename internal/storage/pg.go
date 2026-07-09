@@ -54,6 +54,19 @@ func (db *DB) IsSQLite() bool { return db.sqlDB != nil }
 // IsPostgres reports whether this is a PostgreSQL-backed connection.
 func (db *DB) IsPostgres() bool { return db.pool != nil }
 
+// Ping проверяет доступность БД — для readiness-проб (/healthz). Работает и для
+// PostgreSQL (пул), и для SQLite (database/sql).
+func (db *DB) Ping(ctx context.Context) error {
+	switch {
+	case db.pool != nil:
+		return db.pool.Ping(ctx)
+	case db.sqlDB != nil:
+		return db.sqlDB.PingContext(ctx)
+	default:
+		return fmt.Errorf("storage: no database connection")
+	}
+}
+
 func defaultFilesDir(dsn string) string {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	dbName := "default"
