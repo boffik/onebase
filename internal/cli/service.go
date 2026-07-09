@@ -42,6 +42,7 @@ func init() {
 	serviceInstallCmd.Flags().String("project", "", "project directory (for file config-source)")
 	serviceInstallCmd.Flags().String("user", "", "system user to run the service (Linux only, default: current user)")
 	serviceInstallCmd.Flags().Bool("print", false, "print the unit file instead of installing it")
+	serviceInstallCmd.Flags().Bool("watch", false, "запускать сервер с --watch (hot reload конфигурации без рестарта)")
 
 	serviceUninstallCmd.Flags().String("name", "onebase", "service name to remove")
 
@@ -95,11 +96,12 @@ func runServiceInstall(cmd *cobra.Command, _ []string) error {
 	}
 	exe, _ = filepath.Abs(exe)
 
+	watch, _ := cmd.Flags().GetBool("watch")
 	switch runtime.GOOS {
 	case "linux":
-		return installSystemd(exe, svcName, displayName, dsn, configSource, project, port, cmd, printOnly)
+		return installSystemd(exe, svcName, displayName, dsn, configSource, project, port, watch, cmd, printOnly)
 	case "windows":
-		return installWindowsService(exe, svcName, displayName, dsn, configSource, project, port, printOnly)
+		return installWindowsService(exe, svcName, displayName, dsn, configSource, project, port, watch, printOnly)
 	default:
 		return fmt.Errorf("автоустановка сервиса не поддерживается на %s; используйте --print для получения конфигурации", runtime.GOOS)
 	}
@@ -115,7 +117,7 @@ Wants=postgresql.service
 [Service]
 Type=simple
 User={{.User}}
-ExecStart={{.Exe}} run --config-source {{.ConfigSource}} --db "{{.DSN | systemdEscape}}" --port {{.Port}}{{if .Project}} --project "{{.Project}}"{{end}}
+ExecStart={{.Exe}} run --config-source {{.ConfigSource}} --db "{{.DSN | systemdEscape}}" --port {{.Port}}{{if .Project}} --project "{{.Project}}"{{end}}{{if .Watch}} --watch{{end}}
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
@@ -137,9 +139,10 @@ type systemdData struct {
 	ConfigSource string
 	Project      string
 	Port         int
+	Watch        bool
 }
 
-func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, port int, cmd *cobra.Command, printOnly bool) error {
+func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, port int, watch bool, cmd *cobra.Command, printOnly bool) error {
 	user, _ := cmd.Flags().GetString("user")
 	if user == "" {
 		user = os.Getenv("USER")
@@ -159,6 +162,7 @@ func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, p
 		ConfigSource: configSource,
 		Project:      proj,
 		Port:         port,
+		Watch:        watch,
 	}
 
 	tmpl := template.Must(template.New("unit").Funcs(template.FuncMap{
@@ -198,10 +202,13 @@ func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, p
 
 // ── Windows service ───────────────────────────────────────────────────────────
 
-func installWindowsService(exe, svcName, displayName, dsn, configSource, proj string, port int, printOnly bool) error {
+func installWindowsService(exe, svcName, displayName, dsn, configSource, proj string, port int, watch, printOnly bool) error {
 	args := fmt.Sprintf(`run --config-source %s --db "%s" --port %d`, configSource, dsn, port)
 	if proj != "" {
 		args += fmt.Sprintf(` --project "%s"`, proj)
+	}
+	if watch {
+		args += " --watch"
 	}
 
 	scCmd := fmt.Sprintf(`sc.exe create "%s" binPath= "%s %s" start= auto DisplayName= "OneBase — %s"`,
