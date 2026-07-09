@@ -117,8 +117,9 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 
 	var proj *project.Project
+	var cfgRepo *configdb.Repo
 	if configSource == "database" {
-		cfgRepo := configdb.New(db)
+		cfgRepo = configdb.New(db)
 		if err := cfgRepo.EnsureSchema(ctx); err != nil {
 			return fmt.Errorf("configdb schema: %w", err)
 		}
@@ -405,17 +406,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 
 	srv := api.New(reg, db, interp, authRepo, host, port, uiCfg, sched)
 
-	// опциональный hot reload (см. --watch).
-	// Перечитываем только метаданные (reg.Load*), миграции не повторяем —
-	// они единоразовы и потенциально опасны. Срабатывает только для
-	// file-based конфигов (configdb не имеет смысла отслеживать).
-	if watchEnabled, _ := cmd.Flags().GetBool("watch"); watchEnabled && configSource == "file" {
-		reload := func() {
-			newProj, err := project.Load(dir)
-			if err != nil {
-				runLog.Warn("watch reload failed", "err", err)
-				return
-			}
+	// Опциональный hot reload (см. --watch). Перечитываем ТОЛЬКО метаданные
+	// (reg.Load*), DDL-миграции не повторяем — они единоразовы и потенциально
+	// опасны.
+	//   file     → fsnotify по каталогу проекта (.yaml/.os).
+	//   database → опрос _config_versions: после `onebase deploy`/rollback
+	//              появляется новая версия. Схему трогать не нужно — миграции
+	//              выполняет deploy ДО создания версии конфигурации.
+	if watchEnabled, _ := cmd.Flags().GetBool("watch"); watchEnabled {
+		applyProject := func(newProj *project.Project) {
 			reg.Load(runtime.LoadOptions{
 				Entities:        newProj.Entities,
 				Programs:        newProj.Programs,
@@ -440,12 +439,37 @@ func runServer(cmd *cobra.Command, _ []string) error {
 			reg.LoadAccountRegisters(newProj.AccountRegisters, newProj.ChartsOfAccounts)
 			reg.LoadWidgets(newProj.Widgets)
 			reg.LoadHomePage(newProj.HomePage)
-			fmt.Fprintln(os.Stdout, "[watch] метаданные перезагружены")
 		}
-		if err := devserver.Watch(dir, reload); err != nil {
-			runLog.Warn("watch init failed", "err", err)
-		} else {
-			fmt.Fprintf(os.Stdout, "[watch] отслеживаем %s — изменения .yaml/.os подхватятся без рестарта\n", dir)
+
+		switch configSource {
+		case "file":
+			reload := func() {
+				newProj, err := project.Load(dir)
+				if err != nil {
+					runLog.Warn("watch reload failed", "err", err)
+					return
+				}
+				applyProject(newProj)
+				fmt.Fprintln(os.Stdout, "[watch] метаданные перезагружены")
+			}
+			if err := devserver.Watch(dir, reload); err != nil {
+				runLog.Warn("watch init failed", "err", err)
+			} else {
+				fmt.Fprintf(os.Stdout, "[watch] отслеживаем %s — изменения .yaml/.os подхватятся без рестарта\n", dir)
+			}
+		case "database":
+			reloadCtx, reloadCancel := context.WithCancel(ctx)
+			defer reloadCancel()
+			go watchConfigVersions(reloadCtx, cfgRepo, configReloadInterval, func() {
+				newProj, err := project.LoadFromDB(reloadCtx, cfgRepo)
+				if err != nil {
+					runLog.Warn("db watch reload failed", "err", err)
+					return
+				}
+				applyProject(newProj)
+				fmt.Fprintln(os.Stdout, "[watch] конфигурация перезагружена из БД (новая версия)")
+			})
+			fmt.Fprintln(os.Stdout, "[watch] отслеживаем версии конфигурации в БД — deploy подхватится без рестарта")
 		}
 	}
 
@@ -472,6 +496,42 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	err = srv.Shutdown(shutdownCtx)
 	<-schedDone
 	return err
+}
+
+// configReloadInterval — период опроса истории версий конфигурации в
+// database-режиме при --watch.
+const configReloadInterval = 5 * time.Second
+
+// latestConfigVersionID возвращает ID самой свежей версии конфигурации или ""
+// (нет версий либо ошибка чтения — тогда hot reload просто не срабатывает).
+func latestConfigVersionID(ctx context.Context, cfgRepo *configdb.Repo) string {
+	vs, err := cfgRepo.ListVersions(ctx, 1)
+	if err != nil || len(vs) == 0 {
+		return ""
+	}
+	return vs[0].ID
+}
+
+// watchConfigVersions опрашивает историю версий конфигурации раз в interval и
+// вызывает onChange при появлении новой версии (её создают `onebase deploy` и
+// rollback). Возвращается при отмене ctx. Схему БД не трогает — DDL-миграции
+// выполняет deploy ДО создания версии.
+func watchConfigVersions(ctx context.Context, cfgRepo *configdb.Repo, interval time.Duration, onChange func()) {
+	last := latestConfigVersionID(ctx, cfgRepo)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cur := latestConfigVersionID(ctx, cfgRepo)
+			if cur != "" && cur != last {
+				last = cur
+				onChange()
+			}
+		}
+	}
 }
 
 func runtimeLimitsFromApp(l *project.LimitsConfig) ui.RuntimeLimits {
