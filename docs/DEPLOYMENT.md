@@ -116,7 +116,7 @@ C:\onebase\bin\onebase.exe ibases add `
 # Вариант Б (SQLite, конфигурация файлами)
 C:\onebase\bin\onebase.exe ibases add `
   --name docflow `
-  --db C:\onebase\data\docflow.db `
+  --sqlite C:\onebase\data\docflow.db `
   --path C:\onebase\project `
   --port 8080 --source file
 
@@ -140,7 +140,8 @@ C:\onebase\bin\onebase.exe service uninstall --name onebase-docflow
 ```
 
 > Если предпочитаете без реестра — можно указать параметры явно:
-> `service install --db "postgres://…" --port 8080 --name onebase-docflow`.
+> `service install --db "postgres://…" --port 8080 --name onebase-docflow`
+> или `service install --sqlite C:\onebase\data\docflow.db --project C:\onebase\project --config-source file --port 8080 --name onebase-docflow`.
 
 ---
 
@@ -248,7 +249,7 @@ C:\onebase\bin\onebase.exe update `
 |------|-----------|
 | `--from` | путь к `.zip` или `.exe` (обязателен) |
 | `--id` / `--service` | база из реестра / явное имя службы |
-| `--sha256` | ожидаемая контрольная сумма бинаря |
+| `--sha256` | ожидаемая контрольная сумма файла обновления (`.zip` или `.exe`) |
 | `--target` | какой файл заменять (по умолчанию — текущий `onebase.exe`) |
 | `--port` / `--healthz-url` | куда стучаться пробой (по умолчанию порт базы) |
 | `--timeout` | сколько ждать `200` от `/healthz` (по умолчанию 30с) |

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/spf13/cobra"
 )
 
 var serviceCmd = &cobra.Command{
@@ -22,21 +22,23 @@ var serviceInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install onebase as a system service (systemd on Linux, sc.exe on Windows)",
 	Example: `  onebase service install --id <base-id>
-  onebase service install --db "postgres://..." --port 8080 --name myapp`,
+  onebase service install --db "postgres://..." --port 8080 --name myapp
+  onebase service install --sqlite ./base.db --project ./project --config-source file --port 8080 --name myapp`,
 	RunE: runServiceInstall,
 }
 
 var serviceUninstallCmd = &cobra.Command{
-	Use:   "uninstall",
-	Short: "Remove the onebase system service",
+	Use:     "uninstall",
+	Short:   "Remove the onebase system service",
 	Example: `  onebase service uninstall --name onebase-myapp`,
-	RunE: runServiceUninstall,
+	RunE:    runServiceUninstall,
 }
 
 func init() {
 	serviceInstallCmd.Flags().String("id", "", "base ID from ibases registry")
 	serviceInstallCmd.Flags().String("name", "", "service name (default: onebase-<base-name>)")
 	serviceInstallCmd.Flags().String("db", "", "PostgreSQL DSN (if not using --id)")
+	serviceInstallCmd.Flags().String("sqlite", "", "SQLite database file path (if not using --id)")
 	serviceInstallCmd.Flags().Int("port", 8080, "HTTP port (if not using --id)")
 	serviceInstallCmd.Flags().String("config-source", "database", "file or database (if not using --id)")
 	serviceInstallCmd.Flags().String("project", "", "project directory (for file config-source)")
@@ -56,7 +58,7 @@ func runServiceInstall(cmd *cobra.Command, _ []string) error {
 	svcName, _ := cmd.Flags().GetString("name")
 	printOnly, _ := cmd.Flags().GetBool("print")
 
-	var dsn, configSource, project, displayName string
+	var dsn, sqlitePath, dbType, configSource, project, displayName string
 	var port int
 
 	if baseID != "" {
@@ -69,6 +71,8 @@ func runServiceInstall(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("база не найдена: %w", err)
 		}
 		dsn = base.DB
+		sqlitePath = base.DBPath
+		dbType = base.DBType
 		port = base.Port
 		configSource = base.ConfigSource
 		project = base.Path
@@ -78,16 +82,31 @@ func runServiceInstall(cmd *cobra.Command, _ []string) error {
 		}
 	} else {
 		dsn, _ = cmd.Flags().GetString("db")
+		sqlitePath, _ = cmd.Flags().GetString("sqlite")
 		port, _ = cmd.Flags().GetInt("port")
 		configSource, _ = cmd.Flags().GetString("config-source")
 		project, _ = cmd.Flags().GetString("project")
 		displayName = svcName
-		if dsn == "" {
-			return fmt.Errorf("укажите --id или --db")
+		switch {
+		case dsn == "" && sqlitePath == "":
+			return fmt.Errorf("укажите --id, --db или --sqlite")
+		case dsn != "" && sqlitePath != "":
+			return fmt.Errorf("--db и --sqlite взаимоисключающи; укажите только один")
+		case sqlitePath != "":
+			dbType = "sqlite"
 		}
 		if svcName == "" {
 			svcName = "onebase"
 		}
+		if displayName == "" {
+			displayName = svcName
+		}
+	}
+	if dbType == "" && dsn == "" {
+		dbType = "sqlite"
+	}
+	if dbType == "sqlite" && sqlitePath == "" {
+		return fmt.Errorf("для SQLite-базы укажите путь к файлу БД (--sqlite или db_path в ibases)")
 	}
 
 	exe, err := os.Executable()
@@ -99,9 +118,9 @@ func runServiceInstall(cmd *cobra.Command, _ []string) error {
 	watch, _ := cmd.Flags().GetBool("watch")
 	switch runtime.GOOS {
 	case "linux":
-		return installSystemd(exe, svcName, displayName, dsn, configSource, project, port, watch, cmd, printOnly)
+		return installSystemd(exe, svcName, displayName, dsn, sqlitePath, dbType, configSource, project, port, watch, cmd, printOnly)
 	case "windows":
-		return installWindowsService(exe, svcName, displayName, dsn, configSource, project, port, watch, printOnly)
+		return installWindowsService(exe, svcName, displayName, dsn, sqlitePath, dbType, configSource, project, port, watch, printOnly)
 	default:
 		return fmt.Errorf("автоустановка сервиса не поддерживается на %s; используйте --print для получения конфигурации", runtime.GOOS)
 	}
@@ -117,7 +136,7 @@ Wants=postgresql.service
 [Service]
 Type=simple
 User={{.User}}
-ExecStart={{.Exe}} run --config-source {{.ConfigSource}} --db "{{.DSN | systemdEscape}}" --port {{.Port}}{{if .Project}} --project "{{.Project}}"{{end}}{{if .Watch}} --watch{{end}}
+ExecStart={{.Exe}} run --config-source {{.ConfigSource}} {{if eq .DBType "sqlite"}}--sqlite "{{.SQLitePath | systemdEscape}}"{{else}}--db "{{.DSN | systemdEscape}}"{{end}} --port {{.Port}}{{if .Project}} --project "{{.Project}}"{{end}}{{if .Watch}} --watch{{end}}
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
@@ -136,13 +155,15 @@ type systemdData struct {
 	Exe          string
 	SvcName      string
 	DSN          string
+	SQLitePath   string
+	DBType       string
 	ConfigSource string
 	Project      string
 	Port         int
 	Watch        bool
 }
 
-func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, port int, watch bool, cmd *cobra.Command, printOnly bool) error {
+func installSystemd(exe, svcName, displayName, dsn, sqlitePath, dbType, configSource, proj string, port int, watch bool, cmd *cobra.Command, printOnly bool) error {
 	user, _ := cmd.Flags().GetString("user")
 	if user == "" {
 		user = os.Getenv("USER")
@@ -159,6 +180,8 @@ func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, p
 		Exe:          exe,
 		SvcName:      svcName,
 		DSN:          dsn,
+		SQLitePath:   sqlitePath,
+		DBType:       dbType,
 		ConfigSource: configSource,
 		Project:      proj,
 		Port:         port,
@@ -202,8 +225,12 @@ func installSystemd(exe, svcName, displayName, dsn, configSource, proj string, p
 
 // ── Windows service ───────────────────────────────────────────────────────────
 
-func installWindowsService(exe, svcName, displayName, dsn, configSource, proj string, port int, watch, printOnly bool) error {
-	args := fmt.Sprintf(`run --config-source %s --db "%s" --port %d`, configSource, dsn, port)
+func installWindowsService(exe, svcName, displayName, dsn, sqlitePath, dbType, configSource, proj string, port int, watch, printOnly bool) error {
+	dbArg := fmt.Sprintf(`--db "%s"`, dsn)
+	if dbType == "sqlite" {
+		dbArg = fmt.Sprintf(`--sqlite "%s"`, sqlitePath)
+	}
+	args := fmt.Sprintf(`run --config-source %s %s --port %d`, configSource, dbArg, port)
 	if proj != "" {
 		args += fmt.Sprintf(` --project "%s"`, proj)
 	}

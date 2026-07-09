@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/launcher"
 	"github.com/ivantit66/onebase/internal/selfupdate"
+	"github.com/spf13/cobra"
 )
 
 var updateCmd = &cobra.Command{
@@ -29,7 +29,7 @@ offline-серверов, куда обновление приносят на ф
 
 func init() {
 	updateCmd.Flags().String("from", "", "путь к обновлению: .zip (внутри ищется onebase[.exe]) или сам бинарь (обязателен)")
-	updateCmd.Flags().String("sha256", "", "ожидаемая SHA256 бинаря (hex) — при указании проверяется до установки")
+	updateCmd.Flags().String("sha256", "", "ожидаемая SHA256 файла обновления (.zip/.exe, hex) — при указании проверяется до установки")
 	updateCmd.Flags().String("service", "", "имя системного сервиса (иначе выводится из --id)")
 	updateCmd.Flags().String("id", "", "ID базы из реестра ibases (даёт имя сервиса и порт)")
 	updateCmd.Flags().String("target", "", "путь к заменяемому бинарю onebase (по умолчанию — текущий исполняемый файл)")
@@ -49,7 +49,14 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// 1. Извлечь/подготовить новый бинарь во временный каталог.
+	// 1. Проверить артефакт обновления, затем извлечь/подготовить новый бинарь
+	// во временный каталог.
+	if sha != "" {
+		if err := selfupdate.VerifySHA256(from, sha); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stdout, "SHA256 файла обновления совпала.")
+	}
 	stageDir, err := os.MkdirTemp("", "onebase-update-*")
 	if err != nil {
 		return err
@@ -59,12 +66,6 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	newBin, err := selfupdate.StageBinary(from, stageDir)
 	if err != nil {
 		return err
-	}
-	if sha != "" {
-		if err := selfupdate.VerifySHA256(newBin, sha); err != nil {
-			return err
-		}
-		fmt.Fprintln(os.Stdout, "SHA256 совпала.")
 	}
 
 	// 2. Остановить сервис — освобождаем бинарь.

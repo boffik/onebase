@@ -5,8 +5,8 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/spf13/cobra"
 )
 
 var ibasesCmd = &cobra.Command{
@@ -34,7 +34,11 @@ var ibasesListCmd = &cobra.Command{
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "ID\tNAME\tSOURCE\tPORT\tDB")
 		for _, b := range bases {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n", b.ID[:8]+"…", b.Name, b.ConfigSource, b.Port, b.DB)
+			dbLabel := b.DB
+			if b.DBType == "sqlite" {
+				dbLabel = b.DBPath
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n", b.ID[:8]+"…", b.Name, b.ConfigSource, b.Port, dbLabel)
 		}
 		return tw.Flush()
 	},
@@ -46,12 +50,19 @@ var ibasesAddCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name, _ := cmd.Flags().GetString("name")
 		db, _ := cmd.Flags().GetString("db")
+		sqlitePath, _ := cmd.Flags().GetString("sqlite")
 		path, _ := cmd.Flags().GetString("path")
 		port, _ := cmd.Flags().GetInt("port")
 		src, _ := cmd.Flags().GetString("source")
 
-		if name == "" || db == "" {
-			return fmt.Errorf("--name and --db are required")
+		if name == "" {
+			return fmt.Errorf("--name is required")
+		}
+		switch {
+		case db == "" && sqlitePath == "":
+			return fmt.Errorf("укажите --db (PostgreSQL) или --sqlite (файл SQLite)")
+		case db != "" && sqlitePath != "":
+			return fmt.Errorf("--db и --sqlite взаимоисключающи; укажите только один")
 		}
 		store, err := launcher.NewStore()
 		if err != nil {
@@ -63,6 +74,11 @@ var ibasesAddCmd = &cobra.Command{
 			Path:         path,
 			Port:         port,
 			ConfigSource: src,
+		}
+		if sqlitePath != "" {
+			b.DBType = "sqlite"
+			b.DBPath = sqlitePath
+			b.DB = ""
 		}
 		if err := store.Add(b); err != nil {
 			return err
@@ -95,6 +111,7 @@ var ibasesRemoveCmd = &cobra.Command{
 func init() {
 	ibasesAddCmd.Flags().String("name", "", "display name")
 	ibasesAddCmd.Flags().String("db", "", "PostgreSQL connection string")
+	ibasesAddCmd.Flags().String("sqlite", "", "SQLite database file path")
 	ibasesAddCmd.Flags().String("path", "", "project directory (for file source)")
 	ibasesAddCmd.Flags().Int("port", 8080, "server port")
 	ibasesAddCmd.Flags().String("source", "database", "config source: file or database")
