@@ -96,6 +96,35 @@ func TestRegistry_FuncMetrics(t *testing.T) {
 	}
 }
 
+// Middleware не должен «съедать» http.Flusher: SSE-эндпоинты (real-time-
+// уведомления /ui/events, поток сканера ШК) делают w.(http.Flusher), и без
+// проксирования Flush через statusRecorder падали бы с «стриминг не
+// поддерживается сервером» на любой базе с ONEBASE_DEBUG_TOKEN (лаунчер/GUI).
+func TestRegistry_MiddlewarePreservesFlusher(t *testing.T) {
+	reg := New()
+	r := chi.NewRouter()
+	r.Use(reg.Middleware)
+	var sawFlusher bool
+	r.Get("/ui/events", func(w http.ResponseWriter, _ *http.Request) {
+		f, ok := w.(http.Flusher)
+		sawFlusher = ok
+		if ok {
+			w.WriteHeader(http.StatusOK)
+			f.Flush()
+		}
+	})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ui/events", nil))
+
+	if !sawFlusher {
+		t.Fatal("хендлер за metrics-middleware не увидел http.Flusher — SSE-стриминг сломан")
+	}
+	if !rec.Flushed {
+		t.Error("Flush() не проброшен до нижележащего ResponseWriter")
+	}
+}
+
 // Незаматченный путь группируется под route="other", а не плодит серию.
 func TestRegistry_UnmatchedRouteIsOther(t *testing.T) {
 	reg := New()
