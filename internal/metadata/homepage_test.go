@@ -59,6 +59,30 @@ func TestLoadHomePage_Missing(t *testing.T) {
 	}
 }
 
+func TestLoadHomePage_Hidden(t *testing.T) {
+	dir := t.TempDir()
+	// hidden: true парсится в HomePage.Hidden (issue #304).
+	path := filepath.Join(dir, "home_page.yaml")
+	writeFile(t, path, "hidden: true\n")
+	hp, err := LoadHomePage(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if hp == nil || !hp.Hidden {
+		t.Fatalf("hidden не распарсился: %+v", hp)
+	}
+	// Без ключа hidden главная видима по умолчанию.
+	path2 := filepath.Join(dir, "home2.yaml")
+	writeFile(t, path2, "title: Главная\n")
+	hp2, err := LoadHomePage(path2)
+	if err != nil {
+		t.Fatalf("load2: %v", err)
+	}
+	if hp2.Hidden {
+		t.Error("home_page без hidden должна быть видимой")
+	}
+}
+
 func TestRowGroups(t *testing.T) {
 	hp := &HomePage{Rows: []HomePageRow{
 		{Widgets: []string{"A", "B"}},

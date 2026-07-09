@@ -422,6 +422,7 @@ type cfgHomePage struct {
 	Widgets []string          // отмеченные виджеты (режим «Авто»)
 	Rows    [][]string        // раскладка по рядам (режим «По рядам»)
 	Layout  string            // "auto" | "rows"
+	Hidden  bool              // скрыть глобальную «Главную» (навигация только по разделам, issue #304)
 }
 
 type configuratorData struct {

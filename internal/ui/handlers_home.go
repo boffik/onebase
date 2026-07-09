@@ -91,8 +91,20 @@ func (s *Server) logo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
+	tabs := s.store.EffectiveFormOpenMode(r.Context(), currentUserLogin(r)) == storage.FormModeTabs
+	// Глобальная «Главная» скрыта конфигурацией (home_page.hidden) → уводим на
+	// первый раздел (issue #304). В режиме вкладок цель — оболочка /ui/app,
+	// поэтому вычисляем базу до редиректа вкладок, чтобы не делать лишний хоп.
+	base := "/ui/"
+	if tabs {
+		base = "/ui/app"
+	}
+	if target, ok := s.hiddenHomeRedirect(r, base); ok {
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
 	// Режим вкладок: входная страница уводит в оболочку /ui/app (issue #129/#130).
-	if s.store.EffectiveFormOpenMode(r.Context(), currentUserLogin(r)) == storage.FormModeTabs {
+	if tabs {
 		q := url.Values{"home": []string{"1"}}
 		if sub := r.URL.Query().Get("subsystem"); sub != "" {
 			q.Set("subsystem", sub)
@@ -102,6 +114,31 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, r, "page-index", s.homeDashboardData(r))
+}
+
+// hideGlobalHome сообщает, прячется ли глобальная «Главная»: флаг
+// config/home_page.yaml → hidden, но только когда есть хотя бы одна подсистема
+// (иначе навигации не останется — фейл-сейф, флаг игнорируется). Используется
+// и панелью разделов (убрать ведущую ссылку), и редиректом входа.
+func (s *Server) hideGlobalHome() bool {
+	hp := s.reg.HomePage()
+	return hp != nil && hp.Hidden && len(s.reg.Subsystems()) > 0
+}
+
+// hiddenHomeRedirect решает, нужно ли увести запрос глобальной «Главной» на
+// первый раздел. Срабатывает, когда глобальная «Главная» скрыта (hideGlobalHome)
+// и в запросе нет ?subsystem= (сам раздел показываем как есть). base — путь
+// назначения: "/ui/" для режима страниц, "/ui/app" для вкладок.
+func (s *Server) hiddenHomeRedirect(r *http.Request, base string) (string, bool) {
+	if r.URL.Query().Get("subsystem") != "" || !s.hideGlobalHome() {
+		return "", false
+	}
+	subs := s.reg.Subsystems() // hideGlobalHome гарантирует непустой список
+	q := url.Values{"subsystem": []string{subs[0].Name}}
+	if base == "/ui/app" {
+		q.Set("home", "1")
+	}
+	return base + "?" + q.Encode(), true
 }
 
 func (s *Server) homeDashboardData(r *http.Request) map[string]any {

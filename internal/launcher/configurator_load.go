@@ -425,12 +425,14 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 	ghTitle := ""
 	var ghRows [][]string
 	var ghTitles map[string]string
+	ghHidden := false
 	if proj.HomePage != nil {
 		ghRows = proj.HomePage.RowGroups()
 		if proj.HomePage.Title != "" && proj.HomePage.Title != "Главная" {
 			ghTitle = proj.HomePage.Title
 		}
 		ghTitles = proj.HomePage.Titles
+		ghHidden = proj.HomePage.Hidden
 	}
 	data.GlobalHome = cfgHomePage{
 		Title:   ghTitle,
@@ -438,6 +440,7 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		Widgets: homeWidgetsNames(proj.HomePage),
 		Rows:    ghRows,
 		Layout:  homeLayoutMode(proj.HomePage),
+		Hidden:  ghHidden,
 	}
 
 	// Generate query builder schema

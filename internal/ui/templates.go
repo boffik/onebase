@@ -829,10 +829,12 @@ const tplNav = `
 {{if .Subsystems}}
 <nav class="subsys-bar">
   {{$home := t $.Lang "Главная"}}
-  <a href="/ui/" class="{{if not .CurrentSubsystem}}active{{end}}">{{$home}}</a>
+  {{/* #304: home_page.hidden прячет ведущую «Главную» — навигация только по разделам. */}}
+  {{if not .HideHome}}<a href="/ui/" class="{{if not .CurrentSubsystem}}active{{end}}">{{$home}}</a>{{end}}
   {{/* #215.2: не дублируем ведущую «Главная», если в базе есть одноимённая
-       подсистема (её представление совпадает с меткой домашней ссылки). */}}
-  {{range .Subsystems}}{{if ne (.DisplayName $.Lang) $home}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{lucideIcon .Icon}}{{.DisplayName $.Lang}}</a>{{end}}{{end}}
+       подсистема (её представление совпадает с меткой домашней ссылки). Когда
+       ведущей ссылки нет (HideHome), одноимённый раздел, наоборот, показываем. */}}
+  {{range .Subsystems}}{{if or $.HideHome (ne (.DisplayName $.Lang) $home)}}<a href="/ui/?subsystem={{.Name}}" class="{{if eq .Name $.CurrentSubsystem}}active{{end}}">{{lucideIcon .Icon}}{{.DisplayName $.Lang}}</a>{{end}}{{end}}
 </nav>
 {{end}}
 <div class="app-body">
