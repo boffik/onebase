@@ -554,18 +554,16 @@ function obManagedAddVtRow(btn) {
 
 function obManagedInitDelegates() {
   document.addEventListener('click', function (e) {
-    var btn = e.target && e.target.closest ? e.target.closest('[data-ob-ref-picker],[data-ob-ref-current],[data-ob-file-trigger],[data-ob-fire-click],[data-ob-grid-add],[data-ob-grid-del],[data-ob-add-tp],[data-ob-add-vt],[data-ob-remove-row],[data-ob-ref-cancel],[data-ob-toggle-next]') : null;
+    // data-ob-toggle-next НЕ обрабатываем здесь: managed-форма всегда грузит и
+    // ui.js (из шаблона "head"), где этот же делегат уже висит на document.
+    // Дублирование переключало бы display дважды (none→block→none) за один клик
+    // и dropdown «Печать ▾»/«Ввести на основании» не открывался бы — issue #309.
+    var btn = e.target && e.target.closest ? e.target.closest('[data-ob-ref-picker],[data-ob-ref-current],[data-ob-file-trigger],[data-ob-fire-click],[data-ob-grid-add],[data-ob-grid-del],[data-ob-add-tp],[data-ob-add-vt],[data-ob-remove-row],[data-ob-ref-cancel]') : null;
     if (!btn) return;
 
     if (btn.hasAttribute('data-ob-ref-cancel')) {
       e.preventDefault();
       try { parent.postMessage({ source: 'obRefCancel' }, '*'); } catch (_) {}
-      return;
-    }
-    if (btn.hasAttribute('data-ob-toggle-next')) {
-      e.preventDefault();
-      var d = btn.nextElementSibling;
-      if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
       return;
     }
     if (btn.hasAttribute('data-ob-ref-picker')) {
