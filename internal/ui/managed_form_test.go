@@ -139,6 +139,7 @@ func TestPageManagedForm_Renders(t *testing.T) {
 		`id="ob-managed-config"`,
 		`id="ob-managed-tp-ref-opts"`,
 		`src="/static/managed.js"`,
+		`src="/static/ui.js"`, // managed-форма грузит и ui.js (из "head"): делегат data-ob-toggle-next живёт только там (issue #309)
 	}
 	for _, e := range expects {
 		if !strings.Contains(html, e) {

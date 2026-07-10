@@ -108,6 +108,22 @@ func TestStaticManagedJS(t *testing.T) {
 	}
 }
 
+// TestToggleNextSingleHandler фиксирует инвариант issue #309: делегат
+// data-ob-toggle-next (dropdown «Печать ▾» / «Ввести на основании») должен
+// висеть на document ровно один раз. managed-форма грузит и ui.js (из шаблона
+// "head"), и managed.js — если бы оба вешали этот обработчик, один клик
+// переключал бы display дважды (none→block→none) и dropdown не открывался бы.
+// Владелец — ui.js (грузится на всех страницах); managed.js не должен дублировать.
+func TestToggleNextSingleHandler(t *testing.T) {
+	if !strings.Contains(string(uiJS), "[data-ob-toggle-next]") {
+		t.Fatal("ui.js должен обрабатывать data-ob-toggle-next (единственный владелец делегата)")
+	}
+	if strings.Contains(string(managedJS), "[data-ob-toggle-next]") {
+		t.Fatal("managed.js не должен дублировать делегат data-ob-toggle-next: " +
+			"managed-форма грузит и ui.js, двойной обработчик ломает dropdown (issue #309)")
+	}
+}
+
 func TestStaticQueryBuilderJS(t *testing.T) {
 	r := chi.NewRouter()
 	mountStatic(r)
