@@ -742,6 +742,7 @@
   "Файл не найден": "Datei nicht gefunden",
   "Ошибка разбора формы": "Fehler beim Verarbeiten des Formulars",
   "Нет файла в форме": "Keine Datei im Formular",
+  "Недопустимый тип файла": "Unzulässiger Dateityp",
   "Функция Сформировать() не найдена в %s.os": "Funktion Сформировать() in %s.os nicht gefunden",
   "Процедура должна возвращать ТабличныйДокумент": "Die Prozedur muss ein SpreadsheetDocument zurückgeben",
   "copy data (возможно дубликаты по новому PK)": "Daten kopieren (mögliche Duplikate beim neuen PK)",

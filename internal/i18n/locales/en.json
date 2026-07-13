@@ -828,6 +828,7 @@
   "Файл не найден": "File not found",
   "Ошибка разбора формы": "Form parsing error",
   "Нет файла в форме": "No file in the form",
+  "Недопустимый тип файла": "File type not allowed",
   "Функция Сформировать() не найдена в %s.os": "Function Сформировать() not found in %s.os",
   "Процедура должна возвращать ТабличныйДокумент": "The procedure must return a SpreadsheetDocument",
   "copy data (возможно дубликаты по новому PK)": "copy data (possible duplicates by the new PK)",
