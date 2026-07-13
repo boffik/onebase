@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
           cache: true
 
       - name: Check for UTF-8 BOM in .go files
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
           cache: true
       # Набор линтеров — в .golangci.yml (план 56): стартуем с того, что
       # проходит сейчас, ужесточаем по мере чистки.
@@ -104,13 +104,14 @@ jobs:
     # ВыполнитьКоманду) — ловит уязвимые транзитивные зависимости и версию Go до
     # релиза. На момент добавления достижимых advisory нет: модульные закрыты
     # бампом (x/net, pgx/v5), stdlib — патчами в go-version toolchain'а ниже.
-    # Держите go-version актуальным (setup-go подтягивает свежий патч 1.26.x).
+    # Держите go-version актуальным и пиньте патч-версию: floating 1.26.x может
+    # взять устаревший toolcache на GitHub runner и завалить govulncheck.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
           cache: true
       - name: govulncheck
         run: |
@@ -130,7 +131,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version: '1.26.5'
           cache: true
 
       - name: Install benchstat
