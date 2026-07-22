@@ -436,6 +436,10 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 		http.Error(w, s.errText(r, err), 400)
 		return
 	}
+	if err := checkFormNumberFields(r, entity); err != nil {
+		http.Error(w, s.errText(r, err), http.StatusBadRequest)
+		return
+	}
 	fields = formToFields(r, entity)
 	tpRows = parseTablePartRows(r, entity)
 

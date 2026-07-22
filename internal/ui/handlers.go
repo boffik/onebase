@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +19,7 @@ import (
 	"github.com/ivantit66/onebase/internal/richtext"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/shopspring/decimal"
 )
 
 func (s *Server) getEntity(w http.ResponseWriter, r *http.Request) *metadata.Entity {
@@ -742,6 +743,44 @@ func formatLabelValue(v any) string {
 	return strings.TrimSpace(fmt.Sprintf("%v", v))
 }
 
+var formNumberPattern = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+)$`)
+
+// parseFormNumber разбирает пользовательское представление числа. В формах
+// принимаются оба привычных десятичных разделителя (12.345 и 12,345), но не
+// пропускаются буквы, несколько разделителей и прочий ввод, который PostgreSQL
+// затем отклонил бы как invalid input syntax for type numeric.
+func parseFormNumber(raw string) (decimal.Decimal, error) {
+	value := strings.TrimSpace(raw)
+	if !formNumberPattern.MatchString(value) {
+		return decimal.Zero, i18nerr.Errorf("некорректное число %q: используйте цифры и один разделитель — запятую или точку", raw)
+	}
+	value = strings.Replace(value, ",", ".", 1)
+	result, err := decimal.NewFromString(value)
+	if err != nil {
+		return decimal.Zero, i18nerr.Errorf("некорректное число %q", raw)
+	}
+	return result, nil
+}
+
+// checkFormNumberFields валидирует числовые реквизиты до запуска hook-ов и
+// транзакции записи, чтобы пользователь получил понятный ответ формы, а не
+// техническую ошибку драйвера PostgreSQL.
+func checkFormNumberFields(r *http.Request, entity *metadata.Entity) error {
+	for _, f := range entity.Fields {
+		if f.Type != metadata.FieldTypeNumber {
+			continue
+		}
+		raw := r.FormValue(f.Name)
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		if _, err := parseFormNumber(raw); err != nil {
+			return i18nerr.Errorf("поле %q: %v", f.Name, err)
+		}
+	}
+	return nil
+}
+
 func formToFields(r *http.Request, entity *metadata.Entity) map[string]any {
 	fields := make(map[string]any)
 	for _, f := range entity.Fields {
@@ -766,7 +805,7 @@ func formToFields(r *http.Request, entity *metadata.Entity) map[string]any {
 		case metadata.FieldTypeBool:
 			fields[f.Name] = val == "true"
 		case metadata.FieldTypeNumber:
-			if n, err := strconv.ParseFloat(val, 64); err == nil {
+			if n, err := parseFormNumber(val); err == nil {
 				fields[f.Name] = n
 			} else {
 				fields[f.Name] = val
