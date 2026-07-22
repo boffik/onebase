@@ -1471,6 +1471,8 @@ const tplForm = `
       <option value="false" {{if eq (index $.Values $fn) "false"}}selected{{end}}>{{t $.Lang "Нет"}}</option>
       <option value="true"  {{if eq (index $.Values $fn) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
+  {{else if eq (str .Type) "number"}}
+    <input type="text" inputmode="decimal" pattern="[+-]?([0-9]+([.,][0-9]+)?|[.,][0-9]+)" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$flabel}}" title="{{t $.Lang "Введите число; десятичный разделитель — запятая или точка"}}">
   {{else if isRichText (str .Type)}}
     {{/* textarea — скрытое form-backing поле (хранит санитизированный HTML).
          Без JS остаётся видимым и рабочим (прогрессивное улучшение). С JS
