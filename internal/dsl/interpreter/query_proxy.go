@@ -93,7 +93,7 @@ func (q *queryProxy) CallMethod(name string, args []any) any {
 
 // unwrapArrayParams converts DSL params for query compilation:
 // - *Array → []any (each item unwrapped)
-// - *Ref → UUID string
+// - any reference-like value implementing GetRefUUID → UUID string
 // This ensures pgx receives plain Go types, not interpreter-specific wrappers.
 func unwrapArrayParams(params map[string]any) map[string]any {
 	result := make(map[string]any, len(params))
@@ -105,18 +105,16 @@ func unwrapArrayParams(params map[string]any) map[string]any {
 				items[i] = unwrapRef(item)
 			}
 			result[k] = items
-		case *Ref:
-			result[k] = val.UUID
 		default:
-			result[k] = v
+			result[k] = unwrapRef(v)
 		}
 	}
 	return result
 }
 
 func unwrapRef(v any) any {
-	if ref, ok := v.(*Ref); ok {
-		return ref.UUID
+	if ref, ok := v.(interface{ GetRefUUID() string }); ok {
+		return ref.GetRefUUID()
 	}
 	return v
 }

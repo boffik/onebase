@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -111,6 +112,29 @@ func TestQuery_SetParameter(t *testing.T) {
 	evalQuery(t, src, db, &stubReg{})
 	assert.NotEmpty(t, capturedSQL)
 	assert.Contains(t, capturedArgs, "Кабель")
+}
+
+// Объект документа и оборачивающий его UI this реализуют GetRefUUID. Параметр
+// запроса должен получить обычную UUID-строку, а не внутренний Go-объект,
+// который PostgreSQL-драйвер не умеет кодировать.
+func TestQuery_ReferenceLikeParameter_UnwrapsUUID(t *testing.T) {
+	var capturedArgs []any
+	db := &captureDB{onQuery: func(_ string, args []any) {
+		capturedArgs = args
+	}}
+	src := `Процедура Тест()
+		Запрос = Новый Запрос;
+		Запрос.Текст = "ВЫБРАТЬ Номер ИЗ Документ.Заказ ГДЕ Ссылка <> &ЭтотДокумент";
+		Запрос.УстановитьПараметр("ЭтотДокумент", ЭтотОбъект);
+		Запрос.Выполнить();
+	КонецПроцедуры`
+	evalQuery(t, src, db, &stubReg{})
+
+	require.Len(t, capturedArgs, 1)
+	id, ok := capturedArgs[0].(string)
+	require.Truef(t, ok, "параметр имеет тип %T, ожидалась UUID-строка", capturedArgs[0])
+	_, err := uuid.Parse(id)
+	require.NoError(t, err)
 }
 
 func TestQuery_EmptyText_Panics(t *testing.T) {
