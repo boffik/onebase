@@ -51,6 +51,20 @@ func TestObject_String_Number(t *testing.T) {
 	}
 }
 
+// Существующий объект формы получает Fields с именами из метаданных
+// (PascalCase), тогда как новый объект после Set хранит lowercase.
+func TestObject_String_PascalCaseNumber(t *testing.T) {
+	o := &Object{
+		Type:   "ПриходныйКассовыйОрдер",
+		Kind:   metadata.KindDocument,
+		ID:     uuid.New(),
+		Fields: map[string]any{"Номер": "ПКО-00001"},
+	}
+	if got := o.String(); got != "ПКО-00001" {
+		t.Errorf("String() = %q, ожидалось значение PascalCase-поля Номер", got)
+	}
+}
+
 // Без конвенционных полей — fallback на Type:short-uuid.
 func TestObject_String_Fallback(t *testing.T) {
 	o := &Object{

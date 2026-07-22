@@ -137,7 +137,9 @@ func (o *Object) String() string {
 		return ""
 	}
 	for _, k := range []string{"наименование", "name", "номер", "number"} {
-		if v, ok := o.Fields[k]; ok && v != nil {
+		// Fields приходят как в lowercase после Object.Set, так и в PascalCase
+		// из БД/формы существующего объекта. Get ищет регистронезависимо.
+		if v := o.Get(k); v != nil {
 			s := strings.TrimSpace(fmt.Sprint(v))
 			if s != "" {
 				return s
