@@ -254,6 +254,102 @@ func TestCompile_SystemCols_BareAndDotted(t *testing.T) {
 	}
 }
 
+// Имена системных колонок регистра не являются зарезервированными для
+// документов и справочников: там это обычные прикладные поля с кириллическими
+// физическими именами.
+func TestCompile_SystemColNamesRemainEntityFields(t *testing.T) {
+	for _, source := range []string{"Документ.НачислениеВзноса", "Справочник.Периоды"} {
+		src := `ВЫБРАТЬ Д.Период, Д.ВидДвижения, Д.Регистратор, Д.НомерСтроки, Период
+ИЗ ` + source + ` КАК Д
+ГДЕ Д.Период >= &Дата`
+
+		r, err := query.Compile(src, query.CompileOpts{
+			Params: map[string]any{"Дата": "2026-01-01"},
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", source, err)
+		}
+		for _, want := range []string{
+			"д.период",
+			"д.виддвижения",
+			"д.регистратор",
+			"д.номерстроки",
+			"период",
+		} {
+			if !strings.Contains(r.SQL, want) {
+				t.Errorf("%s: ожидалось %q, получили: %s", source, want, r.SQL)
+			}
+		}
+		for _, unwanted := range []string{
+			"д.period",
+			"д.вид_движения",
+			"д.recorder",
+			"д.line_number",
+		} {
+			if strings.Contains(r.SQL, unwanted) {
+				t.Errorf("%s: системная колонка %q не должна применяться к сущности: %s", source, unwanted, r.SQL)
+			}
+		}
+	}
+}
+
+// В смешанном запросе тип определяется по квалификатору: одно и то же имя
+// «Период» у документа и регистра должно вести к разным физическим колонкам.
+func TestCompile_SystemColsUseQualifiedSourceType(t *testing.T) {
+	src := `ВЫБРАТЬ Д.Период, Р.Период
+ИЗ Документ.НачислениеВзноса КАК Д
+ЛЕВОЕ СОЕДИНЕНИЕ РегистрНакопления.Взносы КАК Р
+ПО Р.Регистратор = Д.Ссылка`
+
+	r, err := query.Compile(src, query.CompileOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "д.период") {
+		t.Errorf("поле документа должно остаться кириллическим: %s", r.SQL)
+	}
+	if !strings.Contains(r.SQL, "р.period") {
+		t.Errorf("поле регистра должно разрешиться в period: %s", r.SQL)
+	}
+	if !strings.Contains(r.SQL, "р.recorder") {
+		t.Errorf("Регистратор регистра должен разрешиться в recorder: %s", r.SQL)
+	}
+}
+
+// Поле сущности, прочитанное через ссылочное измерение регистра, также не
+// должно ошибочно считаться системной колонкой самого регистра.
+func TestCompile_SystemColNameThroughReferenceRemainsEntityField(t *testing.T) {
+	src := `ВЫБРАТЬ ДокументНачисления.Период
+ИЗ РегистрНакопления.Взносы КАК Р`
+	reg := &metadata.Register{
+		Name: "Взносы",
+		Dimensions: []metadata.Field{
+			{Name: "ДокументНачисления", RefEntity: "НачислениеВзноса"},
+		},
+	}
+	doc := &metadata.Entity{
+		Name: "НачислениеВзноса",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Период", Type: metadata.FieldTypeDate},
+		},
+	}
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Registers: []*metadata.Register{reg},
+		Entities:  []*metadata.Entity{doc},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "ref_документначисления.период") {
+		t.Errorf("поле документа через ссылку должно остаться кириллическим: %s", r.SQL)
+	}
+	if strings.Contains(r.SQL, "ref_документначисления.period") {
+		t.Errorf("поле документа через ссылку ошибочно разрешилось как системное: %s", r.SQL)
+	}
+}
+
 // функции даты в DSL должны транслироваться в SQL-эквиваленты
 // под нужный диалект. SQL case-insensitive — сравниваем в lowercase, поскольку
 // транслятор лоуэркейсит идентификаторы.

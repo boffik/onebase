@@ -481,6 +481,20 @@ type translator struct {
 	rowsScoped  bool                          // true после внедрения rowFilters в outer WHERE
 	rowApplied  []SourceRef                   // источники, к которым RLS-предикат реально внедрён (для финальной сверки)
 	parenDepth  int                           // глубина незакрытых '(' в основном потоке (VT-аргументы считает parseVTArgs)
+	sourceCtx   sourceContext                 // тип основного источника и квалификаторов для системных колонок регистра
+}
+
+type sourceClass uint8
+
+const (
+	sourceClassUnknown sourceClass = iota
+	sourceClassEntity
+	sourceClassRegister
+)
+
+type sourceContext struct {
+	main       sourceClass
+	qualifiers map[string]sourceClass
 }
 
 type pendingRowFilter struct {
@@ -2173,6 +2187,94 @@ func preScanMainTable(tokens []tok) string {
 	return ""
 }
 
+// preScanSourceContext определяет, какие квалификаторы относятся к регистрам,
+// а какие — к документам/справочникам. Это нужно до основного прохода, потому
+// что SELECT транслируется раньше FROM, а русские имена системных колонок
+// регистра (Период, Регистратор, ...) совпадают с допустимыми прикладными
+// полями сущностей.
+func preScanSourceContext(tokens []tok) sourceContext {
+	ctx := sourceContext{qualifiers: map[string]sourceClass{}}
+	for i := 0; i+2 < len(tokens); i++ {
+		if tokens[i].kind != tIdent {
+			continue
+		}
+		typeUpper := strings.ToUpper(tokens[i].val)
+		if !isSourceType(typeUpper) || tokens[i+1].kind != tDot || tokens[i+2].kind != tIdent {
+			continue
+		}
+
+		class := sourceClassEntity
+		if isAccumRegType(typeUpper) || isInfoRegType(typeUpper) || isAccountRegType(typeUpper) {
+			class = sourceClassRegister
+		}
+		if ctx.main == sourceClassUnknown {
+			ctx.main = class
+		}
+
+		entityName := strings.ToLower(tokens[i+2].val)
+		ctx.qualifiers[entityName] = class
+		ctx.qualifiers[sourceToTable(typeUpper, tokens[i+2].val)] = class
+
+		// У обычного источника КАК/AS следует сразу за именем сущности.
+		aliasPos := i + 3
+		if aliasPos+1 < len(tokens) && tokens[aliasPos].kind == tIdent {
+			aliasUpper := strings.ToUpper(tokens[aliasPos].val)
+			if (aliasUpper == "КАК" || aliasUpper == "AS") && tokens[aliasPos+1].kind == tIdent {
+				ctx.qualifiers[strings.ToLower(tokens[aliasPos+1].val)] = class
+				continue
+			}
+		}
+
+		// У виртуальной таблицы пользовательский алиас находится после списка
+		// аргументов: Регистр.X.Остатки(...) КАК Р.
+		if i+5 >= len(tokens) || tokens[i+3].kind != tDot || tokens[i+5].kind != tLParen {
+			continue
+		}
+		depth := 0
+		for j := i + 5; j < len(tokens); j++ {
+			switch tokens[j].kind {
+			case tLParen:
+				depth++
+			case tRParen:
+				depth--
+				if depth == 0 {
+					aliasPos = j + 1
+					if aliasPos+1 < len(tokens) && tokens[aliasPos].kind == tIdent {
+						aliasUpper := strings.ToUpper(tokens[aliasPos].val)
+						if (aliasUpper == "КАК" || aliasUpper == "AS") && tokens[aliasPos+1].kind == tIdent {
+							ctx.qualifiers[strings.ToLower(tokens[aliasPos+1].val)] = class
+						}
+					}
+					j = len(tokens)
+				}
+			}
+		}
+	}
+	return ctx
+}
+
+// systemColumnAlias разрешает русское имя системной колонки только в контексте
+// регистра. Для документов и справочников такое имя является обычным
+// прикладным полем и должно остаться кириллическим.
+func (tr *translator) systemColumnAlias(name string, prevDot bool) (string, bool) {
+	col, ok := systemColAlias(name)
+	if !ok {
+		return "", false
+	}
+	if prevDot && tr.pos >= 3 {
+		qualifier := strings.ToLower(tr.tokens[tr.pos-3].val)
+		// Обращение через ссылочное поле регистра ведёт к документу или
+		// справочнику, поэтому Регистр.Документ.Период — не системный period.
+		if tr.findRefDim(qualifier) != nil {
+			return "", false
+		}
+		if class, known := tr.sourceCtx.qualifiers[qualifier]; known {
+			return col, class == sourceClassRegister
+		}
+	}
+	return col, tr.sourceCtx.main == sourceClassRegister
+}
+
 // projectionFieldNames extracts identifiers used by SELECT expressions before
 // aliases are applied. It deliberately errs on the safe side: qualifiers and
 // otherwise harmless identifiers may be included, but an underlying field must
@@ -2304,6 +2406,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		colTypes:    buildColTypes(tokens, opts),
 		mainTable:   preScanMainTable(tokens),
 		refDims:     preScanRefDims(tokens, opts),
+		sourceCtx:   preScanSourceContext(tokens),
 		aliases:     map[string]struct{}{},
 		section:     sectionOther,
 	}
@@ -2556,8 +2659,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 				continue
 			}
 			// Системные колонки регистра — PascalCase русские алиасы
-			// (см. Работает и с префиксом (Х.Период), и без.
-			if col, ok := systemColAlias(t.val); ok {
+			// (см. systemColAlias). Работает и с префиксом (Х.Период), и без,
+			// но только если соответствующий источник действительно регистр.
+			if col, ok := tr.systemColumnAlias(t.val, prevDot); ok {
 				tr.emit(col)
 				continue
 			}
