@@ -16,6 +16,7 @@ func TestPageForm_DelegatedHandlers(t *testing.T) {
 	}
 	for _, want := range []string{
 		"data-ob-popup-cancel",
+		"data-ob-close-tab",
 		"data-ob-toggle-next",
 		"data-ob-confirm",
 		"data-ob-ref-current",
@@ -92,6 +93,7 @@ func TestPageForm_DelegatedHandlers(t *testing.T) {
 	}
 	html := buf.String()
 	for _, want := range []string{
+		`data-ob-close-tab`,
 		`data-ob-toggle-next`,
 		`data-ob-confirm=`,
 		`data-ob-ref-picker="ref-Контрагент"`,
