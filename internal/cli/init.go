@@ -70,7 +70,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 // разработчика сразу видел структуру, рабочий цикл и встроенные функции —
 // без ручных подсказок от пользователя (best-effort).
 func writeAIGuide(dir string) {
-	_ = os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(generateAIGuide()), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(generateAIGuide(environmentNote(dir))), 0o644)
 	// CLAUDE.md не перезаписываем, если он уже есть (мог быть кастомизирован).
 	claudePath := filepath.Join(dir, "CLAUDE.md")
 	if _, err := os.Stat(claudePath); os.IsNotExist(err) {

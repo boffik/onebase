@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -29,12 +30,14 @@ var aiguideCmd = &cobra.Command{
 
 func init() {
 	aiguideCmd.Flags().String("output", "", "записать руководство в файл вместо stdout (обычно AGENTS.md)")
+	aiguideCmd.Flags().String("project", "", "каталог конфигурации — добавит блок «Окружение» (путь + ОС-заметка); без него вывод чисто портируемый")
 	aiguideCmd.Flags().Bool("claude", false, "также положить рядом CLAUDE.md-указатель (авто-загрузка Claude Code); не перезаписывает существующий")
 	rootCmd.AddCommand(aiguideCmd)
 }
 
 func runAIGuide(cmd *cobra.Command, _ []string) error {
-	guide := generateAIGuide()
+	proj, _ := cmd.Flags().GetString("project")
+	guide := generateAIGuide(environmentNote(proj))
 	out, _ := cmd.Flags().GetString("output")
 	if out == "" {
 		fmt.Fprint(os.Stdout, guide)
@@ -58,14 +61,14 @@ func runAIGuide(cmd *cobra.Command, _ []string) error {
 
 // generateAIGuide строит справочник из платформы. Списки builtins берутся из
 // реестра функций (не устаревают), остальное — стабильные конвенции платформы.
-func generateAIGuide() string {
+func generateAIGuide(envBlock string) string {
 	var b strings.Builder
 	b.WriteString(`# OneBase — руководство для ИИ-разработчика
 
 Этот файл сгенерирован командой ` + "`onebase ai-guide`" + ` из самой платформы.
 OneBase — 1С-подобная платформа: конфигурация описывает прикладные объекты
 (метаданные YAML) и логику (DSL ` + "`.os`" + `), платформа их исполняет.
-
+` + envBlock + `
 ## Структура репозитория конфигурации
 
 ` + "```" + `
@@ -121,6 +124,29 @@ src/*.os                модули DSL (логика объектов, обр�
 | ` + "`onebase mcp --project <dir>`" + ` | MCP stdio server для внешних AI-клиентов. Read-only по умолчанию; mutating tools включаются точечно (` + "`--allow-refactor-write`" + `, ` + "`--allow-config-rollback`" + `, ` + "`--allow-fmt-write`" + `, ` + "`--allow-procrun`" + `) или общим ` + "`--allow-write`" + `. |
 | ` + "`onebase procrun --project <dir> --proc <Имя> --set К=З --file П=путь`" + ` | Запуск обработки офлайн, печать ` + "`Сообщить()`" + `. Отладка прикладной логики. |
 | ` + "`onebase run --project <dir> --sqlite <файл> --port N`" + ` | Поднять сервер (UI + REST). |
+
+## Проверка результата (доказательства)
+
+**Зелёный ` + "`onebase check`" + ` ≠ «работает».** ` + "`check`" + ` ловит синтаксис,
+неизвестные функции и компиляцию/исполнение запросов (` + "`no such column/table`" + `),
+но не бизнес-поведение. Доказывай под тип изменения:
+
+- **Проведение, движения, остатки:** через ` + "`onebase procrun`" + ` создай документ,
+  проведи, прочитай движения/остатки ` + "`Запросом`" + `, напечатай ` + "`Сообщить()`" + ` —
+  сверь числа. Регистры проверяй и напрямую через ` + "`onebase query`" + `.
+- **Запрос, агрегаты:** ` + "`onebase query … --params '{…}'`" + ` на реальных данных,
+  сверь с ожиданием.
+- **Отчёт, виджет:** ` + "`onebase report explain`" + ` / ` + "`onebase widget explain --json`" + `
+  — запрос, SQL, sample rows.
+- **UI, формы, дашборды:** headless CLI отрисовку не покажет — либо подними
+  ` + "`onebase run`" + ` и проверь браузером, либо честно напиши «UI не проверен headless».
+- **Роли, RLS, видимость:** ` + "`ИмяПользователя()`" + ` пуст в ` + "`procrun`" + `, RLS по
+  пользователю headless не доказать — нужен сессионный прогон под ролью через
+  ` + "`onebase run`" + `.
+
+Отчёт о сделанном держи коротким и проверяемым: строка Tool trace (команда → итог),
+что создано, какие проверки прошли — не только ` + "`check`" + `, но и сверенные числа
+` + "`procrun`" + `/` + "`query`" + `, и явно проверен ли UI — и как открыть результат.
 
 ## Язык DSL
 
@@ -259,6 +285,32 @@ Vision-запрос по данным **из памяти**: принимает 
 внутреннего токена, а консоли требуют сессию администратора. Не полагайся на их
 наличие в проде; данные мутирующие операции (запись/проведение) — только явно.
 `)
+	return b.String()
+}
+
+// environmentNote — discovered-блок «Окружение»: путь проекта и ОС-условная
+// заметка о запуске. Вычисляется в момент генерации на машине пользователя,
+// поэтому корректен на любом компе (портируемость через обнаружение, а не через
+// зашитые пути). Пустая строка, если каталог проекта не задан, — тогда руководство
+// остаётся чисто портируемым.
+func environmentNote(projectDir string) string {
+	if projectDir == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(projectDir)
+	if err != nil {
+		abs = projectDir
+	}
+	var b strings.Builder
+	b.WriteString("\n## Окружение (определено при генерации)\n\n")
+	fmt.Fprintf(&b, "- Проект: `%s`\n", abs)
+	b.WriteString("- Запускай `onebase` из этого каталога или с `--project <путь>`; сам бинарь берётся из PATH.\n")
+	switch runtime.GOOS {
+	case "windows":
+		b.WriteString("- ОС: Windows — в путях `\\`; запущенный сервер держит файл БД залоченным (останови его перед `migrate`).\n")
+	default:
+		fmt.Fprintf(&b, "- ОС: %s — в путях `/`.\n", runtime.GOOS)
+	}
 	return b.String()
 }
 
