@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
@@ -71,8 +73,10 @@ func sanitizeFileName(name string) string {
 }
 
 type handler struct {
-	store  *Store
-	runner *Runner
+	store         *Store
+	runner        *Runner
+	cfgLoginLimit *auth.LoginLimiter
+	cfgLoginOnce  sync.Once
 	// isoBrowser запускает изолированные окна Предприятия (план 78);
 	// в тестах подменяется фейком.
 	isoBrowser isolatedBrowser
@@ -528,8 +532,9 @@ func (h *handler) configuratorReorder(w http.ResponseWriter, r *http.Request) {
 	// Клиент шлёт FormData (multipart/form-data). Нельзя ограничиться ParseForm:
 	// для multipart он не читает тело, а после него FormValue/r.Form уже не
 	// триггерят ParseMultipartForm (r.Form != nil) → group и name приходят пустыми.
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil && err != http.ErrNotMultipart {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		writeJSON(w, requestBodyErrorStatus(err), map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	group := r.FormValue("group")

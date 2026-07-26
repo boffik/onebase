@@ -28,9 +28,9 @@ func requestWithBaseID(req *http.Request, id string) *http.Request {
 // configurator-cookie, иначе следующий AJAX-запрос загрузит форму входа внутрь
 // панели, а её submit уйдёт POST-запросом на GET-only /configurator (HTTP 405).
 func TestCfgAdminUserCreate_FirstAdminStartsConfiguratorSession(t *testing.T) {
-	t.Cleanup(CloseAuthPools)
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "first-admin.db")
+	t.Cleanup(CloseAuthPools)
 	db, err := storage.ConnectSQLite(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestCfgAdminUserCreate_FirstAdminStartsConfiguratorSession(t *testing.T) {
 	h := &handler{store: store, runner: NewRunner()}
 
 	req := httptest.NewRequest(http.MethodPost, "/bases/first-admin-base/configurator/admin/users/create",
-		strings.NewReader(`{"login":"admin","password":"secret","fullName":"Admin","isAdmin":true}`))
+		strings.NewReader(`{"login":"admin","password":"secret123","fullName":"Admin","isAdmin":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithBaseID(req, base.ID)
 	rec := httptest.NewRecorder()
@@ -78,9 +78,9 @@ func TestCfgAdminUserCreate_FirstAdminStartsConfiguratorSession(t *testing.T) {
 }
 
 func TestCfgAdminUserCreate_FirstUserMustBeAdmin(t *testing.T) {
-	t.Cleanup(CloseAuthPools)
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "first-user.db")
+	t.Cleanup(CloseAuthPools)
 	db, err := storage.ConnectSQLite(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestCfgAdminUserCreate_FirstUserMustBeAdmin(t *testing.T) {
 	}
 	h := &handler{store: store, runner: NewRunner()}
 	req := httptest.NewRequest(http.MethodPost, "/bases/first-user-base/configurator/admin/users/create",
-		strings.NewReader(`{"login":"user","password":"secret","isAdmin":false}`))
+		strings.NewReader(`{"login":"user","password":"secret123","isAdmin":false}`))
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithBaseID(req, base.ID)
 	rec := httptest.NewRecorder()
@@ -109,6 +109,75 @@ func TestCfgAdminUserCreate_FirstUserMustBeAdmin(t *testing.T) {
 	}
 	if has, err := repo.HasUsers(ctx); err != nil || has {
 		t.Fatalf("first non-admin must not be created: has=%v err=%v", has, err)
+	}
+}
+
+func TestConfiguratorLoginIsRateLimited(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "rate-limit.db")
+	t.Cleanup(CloseAuthPools)
+	db, err := storage.ConnectSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := auth.NewRepo(db)
+	if err := repo.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CreateManaged(ctx, "admin", "secret123", "", true); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &Store{path: filepath.Join(t.TempDir(), "ibases.yaml")}
+	base := &Base{ID: "limited-login", ConfigSource: "database", DBType: "sqlite", DBPath: dbPath}
+	if err := store.save([]*Base{base}); err != nil {
+		t.Fatal(err)
+	}
+	h := &handler{store: store, runner: NewRunner()}
+	login := func() *httptest.ResponseRecorder {
+		form := url.Values{"login": {"admin"}, "password": {"wrong-password"}}
+		req := httptest.NewRequest(http.MethodPost, "/bases/limited-login/configurator/login", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.RemoteAddr = "10.0.0.9:4567"
+		req = requestWithBaseID(req, base.ID)
+		rec := httptest.NewRecorder()
+		h.cfgLoginSubmit(rec, req)
+		return rec
+	}
+
+	for i := 0; i < 5; i++ {
+		if rec := login(); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d, want 401", i+1, rec.Code)
+		}
+	}
+	rec := login()
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("blocked login = %d Retry-After=%q, want 429 with retry", rec.Code, rec.Header().Get("Retry-After"))
+	}
+}
+
+func TestCfgAuthMiddlewareFailsClosedWhenDatabaseCannotOpen(t *testing.T) {
+	store := &Store{path: filepath.Join(t.TempDir(), "ibases.yaml")}
+	base := &Base{ID: "broken-auth", Name: "Broken auth", DBType: "unsupported"}
+	if err := store.save([]*Base{base}); err != nil {
+		t.Fatal(err)
+	}
+	h := &handler{store: store, runner: NewRunner()}
+	called := false
+	protected := h.cfgAuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+
+	req := requestWithBaseID(httptest.NewRequest(http.MethodGet, "/bases/broken-auth/configurator", nil), base.ID)
+	rec := httptest.NewRecorder()
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if called {
+		t.Fatal("protected configurator handler was called after auth database error")
 	}
 }
 

@@ -3,6 +3,7 @@ package query_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/query"
@@ -54,6 +55,38 @@ func TestCompile_WithParam(t *testing.T) {
 	}
 	if len(r.Args) != 1 || r.Args[0] != "Приход" {
 		t.Errorf("expected args=[Приход], got %v", r.Args)
+	}
+}
+
+func TestCompile_Between(t *testing.T) {
+	src := `ВЫБРАТЬ id ИЗ Документ.ЗаЧас ГДЕ Дата МЕЖДУ &ДатаНачала И &ДатаОкончания`
+	params := map[string]any{
+		"ДатаНачала":    time.Date(2026, 7, 26, 0, 0, 0, 0, time.UTC),
+		"ДатаОкончания": time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC),
+	}
+
+	tests := []struct {
+		name    string
+		dialect storage.Dialect
+		want    string
+	}{
+		{name: "postgres", want: "WHERE дата BETWEEN $1::timestamptz AND $2::timestamptz"},
+		{name: "sqlite", dialect: storage.SQLiteDialect{}, want: "WHERE дата BETWEEN ? AND ?"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := query.Compile(src, query.CompileOpts{Params: params, Dialect: tt.dialect})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(r.SQL, tt.want) {
+				t.Fatalf("expected %q, got: %s", tt.want, r.SQL)
+			}
+			if len(r.Args) != 2 {
+				t.Fatalf("expected 2 args, got %d: %v", len(r.Args), r.Args)
+			}
+		})
 	}
 }
 
@@ -251,6 +284,138 @@ func TestCompile_SystemCols_BareAndDotted(t *testing.T) {
 	// bare и в WHERE
 	if !strings.Contains(sql, "period >=") {
 		t.Errorf("ожидалось period >= в WHERE, получили: %s", sql)
+	}
+}
+
+// Имена системных колонок регистра не являются зарезервированными для
+// документов и справочников: там это обычные прикладные поля с кириллическими
+// физическими именами.
+func TestCompile_SystemColNamesRemainEntityFields(t *testing.T) {
+	for _, source := range []string{"Документ.НачислениеВзноса", "Справочник.Периоды"} {
+		src := `ВЫБРАТЬ Д.Период, Д.ВидДвижения, Д.Регистратор, Д.НомерСтроки, Период
+ИЗ ` + source + ` КАК Д
+ГДЕ Д.Период >= &Дата`
+
+		r, err := query.Compile(src, query.CompileOpts{
+			Params: map[string]any{"Дата": "2026-01-01"},
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", source, err)
+		}
+		for _, want := range []string{
+			"д.период",
+			"д.виддвижения",
+			"д.регистратор",
+			"д.номерстроки",
+			"период",
+		} {
+			if !strings.Contains(r.SQL, want) {
+				t.Errorf("%s: ожидалось %q, получили: %s", source, want, r.SQL)
+			}
+		}
+		for _, unwanted := range []string{
+			"д.period",
+			"д.вид_движения",
+			"д.recorder",
+			"д.line_number",
+		} {
+			if strings.Contains(r.SQL, unwanted) {
+				t.Errorf("%s: системная колонка %q не должна применяться к сущности: %s", source, unwanted, r.SQL)
+			}
+		}
+	}
+}
+
+// В смешанном запросе тип определяется по квалификатору: одно и то же имя
+// «Период» у документа и регистра должно вести к разным физическим колонкам.
+func TestCompile_SystemColsUseQualifiedSourceType(t *testing.T) {
+	src := `ВЫБРАТЬ Д.Период, Р.Период
+ИЗ Документ.НачислениеВзноса КАК Д
+ЛЕВОЕ СОЕДИНЕНИЕ РегистрНакопления.Взносы КАК Р
+ПО Р.Регистратор = Д.Ссылка`
+
+	r, err := query.Compile(src, query.CompileOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "д.период") {
+		t.Errorf("поле документа должно остаться кириллическим: %s", r.SQL)
+	}
+	if !strings.Contains(r.SQL, "р.period") {
+		t.Errorf("поле регистра должно разрешиться в period: %s", r.SQL)
+	}
+	if !strings.Contains(r.SQL, "р.recorder") {
+		t.Errorf("Регистратор регистра должен разрешиться в recorder: %s", r.SQL)
+	}
+}
+
+func TestCompile_SystemColsAreScopedToNestedSelect(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "outer register inner document",
+			src: `ВЫБРАТЬ Период,
+    (ВЫБРАТЬ Период ИЗ Документ.НачислениеВзноса КАК Д) КАК ПериодДокумента
+ИЗ РегистрНакопления.Взносы КАК Р`,
+			want: []string{"SELECT period,", "(SELECT период FROM начислениевзноса AS д)"},
+		},
+		{
+			name: "outer document inner register",
+			src: `ВЫБРАТЬ Период,
+    (ВЫБРАТЬ Период ИЗ РегистрНакопления.Взносы КАК Р) КАК ПериодРегистра
+ИЗ Документ.НачислениеВзноса КАК Д`,
+			want: []string{"SELECT период,", "(SELECT period FROM рег_взносы AS р)"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := query.Compile(tt.src, query.CompileOpts{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(r.SQL, want) {
+					t.Errorf("ожидалось %q, получили: %s", want, r.SQL)
+				}
+			}
+		})
+	}
+}
+
+// Поле сущности, прочитанное через ссылочное измерение регистра, также не
+// должно ошибочно считаться системной колонкой самого регистра.
+func TestCompile_SystemColNameThroughReferenceRemainsEntityField(t *testing.T) {
+	src := `ВЫБРАТЬ ДокументНачисления.Период
+ИЗ РегистрНакопления.Взносы КАК Р`
+	reg := &metadata.Register{
+		Name: "Взносы",
+		Dimensions: []metadata.Field{
+			{Name: "ДокументНачисления", RefEntity: "НачислениеВзноса"},
+		},
+	}
+	doc := &metadata.Entity{
+		Name: "НачислениеВзноса",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Период", Type: metadata.FieldTypeDate},
+		},
+	}
+
+	r, err := query.Compile(src, query.CompileOpts{
+		Registers: []*metadata.Register{reg},
+		Entities:  []*metadata.Entity{doc},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.SQL, "ref_документначисления.период") {
+		t.Errorf("поле документа через ссылку должно остаться кириллическим: %s", r.SQL)
+	}
+	if strings.Contains(r.SQL, "ref_документначисления.period") {
+		t.Errorf("поле документа через ссылку ошибочно разрешилось как системное: %s", r.SQL)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -114,7 +115,8 @@ func reqWithEntity(method, target string, body []byte, params map[string]string,
 	for k, v := range params {
 		rctx.URLParams.Add(k, v)
 	}
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	ctx := auth.ContextWithOpenAccess(r.Context())
+	return r.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 }
 
 func withUser(r *http.Request, u *auth.User) *http.Request {
@@ -129,6 +131,16 @@ func apiUser(login string, permissions auth.Permission) *auth.User {
 			Name:        "role-" + login,
 			Permissions: permissions,
 		}},
+	}
+}
+
+func TestRESTAnonymousAccessRequiresExplicitBootstrapContext(t *testing.T) {
+	if canREST(context.Background(), string(metadata.KindCatalog), "Товар", "read") {
+		t.Fatal("missing auth context must not imply unrestricted REST access")
+	}
+	ctx := auth.ContextWithOpenAccess(context.Background())
+	if !canREST(ctx, string(metadata.KindCatalog), "Товар", "read") {
+		t.Fatal("confirmed first-run context must retain open access")
 	}
 }
 
@@ -153,8 +165,8 @@ func TestAPI_Create_OnWriteHasDSLVars(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.createObject(metadata.KindCatalog).ServeHTTP(w, r)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp struct {
 		ID       string   `json:"id"`
@@ -335,7 +347,7 @@ func TestAPI_RowAccessAutoFillsOwnerOnCreate(t *testing.T) {
 	req := withUser(reqWithEntity(http.MethodPost, "/catalogs/Товар", []byte(`{"Наименование":"A"}`), map[string]string{"entity": cat.Name}, nil), user)
 	rec := httptest.NewRecorder()
 	h.createObject(metadata.KindCatalog)(rec, req)
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	var res map[string]string
@@ -717,6 +729,7 @@ func TestAPIV2_CRUDRoundTripEnvelope(t *testing.T) {
 	}
 
 	updateReq := reqWithEntity("PUT", "/api/v2/catalog/Товар/"+created.Data.ID, []byte(`{"Наименование":"Дрель"}`), map[string]string{"name": "Товар", "id": created.Data.ID}, nil)
+	updateReq.Header.Set("If-Match", "1")
 	updateRec := httptest.NewRecorder()
 	h.updateObjectV2(metadata.KindCatalog).ServeHTTP(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
@@ -890,6 +903,12 @@ func TestAPIV2_OpenAPIIncludesPathsAndSchemas(t *testing.T) {
 	catalogPut := paths["/api/v2/catalog/{name}/{id}"].(map[string]any)["put"].(map[string]any)
 	if !openAPIHasHeaderParam(catalogPut["parameters"].([]any), "If-Match") {
 		t.Fatalf("PUT parameters must include If-Match: %#v", catalogPut["parameters"])
+	}
+	for _, p := range catalogPut["parameters"].([]any) {
+		pm, ok := p.(map[string]any)
+		if ok && pm["name"] == "If-Match" && pm["required"] != true {
+			t.Fatalf("If-Match must be required: %#v", pm)
+		}
 	}
 	components := spec["components"].(map[string]any)
 	securitySchemes := components["securitySchemes"].(map[string]any)
@@ -1148,8 +1167,8 @@ func TestAPIV2_ReportUsesBearerTokenRBAC(t *testing.T) {
 	if err := authRepo.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	allowedUser, _ := authRepo.Create(ctx, "runner", "pass", "", false)
-	deniedUser, _ := authRepo.Create(ctx, "reader", "pass", "", false)
+	allowedUser, _ := authRepo.Create(ctx, "runner", "password", "", false)
+	deniedUser, _ := authRepo.Create(ctx, "reader", "password", "", false)
 	role := []*auth.Role{{
 		Name: "report-runner",
 		Permissions: auth.Permission{
@@ -1295,8 +1314,8 @@ func TestAPI_Create_WithTableParts(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.createObject(metadata.KindDocument).ServeHTTP(w, r)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp struct {
 		ID string `json:"id"`
@@ -1351,6 +1370,124 @@ func TestAPI_Update_IfMatchVersionConflict(t *testing.T) {
 
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409 Conflict, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestDecodeBody_StrictSingleObject(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "null", body: `null`},
+		{name: "trailing document", body: `{"Наименование":"A"} {"Наименование":"B"}`},
+		{name: "invalid action type", body: `{"__action":true}`},
+		{name: "unknown metadata", body: `{"__actoin":"post"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			if _, err := decodeBody(r); err == nil {
+				t.Fatalf("decodeBody(%s) succeeded", tt.body)
+			}
+		})
+	}
+}
+
+func TestValidateRESTBody_NormalizesAndRejectsUnknownFields(t *testing.T) {
+	entity := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+		TableParts: []metadata.TablePart{{
+			Name:   "Товары",
+			Fields: []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+		}},
+	}
+	body := createUpdateBody{
+		Fields: map[string]any{"номер": "1"},
+		TablePartRows: map[string][]map[string]any{
+			"товары": {{"количество": float64(2)}},
+		},
+		Action: " POST ",
+	}
+	if err := validateRESTBody(&body, entity); err != nil {
+		t.Fatal(err)
+	}
+	if body.Fields["Номер"] != "1" || body.Action != "post" {
+		t.Fatalf("body was not normalized: %#v", body)
+	}
+	if _, ok := body.TablePartRows["Товары"][0]["Количество"]; !ok {
+		t.Fatalf("table part was not normalized: %#v", body.TablePartRows)
+	}
+
+	body.Fields["Опечатка"] = true
+	if err := validateRESTBody(&body, entity); err == nil {
+		t.Fatal("unknown field must be rejected")
+	}
+}
+
+func TestAPIV2_UpdateRequiresValidIfMatch(t *testing.T) {
+	entity := &metadata.Entity{
+		Name:   "Товар",
+		Kind:   metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+	}
+	h, _ := newAPITestHandler(t, []*metadata.Entity{entity}, nil)
+	id := uuid.New().String()
+
+	for _, tt := range []struct {
+		name   string
+		header string
+		status int
+	}{
+		{name: "missing", status: http.StatusPreconditionRequired},
+		{name: "invalid", header: `W/"1"`, status: http.StatusBadRequest},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := reqWithEntity(http.MethodPut, "/api/v2/catalog/Товар/"+id,
+				[]byte(`{"Наименование":"Новое"}`),
+				map[string]string{"name": "Товар", "id": id}, nil)
+			if tt.header != "" {
+				r.Header.Set("If-Match", tt.header)
+			}
+			w := httptest.NewRecorder()
+			h.updateObjectV2(metadata.KindCatalog).ServeHTTP(w, r)
+			if w.Code != tt.status {
+				t.Fatalf("status = %d, want %d: %s", w.Code, tt.status, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestAPI_PostDocumentReadsChunkedBody(t *testing.T) {
+	entity := &metadata.Entity{
+		Name:    "Поступление",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{entity}, nil)
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, entity.Name, id, map[string]any{"Номер": "1"}, entity); err != nil {
+		t.Fatal(err)
+	}
+
+	r := reqWithEntity(http.MethodPost, "/documents/Поступление/"+id.String()+"/post",
+		[]byte(`{"Номер":"2"}`),
+		map[string]string{"entity": entity.Name, "id": id.String()}, nil)
+	r.ContentLength = -1
+	w := httptest.NewRecorder()
+	h.postDocument().ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+	}
+	row, err := h.store.GetByID(ctx, entity.Name, id, entity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row["Номер"] != "2" || row["posted"] != true {
+		t.Fatalf("chunked body was ignored: %#v", row)
 	}
 }
 
@@ -1421,6 +1558,17 @@ func TestAPI_PostDocument_WritesMovements(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+	var response map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("post response is not JSON: %v", err)
+	}
+	for key := range response {
+		switch key {
+		case "id", "posted", "messages":
+		default:
+			t.Fatalf("post response leaked entity field %q: %s", key, w.Body.String())
+		}
+	}
 
 	// Проверим что движения реально записались.
 	rows, err := db.GetMovements(ctx, "Остатки", reg, storage.RegFilter{})
@@ -1429,6 +1577,52 @@ func TestAPI_PostDocument_WritesMovements(t *testing.T) {
 	}
 	if len(rows) != 1 {
 		t.Fatalf("ожидалось 1 движение, получено %d: %v", len(rows), rows)
+	}
+}
+
+func TestAPI_DeleteDocumentClearsInfoRegisterMovements(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "УстановкаЦен",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	ir := &metadata.InfoRegister{
+		Name:       "Цены",
+		Periodic:   true,
+		Dimensions: []metadata.Field{{Name: "Товар", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Цена", Type: metadata.FieldTypeNumber}},
+	}
+	h, ctx := newAPITestHandler(t, []*metadata.Entity{doc}, nil)
+	if err := h.store.MigrateInfoRegisters(ctx, []*metadata.InfoRegister{ir}); err != nil {
+		t.Fatal(err)
+	}
+	h.reg.Load(runtime.LoadOptions{Entities: []*metadata.Entity{doc}, InfoRegs: []*metadata.InfoRegister{ir}})
+
+	id := uuid.New()
+	if err := h.store.Upsert(ctx, doc.Name, id, map[string]any{"Номер": "1"}, doc); err != nil {
+		t.Fatal(err)
+	}
+	period := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	if err := h.store.WriteInfoMovements(ctx, ir.Name, doc.Name, id, []map[string]any{{
+		"Товар": "Молоток", "Цена": float64(100),
+	}}, ir, &period); err != nil {
+		t.Fatal(err)
+	}
+
+	r := reqWithEntity("DELETE", "/documents/"+doc.Name+"/"+id.String(), nil,
+		map[string]string{"entity": doc.Name, "id": id.String()}, nil)
+	w := httptest.NewRecorder()
+	h.deleteObject(metadata.KindDocument).ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete: expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+	rows, err := h.store.InfoRegList(ctx, ir, storage.RegFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("delete left %d orphan info-register movements: %v", len(rows), rows)
 	}
 }
 
@@ -1496,8 +1690,8 @@ func TestAPI_PostDocument_EmptyBody_KeepsTableParts(t *testing.T) {
 	rc := reqWithEntity("POST", "/documents/Поступление", body, map[string]string{"entity": "Поступление"}, nil)
 	wc := httptest.NewRecorder()
 	h.createObject(metadata.KindDocument).ServeHTTP(wc, rc)
-	if wc.Code != http.StatusOK {
-		t.Fatalf("create: ожидалось 200, получено %d: %s", wc.Code, wc.Body.String())
+	if wc.Code != http.StatusCreated {
+		t.Fatalf("create: ожидалось 201, получено %d: %s", wc.Code, wc.Body.String())
 	}
 	var created struct {
 		ID string `json:"id"`

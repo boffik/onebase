@@ -136,6 +136,7 @@ func TestPageManagedForm_Renders(t *testing.T) {
 		`accesskey="7"`,
 		`data-ob-hotkey="F7"`,
 		`aria-keyshortcuts="F7"`,
+		`data-ob-close-tab`,
 		`id="ob-managed-config"`,
 		`id="ob-managed-tp-ref-opts"`,
 		`src="/static/managed.js"`,
