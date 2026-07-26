@@ -165,6 +165,9 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	if err := db.EnsureExchangeSchema(ctx); err != nil {
 		return fmt.Errorf("exchange schema: %w", err)
 	}
+	if err := db.EnsureIntakeSchema(ctx); err != nil {
+		return fmt.Errorf("intake schema: %w", err)
+	}
 
 	// Sync roles from YAML. Malformed or unreadable role files must not leave
 	// stale permissions active while startup appears successful.

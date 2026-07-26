@@ -68,6 +68,9 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	if err := db.EnsureExchangeSchema(ctx); err != nil {
 		return fmt.Errorf("exchange schema: %w", err)
 	}
+	if err := db.EnsureIntakeSchema(ctx); err != nil {
+		return fmt.Errorf("intake schema: %w", err)
+	}
 
 	reg := runtime.NewRegistry()
 	interp := interpreter.New()

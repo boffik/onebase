@@ -1,0 +1,13 @@
+name: SiteLead
+transport: http
+endpoint: /hs/intake/lead
+schema_version: "1"
+handler: SiteLead
+auth: none
+idempotency:
+  key: event_id
+  scope: [source, aggregate]
+  ttl: 30d
+dlq:
+  on: [handler_error, schema_mismatch, key_conflict]
+  max_retries: 3

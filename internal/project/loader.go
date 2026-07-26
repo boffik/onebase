@@ -47,6 +47,7 @@ type Project struct {
 	HTTPServices     []*httpservice.Service   // план 61: опубликованные HTTP-сервисы
 	Pages            []*page.Page             // план 66: страницы (произвольные представления на DSL)
 	ExchangePlans    []*metadata.ExchangePlan // план 86: планы обмена данными между базами
+	Intakes          []*metadata.Intake       // план 90: входные шлюзы приёмки (идемпотентность + DLQ)
 	Modules          map[string]*ast.Program  // module name → parsed procs
 	Subsystems       []*metadata.Subsystem
 	Journals         []*metadata.Journal
@@ -311,6 +312,9 @@ func Load(dir string) (*Project, error) {
 	if err := p.loadExchangePlans(); err != nil {
 		return nil, err
 	}
+	if err := p.loadIntakes(); err != nil {
+		return nil, err
+	}
 	if err := p.loadSubsystems(); err != nil {
 		return nil, err
 	}
@@ -441,6 +445,26 @@ func (p *Project) loadExchangePlans() error {
 		}
 	}
 	p.ExchangePlans = plans
+	return nil
+}
+
+// loadIntakes читает intake/*.yaml (план 90). Каждый шлюз валидируется сразу —
+// битое объявление ловится на загрузке, до рантайма. Обработчик (handler) —
+// процедура модуля, резолвится транспортным слоем при вызове.
+func (p *Project) loadIntakes() error {
+	intakes, err := metadata.LoadIntakeDir(filepath.Join(p.Dir, "intake"))
+	if err != nil {
+		return fmt.Errorf("project: load intakes: %w", err)
+	}
+	for _, in := range intakes {
+		// Валидируем ДО раскрытия ${env:…}: плейсхолдер считается заданным
+		// секретом (onebase check проходит без выставленных переменных окружения).
+		if err := in.Validate(); err != nil {
+			return fmt.Errorf("project: intake %q: %w", in.Name, err)
+		}
+		in.Secret = expandEnvRefs(in.Secret)
+	}
+	p.Intakes = intakes
 	return nil
 }
 

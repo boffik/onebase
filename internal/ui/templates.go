@@ -797,6 +797,7 @@ const tplNav = `
         <summary>{{t $.Lang "Интеграции и задания"}}</summary>
         <div class="sys-group-body">
           <a href="/ui/admin/exchange">{{t $.Lang "Обмен данными"}}</a>
+          <a href="/ui/admin/intake">{{t $.Lang "Входная приёмка"}}</a>
           <a href="/ui/admin/scheduled">{{t $.Lang "Регламентные задания"}}</a>
           <a href="/ui/admin/webhooks">{{t $.Lang "Журнал веб-хуков"}}</a>
         </div>
