@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -12,22 +14,25 @@ import (
 
 // seedQuarantine кладёт в БД одно карантинное событие (строка идемпотентности
 // quarantined + запись DLQ с валидным конвертом для повтора).
-func seedQuarantine(t *testing.T, s *Server, key string) {
+func seedQuarantine(t *testing.T, s *Server, key string) string {
 	t.Helper()
 	ctx := context.Background()
+	sum := sha256.Sum256([]byte(`{"x":1}`))
 	if _, err := s.store.InsertIntakeLogIfNew(ctx, storage.IntakeLogRow{
-		Intake: "SiteLead", Scope: "site", Key: key, PayloadHash: "h",
+		Intake: "SiteLead", Scope: `["site"]`, Key: key, PayloadHash: hex.EncodeToString(sum[:]),
 		Status: storage.IntakeStatusQuarantined, ReceivedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.store.InsertIntakeDLQ(ctx, storage.IntakeDLQEntry{
-		Intake: "SiteLead", Key: key, Scope: "site",
-		Payload:       `{"event_id":"` + key + `","source":"site","payload":{"x":1}}`,
-		Reason:        "handler_error", Error: "boom", QuarantinedAt: 1000,
-	}); err != nil {
+	id, err := s.store.InsertIntakeDLQ(ctx, storage.IntakeDLQEntry{
+		Intake: "SiteLead", Key: key, Scope: `["site"]`,
+		Payload: `{"event_id":"` + key + `","source":"site","payload":{"x":1}}`,
+		Reason:  "handler_error", Error: "boom", QuarantinedAt: 1000,
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	return id
 }
 
 func TestIntakeMonitor_Lists(t *testing.T) {
@@ -49,10 +54,10 @@ func TestIntakeMonitor_Lists(t *testing.T) {
 
 func TestIntakeMonitor_Replay(t *testing.T) {
 	s := newIntakeTestServer(t)
-	seedQuarantine(t, s, "Q1")
+	dlqID := seedQuarantine(t, s, "Q1")
 	ctx := context.Background()
 
-	form := url.Values{"intake": {"SiteLead"}, "key": {"Q1"}}
+	form := url.Values{"intake": {"SiteLead"}, "dlq_id": {dlqID}}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/ui/admin/intake/replay", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -65,7 +70,7 @@ func TestIntakeMonitor_Replay(t *testing.T) {
 	if open, _ := s.store.ListIntakeDLQ(ctx, "SiteLead", true, 0); len(open) != 0 {
 		t.Fatalf("после replay открытых записей карантина: %d, ожидалось 0", len(open))
 	}
-	row, _, _ := s.store.GetIntakeLog(ctx, "SiteLead", "site", "Q1")
+	row, _, _ := s.store.GetIntakeLog(ctx, "SiteLead", `["site"]`, "Q1")
 	if row.Status != storage.IntakeStatusProcessed {
 		t.Fatalf("после replay статус=%q, ожидался processed", row.Status)
 	}

@@ -264,12 +264,13 @@ func mapHandlerResult(result any) intake.HandlerResult {
 		_ = json.Unmarshal(data, &br) // объект → map; иначе br = nil
 	}
 	ref := ""
-	for _, k := range []string{"ссылка", "ref", "id"} {
-		if v, ok := br[k]; ok {
-			if sv, ok := v.(string); ok && sv != "" {
-				ref = sv
-				break
-			}
+	for key, value := range br {
+		if !strings.EqualFold(key, "ссылка") && !strings.EqualFold(key, "ref") && !strings.EqualFold(key, "id") {
+			continue
+		}
+		if sv, ok := value.(string); ok && sv != "" {
+			ref = sv
+			break
 		}
 	}
 	return intake.HandlerResult{Ref: ref, BusinessResult: br}

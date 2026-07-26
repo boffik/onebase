@@ -14,15 +14,18 @@ import (
 	"time"
 
 	"github.com/ivantit66/onebase/internal/intake"
+	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 type intakeDLQView struct {
+	ID        string
 	Key       string
 	Reason    string
 	Error     string
 	Attempts  int
 	When      string
 	Corr      string
+	CanReplay bool
 }
 
 type intakeView struct {
@@ -54,8 +57,9 @@ func (s *Server) intakeMonitor(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, e := range dlq {
 			v.DLQ = append(v.DLQ, intakeDLQView{
-				Key: e.Key, Reason: e.Reason, Error: e.Error, Attempts: e.Attempts,
+				ID: e.ID, Key: e.Key, Reason: e.Reason, Error: e.Error, Attempts: e.Attempts,
 				When: formatEpoch(e.QuarantinedAt), Corr: e.CorrelationID,
+				CanReplay: e.Reason == metadata.DLQHandlerError,
 			})
 		}
 		views = append(views, v)
@@ -79,9 +83,18 @@ func (s *Server) intakeMonitorReplay(w http.ResponseWriter, r *http.Request) {
 		s.intakeMonitorRedirect(w, r, "", "шлюз не найден")
 		return
 	}
-	key := r.FormValue("key")
-	if key == "" {
-		s.intakeMonitorRedirect(w, r, "", "не указан ключ")
+	dlqID := r.FormValue("dlq_id")
+	if dlqID == "" {
+		s.intakeMonitorRedirect(w, r, "", "не указана запись карантина")
+		return
+	}
+	entry, found, err := s.store.GetIntakeDLQ(ctx, in.Name, dlqID)
+	if err != nil {
+		s.intakeMonitorRedirect(w, r, "", s.errText(r, err))
+		return
+	}
+	if !found {
+		s.intakeMonitorRedirect(w, r, "", "запись карантина не найдена")
 		return
 	}
 	handler, err := s.newIntakeHandler(in)
@@ -89,16 +102,18 @@ func (s *Server) intakeMonitorReplay(w http.ResponseWriter, r *http.Request) {
 		s.intakeMonitorRedirect(w, r, "", err.Error())
 		return
 	}
-	res, err := intake.New(s.store).Replay(ctx, in, handler, key)
+	res, err := intake.New(s.store).Replay(ctx, in, handler, dlqID)
 	if err != nil {
 		s.intakeMonitorRedirect(w, r, "", s.errText(r, err))
 		return
 	}
-	s.auditIntake(ctx, r, "intake.replay", in.Name, key, string(res.Status), "", map[string]any{"ref": res.ResultRef})
+	s.auditIntake(ctx, r, "intake.replay", in.Name, entry.Key, string(res.Status), entry.CorrelationID,
+		map[string]any{"ref": res.ResultRef, "dlq_id": entry.ID})
 	if res.Status == intake.StatusAccepted || res.Status == intake.StatusDuplicate {
-		s.intakeMonitorRedirect(w, r, fmt.Sprintf("Повтор %q: %s (%s)", key, res.Status, res.ResultRef), "")
+		s.intakeMonitorRedirect(w, r, fmt.Sprintf("Повтор %q: %s (%s)", entry.Key, res.Status, res.ResultRef), "")
 	} else {
-		s.intakeMonitorRedirect(w, r, "", fmt.Sprintf("Повтор %q: %s (%s) — событие снова в карантине", key, res.Status, res.Reason))
+		s.intakeMonitorRedirect(w, r, "", fmt.Sprintf("Повтор %q: %s (%s) — событие снова в карантине",
+			entry.Key, res.Status, res.Reason))
 	}
 }
 
@@ -156,11 +171,13 @@ const tplIntakeMonitor = `{{define "intake-monitor"}}` + adminHead + `
     <td style="text-align:center">{{.Attempts}}</td>
     <td style="color:#94a3b8;font-size:12px">{{.When}}</td>
     <td style="text-align:right">
+      {{if .CanReplay}}
       <form method="POST" action="/ui/admin/intake/replay" style="margin:0" onsubmit="return confirm('Повторить обработку события {{.Key}}?')">
         <input type="hidden" name="intake" value="{{$intake}}">
-        <input type="hidden" name="key" value="{{.Key}}">
+        <input type="hidden" name="dlq_id" value="{{.ID}}">
         <button class="btn btn-sm btn-primary" type="submit">Повторить</button>
       </form>
+      {{else}}<span style="color:#94a3b8;font-size:12px">Требует разбора</span>{{end}}
     </td>
   </tr>{{end}}
   </tbody>

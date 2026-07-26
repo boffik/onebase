@@ -49,11 +49,13 @@ func TestIntakeValidate(t *testing.T) {
 	}
 
 	bad := []*Intake{
-		{Transport: "http", Endpoint: "/x", Handler: "H"},                              // нет имени
-		{Name: "A", Transport: "http", Handler: "H"},                                   // http без endpoint
-		{Name: "A", Transport: "queue", Endpoint: "/x", Handler: "H"},                  // неизвестный transport
-		{Name: "A", Transport: "http", Endpoint: "/x"},                                 // нет handler
-		{Name: "A", Transport: "http", Endpoint: "/x", Handler: "H", DLQ: IntakeDLQ{On: []string{"nope"}}}, // плохой dlq.on
+		{Transport: "http", Endpoint: "/x", Handler: "H"},                                                                                 // нет имени
+		{Name: "A", Transport: "http", Handler: "H"},                                                                                      // http без endpoint
+		{Name: "A", Transport: "queue", Endpoint: "/x", Handler: "H"},                                                                     // неизвестный transport
+		{Name: "A", Transport: "http", Endpoint: "/x"},                                                                                    // нет handler
+		{Name: "A", Transport: "http", Endpoint: "/x", Handler: "H", DLQ: IntakeDLQ{On: []string{"nope"}}},                                // плохой dlq.on
+		{Name: "A", Transport: "http", Endpoint: "/x", Handler: "H", Idempotency: IntakeIdempotency{Scope: []string{""}}},                 // пустой scope
+		{Name: "A", Transport: "http", Endpoint: "/x", Handler: "H", Idempotency: IntakeIdempotency{Scope: []string{"source", "source"}}}, // дубль scope
 	}
 	for i, in := range bad {
 		in.Normalize()

@@ -146,6 +146,16 @@ func (in *Intake) Validate() error {
 	if in.Idempotency.Key == "" {
 		return fmt.Errorf("intake %q: не задан idempotency.key", in.Name)
 	}
+	seenScope := make(map[string]struct{}, len(in.Idempotency.Scope))
+	for _, field := range in.Idempotency.Scope {
+		if field == "" {
+			return fmt.Errorf("intake %q: idempotency.scope содержит пустое имя поля", in.Name)
+		}
+		if _, duplicate := seenScope[field]; duplicate {
+			return fmt.Errorf("intake %q: idempotency.scope повторяет поле %q", in.Name, field)
+		}
+		seenScope[field] = struct{}{}
+	}
 	if _, err := in.TTLSeconds(); err != nil {
 		return fmt.Errorf("intake %q: idempotency.ttl: %w", in.Name, err)
 	}

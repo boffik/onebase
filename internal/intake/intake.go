@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ivantit66/onebase/internal/metadata"
@@ -115,8 +114,9 @@ func (e Envelope) CorrelationID() string { return e.Field("correlation_id") }
 
 // Engine исполняет приёмку поверх хранилища.
 type Engine struct {
-	Store *storage.DB
-	Now   func() time.Time // инъекция часов для тестов; nil → time.Now
+	Store        *storage.DB
+	Now          func() time.Time // инъекция часов для тестов; nil → time.Now
+	InFlightWait time.Duration    // ожидание конкурентного received; 0 → 5 секунд
 }
 
 // New создаёт движок приёмки.
@@ -127,6 +127,13 @@ func (e *Engine) now() time.Time {
 		return e.Now()
 	}
 	return time.Now()
+}
+
+func (e *Engine) inFlightWait() time.Duration {
+	if e.InFlightWait > 0 {
+		return e.InFlightWait
+	}
+	return 5 * time.Second
 }
 
 // Ingest — приём одного события. Машина состояний:
@@ -143,7 +150,10 @@ func (e *Engine) Ingest(ctx context.Context, in *metadata.Intake, h Handler, env
 		// конверт (а не молча схлопывать все события в одну строку).
 		return Result{Status: StatusRejected, Reason: "missing_idempotency_key"}, nil
 	}
-	scope := e.resolveScope(in, env)
+	scope, err := e.resolveScope(in, env)
+	if err != nil {
+		return Result{Status: StatusRejected, Reason: err.Error()}, nil
+	}
 	hash, err := payloadHash(env.Payload)
 	if err != nil {
 		return Result{}, err
@@ -173,6 +183,11 @@ func (e *Engine) Ingest(ctx context.Context, in *metadata.Intake, h Handler, env
 		return Result{}, err
 	}
 
+	if in.SchemaVersion != "" && env.Field("schema_version") != in.SchemaVersion {
+		return e.quarantine(ctx, in, env, key, scope, metadata.DLQSchemaMismatch,
+			fmt.Sprintf("schema_version: ожидалась %q, получена %q", in.SchemaVersion, env.Field("schema_version")),
+			inserted)
+	}
 	if !inserted {
 		return e.onExisting(ctx, in, env, key, scope, hash)
 	}
@@ -199,12 +214,57 @@ func (e *Engine) onExisting(ctx context.Context, in *metadata.Intake, env Envelo
 	if row.Status == storage.IntakeStatusQuarantined {
 		return Result{Status: StatusQuarantined, Reason: "already_quarantined", ResultRef: row.ResultRef}, nil
 	}
-	// processed или received (in-flight) с тем же телом → Дубль без повторной обработки.
+	if row.Status == storage.IntakeStatusReceived {
+		return e.waitForExisting(ctx, in.Name, scope, key, hash)
+	}
+	if row.Status != storage.IntakeStatusProcessed {
+		return Result{}, fmt.Errorf("intake %q: неизвестный статус ключа %q: %q", in.Name, key, row.Status)
+	}
+	return resultFromLog(row, StatusDuplicate), nil
+}
+
+func (e *Engine) waitForExisting(ctx context.Context, intakeName, scope, key, hash string) (Result, error) {
+	timer := time.NewTimer(e.inFlightWait())
+	defer timer.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		case <-timer.C:
+			return Result{}, fmt.Errorf("intake %q: обработка ключа %q ещё не завершена", intakeName, key)
+		case <-ticker.C:
+			row, found, err := e.Store.GetIntakeLog(ctx, intakeName, scope, key)
+			if err != nil {
+				return Result{}, err
+			}
+			if !found {
+				return Result{}, fmt.Errorf("intake %q: строка ключа %q исчезла во время обработки", intakeName, key)
+			}
+			if row.PayloadHash != hash {
+				return Result{}, fmt.Errorf("intake %q: строка ключа %q была заменена во время обработки", intakeName, key)
+			}
+			switch row.Status {
+			case storage.IntakeStatusReceived:
+				continue
+			case storage.IntakeStatusProcessed:
+				return resultFromLog(row, StatusDuplicate), nil
+			case storage.IntakeStatusQuarantined:
+				return Result{Status: StatusQuarantined, Reason: "already_quarantined", ResultRef: row.ResultRef}, nil
+			default:
+				return Result{}, fmt.Errorf("intake %q: неизвестный статус ключа %q: %q", intakeName, key, row.Status)
+			}
+		}
+	}
+}
+
+func resultFromLog(row storage.IntakeLogRow, status Status) Result {
 	var br map[string]any
 	if row.BusinessResult != "" {
 		_ = json.Unmarshal([]byte(row.BusinessResult), &br)
 	}
-	return Result{Status: StatusDuplicate, ResultRef: row.ResultRef, BusinessResult: br}, nil
+	return Result{Status: status, ResultRef: row.ResultRef, BusinessResult: br}
 }
 
 // process запускает обработчик и отметку processed в одной транзакции. Ошибка
@@ -260,61 +320,157 @@ func (e *Engine) quarantine(ctx context.Context, in *metadata.Intake, env Envelo
 		return nil
 	})
 	if err != nil {
+		// Иначе транспорт получит 5xx, но его retry увидит вечную received-строку
+		// и будет ошибочно подтверждён как дубль без записи в DLQ.
+		if ourRow {
+			if cleanupErr := e.Store.DeleteIntakeLog(ctx, in.Name, scope, key); cleanupErr != nil {
+				return Result{}, errors.Join(err, cleanupErr)
+			}
+		}
 		return Result{}, err
 	}
 	return Result{Status: StatusQuarantined, Reason: reason, DLQID: dlqID}, nil
 }
 
-// Replay переигрывает открытую запись карантина по ключу. Идемпотентность
-// соблюдается: строка идемпотентности уже существует (quarantined), при успехе
-// переходит в processed. Предыдущий сбойный проход ничего не закоммитил, поэтому
-// дубля бизнес-объекта не возникает.
-func (e *Engine) Replay(ctx context.Context, in *metadata.Intake, h Handler, key string) (Result, error) {
-	entry, found, err := e.Store.GetOpenIntakeDLQ(ctx, in.Name, key)
+var errReplayAlreadyClaimed = errors.New("intake: запись карантина уже обработана")
+
+// Replay переигрывает открытую запись карантина по её уникальному ID.
+// Безопасно повторяются только handler_error: у schema_mismatch/key_conflict
+// исходная строка ключа может уже указывать на успешно созданный объект.
+//
+// Захват DLQ, обработчик и переход строки идемпотентности в processed входят в
+// одну транзакцию. Поэтому сбой закрытия DLQ не может оставить созданный объект
+// при открытой записи, а два конкурентных replay не выполнят обработчик дважды.
+func (e *Engine) Replay(ctx context.Context, in *metadata.Intake, h Handler, dlqID string) (Result, error) {
+	entry, found, err := e.Store.GetIntakeDLQ(ctx, in.Name, dlqID)
 	if err != nil {
 		return Result{}, err
 	}
 	if !found {
-		return Result{}, fmt.Errorf("intake %q: нет открытой записи карантина по ключу %q", in.Name, key)
+		return Result{}, fmt.Errorf("intake %q: запись карантина %q не найдена", in.Name, dlqID)
+	}
+	if entry.ReplayState == storage.DLQStateReplayed {
+		return e.replayDuplicate(ctx, entry)
+	}
+	if entry.ReplayState != storage.DLQStateOpen {
+		return Result{}, fmt.Errorf("intake %q: запись карантина %q имеет состояние %q", in.Name, dlqID, entry.ReplayState)
+	}
+	if entry.Reason != metadata.DLQHandlerError {
+		return Result{}, fmt.Errorf("intake %q: карантин %s нельзя повторить автоматически; требуется разбор конфликта",
+			in.Name, entry.Reason)
 	}
 	env, err := ParseEnvelope([]byte(entry.Payload))
 	if err != nil {
 		return Result{}, err
 	}
-	scope := entry.Scope
+	hash, err := payloadHash(env.Payload)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := e.validateReplayLog(ctx, entry, hash); err != nil {
+		return Result{}, err
+	}
 
 	var hr HandlerResult
+	handlerFailed := false
 	txErr := e.Store.WithTx(ctx, func(txctx context.Context) error {
+		claimed, err := e.Store.MarkIntakeDLQReplayedIfOpen(txctx, entry.ID)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return errReplayAlreadyClaimed
+		}
+		logClaimed, err := e.Store.ClaimIntakeLogForReplay(
+			txctx, entry.Intake, entry.Scope, entry.Key, hash)
+		if err != nil {
+			return err
+		}
+		if !logClaimed {
+			return fmt.Errorf("intake %q: строку ключа %q не удалось захватить для replay", entry.Intake, entry.Key)
+		}
 		r, herr := h.Handle(txctx, env)
 		if herr != nil {
+			handlerFailed = true
 			return herr
 		}
 		hr = r
-		return e.Store.SetIntakeLogProcessed(txctx, in.Name, scope, key, r.Ref, marshalResult(r.BusinessResult))
+		return e.Store.SetIntakeLogProcessed(txctx, in.Name, entry.Scope, entry.Key, r.Ref, marshalResult(r.BusinessResult))
 	})
 	if txErr != nil {
+		if errors.Is(txErr, errReplayAlreadyClaimed) {
+			return e.replayDuplicate(ctx, entry)
+		}
+		if !handlerFailed {
+			return Result{}, txErr
+		}
 		if err := e.Store.BumpIntakeDLQAttempts(ctx, entry.ID, txErr.Error()); err != nil {
 			return Result{}, err
 		}
 		return Result{Status: StatusQuarantined, Reason: metadata.DLQHandlerError, DLQID: entry.ID}, nil
 	}
-	if err := e.Store.SetIntakeDLQState(ctx, entry.ID, storage.DLQStateReplayed); err != nil {
-		return Result{}, err
-	}
 	return Result{Status: StatusAccepted, ResultRef: hr.Ref, BusinessResult: hr.BusinessResult}, nil
 }
 
+func (e *Engine) validateReplayLog(ctx context.Context, entry storage.IntakeDLQEntry, hash string) error {
+	row, found, err := e.Store.GetIntakeLog(ctx, entry.Intake, entry.Scope, entry.Key)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("intake %q: строка идемпотентности для карантина %q не найдена", entry.Intake, entry.ID)
+	}
+	if row.Status != storage.IntakeStatusQuarantined {
+		return fmt.Errorf("intake %q: ключ %q имеет статус %q, replay небезопасен", entry.Intake, entry.Key, row.Status)
+	}
+	if row.PayloadHash != hash {
+		return fmt.Errorf("intake %q: payload карантина %q не совпадает со строкой идемпотентности", entry.Intake, entry.ID)
+	}
+	return nil
+}
+
+func (e *Engine) replayDuplicate(ctx context.Context, entry storage.IntakeDLQEntry) (Result, error) {
+	row, found, err := e.Store.GetIntakeLog(ctx, entry.Intake, entry.Scope, entry.Key)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found || row.Status != storage.IntakeStatusProcessed {
+		return Result{}, fmt.Errorf("intake %q: карантин %q закрыт без обработанного результата", entry.Intake, entry.ID)
+	}
+	env, err := ParseEnvelope([]byte(entry.Payload))
+	if err != nil {
+		return Result{}, err
+	}
+	hash, err := payloadHash(env.Payload)
+	if err != nil {
+		return Result{}, err
+	}
+	if row.PayloadHash != hash {
+		return Result{}, fmt.Errorf("intake %q: ключ карантина %q уже переиспользован после TTL", entry.Intake, entry.ID)
+	}
+	return resultFromLog(row, StatusDuplicate), nil
+}
+
 // resolveScope собирает пространство ключа из полей конверта, перечисленных в
-// idempotency.scope, соединяя значения через "|".
-func (e *Engine) resolveScope(in *metadata.Intake, env Envelope) string {
+// idempotency.scope. JSON-массив сохраняет границы значений: пары ["a|b","c"]
+// и ["a","b|c"] не схлопываются в один ключ.
+func (e *Engine) resolveScope(in *metadata.Intake, env Envelope) (string, error) {
 	if len(in.Idempotency.Scope) == 0 {
-		return ""
+		return "", nil
 	}
 	parts := make([]string, 0, len(in.Idempotency.Scope))
 	for _, s := range in.Idempotency.Scope {
-		parts = append(parts, env.Field(s))
+		value := env.Field(s)
+		if value == "" {
+			return "", fmt.Errorf("missing_idempotency_scope:%s", s)
+		}
+		parts = append(parts, value)
 	}
-	return strings.Join(parts, "|")
+	data, err := json.Marshal(parts)
+	if err != nil {
+		return "", fmt.Errorf("intake: канонизация scope: %w", err)
+	}
+	return string(data), nil
 }
 
 // payloadHash канонизирует payload (JSON с отсортированными ключами —

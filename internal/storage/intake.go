@@ -111,8 +111,12 @@ func (db *DB) EnsureIntakeSchema(ctx context.Context) error {
 // нет. inserted=true — строка новая (вызывающий владеет обработкой); false —
 // ключ уже занят (дубль или конфликт), актуальную строку читай GetIntakeLog.
 //
-// Гарантия опирается на UNIQUE(intake, scope, key) + ON CONFLICT DO NOTHING:
+// Гарантия опирается на UNIQUE(intake, scope, key) + условный UPSERT:
 // под конкуренцией уникальный индекс сериализует вставки, ровно одна побеждает.
+// Истёкшая processed-строка атомарно заменяется новой, поэтому настроенное окно
+// идемпотентности действительно освобождает ключ без отдельной TOCTOU-очистки.
+// received/quarantined не вытесняются: незавершённое событие нельзя потерять
+// только потому, что истёк срок дедупликации.
 func (db *DB) InsertIntakeLogIfNew(ctx context.Context, row IntakeLogRow) (bool, error) {
 	if row.Status == "" {
 		row.Status = IntakeStatusReceived
@@ -122,7 +126,17 @@ func (db *DB) InsertIntakeLogIfNew(ctx context.Context, row IntakeLogRow) (bool,
 		INSERT INTO _intake_log
 			(intake, scope, key, payload_hash, status, result_ref, business_result, correlation_id, received_at, ttl_expires_at)
 		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-		ON CONFLICT (intake, scope, key) DO NOTHING`,
+		ON CONFLICT (intake, scope, key) DO UPDATE SET
+			payload_hash = excluded.payload_hash,
+			status = excluded.status,
+			result_ref = excluded.result_ref,
+			business_result = excluded.business_result,
+			correlation_id = excluded.correlation_id,
+			received_at = excluded.received_at,
+			ttl_expires_at = excluded.ttl_expires_at
+		WHERE _intake_log.ttl_expires_at > 0
+		  AND _intake_log.ttl_expires_at <= excluded.received_at
+		  AND _intake_log.status = 'processed'`,
 		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5),
 		d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9), d.Placeholder(10))
 	tag, err := db.Exec(ctx, q,
@@ -154,6 +168,25 @@ func (db *DB) GetIntakeLog(ctx context.Context, intake, scope, key string) (Inta
 	return r, true, nil
 }
 
+// ClaimIntakeLogForReplay атомарно переводит подходящую quarantined-строку в
+// received и тем самым блокирует её до конца транзакции replay. Это не даёт
+// параллельной доставке или второму replay запустить обработчик одновременно.
+func (db *DB) ClaimIntakeLogForReplay(ctx context.Context, intake, scope, key, payloadHash string) (bool, error) {
+	d := db.dialect
+	q := fmt.Sprintf(`
+		UPDATE _intake_log SET status = %s
+		WHERE intake = %s AND scope = %s AND key = %s
+		  AND payload_hash = %s AND status = %s`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3),
+		d.Placeholder(4), d.Placeholder(5), d.Placeholder(6))
+	tag, err := db.Exec(ctx, q,
+		IntakeStatusReceived, intake, scope, key, payloadHash, IntakeStatusQuarantined)
+	if err != nil {
+		return false, fmt.Errorf("intake: claim log replay: %w", err)
+	}
+	return tag.RowsAffected == 1, nil
+}
+
 // SetIntakeLogProcessed помечает строку обработанной и сохраняет результат.
 // Вызывать в той же транзакции, что и создание бизнес-объекта (storage.WithTx).
 func (db *DB) SetIntakeLogProcessed(ctx context.Context, intake, scope, key, resultRef, businessResult string) error {
@@ -163,8 +196,12 @@ func (db *DB) SetIntakeLogProcessed(ctx context.Context, intake, scope, key, res
 		WHERE intake = %s AND scope = %s AND key = %s`,
 		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3),
 		d.Placeholder(4), d.Placeholder(5), d.Placeholder(6))
-	if _, err := db.Exec(ctx, q, IntakeStatusProcessed, resultRef, businessResult, intake, scope, key); err != nil {
+	tag, err := db.Exec(ctx, q, IntakeStatusProcessed, resultRef, businessResult, intake, scope, key)
+	if err != nil {
 		return fmt.Errorf("intake: mark processed: %w", err)
+	}
+	if tag.RowsAffected != 1 {
+		return fmt.Errorf("intake: mark processed: строка идемпотентности не найдена")
 	}
 	return nil
 }
@@ -296,26 +333,42 @@ func (db *DB) ListIntakeDLQ(ctx context.Context, intake string, onlyOpen bool, l
 	return out, rows.Err()
 }
 
-// GetOpenIntakeDLQ возвращает открытую (replay_state = open) запись карантина по
-// ключу — точка входа для replay. found=false — открытой записи нет.
-func (db *DB) GetOpenIntakeDLQ(ctx context.Context, intake, key string) (IntakeDLQEntry, bool, error) {
+// GetIntakeDLQ возвращает запись карантина по её уникальному ID в пределах
+// шлюза. В отличие от поиска по ключу однозначен при scope и повторных
+// конфликтах одного event_id.
+func (db *DB) GetIntakeDLQ(ctx context.Context, intake, id string) (IntakeDLQEntry, bool, error) {
 	d := db.dialect
 	q := fmt.Sprintf(`
 		SELECT id, intake, key, scope, payload, reason, error, attempts, correlation_id, quarantined_at, replay_state
-		FROM _intake_dlq WHERE intake = %s AND key = %s AND replay_state = %s
-		ORDER BY quarantined_at DESC, id LIMIT 1`,
-		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+		FROM _intake_dlq WHERE intake = %s AND id = %s`,
+		d.Placeholder(1), d.Placeholder(2))
 	var e IntakeDLQEntry
-	err := db.QueryRow(ctx, q, intake, key, DLQStateOpen).Scan(
+	err := db.QueryRow(ctx, q, intake, id).Scan(
 		&e.ID, &e.Intake, &e.Key, &e.Scope, &e.Payload, &e.Reason,
 		&e.Error, &e.Attempts, &e.CorrelationID, &e.QuarantinedAt, &e.ReplayState)
 	if IsNotFound(err) {
 		return IntakeDLQEntry{}, false, nil
 	}
 	if err != nil {
-		return IntakeDLQEntry{}, false, fmt.Errorf("intake: get open dlq: %w", err)
+		return IntakeDLQEntry{}, false, fmt.Errorf("intake: get dlq: %w", err)
 	}
 	return e, true, nil
+}
+
+// MarkIntakeDLQReplayedIfOpen атомарно захватывает открытую запись для replay.
+// Вызывается внутри той же транзакции, что обработчик и отметка processed:
+// при любом сбое переход откатывается вместе с бизнес-записями.
+func (db *DB) MarkIntakeDLQReplayedIfOpen(ctx context.Context, id string) (bool, error) {
+	d := db.dialect
+	q := fmt.Sprintf(`
+		UPDATE _intake_dlq SET replay_state = %s
+		WHERE id = %s AND replay_state = %s`,
+		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+	tag, err := db.Exec(ctx, q, DLQStateReplayed, id, DLQStateOpen)
+	if err != nil {
+		return false, fmt.Errorf("intake: claim dlq replay: %w", err)
+	}
+	return tag.RowsAffected == 1, nil
 }
 
 // SetIntakeDLQState меняет состояние записи карантина (open|replayed|discarded).

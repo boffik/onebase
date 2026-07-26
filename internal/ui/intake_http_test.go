@@ -160,3 +160,13 @@ func TestIntakeHTTP_AuthToken(t *testing.T) {
 		t.Fatalf("с токеном: code=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestMapHandlerResult_ReferenceFieldIsCaseInsensitive(t *testing.T) {
+	got := mapHandlerResult(map[string]any{"Ссылка": "ref-42", "ok": true})
+	if got.Ref != "ref-42" {
+		t.Fatalf("Ref=%q, ожидалось ref-42", got.Ref)
+	}
+	if got.BusinessResult["ok"] != true {
+		t.Fatalf("business result потерян: %+v", got.BusinessResult)
+	}
+}

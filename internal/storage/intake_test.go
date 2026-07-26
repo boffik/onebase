@@ -66,6 +66,54 @@ func TestInsertIntakeLogIfNew_Duplicate(t *testing.T) {
 	}
 }
 
+func TestInsertIntakeLogIfNew_ReclaimsExpiredTTL(t *testing.T) {
+	db, ctx := newIntakeDB(t)
+	old := sampleRow()
+	old.Status = storage.IntakeStatusProcessed
+	old.ReceivedAt = 10
+	old.TTLExpiresAt = 100
+	if inserted, err := db.InsertIntakeLogIfNew(ctx, old); err != nil || !inserted {
+		t.Fatalf("insert old: inserted=%v err=%v", inserted, err)
+	}
+
+	fresh := sampleRow()
+	fresh.PayloadHash = "hash2"
+	fresh.ReceivedAt = 100
+	fresh.TTLExpiresAt = 200
+	inserted, err := db.InsertIntakeLogIfNew(ctx, fresh)
+	if err != nil || !inserted {
+		t.Fatalf("reclaim expired: inserted=%v err=%v", inserted, err)
+	}
+	got, found, err := db.GetIntakeLog(ctx, fresh.Intake, fresh.Scope, fresh.Key)
+	if err != nil || !found {
+		t.Fatalf("get reclaimed: found=%v err=%v", found, err)
+	}
+	if got.PayloadHash != "hash2" || got.ReceivedAt != 100 || got.TTLExpiresAt != 200 {
+		t.Fatalf("истёкшая строка не заменена: %+v", got)
+	}
+
+	again := fresh
+	again.PayloadHash = "hash3"
+	again.ReceivedAt = 150
+	if inserted, err := db.InsertIntakeLogIfNew(ctx, again); err != nil || inserted {
+		t.Fatalf("неистёкшая строка не должна заменяться: inserted=%v err=%v", inserted, err)
+	}
+
+	pending := sampleRow()
+	pending.Key = "pending"
+	pending.ReceivedAt = 10
+	pending.TTLExpiresAt = 20
+	if inserted, err := db.InsertIntakeLogIfNew(ctx, pending); err != nil || !inserted {
+		t.Fatalf("insert pending: inserted=%v err=%v", inserted, err)
+	}
+	pendingRetry := pending
+	pendingRetry.ReceivedAt = 100
+	pendingRetry.TTLExpiresAt = 200
+	if inserted, err := db.InsertIntakeLogIfNew(ctx, pendingRetry); err != nil || inserted {
+		t.Fatalf("истёкшая received-строка не должна вытесняться: inserted=%v err=%v", inserted, err)
+	}
+}
+
 // TestInsertIntakeLogIfNew_Concurrency — крайне важный тест: ядро гарантии
 // идемпотентности. 50 горутин конкурентно вставляют ОДИН и тот же ключ; ровно
 // одна должна получить inserted=true. Это доказывает атомарный insert-if-new
@@ -148,22 +196,23 @@ func TestIntakeDLQ_Lifecycle(t *testing.T) {
 		t.Fatalf("ожидалась 1 открытая запись, получено %d", len(open))
 	}
 
-	entry, found, err := db.GetOpenIntakeDLQ(ctx, "SiteLead", "E9")
-	if err != nil || !found {
-		t.Fatalf("GetOpenIntakeDLQ: found=%v err=%v", found, err)
+	byID, found, err := db.GetIntakeDLQ(ctx, "SiteLead", id)
+	if err != nil || !found || byID.Key != "E9" {
+		t.Fatalf("GetIntakeDLQ: found=%v entry=%+v err=%v", found, byID, err)
 	}
-	if entry.Payload != `{"event_id":"E9"}` {
-		t.Fatalf("payload не сохранён: %q", entry.Payload)
+	if byID.Payload != `{"event_id":"E9"}` {
+		t.Fatalf("payload не сохранён: %q", byID.Payload)
 	}
-
-	if err := db.SetIntakeDLQState(ctx, id, storage.DLQStateReplayed); err != nil {
-		t.Fatalf("SetIntakeDLQState: %v", err)
+	claimed, err := db.MarkIntakeDLQReplayedIfOpen(ctx, id)
+	if err != nil || !claimed {
+		t.Fatalf("MarkIntakeDLQReplayedIfOpen: claimed=%v err=%v", claimed, err)
 	}
-	_, found, err = db.GetOpenIntakeDLQ(ctx, "SiteLead", "E9")
-	if err != nil {
-		t.Fatalf("GetOpenIntakeDLQ после replay: %v", err)
+	claimed, err = db.MarkIntakeDLQReplayedIfOpen(ctx, id)
+	if err != nil || claimed {
+		t.Fatalf("повторный claim должен проиграть: claimed=%v err=%v", claimed, err)
 	}
-	if found {
-		t.Fatalf("после replayed запись не должна считаться открытой")
+	byID, found, err = db.GetIntakeDLQ(ctx, "SiteLead", id)
+	if err != nil || !found || byID.ReplayState != storage.DLQStateReplayed {
+		t.Fatalf("после replayed неверное состояние: found=%v entry=%+v err=%v", found, byID, err)
 	}
 }
