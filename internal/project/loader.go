@@ -86,6 +86,13 @@ type EmailConfig struct {
 type AttachmentsConfig struct {
 	MaxFileSizeMB int      `yaml:"max_file_size_mb"`
 	AllowedTypes  []string `yaml:"allowed_types"`
+	// Deprecated compatibility keys accepted since v0.9.3 used a permissive
+	// YAML decoder. They were never applied by the runtime; keeping them here
+	// lets existing projects start while `onebase check` reports migration
+	// warnings instead of rejecting the whole configuration.
+	DeprecatedStorageType        string   `yaml:"storage_type,omitempty"`
+	DeprecatedStorageLocation    string   `yaml:"storage_location,omitempty"`
+	DeprecatedOfficeAllowedTypes []string `yaml:"office_allowed_types,omitempty"`
 }
 
 // DemoConfig holds demo-mode settings from app.yaml section "demo".
@@ -148,11 +155,15 @@ type AppConfig struct {
 	Logo        string             `yaml:"logo,omitempty"`
 	Email       *EmailConfig       `yaml:"email,omitempty"`
 	Attachments *AttachmentsConfig `yaml:"attachments,omitempty"`
-	Demo        *DemoConfig        `yaml:"demo,omitempty"`
-	Backup      *BackupConfig      `yaml:"backup,omitempty"`
-	AI          *AIConfig          `yaml:"ai,omitempty"`
-	Limits      *LimitsConfig      `yaml:"limits,omitempty"`
-	DSL         *DSLConfig         `yaml:"dsl,omitempty"`
+	// DeprecatedRussianPost preserves the permissive v0.9.3 behavior for
+	// downstream project-owned integration settings. OneBase does not consume
+	// this block; `onebase check` asks projects to move it out of app.yaml.
+	DeprecatedRussianPost map[string]any `yaml:"russian_post,omitempty"`
+	Demo                  *DemoConfig    `yaml:"demo,omitempty"`
+	Backup                *BackupConfig  `yaml:"backup,omitempty"`
+	AI                    *AIConfig      `yaml:"ai,omitempty"`
+	Limits                *LimitsConfig  `yaml:"limits,omitempty"`
+	DSL                   *DSLConfig     `yaml:"dsl,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в

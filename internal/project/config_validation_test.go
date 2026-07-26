@@ -26,6 +26,37 @@ func TestLoadConfigRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestLoadConfigAcceptsLegacyIgnoredFields(t *testing.T) {
+	dir := writeAppConfig(t, `name: DocFlow
+attachments:
+  storage_type: onebase_attachments
+  storage_location: database:_attachments
+  max_file_size_mb: 50
+  allowed_types: [pdf, png]
+  office_allowed_types: [doc, docx, xls, xlsx]
+russian_post:
+  enabled: true
+  integration_mode: mock
+`)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatalf("legacy app.yaml must remain loadable: %v", err)
+	}
+	if cfg.Attachments == nil {
+		t.Fatal("Attachments is nil")
+	}
+	if cfg.Attachments.DeprecatedStorageType != "onebase_attachments" ||
+		cfg.Attachments.DeprecatedStorageLocation != "database:_attachments" {
+		t.Fatalf("legacy attachment keys were not decoded: %+v", cfg.Attachments)
+	}
+	if len(cfg.Attachments.DeprecatedOfficeAllowedTypes) != 4 {
+		t.Fatalf("office_allowed_types = %v", cfg.Attachments.DeprecatedOfficeAllowedTypes)
+	}
+	if cfg.DeprecatedRussianPost["integration_mode"] != "mock" {
+		t.Fatalf("russian_post = %#v", cfg.DeprecatedRussianPost)
+	}
+}
+
 func TestLoadConfigRejectsMalformedYAML(t *testing.T) {
 	dir := writeAppConfig(t, "name: [broken\n")
 	if _, err := LoadConfig(dir); err == nil {
