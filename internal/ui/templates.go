@@ -447,11 +447,9 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			type param interface{ GetName() string }
 			// Use reflection-free approach: just iterate over values map
 			parts := []string{}
-			if values != nil {
-				for k, v := range values {
-					if v != nil && fmt.Sprintf("%v", v) != "" {
-						parts = append(parts, k+"="+url.QueryEscape(fmt.Sprintf("%v", v)))
-					}
+			for k, v := range values {
+				if v != nil && fmt.Sprintf("%v", v) != "" {
+					parts = append(parts, k+"="+url.QueryEscape(fmt.Sprintf("%v", v)))
 				}
 			}
 			if len(parts) == 0 {
@@ -1320,7 +1318,7 @@ const tplForm = `
   {{if .IsPopup}}
   <a href="#" data-ob-popup-cancel title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{else}}
-  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" data-ob-close-tab title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{end}}
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}

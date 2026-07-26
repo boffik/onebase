@@ -34,6 +34,7 @@ func TestAppShell_Render(t *testing.T) {
 		`window.obOpenTab=openTab`, // движок вкладок
 		`'obTabs'`,                 // ключ sessionStorage для restore
 		`source==='obOpenTab'`,     // приём запросов из iframe
+		`source==='obCloseTab'`,    // закрытие вкладки по крестику внутри формы
 		`<header class="topbar">`,  // переиспользован nav (хром оболочки)
 		`ob-tab-dup`,               // кнопка «новый экземпляр» (#130)
 		`{allowDup:true}`,          // дубликат = новый экземпляр
@@ -113,7 +114,9 @@ func TestHead_EmbeddedChromeHidden(t *testing.T) {
 		`window.__obEmbedded = window.self !== window.top`,
 		`obOpenableForm`,                           // фаза 2: перехват открытия форм во вкладку
 		`window.obOpenInShell`,                     // общий helper для ссылок и JS-открытий списков
+		`window.obCloseInShell`,                    // крестик формы закрывает вкладку оболочки
 		`source: 'obOpenTab'`,                      // постит запрос родителю-оболочке
+		`source: 'obCloseTab'`,                     // просит оболочку закрыть текущую вкладку
 		`window.parent && window.parent.obOpenTab`, // guard: только если родитель — оболочка
 		`source: 'obDirty'`,                        // фаза 3: трекер несохранённых правок
 	} {

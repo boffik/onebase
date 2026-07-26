@@ -3,10 +3,12 @@ package project
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -54,13 +56,20 @@ type Project struct {
 	Widgets          []*metadata.Widget
 	HomePage         *metadata.HomePage
 	cleanup          func()
+	cleanupOnce      sync.Once
 }
 
 // Close releases resources (e.g., temp dirs) associated with this Project.
 func (p *Project) Close() {
-	if p.cleanup != nil {
-		p.cleanup()
+	if p == nil {
+		return
 	}
+	p.cleanupOnce.Do(func() {
+		if p.cleanup != nil {
+			p.cleanup()
+			p.cleanup = nil
+		}
+	})
 }
 
 // EmailConfig holds SMTP configuration from app.yaml section "email".
@@ -157,13 +166,31 @@ type AppConfig struct {
 
 // LoadConfig reads config/app.yaml from the project directory.
 func LoadConfig(dir string) (*AppConfig, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "config", "app.yaml"))
+	path := filepath.Join(dir, "config", "app.yaml")
+	f, err := os.Open(path)
 	if err != nil {
-		return &AppConfig{Name: filepath.Base(dir)}, nil
+		if os.IsNotExist(err) {
+			return &AppConfig{Name: filepath.Base(dir)}, nil
+		}
+		return nil, fmt.Errorf("project: read %s: %w", path, err)
 	}
+	defer f.Close()
+
 	var cfg AppConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		if err == io.EOF {
+			return &AppConfig{Name: filepath.Base(dir)}, nil
+		}
+		return nil, fmt.Errorf("project: parse %s: %w", path, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("project: parse %s: multiple YAML documents are not allowed", path)
+		}
+		return nil, fmt.Errorf("project: parse %s: %w", path, err)
 	}
 	if cfg.LLM != nil {
 		expandLLMEnv(cfg.LLM)

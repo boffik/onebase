@@ -361,6 +361,7 @@ var kwMap = map[string]string{
 	"ЕСТЬ":          "IS",
 	"ПУСТО":         "NULL",
 	"В":             "IN",
+	"МЕЖДУ":         "BETWEEN",
 	"ОБЪЕДИНИТЬ":    "UNION",
 	"ВСЕ":           "ALL",
 	// JOIN keywords (Russian)
@@ -393,6 +394,7 @@ var kwMap = map[string]string{
 	"IS":       "IS",
 	"NULL":     "NULL",
 	"IN":       "IN",
+	"BETWEEN":  "BETWEEN",
 	"UNION":    "UNION",
 	"ALL":      "ALL",
 	// JOIN keywords (English pass-through)
@@ -481,6 +483,69 @@ type translator struct {
 	rowsScoped  bool                          // true после внедрения rowFilters в outer WHERE
 	rowApplied  []SourceRef                   // источники, к которым RLS-предикат реально внедрён (для финальной сверки)
 	parenDepth  int                           // глубина незакрытых '(' в основном потоке (VT-аргументы считает parseVTArgs)
+	sourceCtx   sourceContext                 // scoped-типы источников для системных колонок регистра
+	unionDepths map[int]bool                  // глубины SELECT с UNION для compound ORDER BY
+	unionOrders map[int]bool                  // ORDER BY относится ко всему UNION, алиасы таблиц там недоступны
+}
+
+type sourceClass uint8
+
+const (
+	sourceClassUnknown sourceClass = iota
+	sourceClassEntity
+	sourceClassRegister
+)
+
+type sourceContext struct {
+	scopes       []sourceScope
+	tokenScope   []int
+	tokenSection []querySection
+}
+
+type sourceScope struct {
+	main       sourceClass
+	mainTable  string
+	qualifiers map[string]sourceClass
+	refAliases map[string]struct{}
+}
+
+func (ctx sourceContext) scopeAt(tokenPos int) (sourceScope, bool) {
+	scopeID, ok := ctx.scopeIDAt(tokenPos)
+	if !ok {
+		return sourceScope{}, false
+	}
+	return ctx.scopes[scopeID], true
+}
+
+func (ctx sourceContext) scopeIDAt(tokenPos int) (int, bool) {
+	if tokenPos < 0 || tokenPos >= len(ctx.tokenScope) {
+		return 0, false
+	}
+	scopeID := ctx.tokenScope[tokenPos]
+	if scopeID < 0 || scopeID >= len(ctx.scopes) {
+		return 0, false
+	}
+	return scopeID, true
+}
+
+func (ctx sourceContext) sectionAt(tokenPos int) querySection {
+	if tokenPos < 0 || tokenPos >= len(ctx.tokenSection) {
+		return sectionOther
+	}
+	return ctx.tokenSection[tokenPos]
+}
+
+func (ctx sourceContext) isReferenceAliasAt(tokenPos int, lower string) bool {
+	section := ctx.sectionAt(tokenPos)
+	if section != sectionGroupBy && section != sectionOrderBy && section != sectionHaving {
+		return false
+	}
+	scope, ok := ctx.scopeAt(tokenPos)
+	if !ok {
+		return false
+	}
+	_, ok = scope.refAliases[lower]
+	return ok
 }
 
 type pendingRowFilter struct {
@@ -1566,7 +1631,7 @@ func (tr *translator) genBalancesAndTurnovers(reg *metadata.Register, args [][]t
 	// границы — даты-значения, нет отбора (args[2]) и активной строковой политики;
 	// иначе обычный расчёт ниже.
 	if reg.TotalsUsable() && tr.sourceRowFilter("register", reg.Name) == nil &&
-		!(len(args) > 2 && len(args[2]) > 0) && len(args) >= 2 {
+		(len(args) <= 2 || len(args[2]) == 0) && len(args) >= 2 {
 		if start, ok1 := tr.firstArgDate(args[0]); ok1 {
 			if end, ok2 := tr.firstArgDate(args[1]); ok2 {
 				// Обратный диапазон оставляем обычному пути: его историческая
@@ -2113,11 +2178,38 @@ func (tr *translator) qualifyOwn(col, lower string) string {
 		return col // алиас вывода, не колонка таблицы
 	}
 	if len(tr.refDims) > 0 && tr.mainTable != "" {
-		if _, own := tr.colTypes[lower]; own {
+		_, own := tr.colTypes[lower]
+		if own {
 			return tr.mainTable + "." + col
 		}
 	}
 	return col
+}
+
+// qualifyReference квалифицирует виртуальное поле Ссылка/Reference/Ref по
+// основному источнику именно текущего SELECT-scope. Выходные алиасы обрабатываются
+// отдельно: глобальная tr.aliases не должна влиять на вложенные/UNION SELECT.
+func (tr *translator) qualifyReference(col string) string {
+	if len(tr.refDims) == 0 || tr.mainTable == "" || tr.inUnionOrder() {
+		return col
+	}
+	if scope, ok := tr.sourceCtx.scopeAt(tr.pos - 1); ok && scope.mainTable != "" {
+		return scope.mainTable + "." + col
+	}
+	return col
+}
+
+func (tr *translator) inUnionOrder() bool {
+	for depth := tr.parenDepth; depth >= 0; depth-- {
+		if tr.unionOrders[depth] {
+			return true
+		}
+	}
+	return false
+}
+
+func isReferenceName(lower string) bool {
+	return lower == "ссылка" || lower == "reference" || lower == "ref"
 }
 
 // emitOwnColumn эмитит неквалифицированную собственную колонку с учётом п.48/п.49.
@@ -2171,6 +2263,242 @@ func preScanMainTable(tokens []tok) string {
 		return table
 	}
 	return ""
+}
+
+// preScanSourceContext определяет по каждому SELECT-scope, какие квалификаторы
+// относятся к регистрам, а какие — к документам/справочникам. Это нужно до
+// основного прохода, потому что SELECT транслируется раньше FROM, а русские
+// имена системных колонок регистра (Период, Регистратор, ...) совпадают с
+// допустимыми прикладными полями сущностей. Scope привязан к токенам, а не
+// только к глубине скобок: Период внутри Год(Период) остаётся в родительском
+// SELECT, а SELECT-подзапрос получает собственный main/aliases.
+func preScanSourceContext(tokens []tok) sourceContext {
+	ctx := sourceContext{
+		tokenScope:   make([]int, len(tokens)),
+		tokenSection: make([]querySection, len(tokens)),
+	}
+	for i := range ctx.tokenScope {
+		ctx.tokenScope[i] = -1
+		ctx.tokenSection[i] = sectionOther
+	}
+	type scopeFrame struct {
+		id    int
+		depth int
+	}
+	var active []scopeFrame
+	var sections []querySection
+	depth := 0
+
+	for i := 0; i < len(tokens); i++ {
+		t := tokens[i]
+		if t.kind == tIdent {
+			if kw, ok := sqlKW(t.val); ok && kw == "SELECT" {
+				// UNION starts a sibling SELECT at the same depth; nested SELECT
+				// keeps every shallower parent frame active.
+				for len(active) > 0 && active[len(active)-1].depth >= depth {
+					active = active[:len(active)-1]
+				}
+				scopeID := len(ctx.scopes)
+				ctx.scopes = append(ctx.scopes, sourceScope{
+					qualifiers: map[string]sourceClass{},
+					refAliases: map[string]struct{}{},
+				})
+				sections = append(sections, sectionSelect)
+				active = append(active, scopeFrame{id: scopeID, depth: depth})
+			}
+		}
+		if len(active) > 0 {
+			frame := active[len(active)-1]
+			scopeID := frame.id
+			// EXTRACT(YEAR FROM ...) содержит SQL-слово FROM внутри выражения.
+			// Секцию SELECT меняют только ключевые слова на глубине самого SELECT.
+			if t.kind == tIdent && depth == frame.depth {
+				if kw, ok := sqlKW(t.val); ok {
+					switch kw {
+					case "SELECT":
+						sections[scopeID] = sectionSelect
+					case "FROM":
+						sections[scopeID] = sectionFrom
+					case "WHERE":
+						sections[scopeID] = sectionWhere
+					case "GROUP":
+						sections[scopeID] = sectionGroupBy
+					case "ORDER":
+						sections[scopeID] = sectionOrderBy
+					case "HAVING":
+						sections[scopeID] = sectionHaving
+					}
+				}
+			}
+			ctx.tokenScope[i] = scopeID
+			ctx.tokenSection[i] = sections[scopeID]
+			if sections[scopeID] == sectionSelect && t.kind == tIdent && depth == frame.depth {
+				if up := strings.ToUpper(t.val); (up == "КАК" || up == "AS") &&
+					i+1 < len(tokens) && tokens[i+1].kind == tIdent {
+					alias := strings.ToLower(tokens[i+1].val)
+					if isReferenceName(alias) {
+						ctx.scopes[scopeID].refAliases[alias] = struct{}{}
+					}
+				}
+			}
+		}
+
+		// Производная таблица в FROM/JOIN сама является источником текущего
+		// SELECT. Без этого следующий обычный JOIN ошибочно становился mainTable.
+		if t.kind == tIdent && len(active) > 0 {
+			if kw, ok := sqlKW(t.val); ok && (kw == "FROM" || kw == "JOIN") &&
+				i+2 < len(tokens) && tokens[i+1].kind == tLParen &&
+				tokens[i+2].kind == tIdent {
+				if nestedKW, nested := sqlKW(tokens[i+2].val); nested && nestedKW == "SELECT" {
+					scope := &ctx.scopes[active[len(active)-1].id]
+					isMain := scope.mainTable == ""
+					nesting := 0
+					for j := i + 1; j < len(tokens); j++ {
+						switch tokens[j].kind {
+						case tLParen:
+							nesting++
+						case tRParen:
+							nesting--
+							if nesting == 0 {
+								aliasPos := j + 1
+								if aliasPos+1 < len(tokens) && tokens[aliasPos].kind == tIdent {
+									aliasUpper := strings.ToUpper(tokens[aliasPos].val)
+									if (aliasUpper == "КАК" || aliasUpper == "AS") && tokens[aliasPos+1].kind == tIdent {
+										alias := strings.ToLower(tokens[aliasPos+1].val)
+										if isMain {
+											scope.mainTable = alias
+										}
+									}
+								}
+								j = len(tokens)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if i+2 >= len(tokens) {
+			switch t.kind {
+			case tLParen:
+				depth++
+			case tRParen:
+				for len(active) > 0 && active[len(active)-1].depth >= depth {
+					active = active[:len(active)-1]
+				}
+				if depth > 0 {
+					depth--
+				}
+			}
+			continue
+		}
+		if tokens[i].kind != tIdent {
+			switch t.kind {
+			case tLParen:
+				depth++
+			case tRParen:
+				for len(active) > 0 && active[len(active)-1].depth >= depth {
+					active = active[:len(active)-1]
+				}
+				if depth > 0 {
+					depth--
+				}
+			}
+			continue
+		}
+		typeUpper := strings.ToUpper(tokens[i].val)
+		if len(active) == 0 || !isSourceType(typeUpper) || tokens[i+1].kind != tDot || tokens[i+2].kind != tIdent {
+			continue
+		}
+		scope := &ctx.scopes[active[len(active)-1].id]
+
+		class := sourceClassEntity
+		if isAccumRegType(typeUpper) || isInfoRegType(typeUpper) || isAccountRegType(typeUpper) {
+			class = sourceClassRegister
+		}
+		if scope.main == sourceClassUnknown {
+			scope.main = class
+		}
+		isMain := scope.mainTable == ""
+		if isMain {
+			// Виртуальная таблица эмитится как подзапрос со специальным алиасом,
+			// который здесь не вычисляем. Для обычного источника сохраняем имя,
+			// чтобы bare-Ссылка квалифицировалась в своём SELECT-scope.
+			if i+3 >= len(tokens) || tokens[i+3].kind != tDot {
+				scope.mainTable = sourceToTable(typeUpper, tokens[i+2].val)
+			}
+		}
+
+		entityName := strings.ToLower(tokens[i+2].val)
+		scope.qualifiers[entityName] = class
+		scope.qualifiers[sourceToTable(typeUpper, tokens[i+2].val)] = class
+
+		// У обычного источника КАК/AS следует сразу за именем сущности.
+		aliasPos := i + 3
+		if aliasPos+1 < len(tokens) && tokens[aliasPos].kind == tIdent {
+			aliasUpper := strings.ToUpper(tokens[aliasPos].val)
+			if (aliasUpper == "КАК" || aliasUpper == "AS") && tokens[aliasPos+1].kind == tIdent {
+				alias := strings.ToLower(tokens[aliasPos+1].val)
+				scope.qualifiers[alias] = class
+				if isMain {
+					scope.mainTable = alias
+				}
+				continue
+			}
+		}
+
+		// У виртуальной таблицы пользовательский алиас находится после списка
+		// аргументов: Регистр.X.Остатки(...) КАК Р.
+		if i+5 >= len(tokens) || tokens[i+3].kind != tDot || tokens[i+5].kind != tLParen {
+			continue
+		}
+		depth := 0
+		for j := i + 5; j < len(tokens); j++ {
+			switch tokens[j].kind {
+			case tLParen:
+				depth++
+			case tRParen:
+				depth--
+				if depth == 0 {
+					aliasPos = j + 1
+					if aliasPos+1 < len(tokens) && tokens[aliasPos].kind == tIdent {
+						aliasUpper := strings.ToUpper(tokens[aliasPos].val)
+						if (aliasUpper == "КАК" || aliasUpper == "AS") && tokens[aliasPos+1].kind == tIdent {
+							scope.qualifiers[strings.ToLower(tokens[aliasPos+1].val)] = class
+						}
+					}
+					j = len(tokens)
+				}
+			}
+		}
+	}
+	return ctx
+}
+
+// systemColumnAlias разрешает русское имя системной колонки только в контексте
+// регистра. Для документов и справочников такое имя является обычным
+// прикладным полем и должно остаться кириллическим.
+func (tr *translator) systemColumnAlias(name string, prevDot bool) (string, bool) {
+	col, ok := systemColAlias(name)
+	if !ok {
+		return "", false
+	}
+	scope, hasScope := tr.sourceCtx.scopeAt(tr.pos - 1)
+	if !hasScope {
+		return "", false
+	}
+	if prevDot && tr.pos >= 3 {
+		qualifier := strings.ToLower(tr.tokens[tr.pos-3].val)
+		if class, known := scope.qualifiers[qualifier]; known {
+			return col, class == sourceClassRegister
+		}
+		// Обращение через ссылочное поле регистра ведёт к документу или
+		// справочнику, поэтому Регистр.Документ.Период — не системный period.
+		if tr.findRefDim(qualifier) != nil {
+			return "", false
+		}
+	}
+	return col, scope.main == sourceClassRegister
 }
 
 // projectionFieldNames extracts identifiers used by SELECT expressions before
@@ -2304,7 +2632,10 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		colTypes:    buildColTypes(tokens, opts),
 		mainTable:   preScanMainTable(tokens),
 		refDims:     preScanRefDims(tokens, opts),
+		sourceCtx:   preScanSourceContext(tokens),
 		aliases:     map[string]struct{}{},
+		unionDepths: map[int]bool{},
+		unionOrders: map[int]bool{},
 		section:     sectionOther,
 	}
 	for {
@@ -2483,6 +2814,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			}
 			tr.advance()
 			if upper == "УПОРЯДОЧИТЬ" {
+				if tr.unionDepths[tr.parenDepth] {
+					tr.unionOrders[tr.parenDepth] = true
+				}
 				tr.section = sectionOrderBy
 				tr.emit("ORDER BY")
 			} else {
@@ -2529,6 +2863,8 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			if t.kind == tLParen {
 				tr.parenDepth++
 			} else if t.kind == tRParen && tr.parenDepth > 0 {
+				delete(tr.unionDepths, tr.parenDepth)
+				delete(tr.unionOrders, tr.parenDepth)
 				tr.parenDepth--
 			}
 			tr.advance()
@@ -2548,16 +2884,37 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 			tr.advance()
 			prevDot := tr.prevWasDot
 			tr.prevWasDot = false
+			lower := strings.ToLower(t.val)
+			nextIsDot := tr.peek(0).kind == tDot
+			prevAlias := false
+			if tr.pos >= 2 {
+				if pv := strings.ToUpper(tr.tokens[tr.pos-2].val); pv == "КАК" || pv == "AS" {
+					prevAlias = !prevDot
+				}
+			}
 			// Ссылка / Reference → id (virtual primary-key field, like 1C).
 			// Работает и после точки (Н.Ссылка → н.id), и без алиаса
 			// (ВЫБРАТЬ Ссылка ИЗ Справочник.X → SELECT id FROM x).
-			if up := strings.ToUpper(t.val); up == "ССЫЛКА" || up == "REFERENCE" || up == "REF" {
-				tr.emit("id")
+			if isReferenceName(lower) {
+				switch {
+				case prevAlias:
+					// Имя виртуального поля зарезервировано: исторически
+					// `КАК Ссылка` создаёт SQL-алиас id. Важно не пропускать его
+					// через qualifyReference — `AS таблица.id` невалиден.
+					tr.emit("id")
+				case prevDot:
+					tr.emit("id")
+				case tr.sourceCtx.isReferenceAliasAt(tr.pos-1, lower):
+					tr.emit("id")
+				default:
+					tr.emit(tr.qualifyReference("id"))
+				}
 				continue
 			}
 			// Системные колонки регистра — PascalCase русские алиасы
-			// (см. Работает и с префиксом (Х.Период), и без.
-			if col, ok := systemColAlias(t.val); ok {
+			// (см. systemColAlias). Работает и с префиксом (Х.Период), и без,
+			// но только если соответствующий источник действительно регистр.
+			if col, ok := tr.systemColumnAlias(t.val, prevDot); ok {
 				tr.emit(col)
 				continue
 			}
@@ -2569,6 +2926,7 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					if len(tr.opts.RowFilters) > 0 {
 						return Result{}, fmt.Errorf("row-level filters for UNION queries are not supported yet")
 					}
+					tr.unionDepths[tr.parenDepth] = true
 				case "WHERE":
 					tr.emit("WHERE")
 					tr.section = sectionWhere
@@ -2584,6 +2942,9 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 							return Result{}, err
 						}
 					}
+					if kw == "ORDER" && tr.unionDepths[tr.parenDepth] {
+						tr.unionOrders[tr.parenDepth] = true
+					}
 				}
 				tr.emit(kw)
 				// track clause context
@@ -2598,14 +2959,6 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 					tr.section = sectionOrderBy
 				}
 			} else {
-				lower := strings.ToLower(t.val)
-				nextIsDot := tr.peek(0).kind == tDot
-				prevAlias := false
-				if tr.pos >= 2 {
-					if pv := strings.ToUpper(tr.tokens[tr.pos-2].val); pv == "КАК" || pv == "AS" {
-						prevAlias = !prevDot
-					}
-				}
 				if prevAlias {
 					// Имя алиаса вывода (КАК <name>) — не колонка: эмитим как есть
 					// и запоминаем, чтобы ссылки на него не квалифицировать/CAST'ить.
@@ -2884,13 +3237,13 @@ func isUUID(s string) bool {
 		return false
 	}
 	for i, c := range s {
-		switch {
-		case i == 8 || i == 13 || i == 18 || i == 23:
+		switch i {
+		case 8, 13, 18, 23:
 			if c != '-' {
 				return false
 			}
 		default:
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 				return false
 			}
 		}

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,6 +23,7 @@ func uiClientEntity() *metadata.Entity {
 		Fields: []metadata.Field{
 			{Name: "Наименование", Type: metadata.FieldTypeString},
 			{Name: "Телефон", Type: metadata.FieldTypeString},
+			{Name: "Адрес", Type: metadata.FieldTypeString},
 		},
 	}
 }
@@ -43,12 +45,16 @@ func uiMaskUser(ops []string, fields auth.FieldPolicies) *auth.User {
 func TestUI_QueryProjectionMaskGateRejectsAliasAndExpression(t *testing.T) {
 	cat := uiClientEntity()
 	s, _ := newSubmitTestServer(t, []*metadata.Entity{cat})
-	user := uiMaskUser([]string{"read"}, auth.FieldPolicies{"Телефон": {Read: "mask_all"}})
+	user := uiMaskUser([]string{"read"}, auth.FieldPolicies{
+		"Телефон": {Read: "mask_all"},
+		"Адрес":   {Read: "mask_all"},
+	})
 	ctx := auth.ContextWithUser(context.Background(), user)
 
 	for _, text := range []string{
 		`ВЫБРАТЬ Телефон КАК Контакт ИЗ Справочник.Клиент`,
 		`ВЫБРАТЬ Строка(Телефон) КАК Контакт ИЗ Справочник.Клиент`,
+		`ВЫБРАТЬ Телефон + " " + Адрес КАК Контакт ИЗ Справочник.Клиент`,
 		`ВЫБРАТЬ * ИЗ Справочник.Клиент`,
 	} {
 		compiled, err := s.compileQueryWithRowAccess(ctx, text, nil)
@@ -188,6 +194,46 @@ func TestUI_AppendSelectedRefOptions_MasksPII(t *testing.T) {
 	}
 	if rows[0]["_label"] != "Иванов" {
 		t.Fatalf("подпись опции должна остаться видимой, получено %v", rows[0]["_label"])
+	}
+}
+
+// Vertical UUID→label resolvers must mask the referenced row before choosing
+// its first string field. Otherwise a report/export that projects only a UUID
+// can disclose a protected value that was never present in the projection.
+func TestUI_ReferenceLabelsMaskFirstStringField(t *testing.T) {
+	client := &metadata.Entity{
+		Name: "Клиент",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Телефон", Type: metadata.FieldTypeString},
+		},
+	}
+	call := &metadata.Entity{
+		Name: "Звонок",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Клиент", Type: "reference:Клиент", RefEntity: client.Name},
+		},
+	}
+	s, ctx := newSubmitTestServer(t, []*metadata.Entity{client, call})
+	id := uuid.New()
+	const secret = "+79161234455"
+	if err := s.store.Upsert(ctx, client.Name, id, map[string]any{"Телефон": secret}, client); err != nil {
+		t.Fatal(err)
+	}
+	user := uiMaskUser([]string{"read"}, auth.FieldPolicies{"Телефон": {Read: "mask_all"}})
+	uctx := auth.ContextWithUser(ctx, user)
+
+	reportRows := []map[string]any{{"Клиент": id.String()}}
+	s.resolveUUIDsInReport(uctx, reportRows, "")
+	if got := fmt.Sprint(reportRows[0]["Клиент"]); got == secret || got != "••••••" {
+		t.Fatalf("report UUID label = %q, want fixed mask", got)
+	}
+
+	refRows := []map[string]any{{"Клиент": id.String()}}
+	s.resolveRefs(uctx, call, refRows)
+	if got := fmt.Sprint(refRows[0]["Клиент"]); got == secret || got != "••••••" {
+		t.Fatalf("reference field label = %q, want fixed mask", got)
 	}
 }
 
