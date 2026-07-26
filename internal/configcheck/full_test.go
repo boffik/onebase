@@ -54,6 +54,32 @@ func TestRunFullReportsUnknownAppConfigField(t *testing.T) {
 	t.Fatalf("unknown app config field was not reported: %+v", res.Issues)
 }
 
+func TestRunFullWarnsButAcceptsLegacyAppConfigFields(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "config", "app.yaml"), `name: DocFlow
+attachments:
+  storage_type: onebase_attachments
+  storage_location: database:_attachments
+  office_allowed_types: [doc, docx]
+russian_post:
+  enabled: true
+`)
+
+	res := RunFull(dir)
+	if !res.OK {
+		t.Fatalf("legacy app config must not block startup: %+v", res.Issues)
+	}
+	var deprecated int
+	for _, warning := range res.Warnings {
+		if warning.Code == "config.deprecated-key" {
+			deprecated++
+		}
+	}
+	if deprecated != 4 {
+		t.Fatalf("deprecated warnings = %d, want 4; all warnings: %+v", deprecated, res.Warnings)
+	}
+}
+
 func TestRunFullReportsMalformedRole(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "config", "app.yaml"), "name: Demo\n")
