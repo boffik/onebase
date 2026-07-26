@@ -84,6 +84,43 @@ type Service struct {
 	// настроены. Событие отправляется ПОСЛЕ успешной транзакции (асинхронно):
 	// document.save/document.post или catalog.save в зависимости от вида и Action.
 	Hooks *webhook.Dispatcher
+
+	// ChangePublisher — опциональный потребитель события «строка изменилась»
+	// (план 87, ступень A, живой список). nil = автопубликация выключена
+	// (тесты/procrun/migrate). Реализация в ui рассылает служебное событие
+	// живым спискам с адресацией строго по RLS.
+	ChangePublisher ChangePublisher
+}
+
+// ChangePublisher принимает уведомление об успешном изменении строки сущности
+// (после commit). entity — имя сущности; action ∈ {записан, проведён, удалён};
+// before/after — immutable pre/post-образы строки (nil для create/delete
+// соответственно) для адресации по правам.
+type ChangePublisher interface {
+	PublishChange(ctx context.Context, entity, action string, before, after map[string]any)
+}
+
+// publishChange публикует «данные.<сущность>» живым спискам после успешного
+// сохранения (план 87). before захвачен до записи; after читается уже после
+// commit свежим контекстом (tx-контекст после commit использовать нельзя).
+func (s *Service) publishChange(ctx context.Context, req SaveRequest, isPosting bool, before map[string]any) {
+	if s.ChangePublisher == nil || !req.Entity.NotifyChanges {
+		return
+	}
+	action := "записан"
+	if isPosting {
+		action = "проведён"
+	}
+	entity, id, meta := req.Entity.Name, req.ID, req.Entity
+	publish := func() {
+		bg := context.Background()
+		after, _ := s.Store.GetByID(bg, entity, id, meta)
+		s.ChangePublisher.PublishChange(bg, entity, action, before, after)
+	}
+	if storage.DeferUntilTxCommit(ctx, publish) {
+		return
+	}
+	publish()
 }
 
 // dispatchSaved отправляет веб-хук о записи/проведении объекта.
@@ -231,6 +268,13 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 
 	var msgs []string
 	wasPosted := false
+	// Pre-образ для живого списка (план 87): читаем строку ДО записи, чтобы
+	// прежний владелец убрал её из своего списка при смене прав. Только когда
+	// автопубликация реально включена — иначе лишнего чтения нет.
+	var changeBefore map[string]any
+	if s.ChangePublisher != nil && req.Entity.NotifyChanges && !req.IsNew {
+		changeBefore, _ = s.Store.GetByID(ctx, req.Entity.Name, req.ID, req.Entity)
+	}
 	// Хук и все его DB-побочные записи выполняются в той же транзакции, что
 	// шапка, ТЧ, движения и проведение. Для нового объекта сначала вставляется
 	// полноценная шапка: FK-ссылки из создаваемых хуком объектов уже валидны, но
@@ -340,6 +384,7 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 	}
 
 	s.dispatchSaved(ctx, req, isPosting)
+	s.publishChange(ctx, req, isPosting, changeBefore)
 
 	return SaveResult{ID: req.ID, DSLMessages: msgs, Movements: mc}, nil
 }
