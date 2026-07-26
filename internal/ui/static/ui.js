@@ -2445,10 +2445,21 @@ window.onebaseDevice = {
   if (!window.__obEmbedded) {
     window.addEventListener('onebase:звонок.входящий', function (ev) { callToast(ev.detail); });
   }
+  var sseOpened = false;
   function connect() {
     if (typeof EventSource === 'undefined') return;
     var es = new EventSource('/ui/events');
     window.__obEvents = es;
+    es.onopen = function () {
+      // План 87: служебные события данные.* не переигрываются из replay-окна.
+      // После РЕконнекта (не первого open) просим живые списки перечитаться —
+      // один актуальный GET безопаснее, чем догадка по устаревшему снимку прав.
+      if (sseOpened) {
+        emitOnebaseEvent('onebase:__oblive_refresh_all__', null);
+        forwardOnebaseEvent({ name: '__oblive_refresh_all__', data: null });
+      }
+      sseOpened = true;
+    };
     es.onmessage = function (ev) {
       var msg;
       try {
@@ -2474,4 +2485,105 @@ window.onebaseDevice = {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', connect);
     else connect();
   }
+})();
+
+/* План 87, ступень A — «Живой список». Контейнер списка помечается
+   data-ob-refresh-on="имя1 имя2" (+ data-ob-live="ключ" для сопоставления при
+   перечитывании). Универсальный слушатель ловит window-событие onebase:<имя>,
+   помечает подписанные контейнеры dirty и перечитывает тем же GET (как F5), но с
+   debounce и только в видимой вкладке. Ни одного НОВОГО обязательного запроса:
+   перечитывание — тот же GET, что делает пользователь по F5, реже и лишь когда
+   видно. Событие __oblive_refresh_all__ (SSE reconnect) помечает dirty все. */
+(function () {
+  if (window.__obLiveListInit) return;
+  window.__obLiveListInit = true;
+  var DEBOUNCE = 700;
+  var timers = {}; // key -> timeout id
+  var dirty = {};  // key -> true, ждёт видимости вкладки
+
+  function liveContainers() { return document.querySelectorAll('[data-ob-refresh-on]'); }
+  function keyOf(el, idx) { return el.getAttribute('data-ob-live') || ('__idx' + idx); }
+  function eventsOf(el) {
+    return (el.getAttribute('data-ob-refresh-on') || '').split(/\s+/).filter(Boolean);
+  }
+  function findByKey(root, key) {
+    var all = root.querySelectorAll('[data-ob-refresh-on]');
+    for (var i = 0; i < all.length; i++) {
+      if (keyOf(all[i], i) === key) return all[i];
+    }
+    return null;
+  }
+
+  function doRefresh(el, key) {
+    var src = el.getAttribute('data-ob-refresh-src') || window.location.href;
+    fetch(src, { credentials: 'same-origin', headers: { 'X-Requested-With': 'obLiveList' } })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var cur = findByKey(document, key);
+        var fresh = findByKey(doc, key);
+        if (!cur || !fresh) return;
+        var sc = cur.scrollTop;
+        cur.innerHTML = fresh.innerHTML; // содержимое; атрибуты контейнера сохраняются
+        try { cur.scrollTop = sc; } catch (_) {}
+      })
+      .catch(function () {}); // офлайн/редирект логина — тихо, F5 пользователя выручит
+  }
+
+  // Помечаем контейнер dirty и планируем перечитывание (или откладываем до
+  // видимости вкладки). Склейка пачки событий в один GET допустима: семантика —
+  // «показать актуальное состояние», от объединения не страдает.
+  function schedule(key) {
+    if (document.visibilityState === 'hidden') { dirty[key] = true; return; }
+    if (timers[key]) clearTimeout(timers[key]);
+    timers[key] = setTimeout(function () {
+      timers[key] = null;
+      var el = findByKey(document, key);
+      if (el) doRefresh(el, key);
+    }, DEBOUNCE);
+  }
+
+  function markAll() {
+    var cs = liveContainers();
+    for (var i = 0; i < cs.length; i++) schedule(keyOf(cs[i], i));
+  }
+
+  // Обработчик конкретного события: помечает те контейнеры, что на него подписаны.
+  function onNamed(name) {
+    var cs = liveContainers();
+    for (var i = 0; i < cs.length; i++) {
+      if (eventsOf(cs[i]).indexOf(name) >= 0) schedule(keyOf(cs[i], i));
+    }
+  }
+
+  // Собираем уникальные имена событий со страницы и вешаем по слушателю на каждое.
+  var bound = {};
+  function bindEvents() {
+    var cs = liveContainers();
+    for (var i = 0; i < cs.length; i++) {
+      var names = eventsOf(cs[i]);
+      for (var j = 0; j < names.length; j++) {
+        (function (name) {
+          if (bound[name]) return;
+          bound[name] = true;
+          window.addEventListener('onebase:' + name, function () { onNamed(name); });
+        })(names[j]);
+      }
+    }
+  }
+
+  // Скрытая вкладка копит dirty; при возврате — один перечитывающий GET.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    var keys = Object.keys(dirty);
+    dirty = {};
+    for (var i = 0; i < keys.length; i++) schedule(keys[i]);
+  });
+
+  // SSE reconnect: события данные.* не переигрываются → перечитать все живые списки.
+  window.addEventListener('onebase:__oblive_refresh_all__', markAll);
+
+  function init() { bindEvents(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();

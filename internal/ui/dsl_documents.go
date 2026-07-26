@@ -594,6 +594,12 @@ func (w *docWriter) write() error {
 }
 
 func (w *docWriter) writeInContext(ctx context.Context) error {
+	// Pre-образ живого списка (план 87): для существующего документа читаем строку
+	// ДО записи, чтобы прежний владелец убрал её из списка при смене прав.
+	var changeBefore map[string]any
+	if w.entity.NotifyChanges && w.loaded {
+		changeBefore, _ = w.s.store.GetByID(ctx, w.entity.Name, w.obj.ID, w.entity)
+	}
 	if w.accessID() == uuid.Nil {
 		if err := w.s.autoFillRowAccessFields(ctx, w.entity, "write", w.obj.Fields); err != nil {
 			return err
@@ -643,6 +649,8 @@ func (w *docWriter) writeInContext(ctx context.Context) error {
 		w.saved = wasSaved
 		w.expectedVersion = previousVersion
 	})
+	// Живой список (план 87): отложенная до commit публикация «данные.<сущность>».
+	w.s.publishDocChange(ctx, w.entity, w.obj.ID, "записан", changeBefore)
 	return nil
 }
 
@@ -705,7 +713,12 @@ func (w *docWriter) postInContext(ctx context.Context) error {
 	if err := w.s.store.SetPosted(ctx, w.entity.Name, w.obj.ID, true); err != nil {
 		return err
 	}
-	return exchange.RegisterOnSave(ctx, w.s.store, w.s.reg.ExchangePlans(), w.entity, w.obj.ID, false)
+	if err := exchange.RegisterOnSave(ctx, w.s.store, w.s.reg.ExchangePlans(), w.entity, w.obj.ID, false); err != nil {
+		return err
+	}
+	// Живой список (план 87): «проведён» после успешного проведения из DSL.
+	w.s.publishDocChange(ctx, w.entity, w.obj.ID, "проведён", nil)
+	return nil
 }
 
 // ensureSelfRef устанавливает псевдо-реквизит «Ссылка» самого документа, чтобы

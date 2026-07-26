@@ -70,6 +70,14 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		"isEnum":      func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
 		"tileView":    resolveTileView,
 		"listColumns": resolveListColumns,
+		// liveListRefreshOn (план 87, ступень A): имена событий живого списка через
+		// пробел для атрибута data-ob-refresh-on. Пусто — список статичный.
+		"liveListRefreshOn": func(e *metadata.Entity) string {
+			if e == nil {
+				return ""
+			}
+			return strings.Join(e.ListRefreshOn, " ")
+		},
 		"treeColumn":  isTreeListColumn,
 		"hasValue": func(v any) bool {
 			if v == nil {
@@ -1094,7 +1102,8 @@ const tplList = `
   </form>
 </details>
 
-<div class="card">
+{{$obRefresh := liveListRefreshOn .Entity}}
+<div class="card"{{if $obRefresh}} data-ob-refresh-on="{{$obRefresh}}" data-ob-live="{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}"{{end}}>
 {{if .TreeView}}
 {{/* ===== TREE VIEW ===== */}}
 {{if .TreeRows}}
