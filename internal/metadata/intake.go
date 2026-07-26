@@ -30,6 +30,13 @@ const (
 	IntakeTransportAMQP = "amqp"
 )
 
+// Режимы проверки подлинности отправителя (http-транспорт).
+const (
+	IntakeAuthNone  = "none"  // без проверки (для доверенного контура)
+	IntakeAuthToken = "token" // постоянный секрет в заголовке X-Webhook-Token
+	IntakeAuthHMAC  = "hmac"  // подпись тела X-Webhook-Signature = hex(HMAC-SHA256(тело, secret))
+)
+
 // Причины отправки события в карантин (DLQ). Совпадают с политикой dlq.on.
 const (
 	DLQHandlerError   = "handler_error"   // обработчик вернул ошибку → откат бизнес-объекта
@@ -47,6 +54,8 @@ type Intake struct {
 	SchemaVersion string            `yaml:"schema_version"` // ожидаемая версия конверта
 	Idempotency   IntakeIdempotency `yaml:"idempotency"`
 	Handler       string            `yaml:"handler"` // имя обработчика: процедура Обработать(Конверт) → результат
+	Auth          string            `yaml:"auth"`    // none (по умолч.) | token | hmac — проверка подлинности отправителя
+	Secret        string            `yaml:"secret"`  // общий секрет для token/hmac; поддерживает ${env:VAR}
 	DLQ           IntakeDLQ         `yaml:"dlq"`
 }
 
@@ -89,6 +98,11 @@ func (in *Intake) Normalize() {
 	in.Endpoint = strings.TrimSpace(in.Endpoint)
 	in.SchemaVersion = strings.TrimSpace(in.SchemaVersion)
 	in.Handler = strings.TrimSpace(in.Handler)
+	in.Auth = strings.ToLower(strings.TrimSpace(in.Auth))
+	if in.Auth == "" {
+		in.Auth = IntakeAuthNone
+	}
+	in.Secret = strings.TrimSpace(in.Secret)
 	in.Idempotency.Key = strings.TrimSpace(in.Idempotency.Key)
 	if in.Idempotency.Key == "" {
 		in.Idempotency.Key = "event_id"
@@ -119,6 +133,15 @@ func (in *Intake) Validate() error {
 	}
 	if in.Handler == "" {
 		return fmt.Errorf("intake %q: не задан handler (процедура Обработать)", in.Name)
+	}
+	switch in.Auth {
+	case IntakeAuthNone:
+	case IntakeAuthToken, IntakeAuthHMAC:
+		if in.Secret == "" {
+			return fmt.Errorf("intake %q: auth %s требует secret", in.Name, in.Auth)
+		}
+	default:
+		return fmt.Errorf("intake %q: неизвестный auth %q (none|token|hmac)", in.Name, in.Auth)
 	}
 	if in.Idempotency.Key == "" {
 		return fmt.Errorf("intake %q: не задан idempotency.key", in.Name)

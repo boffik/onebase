@@ -446,9 +446,12 @@ func (p *Project) loadIntakes() error {
 		return fmt.Errorf("project: load intakes: %w", err)
 	}
 	for _, in := range intakes {
+		// Валидируем ДО раскрытия ${env:…}: плейсхолдер считается заданным
+		// секретом (onebase check проходит без выставленных переменных окружения).
 		if err := in.Validate(); err != nil {
 			return fmt.Errorf("project: intake %q: %w", in.Name, err)
 		}
+		in.Secret = expandEnvRefs(in.Secret)
 	}
 	p.Intakes = intakes
 	return nil

@@ -128,6 +128,12 @@ func (s *Server) serviceDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// План 90: входные шлюзы делят префикс /hs/ с сервисами. Их endpoint — полный
+	// путь; при совпадении обслуживаем как приёмник (реестр читается вживую).
+	if s.dispatchIntake(w, r) {
+		return
+	}
+
 	root, remainder, _ := strings.Cut(rest, "/")
 	svc := s.reg.GetHTTPServiceByRoot(root)
 	if svc == nil {

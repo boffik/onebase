@@ -20,6 +20,12 @@ func builtinReadJSON(args []any, file string, line int) (any, error) {
 	return jsonToValue(raw), nil
 }
 
+// JSONValueToDSL рекурсивно превращает разобранное JSON-значение (map[string]any/
+// []any/скаляры из encoding/json) в DSL-значение (*Map/*Array/скаляры) — то же,
+// что получает DSL из ПрочитатьJSON. Экспортировано для приёмки (план 90): конверт
+// события отдаётся обработчику как привычный *Map.
+func JSONValueToDSL(v any) any { return jsonToValue(v) }
+
 func jsonToValue(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
