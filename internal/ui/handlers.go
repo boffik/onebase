@@ -929,14 +929,29 @@ func (s *Server) enrichTPRowsWithRefs(ctx context.Context, tp metadata.TablePart
 		for idStr, refRow := range refRows {
 			labels[idStr] = s.maskedRecordLabel(ctx, refEntity, refRow)
 		}
-		// replace plain UUID strings with *interpreter.Ref{UUID, Name, Manager}
+		// Replace plain UUID strings and rebind existing references to a manager
+		// backed by the current context. A Ref copied into a new document before
+		// Записать() may still carry a manager bound to the outer processor
+		// context. Keeping that manager inside OnWrite makes ПолучитьОбъект()
+		// request a second SQLite connection while the current transaction owns
+		// the only one.
 		mgr := s.refManagerFor(refEntity, ctx)
 		for _, row := range rows {
 			matchKey, v, ok := lookupMapCI(row, f.Name)
 			if !ok || v == nil {
 				continue
 			}
-			if _, isRef := v.(*interpreter.Ref); isRef {
+			if ref, isRef := v.(*interpreter.Ref); isRef {
+				if ref == nil {
+					continue
+				}
+				name := ref.Name
+				if label, ok := labels[ref.UUID]; ok {
+					name = label
+				}
+				row[matchKey] = &interpreter.Ref{
+					UUID: ref.UUID, Name: name, Type: refEntity.Name, Manager: mgr,
+				}
 				continue
 			}
 			idStr, _, ok := uuidFromValue(v)
@@ -981,7 +996,15 @@ func (s *Server) enrichHeaderRefs(ctx context.Context, entity *metadata.Entity, 
 		if matchKey == "" || matchVal == nil {
 			continue
 		}
-		if _, isRef := matchVal.(*interpreter.Ref); isRef {
+		if ref, isRef := matchVal.(*interpreter.Ref); isRef {
+			if ref != nil {
+				obj.Fields[matchKey] = &interpreter.Ref{
+					UUID:    ref.UUID,
+					Name:    ref.Name,
+					Type:    refEntity.Name,
+					Manager: s.refManagerFor(refEntity, ctx),
+				}
+			}
 			continue
 		}
 		idStr := fmt.Sprintf("%v", matchVal)

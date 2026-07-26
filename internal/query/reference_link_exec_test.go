@@ -205,6 +205,92 @@ func TestBareReference_WithReferenceJoin_ExecuteSQLite(t *testing.T) {
 		}
 	})
 
+	t.Run("reference output alias is usable in having", func(t *testing.T) {
+		src := `SELECT SUM(Сумма) AS Reference, Проект
+			FROM Document.Расход
+			GROUP BY Проект
+			HAVING Reference > 50`
+		res, err := query.Compile(src, query.CompileOpts{
+			Entities: entities,
+			Dialect:  storage.SQLiteDialect{},
+		})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+
+		var total float64
+		var display string
+		if err := db.QueryRow(ctx, res.SQL, res.Args...).Scan(&total, &display); err != nil {
+			t.Fatalf("execute %q\nSQL: %s\nerror: %v", src, res.SQL, err)
+		}
+		if total != 100 || display != "Казначейство" {
+			t.Fatalf("row = (%v, %q), want (100, Казначейство)", total, display)
+		}
+		if !strings.Contains(res.SQL, "HAVING(SUM(CAST(расход.сумма AS NUMERIC))) > 50") {
+			t.Fatalf("HAVING did not expand the reserved output alias:\n%s", res.SQL)
+		}
+
+		pgRes, err := query.Compile(src, query.CompileOpts{
+			Entities: entities,
+			Dialect:  storage.PgDialect{},
+		})
+		if err != nil {
+			t.Fatalf("compile PostgreSQL: %v", err)
+		}
+		if !strings.Contains(pgRes.SQL, "HAVING(SUM(расход.сумма)) > 50") ||
+			strings.Contains(pgRes.SQL, "HAVING id") {
+			t.Fatalf("PostgreSQL HAVING still references the SELECT alias:\n%s", pgRes.SQL)
+		}
+	})
+
+	t.Run("reference output alias is usable in group by", func(t *testing.T) {
+		src := `SELECT Сумма AS Reference, Проект
+			FROM Document.Расход
+			GROUP BY Reference, Проект`
+		res, err := query.Compile(src, query.CompileOpts{
+			Entities: entities,
+			Dialect:  storage.SQLiteDialect{},
+		})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+
+		var amount float64
+		var display string
+		if err := db.QueryRow(ctx, res.SQL, res.Args...).Scan(&amount, &display); err != nil {
+			t.Fatalf("execute %q\nSQL: %s\nerror: %v", src, res.SQL, err)
+		}
+		if amount != 100 || display != "Казначейство" {
+			t.Fatalf("row = (%v, %q), want (100, Казначейство)", amount, display)
+		}
+		if !strings.Contains(res.SQL, "GROUP BY(расход.сумма),") {
+			t.Fatalf("GROUP BY did not expand the reserved output alias:\n%s", res.SQL)
+		}
+	})
+
+	t.Run("select all modifier is not copied into group by", func(t *testing.T) {
+		src := `SELECT ALL Сумма AS Reference, Проект
+			FROM Document.Расход
+			GROUP BY Reference, Проект`
+		res, err := query.Compile(src, query.CompileOpts{
+			Entities: entities,
+			Dialect:  storage.SQLiteDialect{},
+		})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		if strings.Contains(res.SQL, "GROUP BY(ALL ") ||
+			!strings.Contains(res.SQL, "GROUP BY(расход.сумма),") {
+			t.Fatalf("SELECT ALL leaked into the grouped expression:\n%s", res.SQL)
+		}
+
+		var amount float64
+		var display string
+		if err := db.QueryRow(ctx, res.SQL, res.Args...).Scan(&amount, &display); err != nil {
+			t.Fatalf("execute %q\nSQL: %s\nerror: %v", src, res.SQL, err)
+		}
+	})
+
 	t.Run("output alias does not leak into references", func(t *testing.T) {
 		src := `ВЫБРАТЬ Сумма КАК Ссылка, Р.Ссылка, (ВЫБРАТЬ Ссылка ИЗ Справочник.Участник) КАК Вложенная ИЗ Документ.Расход КАК Р`
 		res, err := query.Compile(src, query.CompileOpts{
@@ -276,6 +362,85 @@ func TestBareReference_WithReferenceJoin_ExecuteSQLite(t *testing.T) {
 		}
 		if !strings.HasPrefix(res.SQL, "SELECT п.period FROM") {
 			t.Fatalf("derived register lost system-column semantics:\n%s", res.SQL)
+		}
+
+		for _, tt := range []struct {
+			name      string
+			src       string
+			wantStart string
+		}{
+			{
+				name:      "qualified without outer register join",
+				src:       `ВЫБРАТЬ П.Период ИЗ (ВЫБРАТЬ Период ИЗ РегистрНакопления.Остатки КАК В) КАК П`,
+				wantStart: "SELECT п.period FROM",
+			},
+			{
+				name:      "bare without outer register join",
+				src:       `ВЫБРАТЬ Период ИЗ (ВЫБРАТЬ Период ИЗ РегистрНакопления.Остатки КАК В) КАК П`,
+				wantStart: "SELECT period FROM",
+			},
+			{
+				name: "nested derived chain",
+				src: `ВЫБРАТЬ К.Период
+					ИЗ (ВЫБРАТЬ П.Период
+						ИЗ (ВЫБРАТЬ Период ИЗ РегистрНакопления.Остатки КАК В) КАК П
+					) КАК К`,
+				wantStart: "SELECT к.period FROM",
+			},
+			{
+				name:      "wildcard projection",
+				src:       `ВЫБРАТЬ П.Период ИЗ (ВЫБРАТЬ * ИЗ РегистрНакопления.Остатки КАК Р) КАК П`,
+				wantStart: "SELECT п.period FROM",
+			},
+			{
+				name:      "qualified wildcard projection",
+				src:       `ВЫБРАТЬ П.Период ИЗ (ВЫБРАТЬ Р.* ИЗ РегистрНакопления.Остатки КАК Р) КАК П`,
+				wantStart: "SELECT п.period FROM",
+			},
+			{
+				name:      "parenthesized projection",
+				src:       `ВЫБРАТЬ П.Период ИЗ (ВЫБРАТЬ (Период) ИЗ РегистрНакопления.Остатки КАК Р) КАК П`,
+				wantStart: "SELECT п.period FROM",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				derivedRes, err := query.Compile(tt.src, query.CompileOpts{
+					Registers: []*metadata.Register{reg},
+					Dialect:   storage.SQLiteDialect{},
+				})
+				if err != nil {
+					t.Fatalf("compile: %v", err)
+				}
+				if err := db.QueryRow(ctx, derivedRes.SQL, derivedRes.Args...).Scan(&got); err != nil {
+					t.Fatalf("execute %q\nSQL: %s\nerror: %v", tt.src, derivedRes.SQL, err)
+				}
+				if !strings.HasPrefix(derivedRes.SQL, tt.wantStart) {
+					t.Fatalf("derived register lost system-column semantics:\n%s", derivedRes.SQL)
+				}
+			})
+		}
+
+		allSystemSrc := `ВЫБРАТЬ П.Период, П.ВидДвижения, П.Регистратор, П.НомерСтроки
+			ИЗ (ВЫБРАТЬ Период, ВидДвижения, Регистратор, НомерСтроки
+				ИЗ РегистрНакопления.Остатки КАК В
+			) КАК П`
+		allSystemRes, err := query.Compile(allSystemSrc, query.CompileOpts{
+			Registers: []*metadata.Register{reg},
+			Dialect:   storage.SQLiteDialect{},
+		})
+		if err != nil {
+			t.Fatalf("compile all system columns: %v", err)
+		}
+		var movement, recorder, line any
+		if err := db.QueryRow(ctx, allSystemRes.SQL, allSystemRes.Args...).
+			Scan(&got, &movement, &recorder, &line); err != nil {
+			t.Fatalf("execute %q\nSQL: %s\nerror: %v", allSystemSrc, allSystemRes.SQL, err)
+		}
+		if !strings.HasPrefix(
+			allSystemRes.SQL,
+			"SELECT п.period, п.вид_движения, п.recorder, п.line_number FROM",
+		) {
+			t.Fatalf("derived table lost register system columns:\n%s", allSystemRes.SQL)
 		}
 
 		entityFieldSrc := `ВЫБРАТЬ П.Период ИЗ (ВЫБРАТЬ Д.Период ИЗ РегистрНакопления.Остатки КАК Р ЛЕВОЕ СОЕДИНЕНИЕ Документ.Расход КАК Д ПО 1 = 0) КАК П`
@@ -396,8 +561,8 @@ func TestBareReference_WithReferenceJoin_ExecuteSQLite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("compile: %v", err)
 		}
-		if !strings.Contains(res.SQL, "AS id") || !strings.Contains(res.SQL, "GROUP BY id,") {
-			t.Fatalf("English GROUP BY did not resolve the reserved alias:\n%s", res.SQL)
+		if !strings.Contains(res.SQL, "AS id") || !strings.Contains(res.SQL, "GROUP BY(расход.сумма),") {
+			t.Fatalf("English GROUP BY did not expand the reserved alias:\n%s", res.SQL)
 		}
 	})
 }
