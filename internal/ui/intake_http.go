@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -26,11 +27,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/intake"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // dispatchIntake обслуживает запрос как входной шлюз, если его путь совпадает с
@@ -81,10 +84,9 @@ func (s *Server) dispatchIntake(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
-	proc := s.reg.GetModuleNamespacedProc(in.Handler, "Обработать")
-	if proc == nil {
-		writeServiceError(w, http.StatusInternalServerError,
-			"обработчик Обработать не найден в модуле "+in.Handler)
+	handler, herr := s.newIntakeHandler(in)
+	if herr != nil {
+		writeServiceError(w, http.StatusInternalServerError, herr.Error())
 		return true
 	}
 
@@ -96,16 +98,52 @@ func (s *Server) dispatchIntake(w http.ResponseWriter, r *http.Request) bool {
 	opStatus := "ok"
 	defer func() { finish(opStatus, 0, false) }()
 
-	eng := intake.New(s.store)
-	handler := &dslIntakeHandler{s: s, proc: proc, timeout: s.operationTimeout(opHTTPServiceRun)}
-	res, err := eng.Ingest(opCtx, in, handler, env)
+	res, err := intake.New(s.store).Ingest(opCtx, in, handler, env)
 	if err != nil {
 		opStatus = operationStatus(opCtx, err)
 		writeServiceError(w, http.StatusInternalServerError, err.Error())
 		return true
 	}
+	if res.Status == intake.StatusQuarantined {
+		s.auditIntake(opCtx, r, "intake.quarantine", in.Name, env.Field(in.Idempotency.Key), res.Reason, env.CorrelationID(),
+			map[string]any{"dlq_id": res.DLQID})
+	}
 	s.writeIntakeResult(w, res)
 	return true
+}
+
+// newIntakeHandler строит DSL-обработчик шлюза (резолвит процедуру Обработать).
+func (s *Server) newIntakeHandler(in *metadata.Intake) (*dslIntakeHandler, error) {
+	proc := s.reg.GetModuleNamespacedProc(in.Handler, "Обработать")
+	if proc == nil {
+		return nil, fmt.Errorf("обработчик Обработать не найден в модуле %s", in.Handler)
+	}
+	return &dslIntakeHandler{s: s, proc: proc, timeout: s.operationTimeout(opHTTPServiceRun)}, nil
+}
+
+// auditIntake пишет событие приёмки (intake.quarantine/intake.replay) в журнал
+// регистрации. Best-effort: сбой аудита не влияет на ответ.
+func (s *Server) auditIntake(ctx context.Context, r *http.Request, action, intakeName, key, reason, corr string, extra map[string]any) {
+	if s.store == nil {
+		return
+	}
+	newVal := map[string]any{"key": key, "correlation_id": corr}
+	for k, v := range extra {
+		newVal[k] = v
+	}
+	var login, userID string
+	if u := auth.UserFromContext(ctx); u != nil {
+		login, userID = u.Login, u.ID
+	}
+	ip := ""
+	if r != nil {
+		ip = clientIP(r)
+	}
+	_ = s.store.Log(ctx, &storage.AuditEntry{
+		UserID: userID, UserLogin: login, Action: action,
+		EntityKind: "intake", EntityName: intakeName, Field: reason,
+		Reason: corr, NewValue: newVal, IP: ip,
+	})
 }
 
 // resolveIntakeAuth проверяет подлинность отправителя по auth шлюза. body нужен

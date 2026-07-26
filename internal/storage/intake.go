@@ -193,6 +193,53 @@ func (db *DB) SetIntakeLogStatus(ctx context.Context, intake, scope, key, status
 	return nil
 }
 
+// IntakeStats — сводка по шлюзу для монитора/сверки (CC-INT-007): счётчики строк
+// идемпотентности по статусам + число открытых записей карантина.
+type IntakeStats struct {
+	Received    int
+	Processed   int
+	Quarantined int
+	OpenDLQ     int
+}
+
+// IntakeLogStats считает строки _intake_log шлюза по статусам и открытые записи
+// карантина. Это «своя сторона» сверки: оператор сопоставляет числа с источником.
+func (db *DB) IntakeLogStats(ctx context.Context, intake string) (IntakeStats, error) {
+	d := db.dialect
+	var st IntakeStats
+	rows, err := db.Query(ctx,
+		fmt.Sprintf(`SELECT status, COUNT(*) FROM _intake_log WHERE intake = %s GROUP BY status`, d.Placeholder(1)),
+		intake)
+	if err != nil {
+		return st, fmt.Errorf("intake: stats: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return st, err
+		}
+		switch status {
+		case IntakeStatusReceived:
+			st.Received = n
+		case IntakeStatusProcessed:
+			st.Processed = n
+		case IntakeStatusQuarantined:
+			st.Quarantined = n
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return st, err
+	}
+	if err := db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT COUNT(*) FROM _intake_dlq WHERE intake = %s AND replay_state = %s`,
+			d.Placeholder(1), d.Placeholder(2)), intake, DLQStateOpen).Scan(&st.OpenDLQ); err != nil {
+		return st, fmt.Errorf("intake: stats dlq: %w", err)
+	}
+	return st, nil
+}
+
 // InsertIntakeDLQ добавляет запись карантина. Возвращает её id.
 func (db *DB) InsertIntakeDLQ(ctx context.Context, e IntakeDLQEntry) (string, error) {
 	if e.ID == "" {

@@ -360,6 +360,8 @@ func (s *Server) Mount(r chi.Router) {
 	// Admin: монитор обмена данными (план 86)
 	r.Get("/ui/admin/exchange", s.exchangeMonitor)
 	r.Post("/ui/admin/exchange/sync", s.exchangeMonitorSync)
+	r.Get("/ui/admin/intake", s.intakeMonitor)
+	r.Post("/ui/admin/intake/replay", s.intakeMonitorReplay)
 
 	// Self-service: change own password
 	r.Get("/ui/profile/passwd", s.selfPasswd)
