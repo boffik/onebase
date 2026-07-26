@@ -58,6 +58,15 @@ func runProcrun(cmd *cobra.Command, _ []string) error {
 	}
 	defer proj.Close()
 
+	// Offline processors use the same catalog/document writers as the server.
+	// Those writers may emit mandatory audit events (for example governed
+	// publish/rollback decisions), so procrun must initialize the platform
+	// audit schema just like run/dev do. This is idempotent for existing bases
+	// and makes a freshly migrated SQLite database usable from procrun.
+	if err := db.EnsureAuditSchema(ctx); err != nil {
+		return fmt.Errorf("audit schema: %w", err)
+	}
+
 	strParams := parseKeyVals(cmd, "set")
 	fileParams := parseKeyVals(cmd, "file")
 
