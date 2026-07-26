@@ -74,6 +74,9 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	if err := db.EnsureExchangeSchema(ctx); err != nil {
 		return fmt.Errorf("exchange schema: %w", err)
 	}
+	if err := db.EnsureIntakeSchema(ctx); err != nil {
+		return fmt.Errorf("intake schema: %w", err)
+	}
 	if err := db.EnsureScheduledRunsTable(ctx); err != nil {
 		return fmt.Errorf("scheduled runs: %w", err)
 	}

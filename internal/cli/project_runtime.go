@@ -34,6 +34,7 @@ func registryFromProject(proj *project.Project) *runtime.Registry {
 	next.LoadHTTPServices(proj.HTTPServices)
 	next.LoadPages(proj.Pages)
 	next.LoadExchangePlans(proj.ExchangePlans)
+	next.LoadIntakes(proj.Intakes)
 	next.LoadSubsystems(proj.Subsystems)
 	next.LoadJournals(proj.Journals)
 	next.LoadAccountRegisters(proj.AccountRegisters, proj.ChartsOfAccounts)

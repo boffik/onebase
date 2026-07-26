@@ -46,6 +46,7 @@ type Registry struct {
 	httpServices    map[string]*httpservice.Service   // lowercase name → HTTP-сервис
 	pages           map[string]*page.Page             // lowercase name → страница (план 66)
 	exchangePlans   map[string]*metadata.ExchangePlan // lowercase name → план обмена (план 86)
+	intakes         map[string]*metadata.Intake       // lowercase name → входной шлюз (план 90)
 	extProcessors   map[string]*processor.Processor   // внешние обработки (из БД), ключ — Name
 	subsystems      []*metadata.Subsystem             // sorted by Order
 	journals        map[string]*metadata.Journal
@@ -84,6 +85,7 @@ func NewRegistry() *Registry {
 		httpServices:    make(map[string]*httpservice.Service),
 		pages:           make(map[string]*page.Page),
 		exchangePlans:   make(map[string]*metadata.ExchangePlan),
+		intakes:         make(map[string]*metadata.Intake),
 		extProcessors:   make(map[string]*processor.Processor),
 		extProcs:        make(map[string]map[string]*ast.ProcedureDecl),
 		serviceProcs:    make(map[string]map[string]*ast.ProcedureDecl),
@@ -126,6 +128,7 @@ func (r *Registry) ReplaceProjectFrom(src *Registry) {
 	r.httpServices = src.httpServices
 	r.pages = src.pages
 	r.exchangePlans = src.exchangePlans
+	r.intakes = src.intakes
 	r.subsystems = src.subsystems
 	r.journals = src.journals
 	r.accountRegs = src.accountRegs
@@ -1092,6 +1095,36 @@ func (r *Registry) GetExchangePlan(name string) *metadata.ExchangePlan {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.exchangePlans[strings.ToLower(name)]
+}
+
+// LoadIntakes регистрирует входные шлюзы по имени (регистронезависимо, план 90).
+// Зеркало LoadExchangePlans: транспортный шов ищет шлюз через GetIntake.
+func (r *Registry) LoadIntakes(intakes []*metadata.Intake) {
+	m := make(map[string]*metadata.Intake, len(intakes))
+	for _, in := range intakes {
+		m[strings.ToLower(in.Name)] = in
+	}
+	r.mu.Lock()
+	r.intakes = m
+	r.mu.Unlock()
+}
+
+// Intakes возвращает все зарегистрированные входные шлюзы.
+func (r *Registry) Intakes() []*metadata.Intake {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*metadata.Intake, 0, len(r.intakes))
+	for _, in := range r.intakes {
+		out = append(out, in)
+	}
+	return out
+}
+
+// GetIntake ищет входной шлюз по имени (регистронезависимо). nil, если нет.
+func (r *Registry) GetIntake(name string) *metadata.Intake {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.intakes[strings.ToLower(name)]
 }
 
 func (r *Registry) LoadSubsystems(subs []*metadata.Subsystem) {
