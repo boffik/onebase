@@ -35,10 +35,13 @@ func (s *Server) maskRecords(ctx context.Context, entity *metadata.Entity, rows 
 	access.MaskRecords(s.fieldDecisions(ctx, entity), rows)
 }
 
-// fieldMaskRestricted reports whether reading entity masks any field for the
-// request user (used by the storage chokepoint / diagnostics).
-func (s *Server) fieldMaskRestricted(ctx context.Context, entity *metadata.Entity) bool {
-	return len(s.fieldDecisions(ctx, entity)) > 0
+// maskedRecordLabel is the only safe way to derive a user-visible label from
+// a freshly loaded record. Reference resolvers often read a row vertically
+// (UUID → label), bypassing the list/form masking chokepoints; mask first so a
+// sensitive first string field cannot leak through reports, widgets or audit.
+func (s *Server) maskedRecordLabel(ctx context.Context, entity *metadata.Entity, row map[string]any) string {
+	s.maskRecord(ctx, entity, row)
+	return firstStringField(row, entity)
 }
 
 // deniedMaskedColumn is the fail-closed report/AI gate (план 88D): cols are

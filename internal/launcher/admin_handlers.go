@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -253,8 +254,8 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
 		return
 	}
-	if req.Login == "" || req.Password == "" {
-		writeJSON(w, 400, map[string]any{"error": tr(lang, "Логин и пароль обязательны")})
+	if req.Login == "" {
+		writeJSON(w, 400, map[string]any{"error": tr(lang, "Логин обязателен")})
 		return
 	}
 	db, err := getAuthDB(r.Context(), b)
@@ -274,9 +275,13 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": tr(lang, "Первый пользователь должен быть администратором")})
 		return
 	}
-	user, err := repo.Create(r.Context(), req.Login, req.Password, req.FullName, req.IsAdmin)
+	user, err := repo.CreateManaged(r.Context(), req.Login, req.Password, req.FullName, req.IsAdmin)
 	if err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if isPasswordPolicyError(err) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error()})
 		return
 	}
 	// До создания первого пользователя текущая страница была открыта без
@@ -315,7 +320,11 @@ func (h *handler) cfgAdminUserDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := auth.NewRepo(db)
 	if err := repo.Delete(r.Context(), req.ID); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, auth.ErrLastAdmin) || errors.Is(err, auth.ErrLastUser) {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error()})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -340,9 +349,6 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": tr(lang, "id обязателен")})
 		return
 	}
-	// Пустой пароль разрешён сознательно (kiosk/dev/тестовый аккаунт);
-	// bcrypt с "" хеширует валидно, Authenticate тоже принимает пустую
-	// строку — пользователь сможет войти, оставив поле пароля пустым.
 	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
@@ -350,7 +356,11 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := auth.NewRepo(db)
 	if err := repo.UpdatePassword(r.Context(), req.ID, req.Password); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if isPasswordPolicyError(err) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error()})
 		return
 	}
 	// Политика плана 78: смена пароля из конфигуратора — админское действие,
@@ -362,6 +372,12 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 	}
 	logCfgSessionAudit(r, db, "password_change_sessions_revoked", targetLogin, req.ID)
 	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+func isPasswordPolicyError(err error) bool {
+	return errors.Is(err, auth.ErrPasswordRequired) ||
+		errors.Is(err, auth.ErrPasswordTooShort) ||
+		errors.Is(err, auth.ErrPasswordTooLong)
 }
 
 // logCfgSessionAudit пишет событие сессионного аудита от имени администратора

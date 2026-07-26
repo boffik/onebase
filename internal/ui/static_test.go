@@ -26,6 +26,7 @@ func TestStaticUIJS(t *testing.T) {
 	body := rr.Body.String()
 	for _, want := range []string{
 		"window.obOpenInShell",
+		"window.obCloseInShell",
 		"openRefPicker",
 		"function obImageUpload",
 		"function addTpRow",

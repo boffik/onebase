@@ -26,10 +26,27 @@ if (window.__obEmbedded) {
     } catch (_) {}
     return true;
   };
+  window.obCloseInShell = function () {
+    var shell = null;
+    try {
+      if (window.parent && window.parent.obOpenTab) shell = window.parent;
+    } catch (_) {}
+    if (!shell) return false;
+    try {
+      shell.postMessage({ source: 'obCloseTab' }, window.location.origin);
+    } catch (_) {
+      return false;
+    }
+    return true;
+  };
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest('a[href]') : null;
     if (!a || a.target === '_blank') return;
+    if (a.hasAttribute('data-ob-close-tab') && window.obCloseInShell()) {
+      e.preventDefault();
+      return;
+    }
     var href = a.getAttribute('href') || '';
     var title = (a.getAttribute('title') || a.textContent || '').replace(/\s+/g, ' ').trim() || 'Форма';
     if (!window.obOpenInShell(href, title)) return;

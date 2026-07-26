@@ -36,11 +36,10 @@ func (s *Server) journalList(w http.ResponseWriter, r *http.Request) {
 	params.JournalRowFilters = rowFilters
 	for _, jf := range j.Filters {
 		fv := storage.FilterValue{}
-		switch {
-		case jf.Type == "date_range":
+		if jf.Type == "date_range" {
 			fv.From = r.URL.Query().Get("f." + jf.Field + ".from")
 			fv.To = r.URL.Query().Get("f." + jf.Field + ".to")
-		default:
+		} else {
 			fv.Value = r.URL.Query().Get("f." + jf.Field)
 		}
 		params.Filters[jf.Field] = fv
@@ -218,7 +217,7 @@ func (s *Server) resolveJournalRefs(ctx context.Context, j *metadata.Journal, co
 			if err != nil {
 				continue
 			}
-			labels[idStr] = firstStringField(refRow, refEntity)
+			labels[idStr] = s.maskedRecordLabel(ctx, refEntity, refRow)
 		}
 		// Replace in rows
 		for _, row := range rows {
@@ -248,11 +247,10 @@ func (s *Server) journalExcel(w http.ResponseWriter, r *http.Request) {
 	params.JournalRowFilters = rowFilters
 	for _, jf := range j.Filters {
 		fv := storage.FilterValue{}
-		switch {
-		case jf.Type == "date_range":
+		if jf.Type == "date_range" {
 			fv.From = r.URL.Query().Get("f." + jf.Field + ".from")
 			fv.To = r.URL.Query().Get("f." + jf.Field + ".to")
-		default:
+		} else {
 			fv.Value = r.URL.Query().Get("f." + jf.Field)
 		}
 		params.Filters[jf.Field] = fv
