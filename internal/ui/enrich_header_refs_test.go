@@ -136,9 +136,10 @@ func TestEnrichHeaderRefs_NoDuplicateKey(t *testing.T) {
 	}
 }
 
-// Поле, уже являющееся *Ref (проведение из обработки), не должно
-// перезаписываться — двойной обработки нет.
-func TestEnrichHeaderRefs_SkipsExistingRef(t *testing.T) {
+// Поле, уже являющееся *Ref (проведение из обработки), сохраняет идентичность
+// ссылки, но получает manager текущего контекста. Это не даёт старому manager
+// выйти из открытой SQLite-транзакции за вторым соединением (#436).
+func TestEnrichHeaderRefs_RebindsExistingRefManager(t *testing.T) {
 	ctx := context.Background()
 	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -179,7 +180,13 @@ func TestEnrichHeaderRefs_SkipsExistingRef(t *testing.T) {
 	if !ok {
 		t.Fatalf("Склад → %T, ожидался *interpreter.Ref", v)
 	}
-	if ref != orig {
-		t.Error("существующий *Ref был перезаписан — должен пропускаться")
+	if ref == orig {
+		t.Error("существующий *Ref сохранил manager старого контекста")
+	}
+	if ref.UUID != orig.UUID || ref.Name != orig.Name || ref.Type != orig.Type {
+		t.Fatalf("перепривязка изменила ссылку: got=%+v want=%+v", ref, orig)
+	}
+	if ref.Manager == nil {
+		t.Fatal("перепривязанная ссылка не получила manager текущего контекста")
 	}
 }
