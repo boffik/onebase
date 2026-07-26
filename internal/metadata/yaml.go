@@ -146,6 +146,22 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	for _, rf := range raw.Fields {
 		e.Fields = append(e.Fields, parseField(rf))
 	}
+	// A document numerator is the declaration of the standard document number,
+	// not only a formatter for an independently declared field. Keep explicit
+	// Номер metadata untouched, but synthesize the string field when omitted so
+	// describe, DDL, auto-numbering and the query compiler share one contract.
+	if kind == KindDocument && e.Numerator != nil {
+		hasNumber := false
+		for _, f := range e.Fields {
+			if strings.EqualFold(f.Name, "Номер") {
+				hasNumber = true
+				break
+			}
+		}
+		if !hasNumber {
+			e.Fields = append([]Field{{Name: "Номер", Type: FieldTypeString}}, e.Fields...)
+		}
+	}
 	for _, ri := range raw.Indexes {
 		idx := IndexSpec{Fields: trimStringList(ri.Fields), Unique: ri.Unique}
 		if len(idx.Fields) > 0 {

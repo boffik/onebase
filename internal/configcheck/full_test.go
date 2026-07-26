@@ -80,6 +80,26 @@ russian_post:
 	}
 }
 
+func TestRunFullAcceptsNumberQueryForDocumentWithNumerator(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "номенклатура.yaml"), `name: НоменклатураДелНаГод
+numerator: {prefix: "НД-", length: 6, period: year}
+fields:
+  - name: Дата
+    type: date
+`)
+	mkFile(t, filepath.Join(dir, "reports", "номенклатура.yaml"), `name: НоменклатураДелНаГод
+query: |
+  ВЫБРАТЬ Д.Номер КАК НомерНоменклатуры
+  ИЗ Документ.НоменклатураДелНаГод КАК Д
+`)
+
+	res := RunFull(dir)
+	if !res.OK {
+		t.Fatalf("numerator must expose queryable Номер: %+v", res.Issues)
+	}
+}
+
 func TestRunFullReportsMalformedRole(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "config", "app.yaml"), "name: Demo\n")
