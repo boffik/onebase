@@ -301,6 +301,14 @@ func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *run
 	// и Строка(ref) работали в ПриЗаписи так же, как при проведении.
 	if entity := s.reg.GetEntity(obj.Type); entity != nil {
 		s.enrichHeaderRefs(ctx, entity, obj)
+		for _, tp := range entity.TableParts {
+			for name, rows := range obj.TablePartRows {
+				if strings.EqualFold(name, tp.Name) {
+					s.enrichTPRowsWithRefs(ctx, tp, rows)
+					break
+				}
+			}
+		}
 	}
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
