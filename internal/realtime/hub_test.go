@@ -44,6 +44,61 @@ func TestHub_PublishToLogin_DeliversToMatchingSubscriber(t *testing.T) {
 	}
 }
 
+func TestHub_PublishEphemeralToLogins_OnlyListed(t *testing.T) {
+	h := NewHub()
+	_, chIvan, c1 := h.Subscribe("u1", "ivan", nil)
+	defer c1()
+	_, chPetr, c2 := h.Subscribe("u2", "petr", nil)
+	defer c2()
+
+	h.PublishEphemeralToLogins(Event{Name: "данные.заказ", Data: map[string]any{"действие": "записан"}}, []string{"ivan"})
+
+	ev, ok := recv(t, chIvan)
+	if !ok || ev.Name != "данные.заказ" {
+		t.Fatalf("ivan должен получить сигнал: ok=%v ev=%+v", ok, ev)
+	}
+	if !empty(t, chPetr) {
+		t.Fatal("petr не в списке логинов — не должен получить сигнал")
+	}
+}
+
+func TestHub_PublishEphemeralToLogins_NotReplayed(t *testing.T) {
+	h := NewHub()
+	// Обычное событие попадает в replay-окно (id=1).
+	h.Publish("ivan", Event{Name: "обычное"})
+	// Эфемерное — НЕ попадает в replay (id=2, но не в recent).
+	h.PublishEphemeralToLogins(Event{Name: "данные.заказ"}, []string{"ivan"})
+
+	// Reconnect с lastID=1: обычное уже видано, эфемерное не переигрывается.
+	_, ch, cancel := h.SubscribeSince("u1", "ivan", nil, 1)
+	defer cancel()
+	if !empty(t, ch) {
+		t.Fatal("эфемерное событие не должно переигрываться при reconnect")
+	}
+}
+
+func TestHub_ActiveIdentities_Unique(t *testing.T) {
+	h := NewHub()
+	_, _, c1 := h.Subscribe("u1", "ivan", nil)
+	defer c1()
+	_, _, c2 := h.Subscribe("u1", "ivan", nil) // та же identity, второе соединение
+	defer c2()
+	_, _, c3 := h.Subscribe("u2", "petr", nil)
+	defer c3()
+
+	ids := h.ActiveIdentities()
+	if len(ids) != 2 {
+		t.Fatalf("ожидалось 2 уникальные identity, получено %d: %+v", len(ids), ids)
+	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		seen[id.UserID+"/"+id.Login] = true
+	}
+	if !seen["u1/ivan"] || !seen["u2/petr"] {
+		t.Fatalf("identity неполны: %+v", ids)
+	}
+}
+
 func TestHub_PublishToRole_DeliversToRoleMembers(t *testing.T) {
 	h := NewHub()
 	_, ch, cancel := h.Subscribe("u1", "ivan", []string{"Оператор", "Кассир"})

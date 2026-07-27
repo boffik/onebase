@@ -1366,7 +1366,13 @@ func (s *Server) markForDeletion(ctx context.Context, entity *metadata.Entity, i
 	}
 	// Регистрация изменения для планов обмена (план 86): пометка/снятие пометки
 	// на удаление — изменение объекта, распространяем его узлам-получателям.
-	return exchange.RegisterOnSave(ctx, s.store, s.reg.ExchangePlans(), entity, id, mark)
+	if err := exchange.RegisterOnSave(ctx, s.store, s.reg.ExchangePlans(), entity, id, mark); err != nil {
+		return err
+	}
+	// Живой список (план 87): пометка меняет вид строки (зачёркивание) → список
+	// перечитывается. Смены владельца нет, before не нужен.
+	s.publishDocChange(ctx, entity, id, "записан", nil)
+	return nil
 }
 
 // unpostDocument clears movements, sets posted=false and runs
@@ -1515,6 +1521,12 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pre-образ живого списка (план 87): читаем строку ДО удаления, чтобы её
+	// увидевшие пользователи убрали её из списка.
+	var delBefore map[string]any
+	if entity.NotifyChanges {
+		delBefore, _ = s.store.GetByID(r.Context(), entity.Name, id, entity)
+	}
 	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 		if entity.Posting {
 			if err := s.clearMovements(ctx, entity.Name, id); err != nil {
@@ -1524,7 +1536,11 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		if err := exchange.RegisterOnDelete(ctx, s.store, s.reg.ExchangePlans(), entity, id); err != nil {
 			return err
 		}
-		return s.store.Delete(ctx, entity.Name, id)
+		if err := s.store.Delete(ctx, entity.Name, id); err != nil {
+			return err
+		}
+		s.publishDocChange(ctx, entity, id, "удалён", delBefore)
+		return nil
 	}); err != nil {
 		http.Error(w, s.errText(r, err), 500)
 		return

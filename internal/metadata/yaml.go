@@ -67,6 +67,8 @@ type rawEntity struct {
 	BasedOn       []string          `yaml:"based_on"`
 	Activity      *rawActivity      `yaml:"activity"`
 	ListMode      string            `yaml:"list_mode"`
+	ListRefreshOn []string          `yaml:"list_refresh_on"`
+	NotifyChanges bool              `yaml:"notify_changes"`
 	TileView      *rawTileView      `yaml:"tile_view"`
 }
 
@@ -117,6 +119,13 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	// Нормализуем: «Feed», «FEED», « feed » → «feed». Иначе resolveListMode
 	// (сравнение с точной строкой "feed") молча откатывался бы на постранично.
 	e.ListMode = strings.ToLower(strings.TrimSpace(raw.ListMode))
+	// Живой список (план 87, ступень A): имена событий тримуем, пустые отбрасываем.
+	for _, ev := range raw.ListRefreshOn {
+		if ev = strings.TrimSpace(ev); ev != "" {
+			e.ListRefreshOn = append(e.ListRefreshOn, ev)
+		}
+	}
+	e.NotifyChanges = raw.NotifyChanges
 	if raw.TileView != nil {
 		e.TileView = &TileView{
 			Image:    strings.TrimSpace(raw.TileView.Image),

@@ -33,10 +33,11 @@ const recentTTL = 15 * time.Second
 const recentLimit = 64
 
 type subscriber struct {
-	id    string
-	login string
-	roles []string
-	ch    chan Event
+	id     string
+	userID string
+	login  string
+	roles  []string
+	ch     chan Event
 }
 
 // Hub — потокобезопасный реестр подписчиков.
@@ -79,7 +80,7 @@ func (h *Hub) SubscribeSince(userID, login string, roles []string, lastID int64)
 	}
 	h.seq++
 	id = "s" + strconv.FormatInt(h.seq, 10)
-	s := &subscriber{id: id, login: login, roles: roles, ch: make(chan Event, subscriberBuffer)}
+	s := &subscriber{id: id, userID: userID, login: login, roles: roles, ch: make(chan Event, subscriberBuffer)}
 	h.subs[id] = s
 	h.replayLocked(s, lastID, time.Now())
 	return id, s.ch, func() { h.unsubscribe(id) }
@@ -124,6 +125,66 @@ func (h *Hub) Publish(target string, ev Event) {
 				delete(h.subs, id)
 				close(s.ch)
 			}
+		}
+	}
+}
+
+// Identity — снимок identity активного подписчика для внешнего RLS-резолвера
+// (план 87, ступень A): по (UserID, Login) UI загружает актуальные роли/атрибуты
+// и решает, кому из подключённых видна изменённая строка.
+type Identity struct {
+	UserID string
+	Login  string
+}
+
+// ActiveIdentities возвращает уникальные identity активных подписчиков. Стоимость
+// адресации живого списка пропорциональна реально подключённым пользователям, а
+// Hub не начинает зависеть от auth/access.
+func (h *Hub) ActiveIdentities() []Identity {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	seen := make(map[string]struct{}, len(h.subs))
+	out := make([]Identity, 0, len(h.subs))
+	for _, s := range h.subs {
+		key := s.userID + "\x00" + s.login
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, Identity{UserID: s.userID, Login: s.login})
+	}
+	return out
+}
+
+// PublishEphemeralToLogins доставляет событие только подписчикам, чей логин есть
+// в logins, и НЕ кладёт его в replay-окно (план 87, ступень A): «живой список»
+// перечитывается по сигналу инвалидации, а при SSE reconnect клиент сам помечает
+// списки dirty — переигрывать сигнал по устаревшему за время disconnect снимку
+// прав небезопасно. Пустой logins — no-op.
+func (h *Hub) PublishEphemeralToLogins(ev Event, logins []string) {
+	if len(logins) == 0 {
+		return
+	}
+	set := make(map[string]struct{}, len(logins))
+	for _, l := range logins {
+		set[l] = struct{}{}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	h.seq++
+	ev.ID = h.seq
+	for id, s := range h.subs {
+		if _, ok := set[s.login]; !ok {
+			continue
+		}
+		select {
+		case s.ch <- ev:
+		default:
+			delete(h.subs, id)
+			close(s.ch)
 		}
 	}
 }

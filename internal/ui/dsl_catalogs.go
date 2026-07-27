@@ -32,6 +32,9 @@ func (s *Server) newEntityService(hooks *webhook.Dispatcher) *entityservice.Serv
 		},
 		// Исходящие веб-хуки (план 29): save/post диспетчеризуются из Save.
 		Hooks: hooks,
+		// Живой список (план 87): автопубликация «данные.<сущность>» после
+		// успешной записи/проведения. nil при поднятой без шины (тесты/headless).
+		ChangePublisher: s.newChangePublisher(),
 	}
 }
 
