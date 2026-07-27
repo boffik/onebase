@@ -308,10 +308,15 @@ func applyFilesMessage(saves []ConfigFile, deletes []string) string {
 
 // ListByPrefix возвращает все файлы конфигурации, чьи path начинаются
 // с указанного префикса. Префикс может быть пустым — тогда возвращается
-// всё содержимое.
+// всё содержимое. Безопасный каталог с завершающим "/" поддерживается как
+// точная граница префикса, например "forms/" не захватывает "forms_backup/".
 func (r *Repo) ListByPrefix(ctx context.Context, prefix string) ([]ConfigFile, error) {
 	if prefix != "" {
-		if err := ValidatePath(prefix); err != nil {
+		// A directory boundary is a valid and useful prefix: "forms/" must
+		// not also match "forms_backup/...". Validate the directory itself,
+		// but keep the trailing slash in the SQL LIKE pattern.
+		safePrefix := strings.TrimSuffix(prefix, "/")
+		if err := ValidatePath(safePrefix); err != nil {
 			return nil, fmt.Errorf("configdb: unsafe prefix %q: %w", prefix, err)
 		}
 	}

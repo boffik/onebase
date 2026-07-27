@@ -261,7 +261,11 @@ func (h *handler) configuratorFormsEdit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var form *cfgManagedForm
-	all, _ := h.listManagedForms(r, b)
+	all, listErr := h.listManagedForms(r, b)
+	if listErr != nil {
+		http.Error(w, tr(resolveLang(r), "Не удалось прочитать список форм")+": "+listErr.Error(), http.StatusInternalServerError)
+		return
+	}
 	for i := range all {
 		if strings.EqualFold(all[i].Entity, entity) && strings.EqualFold(all[i].Name, name) {
 			form = &all[i]

@@ -88,6 +88,61 @@ form:
 	}
 }
 
+func TestListManagedFormsFromDBReadsSavedForm(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "managed-forms.db")
+	db, err := storage.ConnectSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	repo := configdb.New(db)
+	if err := repo.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	yamlBody := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: сайт_атс
+elements:
+  - kind: ПолеВвода
+    name: ТолькоНужноеПоле
+    data_path: Объект.Наименование
+`
+	if err := repo.SaveFiles(ctx, []configdb.ConfigFile{
+		{Path: "forms/сайт_атс/формаобъекта.form.yaml", Content: []byte(yamlBody)},
+	}, configdb.VersionOptions{Message: "seed managed form"}); err != nil {
+		t.Fatal(err)
+	}
+
+	base := &Base{ConfigSource: "database", DBType: "sqlite", DBPath: dbPath}
+	req := httptest.NewRequest("GET", "/configurator/forms", nil)
+	t.Cleanup(CloseAuthPools)
+	h := &handler{}
+
+	forms, err := h.listManagedForms(req, base)
+	if err != nil {
+		t.Fatalf("listManagedForms: %v", err)
+	}
+	if len(forms) != 1 {
+		t.Fatalf("managed forms = %d, want 1: %+v", len(forms), forms)
+	}
+	if forms[0].Entity != "сайт_атс" || forms[0].Name != "формаобъекта" ||
+		!strings.Contains(forms[0].YAML, "ТолькоНужноеПоле") {
+		t.Fatalf("saved managed form was replaced or misread: %+v", forms[0])
+	}
+
+	treeForms, err := h.listManagedFormsFromDBNoRequest(ctx, base)
+	if err != nil {
+		t.Fatalf("listManagedFormsFromDBNoRequest: %v", err)
+	}
+	if len(treeForms) != 1 || !strings.Contains(treeForms[0].YAML, "ТолькоНужноеПоле") {
+		t.Fatalf("configurator tree did not load saved managed form: %+v", treeForms)
+	}
+}
+
 func TestDeleteManagedFormDBKeepsSimilarName(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "forms.db")
