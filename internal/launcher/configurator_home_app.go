@@ -102,18 +102,6 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		title = subName
 	}
 
-	dir := b.Path
-	if b.ConfigSource == "database" {
-		dir, err = workspacePath(b.ID)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	}
-
-	subDir := filepath.Join(dir, "subsystems")
-	os.MkdirAll(subDir, 0o755)
-
 	type yamlContents struct {
 		Catalogs   []string `yaml:"catalogs,omitempty"`
 		Documents  []string `yaml:"documents,omitempty"`
@@ -124,24 +112,18 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		Journals   []string `yaml:"journals,omitempty"`
 		Pages      []string `yaml:"pages,omitempty"`
 	}
-	type yamlHomePage struct {
-		Title   string                    `yaml:"title,omitempty"`
-		Titles  map[string]string         `yaml:"titles,omitempty"`
-		Layout  string                    `yaml:"layout,omitempty"`
-		Rows    []metadata.HomePageRow    `yaml:"rows,omitempty"`
-		Widgets []metadata.HomePageWidget `yaml:"widgets,omitempty"`
-	}
 	type yamlSubsystem struct {
-		Name     string            `yaml:"name"`
-		Title    string            `yaml:"title"`
-		Titles   map[string]string `yaml:"titles,omitempty"`
-		Icon     string            `yaml:"icon,omitempty"`
-		Order    int               `yaml:"order"`
-		Contents yamlContents      `yaml:"contents"`
-		HomePage *yamlHomePage     `yaml:"home_page,omitempty"`
+		Name     string             `yaml:"name"`
+		Title    string             `yaml:"title"`
+		Titles   map[string]string  `yaml:"titles,omitempty"`
+		Icon     string             `yaml:"icon,omitempty"`
+		Order    int                `yaml:"order"`
+		Roles    []string           `yaml:"roles,omitempty"`
+		Contents yamlContents       `yaml:"contents"`
+		HomePage *metadata.HomePage `yaml:"home_page,omitempty"`
 	}
 
-	targetFile := filepath.Join(subDir, nameToFilename(subName)+".yaml")
+	relPath := "subsystems/" + nameToFilename(subName) + ".yaml"
 
 	ys := yamlSubsystem{
 		Name:  subName,
@@ -159,23 +141,19 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 
 	// Сохраняем переводы (titles) и метаданные рабочего стола из уже
 	// существующего файла, чтобы перезапись не теряла данные, которых нет в форме.
-	if existing, lerr := metadata.LoadSubsystemFile(targetFile); lerr == nil && existing != nil {
-		// Страницы в «Составе подсистемы» пока не показываются галочками —
-		// переносим их из существующего файла, чтобы сохранение подсистемы не
-		// затирало contents.pages (журналы и остальные категории берутся из формы).
-		ys.Contents.Pages = existing.Contents.Pages
-		if formHasMapField(r, "titles") {
-			ys.Titles = parseMapForm(r, "titles")
-		} else {
-			ys.Titles = existing.Titles
-		}
-		if existing.HomePage != nil {
-			ys.HomePage = &yamlHomePage{
-				Title:   existing.HomePage.Title,
-				Titles:  existing.HomePage.Titles,
-				Layout:  existing.HomePage.Layout,
-				Widgets: existing.HomePage.Widgets,
+	if raw, ok := h.readConfigFileRaw(r.Context(), b, relPath); ok {
+		var existing yamlSubsystem
+		if yaml.Unmarshal(raw, &existing) == nil {
+			// Страницы и роли пока не редактируются этой формой — переносим их
+			// из текущей конфигурации, чтобы сохранение состава их не затирало.
+			ys.Roles = existing.Roles
+			ys.Contents.Pages = existing.Contents.Pages
+			if formHasMapField(r, "titles") {
+				ys.Titles = parseMapForm(r, "titles")
+			} else {
+				ys.Titles = existing.Titles
 			}
+			ys.HomePage = existing.HomePage
 		}
 	} else if formHasMapField(r, "titles") {
 		ys.Titles = parseMapForm(r, "titles")
@@ -187,7 +165,7 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	rows, layout := rowsFromForm(r)
 	if len(rows) > 0 {
 		if ys.HomePage == nil {
-			ys.HomePage = &yamlHomePage{}
+			ys.HomePage = &metadata.HomePage{}
 		}
 		ys.HomePage.Rows = rows
 		ys.HomePage.Layout = layout
@@ -201,10 +179,12 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	out, _ := yaml.Marshal(&ys)
-
+	out, err := yaml.Marshal(&ys)
+	if err == nil {
+		err = saveConfigFile(r, h, b, relPath, out)
+	}
 	data := h.loadCfgData(r.Context(), b, "tree")
-	if err := os.WriteFile(targetFile, out, 0o644); err != nil {
+	if err != nil {
 		data.Error = tr(lang, "Ошибка сохранения") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
