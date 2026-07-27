@@ -71,6 +71,36 @@ func TestRepoRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestListByPrefixAcceptsSafeDirectoryBoundary(t *testing.T) {
+	repo, _, ctx := newSQLiteRepo(t)
+	for path, body := range map[string]string{
+		"forms/заказ/формаобъекта.form.yaml": "managed form",
+		"forms_backup/заказ/форма.form.yaml": "must not match",
+		"forms.yaml": "must not match",
+	} {
+		if err := repo.SaveFile(ctx, path, []byte(body)); err != nil {
+			t.Fatalf("SaveFile(%q): %v", path, err)
+		}
+	}
+
+	files, err := repo.ListByPrefix(ctx, "forms/")
+	if err != nil {
+		t.Fatalf("ListByPrefix(forms/): %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("ListByPrefix(forms/) returned %d files, want 1: %+v", len(files), files)
+	}
+	if files[0].Path != "forms/заказ/формаобъекта.form.yaml" || string(files[0].Content) != "managed form" {
+		t.Fatalf("unexpected directory-prefix result: %+v", files[0])
+	}
+
+	for _, unsafe := range []string{"../", "forms//"} {
+		if _, err := repo.ListByPrefix(ctx, unsafe); err == nil {
+			t.Fatalf("ListByPrefix(%q) accepted an unsafe prefix", unsafe)
+		}
+	}
+}
+
 func TestExportToDirRejectsStoredTraversalPath(t *testing.T) {
 	repo, db, ctx := newSQLiteRepo(t)
 	_, err := db.Exec(ctx, `INSERT INTO _onebase_config(path, content) VALUES (?, ?)`, "../evil.yaml", []byte("x"))
