@@ -2467,13 +2467,17 @@ window.onebaseDevice = {
     if (!url) return;
     var title = (link && (link['сущность'] || link.entity)) || '';
     try {
+      // Вкладочная оболочка в этом окне.
       if (typeof window.obOpenTab === 'function') { window.obOpenTab(url, title); return; }
-      if (window.__obEmbedded && window.parent) {
+      // Мы во фрейме оболочки — просим родителя открыть вкладку.
+      if (window.parent && window.parent !== window && typeof window.parent.obOpenTab === 'function') {
         window.parent.postMessage({ source: 'obOpenTab', url: url, title: title }, window.location.origin);
         return;
       }
     } catch (_) {}
-    window.open(url, '_blank');
+    // Нет оболочки (например нативное GUI-окно): переходим в ТЕКУЩЕМ окне, а не
+    // через window.open — иначе WebView2 откроет внешнее окно/браузер с базой.
+    window.location.assign(url);
   }
   // Богатый тост (аналог ПоказатьОповещениеПользователя): заголовок/текст,
   // «важное» не исчезает само, клик по тосту со ссылкой открывает форму.
