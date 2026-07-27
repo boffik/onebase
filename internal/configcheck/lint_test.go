@@ -135,6 +135,23 @@ indexes:
 	}
 }
 
+func TestLintYAML_LiveListKeysKnown(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "задача.yaml"), `name: Задача
+notify_changes: true
+list_refresh_on:
+  - данные.задача
+fields:
+  - name: Номер
+    type: string
+`)
+	for _, is := range CheckLintYAML(dir) {
+		if is.Code == "metadata.unvalidated-key" {
+			t.Fatalf("ключи живого списка должны быть известны линту, получено: %+v", is)
+		}
+	}
+}
+
 func TestLintProject_ListFormFieldWithoutIndex(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "catalogs", "товар.yaml"), `name: Товар
