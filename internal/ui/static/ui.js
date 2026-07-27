@@ -2446,6 +2446,77 @@ window.onebaseDevice = {
   if (!window.__obEmbedded) {
     window.addEventListener('onebase:звонок.входящий', function (ev) { callToast(ev.detail); });
   }
+
+  /* Ступень B (план 87): клиентские команды ui.*. Рисует/исполняет только
+     оболочка (как callToast) — событие ретранслируется во фреймы, но всплывашку и
+     открытие вкладки делает верхнее окно, иначе дубли. */
+  function formURL(link) {
+    link = link || {};
+    var kind = String(link['вид'] || link.kind || 'document').toLowerCase();
+    var ent = link['сущность'] || link.entity || '';
+    var id = link['id'] || link.id || '';
+    if (!ent) return '';
+    if (kind === 'processor' || kind === 'report' || kind === 'page') {
+      return '/ui/' + kind + '/' + encodeURIComponent(String(ent));
+    }
+    var base = '/ui/' + kind + '/' + encodeURIComponent(String(ent).toLowerCase());
+    return id ? base + '/' + encodeURIComponent(String(id)) : base;
+  }
+  function openFormTab(link) {
+    var url = formURL(link);
+    if (!url) return;
+    var title = (link && (link['сущность'] || link.entity)) || '';
+    try {
+      if (typeof window.obOpenTab === 'function') { window.obOpenTab(url, title); return; }
+      if (window.__obEmbedded && window.parent) {
+        window.parent.postMessage({ source: 'obOpenTab', url: url, title: title }, window.location.origin);
+        return;
+      }
+    } catch (_) {}
+    window.open(url, '_blank');
+  }
+  // Богатый тост (аналог ПоказатьОповещениеПользователя): заголовок/текст,
+  // «важное» не исчезает само, клик по тосту со ссылкой открывает форму.
+  function richToast(d) {
+    d = d || {};
+    var box = document.getElementById('ob-toasts');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'ob-toasts';
+      box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:360px';
+      (document.body || document.documentElement).appendChild(box);
+    }
+    var important = String(d['важность'] || '') === 'важное';
+    var link = d['ссылка'];
+    var el = document.createElement('div');
+    el.style.cssText = 'position:relative;background:' + (important ? '#7c2d12' : '#1f2937') + ';color:#fff;padding:12px 28px 12px 14px;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.3);font-size:14px;line-height:1.4' + (link ? ';cursor:pointer' : '');
+    if (d['заголовок']) {
+      var head = document.createElement('div');
+      head.style.cssText = 'font-weight:600;margin-bottom:4px';
+      head.textContent = d['заголовок'];
+      el.appendChild(head);
+    }
+    if (d['текст']) {
+      var body = document.createElement('div');
+      body.textContent = d['текст'];
+      el.appendChild(body);
+    }
+    if (link) { el.addEventListener('click', function () { openFormTab(link); }); }
+    var x = document.createElement('button');
+    x.textContent = '×';
+    x.setAttribute('aria-label', 'Закрыть');
+    x.style.cssText = 'position:absolute;top:4px;right:8px;background:none;border:none;color:#fff;font-size:18px;line-height:1;cursor:pointer';
+    x.addEventListener('click', function (e) { e.stopPropagation(); el.remove(); });
+    el.appendChild(x);
+    box.appendChild(el);
+    if (!important) {
+      setTimeout(function () { if (el.parentNode) el.remove(); }, 8000);
+    }
+  }
+  if (!window.__obEmbedded) {
+    window.addEventListener('onebase:ui.оповещение', function (ev) { richToast(ev.detail); });
+    window.addEventListener('onebase:ui.открытьФорму', function (ev) { openFormTab(ev.detail); });
+  }
   var sseOpened = false;
   function connect() {
     if (typeof EventSource === 'undefined') return;
@@ -2508,7 +2579,9 @@ window.onebaseDevice = {
     return (el.getAttribute('data-ob-refresh-on') || '').split(/\s+/).filter(Boolean);
   }
   function findByKey(root, key) {
-    var all = root.querySelectorAll('[data-ob-refresh-on]');
+    // data-ob-live есть у всех списков (и статичных) — так императивный
+    // ui.обновитьСписок находит контейнер, даже если он не подписан декларативно.
+    var all = root.querySelectorAll('[data-ob-live]');
     for (var i = 0; i < all.length; i++) {
       if (keyOf(all[i], i) === key) return all[i];
     }
@@ -2583,6 +2656,24 @@ window.onebaseDevice = {
 
   // SSE reconnect: события данные.* не переигрываются → перечитать все живые списки.
   window.addEventListener('onebase:__oblive_refresh_all__', markAll);
+
+  // Ступень B — императивная команда «обнови список сейчас»: ui.обновитьСписок
+  // ({сущность}) дёргает контейнеры этой сущности независимо от YAML-подписки.
+  function refreshByEntity(name) {
+    if (!name) return;
+    var want = String(name).toLowerCase();
+    var all = document.querySelectorAll('[data-ob-live]');
+    for (var i = 0; i < all.length; i++) {
+      var key = all[i].getAttribute('data-ob-live') || '';
+      var slash = key.lastIndexOf('/');
+      var ename = slash >= 0 ? key.slice(slash + 1) : key;
+      if (ename === want) schedule(key);
+    }
+  }
+  window.addEventListener('onebase:ui.обновитьСписок', function (ev) {
+    var d = ev.detail || {};
+    refreshByEntity(d['сущность'] || d.entity);
+  });
 
   function init() { bindEvents(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
