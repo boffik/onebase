@@ -1366,7 +1366,13 @@ func (s *Server) markForDeletion(ctx context.Context, entity *metadata.Entity, i
 	}
 	// Регистрация изменения для планов обмена (план 86): пометка/снятие пометки
 	// на удаление — изменение объекта, распространяем его узлам-получателям.
-	return exchange.RegisterOnSave(ctx, s.store, s.reg.ExchangePlans(), entity, id, mark)
+	if err := exchange.RegisterOnSave(ctx, s.store, s.reg.ExchangePlans(), entity, id, mark); err != nil {
+		return err
+	}
+	// Живой список (план 87): пометка меняет вид строки (зачёркивание) → список
+	// перечитывается. Смены владельца нет, before не нужен.
+	s.publishDocChange(ctx, entity, id, "записан", nil)
+	return nil
 }
 
 // unpostDocument clears movements, sets posted=false and runs
