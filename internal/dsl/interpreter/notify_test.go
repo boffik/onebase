@@ -35,6 +35,19 @@ func TestNewNotifyFunctions_NilNotifierIsNoop(t *testing.T) {
 	}
 }
 
+func TestNewNotifyFunctions_ConvertsStructData(t *testing.T) {
+	fn := &fakeNotifier{}
+	pub := NewNotifyFunctions(fn)["ОтправитьУведомление"].(BuiltinFunc)
+	pub([]any{"ivan", "ui.обновитьСписок", NewStructFromMap(map[string]any{"сущность": "Заявка"})}, "", 0)
+	m, ok := fn.data.(map[string]any)
+	if !ok {
+		t.Fatalf("DSL-структуру нужно конвертировать в map (иначе на клиент придёт {}): %T", fn.data)
+	}
+	if m["сущность"] != "Заявка" {
+		t.Fatalf("поле не донесено на клиент: %+v", m)
+	}
+}
+
 func TestShowUserNotification_PublishesUINotice(t *testing.T) {
 	fn := &fakeNotifier{}
 	show, ok := NewNotifyFunctions(fn)["ПоказатьОповещениеПользователя"].(BuiltinFunc)

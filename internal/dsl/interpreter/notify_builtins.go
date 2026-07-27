@@ -28,7 +28,10 @@ func NewNotifyFunctions(n Notifier) map[string]any {
 		}
 		var data any
 		if len(args) >= 3 {
-			data = args[2]
+			// DSL-значение (Структура/Соответствие/Массив/Ссылка) → JSON-нативное:
+			// SSE-кадр сериализуется обычным json.Marshal, а у *Struct/*Map поля
+			// неэкспортируемые (без конвертации на клиент пришло бы «{}»).
+			data = valueToJSON(args[2])
 		}
 		n.Publish(notifyArgString(args[0]), notifyArgString(args[1]), data)
 		return nil, nil
