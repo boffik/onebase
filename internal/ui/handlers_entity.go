@@ -1515,6 +1515,12 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pre-образ живого списка (план 87): читаем строку ДО удаления, чтобы её
+	// увидевшие пользователи убрали её из списка.
+	var delBefore map[string]any
+	if entity.NotifyChanges {
+		delBefore, _ = s.store.GetByID(r.Context(), entity.Name, id, entity)
+	}
 	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 		if entity.Posting {
 			if err := s.clearMovements(ctx, entity.Name, id); err != nil {
@@ -1524,7 +1530,11 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		if err := exchange.RegisterOnDelete(ctx, s.store, s.reg.ExchangePlans(), entity, id); err != nil {
 			return err
 		}
-		return s.store.Delete(ctx, entity.Name, id)
+		if err := s.store.Delete(ctx, entity.Name, id); err != nil {
+			return err
+		}
+		s.publishDocChange(ctx, entity, id, "удалён", delBefore)
+		return nil
 	}); err != nil {
 		http.Error(w, s.errText(r, err), 500)
 		return

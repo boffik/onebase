@@ -303,6 +303,10 @@ func (p *docProxy) DeleteRef(uuidStr string) error {
 	if err := p.s.checkDSLRowAccess(ctx, p.entity, "delete", id, nil); err != nil {
 		return err
 	}
+	var delBefore map[string]any
+	if p.entity.NotifyChanges {
+		delBefore, _ = p.s.store.GetByID(ctx, p.entity.Name, id, p.entity)
+	}
 	return p.s.store.WithTxIfNeeded(ctx, func(ctx context.Context) error {
 		if p.entity.Posting {
 			if err := p.s.clearMovements(ctx, p.entity.Name, id); err != nil {
@@ -312,7 +316,11 @@ func (p *docProxy) DeleteRef(uuidStr string) error {
 		if err := exchange.RegisterOnDelete(ctx, p.s.store, p.s.reg.ExchangePlans(), p.entity, id); err != nil {
 			return err
 		}
-		return p.s.store.Delete(ctx, p.entity.Name, id)
+		if err := p.s.store.Delete(ctx, p.entity.Name, id); err != nil {
+			return err
+		}
+		p.s.publishDocChange(ctx, p.entity, id, "удалён", delBefore)
+		return nil
 	})
 }
 
