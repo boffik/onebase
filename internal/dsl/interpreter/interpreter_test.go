@@ -175,6 +175,83 @@ func TestInterpreter_SiblingProcResolution(t *testing.T) {
 	}
 }
 
+func TestInterpreter_FallbackBuiltinDefersToUserProcedure(t *testing.T) {
+	src := `Процедура ПриЗаписи()
+  ЗаписатьСобытиеАудита("Запись");
+КонецПроцедуры
+
+Процедура ЗаписатьСобытиеАудита(Событие)
+  ЭтотОбъект.Результат = Событие;
+КонецПроцедуры`
+
+	prog, err := parser.New(lexer.New(src, "document.posting.os")).ParseProgram()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var entry, helper *ast.ProcedureDecl
+	for _, proc := range prog.Procedures {
+		switch {
+		case strings.EqualFold(proc.Name.Literal, "ПриЗаписи"):
+			entry = proc
+		case strings.EqualFold(proc.Name.Literal, "ЗаписатьСобытиеАудита"):
+			helper = proc
+		}
+	}
+	if entry == nil || helper == nil {
+		t.Fatal("test procedures not found")
+	}
+
+	fallbackCalled := false
+	interp := interpreter.New()
+	interp.LookupSiblingProc = func(file, name string) *ast.ProcedureDecl {
+		if file == "document.posting.os" && strings.EqualFold(name, "ЗаписатьСобытиеАудита") {
+			return helper
+		}
+		return nil
+	}
+	obj := runtime.NewObject("Документ", metadata.KindDocument)
+	err = interp.Run(entry, obj, map[string]any{
+		"ЗаписатьСобытиеАудита": interpreter.FallbackBuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
+			fallbackCalled = true
+			return nil, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if fallbackCalled {
+		t.Fatal("fallback builtin intercepted an application procedure")
+	}
+	if got := obj.Get("Результат"); got != "Запись" {
+		t.Fatalf("application procedure result = %v, want Запись", got)
+	}
+}
+
+func TestInterpreter_FallbackBuiltinRunsWithoutUserProcedure(t *testing.T) {
+	src := `Процедура Выполнить()
+  ПлатформеннаяФункция("ok");
+КонецПроцедуры`
+	prog, err := parser.New(lexer.New(src, "processor.proc.os")).ParseProgram()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var got any
+	interp := interpreter.New()
+	err = interp.Run(prog.Procedures[0], nil, map[string]any{
+		"ПлатформеннаяФункция": interpreter.FallbackBuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+			got = args[0]
+			return nil, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got != "ok" {
+		t.Fatalf("fallback argument = %v, want ok", got)
+	}
+}
+
 // Module.Proc() namespaced calls.
 func TestInterpreter_NamespacedModuleProc(t *testing.T) {
 	helperSrc := `Функция Удвоить(Х)

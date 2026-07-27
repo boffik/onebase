@@ -116,7 +116,10 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	userNameFn := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
 		return curUserLogin, nil
 	})
-	auditDecisionFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+	// Compatibility-sensitive fallback: before v0.9.6 configurations could
+	// freely declare an application procedure named ЗаписатьСобытиеАудита.
+	// Such a procedure must win over the platform governance API.
+	auditDecisionFn := interpreter.FallbackBuiltinFunc(func(args []any, _ string, _ int) (any, error) {
 		if len(args) < 5 {
 			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: нужны действие, вид, объект, ссылка и идентификатор решения")
 		}
