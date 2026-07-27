@@ -38,7 +38,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   <details class="cfg-tree" data-group="catalogs"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▸</span><span>{{t $.Lang "Справочники"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('catalog')" title="{{t $.Lang "Добавить справочник"}}">+</span></summary>
   {{range .Catalogs}}
-  <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
+  <div class="cfg-item" data-id="e-{{.Name}}" data-delete-kind="catalog" onclick="selItem(this)">
     <span class="ic">📕</span>{{.Name}}
   </div>
   {{end}}
@@ -46,7 +46,7 @@ const cfgTabTree = `{{define "tab-tree"}}
 
   <details class="cfg-tree" data-group="documents"><summary class="cfg-group cfg-group-hd"><span class="tree-toggle">▸</span><span>{{t $.Lang "Документы"}}</span><span class="cfg-add-btn" onclick="event.stopPropagation();cfgNewObj('document')" title="{{t $.Lang "Добавить документ"}}">+</span></summary>
   {{range .Docs}}
-  <div class="cfg-item" data-id="e-{{.Name}}" onclick="selItem(this)">
+  <div class="cfg-item" data-id="e-{{.Name}}" data-delete-kind="document" onclick="selItem(this)">
     <span class="ic">📄</span>{{.Name}}{{if .Posting}}<span class="bp">✓</span>{{end}}
   </div>
   {{end}}
