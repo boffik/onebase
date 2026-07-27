@@ -1103,7 +1103,7 @@ const tplList = `
 </details>
 
 {{$obRefresh := liveListRefreshOn .Entity}}
-<div class="card"{{if $obRefresh}} data-ob-refresh-on="{{$obRefresh}}" data-ob-live="{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}"{{end}}>
+<div class="card" data-ob-live="{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}"{{if $obRefresh}} data-ob-refresh-on="{{$obRefresh}}"{{end}}>
 {{if .TreeView}}
 {{/* ===== TREE VIEW ===== */}}
 {{if .TreeRows}}
