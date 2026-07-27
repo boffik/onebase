@@ -307,7 +307,10 @@ func indexYAMLSchema() *yamlLintSchema {
 }
 
 func entityYAMLSchema() *yamlLintSchema {
-	return with(obj("name", "title", "description", "posting", "hierarchical", "hierarchy_kind", "list_form", "item_form", "based_on", "list_mode"), map[string]*yamlLintSchema{
+	return with(obj(
+		"name", "title", "description", "posting", "hierarchical", "hierarchy_kind",
+		"list_form", "item_form", "based_on", "list_mode", "notify_changes", "list_refresh_on",
+	), map[string]*yamlLintSchema{
 		"titles":     freeMap(),
 		"fields":     seq(fieldYAMLSchema()),
 		"tableparts": seq(tablePartYAMLSchema()),
