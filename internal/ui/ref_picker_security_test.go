@@ -27,3 +27,22 @@ func TestRefPickerDoesNotInjectOptionLabelAsHTML(t *testing.T) {
 		}
 	}
 }
+
+func TestRefPickerRejectsReadOnlyTargetBeforeOpening(t *testing.T) {
+	src := string(uiJS)
+	start := strings.Index(src, "function openRefPicker(selOrId)")
+	end := strings.Index(src, "function openRefCurrent(selOrId)")
+	if start < 0 || end < 0 || end <= start {
+		t.Fatal("openRefPicker function not found in ui.js")
+	}
+	picker := src[start:end]
+
+	guard := strings.Index(picker, "sel.disabled || sel.readOnly || sel.hasAttribute('readonly')")
+	firstRead := strings.Index(picker, "sel.getAttribute(")
+	if guard < 0 {
+		t.Fatal("openRefPicker must reject disabled and readonly targets")
+	}
+	if firstRead < 0 || guard > firstRead {
+		t.Fatal("openRefPicker must check target editability before reading picker attributes")
+	}
+}

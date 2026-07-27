@@ -2074,6 +2074,7 @@ function openItemPicker(payload, elementName) {
 function openRefPicker(selOrId) {
   var sel = (typeof selOrId === 'string') ? document.getElementById(selOrId) : selOrId;
   if (!sel) return;
+  if (sel.disabled || sel.readOnly || sel.hasAttribute('readonly')) return;
   var refEntity = sel.getAttribute('data-ref-entity') || '';
   var allowCreate = sel.getAttribute('data-ref-allow-create') === '1';
   var localOpts = [];

@@ -67,8 +67,8 @@ const tplManagedForm = `
             <option value="{{index . "id"}}" {{if eq (index . "id") (index $ctx.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
-          <button type="button" data-ob-ref-picker="ref-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">…</button>
-          <button type="button" data-ob-ref-current="ref-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px" title="Открыть карточку">🔍</button>
+          <button type="button" data-ob-ref-picker="ref-{{$fn}}"{{if $el.ReadOnly}} disabled{{end}} style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">…</button>
+          <button type="button" data-ob-ref-current="ref-{{$fn}}"{{if $el.ReadOnly}} disabled{{end}} style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px" title="Открыть карточку">🔍</button>
         </div>
       {{else if isEnum (str $f.Type)}}
         <select name="{{$fn}}"{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $el.ReadOnly}} disabled{{end}}{{if $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
