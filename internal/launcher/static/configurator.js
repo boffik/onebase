@@ -827,6 +827,11 @@ document.addEventListener('contextmenu', function(ev) {
   var menu = document.createElement('div');
   menu.id = 'cfg-ctx-menu';
   menu.style.cssText = 'position:fixed;left:'+ev.clientX+'px;top:'+ev.clientY+'px;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);padding:4px 0;z-index:9999;min-width:150px';
+  var prefix = (did.match(/^([a-z]+)-/) || [])[1] || '';
+  var kind = item.dataset.deleteKind || {
+    e:'entity', r:'register', ir:'inforeg', ar:'accountreg', en:'enum',
+    rep:'report', mod:'module', proc:'processor', pf:'printform', sub:'subsystem'
+  }[prefix] || '';
   var dname = did.replace(/^[a-z]+-/, '');
   var delBtn = document.createElement('div');
   delBtn.textContent = 'Удалить «' + dname + '»';
@@ -841,6 +846,8 @@ document.addEventListener('contextmenu', function(ev) {
     form.action = '/bases/' + _dbgBase + '/configurator/entity-delete';
     var inp = document.createElement('input'); inp.type='hidden'; inp.name='entity'; inp.value=dname;
     form.appendChild(inp);
+    var kindInp = document.createElement('input'); kindInp.type='hidden'; kindInp.name='kind'; kindInp.value=kind;
+    form.appendChild(kindInp);
     document.body.appendChild(form);
     form.submit();
   };
