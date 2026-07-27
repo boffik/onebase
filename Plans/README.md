@@ -32,6 +32,9 @@
 > enterprise-auth, бизнес-процессы, обмен данными) и этап **79F** (storage-
 > чокпоинт RLS) — см. «Направление Л» ниже. `35-1c-feature-inventory` приведён
 > к факту (RLS/СКД — ✅).
+> Сверка 2026-07-27: `staticcheck` включён в блокирующий CI; оставшееся
+> ужесточение по `bodyclose`, `unused`, `errcheck` и `gosec` вынесено в
+> исполнимый план **109** с актуальным полным baseline и порядком PR.
 
 ## Текущий приоритет, 2026-07-07
 
@@ -152,6 +155,7 @@
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
 | 43 | [43-audit-techdebt.md](43-audit-techdebt.md) | Техдолг по итогам аудита: покрытие непротестированных пакетов, полный graceful shutdown, единый slog, раскол монолитов | 12–18 дней | 🟡 CI/race/coverage, `slog`, `onebase lint`, debugger/processor coverage и graceful shutdown закрыты; остаток — точечное покрытие `ui`/`launcher`/`mcp`/`widget` и раскол монолитов |
+| 109 | [109-ci-linter-hardening.md](109-ci-linter-hardening.md) | Поэтапное включение `bodyclose`, `unused`, `errcheck`, `gosec` в блокирующий CI без широких suppressions | 10.75–17.75 дня | ⬜ Проект; baseline зафиксирован 2026-07-27 |
 
 ### Направление З — ИИ для бизнеса
 
