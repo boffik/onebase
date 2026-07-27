@@ -13,6 +13,13 @@ import (
 // BuiltinFunc is a callable value that can be injected via extraVars (e.g. Сообщить).
 type BuiltinFunc func(args []any, file string, line int) (any, error)
 
+// FallbackBuiltinFunc is an injected platform function that is used only when
+// the application does not declare a procedure with the same name. It is meant
+// for compatibility-sensitive additions to the global DSL namespace: existing
+// common-module and same-file procedures keep their historical meaning, while
+// new configurations can still call the platform function directly.
+type FallbackBuiltinFunc BuiltinFunc
+
 // DSLError is returned by Error() built-in; stops execution and cancels Save.
 type DSLError struct {
 	File string

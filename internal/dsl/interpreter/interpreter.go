@@ -683,6 +683,7 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 	switch callee := c.Callee.(type) {
 	case *ast.Ident:
 		fnName := callee.Tok.Literal
+		var fallback FallbackBuiltinFunc
 		// Вычислить(Выражение) — разбор строки как выражения и вычисление в
 		// текущем окружении (видит локальные переменные). Обрабатывается до
 		// обычного поиска builtin, т.к. требует доступа к env.
@@ -696,6 +697,9 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 					panic(dslStop{err: err})
 				}
 				return result
+			}
+			if bf, ok2 := val.(FallbackBuiltinFunc); ok2 {
+				fallback = bf
 			}
 		}
 		if i.LookupProc != nil {
@@ -719,6 +723,13 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 					return i.callUserProc(proc, e, args)
 				}
 			}
+		}
+		if fallback != nil {
+			result, err := fallback(args, callee.Tok.File, callee.Tok.Line)
+			if err != nil {
+				panic(dslStop{err: err})
+			}
+			return result
 		}
 		fn, ok := builtins[strings.ToLower(fnName)]
 		if !ok {
