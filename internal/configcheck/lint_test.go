@@ -71,6 +71,33 @@ permissions:
 	}
 }
 
+func TestLintTreatsUnpostHooksAsEntityRoots(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "заказ.yaml"), `name: Заказ
+posting: true
+fields:
+  - name: Номер
+    type: string
+`)
+	mkFile(t, filepath.Join(dir, "src", "заказ.posting.os"), `Процедура ОбработкаУдаленияПроведения()
+КонецПроцедуры
+
+Процедура OnUnpost()
+КонецПроцедуры
+`)
+
+	res := RunFullWithOptions(dir, Options{Lint: true})
+	if !res.OK {
+		t.Fatalf("lint failed: %+v", res.Issues)
+	}
+	for _, warning := range res.Warnings {
+		if warning.Code == "dsl.dead-procedure" &&
+			(strings.Contains(warning.Message, "ОбработкаУдаленияПроведения") || strings.Contains(warning.Message, "OnUnpost")) {
+			t.Fatalf("unpost hook отмечен как недостижимый: %+v", warning)
+		}
+	}
+}
+
 func TestLintYAML_ActivityKeyKnown(t *testing.T) {
 	dir := t.TempDir()
 	// Блок activity (активность справочников) читается загрузчиком — линт не
@@ -108,6 +135,23 @@ indexes:
 	}
 }
 
+func TestLintYAML_LiveListKeysKnown(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "задача.yaml"), `name: Задача
+notify_changes: true
+list_refresh_on:
+  - данные.задача
+fields:
+  - name: Номер
+    type: string
+`)
+	for _, is := range CheckLintYAML(dir) {
+		if is.Code == "metadata.unvalidated-key" {
+			t.Fatalf("ключи живого списка должны быть известны линту, получено: %+v", is)
+		}
+	}
+}
+
 func TestLintProject_ListFormFieldWithoutIndex(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "catalogs", "товар.yaml"), `name: Товар
@@ -134,6 +178,7 @@ indexes:
 	}
 	if found == nil {
 		t.Fatalf("metadata.list-field-without-index not found; got %+v", lint.Warnings)
+		return
 	}
 	if !strings.Contains(found.Message, "Артикул") {
 		t.Fatalf("warning should point to Артикул, got %+v", found)
@@ -343,6 +388,53 @@ permissions:
 	}
 }
 
+// Опечатка в whitelist `roles:` подсистемы или страницы прячет объект у всех
+// не-админов — линт должен предупредить, но не валить check (роль может жить
+// только в БД).
+func TestLintRoles_UnknownRoleRefs(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "roles", "кладовщик.yaml"), `name: Кладовщик
+permissions:
+  catalogs:
+    Товар: [read]
+`)
+	mkFile(t, filepath.Join(dir, "catalogs", "товар.yaml"), `name: Товар
+fields:
+  - name: Наименование
+    type: string
+`)
+	mkFile(t, filepath.Join(dir, "subsystems", "склад.yaml"), `name: Склад
+roles: [Кладовщик, Упрвленец]
+contents:
+  catalogs: [Товар]
+`)
+	mkFile(t, filepath.Join(dir, "pages", "арм.yaml"), `name: АРМ
+title: АРМ
+roles: [НетТакойРоли]
+`)
+	mkFile(t, filepath.Join(dir, "src", "арм.page.os"), `Процедура ПриФормировании(Страница)
+КонецПроцедуры
+`)
+
+	res := RunFullWithOptions(dir, Options{Lint: true})
+	if !res.OK {
+		t.Fatalf("unknown-role warnings should not fail check: %+v", res.Issues)
+	}
+	var got []string
+	for _, w := range res.Warnings {
+		if w.Code == "rbac.unknown-role" {
+			got = append(got, w.Object+":"+w.Message)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 rbac.unknown-role warnings (подсистема + страница), got %v (all=%+v)", got, res.Warnings)
+	}
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, "Упрвленец") || !strings.Contains(joined, "НетТакойРоли") {
+		t.Fatalf("warnings should name the missing roles, got:\n%s", joined)
+	}
+}
+
 func TestLintRoles_RowAccessValid(t *testing.T) {
 	dir := t.TempDir()
 	mkFile(t, filepath.Join(dir, "catalogs", "клиент.yaml"), `name: Клиент
@@ -370,6 +462,61 @@ permissions:
 		if strings.HasPrefix(w.Code, "rls.") {
 			t.Fatalf("unexpected rls lint warning: %+v", w)
 		}
+	}
+}
+
+func TestLintRoles_FieldAccessDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "catalogs", "клиент.yaml"), `name: Клиент
+fields:
+  - name: Телефон
+    type: string
+  - name: Возраст
+    type: number
+`)
+	mkFile(t, filepath.Join(dir, "catalogs", "архив.yaml"), `name: Архив
+fields:
+  - name: Owner
+    type: string
+`)
+	mkFile(t, filepath.Join(dir, "catalogs", "секрет.yaml"), `name: Секрет
+fields:
+  - name: X
+    type: string
+`)
+	mkFile(t, filepath.Join(dir, "roles", "operator.yaml"), `name: Оператор
+permissions:
+  catalogs:
+    Клиент: [read]
+    Архив: [write]
+    Секрет: [disclose]
+  field_access:
+    catalogs:
+      Клиент:
+        Телефон: { read: mask_tail, keep: 4 }
+        НетТакогоПоля: { read: hide }
+        Возраст: { read: mask_city }
+      Архив:
+        Owner: { read: hide }
+      Несуществующий:
+        Owner: { read: hide }
+`)
+
+	res := RunFullWithOptions(dir, Options{Lint: true})
+	if !res.OK {
+		t.Fatalf("field_access lint warnings should not fail check: %+v", res.Issues)
+	}
+	got := map[string]int{}
+	for _, w := range res.Warnings {
+		got[w.Code]++
+	}
+	for _, code := range []string{"mask.invalid-policy", "mask.policy-without-permission", "mask.unknown-object", "mask.disclose-without-read"} {
+		if got[code] == 0 {
+			t.Fatalf("expected %s warning, got codes=%+v warnings=%+v", code, got, res.Warnings)
+		}
+	}
+	if got["mask.invalid-policy"] < 2 {
+		t.Fatalf("expected unknown-field and mask_city-type warnings, got codes=%+v", got)
 	}
 }
 

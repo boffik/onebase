@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,12 +19,16 @@ import (
 	"github.com/ivantit66/onebase/internal/scheduler"
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/ivantit66/onebase/internal/version"
+	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/websec"
 )
 
 type Server struct {
 	srv     *http.Server
 	handler http.Handler
+	uiSrv   *ui.Server
+	hooks   *webhook.Dispatcher
 }
 
 // New строит HTTP-сервер базы. host «» = 127.0.0.1 (см. addr.go): наружу
@@ -42,6 +48,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		uiCfg.Metrics = metricsReg
 	}
 	uiSrv := ui.New(reg, store, interp, authRepo, uiCfg, sched)
+	// Регламентные задания получают полное DSL-окружение ui (Справочники,
+	// Документы, вложения, транзакции) — план 101.
+	if sched != nil {
+		sched.SetVarsBuilder(uiSrv.BuildJobDSLVars)
+	}
 	if metricsReg != nil {
 		registerRuntimeMetrics(metricsReg, authRepo, uiSrv, sched, uiCfg.Webhooks)
 	}
@@ -65,9 +76,10 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 
 	// Public auth routes (no authentication required)
 	authH := &auth.Handlers{
-		Repo:    authRepo,
-		Auditor: store,
-		Codes:   auth.NewOneTimeCodes(30 * time.Second),
+		Repo:          authRepo,
+		Auditor:       store,
+		Codes:         auth.NewOneTimeCodes(30 * time.Second),
+		SecureCookies: envBool("ONEBASE_SECURE_COOKIES"),
 		// 5 неудач с одного IP по одному логину → блок на минуту (план 53).
 		// Общий с basic-auth HTTP-сервисов (см. uiCfg.LoginLimit).
 		LoginLimit: loginLimit,
@@ -95,6 +107,10 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// (none/basic/session/token/hmac), поэтому публичные приёмники вебхуков
 	// работают без cookie, а защищённые проверяют свой механизм внутри.
 	uiSrv.MountServices(r)
+
+	// Онлайн-обмен между базами (план 86) — /exchange/<план>/push|pull. Тоже вне
+	// session-middleware: базы аутентифицируются общим Bearer-токеном плана.
+	uiSrv.MountExchange(r)
 
 	// REST API v2 accepts either an integration Bearer token or the existing
 	// browser session cookie. Keep it outside the UI/session-only group so
@@ -140,7 +156,7 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		mountMetrics(r, debugToken, metricsReg, store)
 	}
 
-	return &Server{handler: r, srv: &http.Server{
+	return &Server{handler: r, uiSrv: uiSrv, hooks: uiCfg.Webhooks, srv: &http.Server{
 		Addr:    listenAddr(host, port),
 		Handler: r,
 		// Slowloris-защита: обрываем клиента, который медленно шлёт заголовки,
@@ -153,12 +169,26 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	}}
 }
 
+func envBool(name string) bool {
+	v, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(name)))
+	return err == nil && v
+}
+
+// InvalidateWidgetCache makes metadata hot reload immediately visible on the
+// dashboard instead of waiting for the widget TTL.
+func (s *Server) InvalidateWidgetCache() {
+	if s != nil && s.uiSrv != nil {
+		s.uiSrv.InvalidateWidgetCache()
+	}
+}
+
 // healthzHandler — readiness-проба: 200, только если БД отвечает, иначе 503.
 // Публична и без токена (в отличие от /metrics): её дёргают reverse-proxy,
 // systemd WatchdogSec и команда `onebase update` при проверке нового бинаря.
 // В отличие от liveness-/health (всегда 200), проверяет реальную доступность БД.
 func healthzHandler(store *storage.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("X-OneBase-Version", version.String())
 		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 		defer cancel()
 		if err := store.Ping(ctx); err != nil {
@@ -205,5 +235,14 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.srv.Shutdown(ctx)
+	if s.uiSrv != nil {
+		s.uiSrv.BeginShutdown()
+	}
+	httpErr := s.srv.Shutdown(ctx)
+	var uiErr error
+	if s.uiSrv != nil {
+		uiErr = s.uiSrv.Shutdown(ctx)
+	}
+	hookErr := s.hooks.Close(ctx)
+	return errors.Join(httpErr, uiErr, hookErr)
 }

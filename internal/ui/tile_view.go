@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import (
+	"strings"
+
+	"github.com/ivantit66/onebase/internal/metadata"
+)
 
 type tileViewRender struct {
 	ImageFields   []metadata.Field
@@ -67,14 +71,21 @@ func resolveTileView(entity *metadata.Entity) tileViewRender {
 }
 
 // resolveListColumns возвращает набор колонок для табличных режимов списка
-// (страницы/лента/дерево). Если в плитке явно задан набор реквизитов
-// (tile_view.fields), тот же набор применяется и к таблице: Заголовок,
-// Подзаголовок и выбранные поля. Иначе показываем все поля сущности — как
-// раньше. Это устраняет расхождение, когда выбор реквизитов влиял только на
-// плитку, а таблица/лента/дерево печатали всё (#216).
+// (страницы/лента/дерево) и экспорта. Источники настройки применяются от более
+// специализированного к общему: управляемая ФормаСписка, list_form сущности,
+// tile_view.fields, затем все поля. Так обычный конфигуратор и редактор
+// управляемой формы задают один и тот же состав и порядок колонок (#386).
 func resolveListColumns(entity *metadata.Entity) []metadata.Field {
 	if entity == nil {
 		return nil
+	}
+	if form := pickManagedForm(entity, "list"); form != nil {
+		if cols := managedListColumns(entity, form); len(cols) > 0 {
+			return cols
+		}
+	}
+	if len(entity.ListForm) > 0 {
+		return namedListColumns(entity, entity.ListForm)
 	}
 	tv := entity.TileView
 	// Тот же критерий «набор задан», что и в resolveTileView: явный fields: []
@@ -100,6 +111,75 @@ func resolveListColumns(entity *metadata.Entity) []metadata.Field {
 	return cols
 }
 
+// namedListColumns сохраняет заданный пользователем порядок и отбрасывает
+// дубликаты. Неизвестные имена не превращают настройку обратно в «все поля»:
+// валидатор конфигурации отдельно сообщит о такой ссылке.
+func namedListColumns(entity *metadata.Entity, names []string) []metadata.Field {
+	cols := make([]metadata.Field, 0, len(names))
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		field := uiFieldByNameFold(entity, strings.TrimSpace(name))
+		if field == nil {
+			continue
+		}
+		key := strings.ToLower(field.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		cols = append(cols, *field)
+	}
+	return cols
+}
+
+// managedListColumns извлекает колонки из дерева элементов управляемой формы.
+// Для импортированных форм это обычно Колонка с data_path "Список.Поле";
+// нативный редактор также может хранить ПолеВвода/ПолеФормы с путём
+// "Объект.Поле". Контейнеры обходятся рекурсивно, поэтому порядок на форме
+// становится порядком колонок списка.
+func managedListColumns(entity *metadata.Entity, form *metadata.FormModule) []metadata.Field {
+	if entity == nil || form == nil {
+		return nil
+	}
+	var names []string
+	var walk func([]*metadata.FormElement)
+	walk = func(elements []*metadata.FormElement) {
+		for _, element := range elements {
+			if element == nil {
+				continue
+			}
+			if isManagedListColumnElement(element.Kind) {
+				name := formDataPathFieldName(element.DataPath)
+				if name == "" {
+					name = strings.TrimSpace(element.FieldName)
+				}
+				if name != "" {
+					names = append(names, name)
+				}
+			}
+			walk(element.Children)
+		}
+	}
+	walk(form.Elements)
+	return namedListColumns(entity, names)
+}
+
+func isManagedListColumnElement(kind metadata.FormElementType) bool {
+	switch kind {
+	case metadata.FormElementColumn,
+		metadata.FormElementField,
+		metadata.FormElementFormField,
+		metadata.FormElementCheckbox,
+		metadata.FormElementSwitch,
+		metadata.FormElementInputList,
+		metadata.FormElementDatePicker,
+		metadata.FormElementPicture:
+		return true
+	default:
+		return false
+	}
+}
+
 func isTreeListColumn(cols []metadata.Field, idx int) bool {
 	if idx < 0 || idx >= len(cols) {
 		return false
@@ -120,6 +200,18 @@ func fieldPtr(f metadata.Field) *metadata.Field {
 func uiFieldByName(entity *metadata.Entity, name string) *metadata.Field {
 	for i := range entity.Fields {
 		if entity.Fields[i].Name == name {
+			return &entity.Fields[i]
+		}
+	}
+	return nil
+}
+
+func uiFieldByNameFold(entity *metadata.Entity, name string) *metadata.Field {
+	if field := uiFieldByName(entity, name); field != nil {
+		return field
+	}
+	for i := range entity.Fields {
+		if strings.EqualFold(entity.Fields[i].Name, name) {
 			return &entity.Fields[i]
 		}
 	}

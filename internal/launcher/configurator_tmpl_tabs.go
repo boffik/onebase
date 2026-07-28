@@ -114,7 +114,10 @@ function cfgViewFile(el){
     <form method="POST" action="/bases/{{.Base.ID}}/config/import">
       <div class="fg">
         <label>{{t $.Lang "Путь к папке"}}</label>
-        <input type="text" name="path" placeholder="~/.onebase/workspace/{{.Base.ID}}">
+        <div class="input-browse">
+          <input type="text" id="config-import-dir" name="path" placeholder="~/.onebase/workspace/{{.Base.ID}}">
+          <button type="button" class="btn-browse" onclick="pickDir('config-import-dir','{{t $.Lang "Выберите папку конфигурации"}}')">📁</button>
+        </div>
       </div>
       <button class="btn-primary" type="submit">{{t $.Lang "Загрузить"}}</button>
     </form>
@@ -197,8 +200,12 @@ const cfgTabBackup = `{{define "tab-backup"}}
       <div style="font-size:11px;color:#64748b;margin-left:22px">{{t $.Lang "Без галки — быстрый бинарный дамп, только для той же СУБД"}}</div>
       <button class="btn-save" type="submit" style="width:fit-content">{{t $.Lang "Выгрузить всё в .obz"}}</button>
     </form>
-    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px" onsubmit="if(!confirm('Восстановить из .obz файла? Все текущие данные будут заменены!'))return false;cfgBackupStart(this,'⏳ Восстановление из .obz...')">
+    <form method="POST" action="/bases/{{.Base.ID}}/configurator/backup/full-import" enctype="multipart/form-data" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap" onsubmit="if(!confirm('Восстановить из .obz файла? Все текущие данные будут заменены!'))return false;cfgBackupStart(this,'⏳ Восстановление из .obz...')">
       <input type="file" name="obz_file" accept=".obz" required style="font-size:12px">
+      <select name="exchange_mode" title="{{t $.Lang "Состояние планов обмена"}}" style="font-size:12px;padding:5px 7px;border:1px solid #d1d5db;border-radius:4px;background:#fff">
+        <option value="disaster_recovery">{{t $.Lang "Тот же узел (восстановить очередь обмена)"}}</option>
+        <option value="clone">{{t $.Lang "Клон (сбросить узел и очередь)"}}</option>
+      </select>
       <button class="btn-save" type="submit" style="background:#dc2626">{{t $.Lang "Загрузить из .obz"}}</button>
     </form>
   </div>

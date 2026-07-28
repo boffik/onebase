@@ -1,0 +1,54 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+)
+
+// Ответ ИИ-ассистента (пользовательский режим) должен рендериться как Markdown
+// → HTML (таблицы/жирный/списки), а не вставляться сырым текстом. Регресс: до
+// этого `pend.textContent = d.text` показывал markdown-таблицу как «|---|».
+func TestAIChat_RendersMarkdown(t *testing.T) {
+	js := string(uiJS)
+	for _, want := range []string{
+		"function mdToHtml",
+		"pend.innerHTML = mdToHtml(",
+		"role === 'assistant'",
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("в ui.js нет %q — ответ ассистента не рендерит markdown", want)
+		}
+	}
+	// Регресс на баг сентинела: в файле не должно быть сырых null-байтов —
+	// сентинел инлайн-кода в mdToHtml должен быть -эскейпом, не 0x00.
+	if strings.ContainsRune(js, 0) {
+		t.Error("в ui.js есть сырой null-байт — сентинел mdToHtml должен быть \\u0000-эскейпом")
+	}
+
+	// Оформление таблиц/кода ответа инжектирует сам ui.js вместе с разметкой
+	// виджета — так стили действуют и на страницах с собственным <head>
+	// (админские «Система» → …), а не только в общем layout.
+	for _, want := range []string{
+		"#ob-ai-log .m.a table",
+		"#ob-ai-log .m.a th",
+		"#ob-ai-log .m.a code",
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("в стилях нет %q — оформление ответа ассистента не подключено", want)
+		}
+	}
+
+	// Регресс: ячейки таблицы наследовали word-break:break-word от .m — в узкой
+	// панели колонки сжимались до посимвольного переноса («Шка/ф/«Сек/рет»).
+	// Ячейкам возвращён word-break:normal, а широкая таблица целиком скроллится
+	// в собственной обёртке .tw, не растягивая остальной текст сообщения.
+	for _, want := range []string{
+		"#ob-ai-log .m.a .tw{overflow-x:auto",
+		"word-break:normal",
+		`out.push('<div class="tw"><table>`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("в ui.js нет %q — таблицы ассистента снова будут жаться посимвольно вместо скролла", want)
+		}
+	}
+}

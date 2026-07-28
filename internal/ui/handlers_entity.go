@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/entityservice"
+	"github.com/ivantit66/onebase/internal/exchange"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/richtext"
 	"github.com/ivantit66/onebase/internal/runtime"
@@ -82,6 +83,9 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.errText(r, err), 500)
 		return
 	}
+	// Маскирование ПДн (план 88) — до resolveRefs: если чувствительное поле
+	// ссылочное, скрытый UUID уже не резолвится в подпись.
+	s.maskRecords(r.Context(), entity, rows)
 	s.resolveRefs(r.Context(), entity, rows)
 	markActivityRows(entity, rows)
 
@@ -95,6 +99,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 			RowFilter:     params.RowFilter,
 			Limit:         storage.MaxListPageSize,
 		})
+		s.maskRecords(r.Context(), entity, allRows)
 		s.resolveRefs(r.Context(), entity, allRows)
 		markActivityRows(entity, allRows)
 		treeRows = buildCatalogTree(allRows)
@@ -431,6 +436,10 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 		http.Error(w, s.errText(r, err), 400)
 		return
 	}
+	if err := checkFormNumberFields(r, entity); err != nil {
+		http.Error(w, s.errText(r, err), http.StatusBadRequest)
+		return
+	}
 	fields = formToFields(r, entity)
 	tpRows = parseTablePartRows(r, entity)
 
@@ -450,11 +459,15 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 		}
 		obj.TablePartRows = tpRows
 
-		// Auto-number: fill Номер if empty for new documents
+		// Auto-number: fill Номер if empty for new documents.
+		// ВАЖНО: значение читаем через obj.Get (регистронезависимо) — obj.Set выше
+		// нормализует ключи в нижний регистр ("номер"), поэтому прямое обращение
+		// obj.Fields["Номер"] всегда возвращало nil и автономер безусловно затирал
+		// введённый пользователем номер (issue #359).
 		if entity.Kind == metadata.KindDocument {
 			for _, f := range entity.Fields {
 				if f.Name == "Номер" && f.Type == metadata.FieldTypeString {
-					if v := fmt.Sprintf("%v", obj.Fields["Номер"]); v == "" || v == "<nil>" {
+					if v := fmt.Sprintf("%v", obj.Get("Номер")); v == "<nil>" || strings.TrimSpace(v) == "" {
 						obj.Set("Номер", s.generateNumber(r.Context(), entity, obj.Fields))
 					}
 					break
@@ -773,6 +786,7 @@ func (s *Server) treeChildrenJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.errText(r, err), http.StatusInternalServerError)
 		return
 	}
+	s.maskRecords(r.Context(), ent, rows) // план 88: маска ПДн в ячейках дерева
 	s.resolveRefs(r.Context(), ent, rows)
 	markActivityRows(ent, rows)
 
@@ -957,6 +971,10 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Маскирование ПДн (план 88): значения строятся из row ниже, поэтому
+	// маскируем строку до сборки vals — на форме поле показывается замаскированным,
+	// а submitEdit защищает реальное значение от перезаписи маской.
+	s.maskRecord(r.Context(), entity, row)
 	langEdit := s.resolveLang(r)
 	enumOpts := s.loadEnumOptions(entity, langEdit)
 	tpEnumLabelsEdit := s.buildTPEnumLabels(entity, langEdit)
@@ -976,6 +994,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 				parsed := false
 				for _, layout := range []string{
 					time.RFC3339, time.RFC3339Nano,
+					"2006-01-02 15:04:05-07:00",
 					"2006-01-02 15:04:05 -0700 MST",
 					"2006-01-02 15:04:05.999999999 -0700 MST",
 					"2006-01-02T15:04:05", "2006-01-02 15:04:05",
@@ -1135,6 +1154,13 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// План 88: не дать пользователю, видящему поле лишь замаскированным,
+	// перезаписать реальное значение маской/подделкой — восстанавливаем
+	// исходные значения масковых полей из БД до проверок и Save.
+	if err := s.protectMaskedFieldsOnWrite(r.Context(), entity, id, obj.Fields); err != nil {
+		http.Error(w, s.errText(r, err), 500)
+		return
+	}
 	if !s.rowAllowedUpdate(w, r, entity, "write", id, obj.Fields) {
 		return
 	}
@@ -1275,22 +1301,38 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if errMsg, _ := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
-		http.Redirect(w, r, docURL+"?posting_error="+url.QueryEscape(errMsg), http.StatusSeeOther)
-		return
-	}
-
-	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
+	// Хук выполняется в ОДНОЙ транзакции с записью движений и признака
+	// проведения (issue #458): БлокировкаДанных внутри ОбработкаПроведения
+	// берёт pg_advisory_xact_lock до чтения остатков — раньше хук работал вне
+	// транзакции и блокировки вырождались в no-op. Коллектор освобождает
+	// внутрипроцессные мьютексы после коммита/отката.
+	lockCollector := runtime.NewLockCollector()
+	defer lockCollector.ReleaseAll()
+	var hookErrMsg string
+	if err := s.store.WithTxScope(r.Context(), func(ctx context.Context) error {
+		ctx = runtime.ContextWithLockCollector(ctx, lockCollector)
+		if errMsg, _ := s.runOnPostCtx(ctx, obj, mc); errMsg != "" {
+			hookErrMsg = errMsg
+			return errPostingHookFailed
+		}
 		if err := s.saveMovements(ctx, entity.Name, id, mc); err != nil {
 			return err
 		}
 		return s.store.SetPosted(ctx, entity.Name, id, true)
 	}); err != nil {
+		if hookErrMsg != "" {
+			http.Redirect(w, r, docURL+"?posting_error="+url.QueryEscape(hookErrMsg), http.StatusSeeOther)
+			return
+		}
 		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	http.Redirect(w, r, docURL, http.StatusSeeOther)
 }
+
+// errPostingHookFailed — сигнальная ошибка для отката транзакции проведения
+// при ошибке ОбработкаПроведения; наружу уходит текст хука, не она сама.
+var errPostingHookFailed = errors.New("posting hook failed")
 
 // clearMovements removes all register movements (accumulation, info, account)
 // recorded by the given document, across every register. Passing nil rows to the
@@ -1335,10 +1377,22 @@ func (s *Server) markForDeletion(ctx context.Context, entity *metadata.Entity, i
 			}
 		}
 	}
-	return s.store.MarkForDeletion(ctx, entity.Name, id, mark)
+	if err := s.store.MarkForDeletion(ctx, entity.Name, id, mark); err != nil {
+		return err
+	}
+	// Регистрация изменения для планов обмена (план 86): пометка/снятие пометки
+	// на удаление — изменение объекта, распространяем его узлам-получателям.
+	if err := exchange.RegisterOnSave(ctx, s.store, s.reg.ExchangePlans(), entity, id, mark); err != nil {
+		return err
+	}
+	// Живой список (план 87): пометка меняет вид строки (зачёркивание) → список
+	// перечитывается. Смены владельца нет, before не нужен.
+	s.publishDocChange(ctx, entity, id, "записан", nil)
+	return nil
 }
 
-// unpostDocument clears movements and sets posted=false.
+// unpostDocument clears movements, sets posted=false and runs
+// ОбработкаУдаленияПроведения in the same transaction.
 func (s *Server) unpostDocument(w http.ResponseWriter, r *http.Request) {
 	entity := s.getEntity(w, r)
 	if entity == nil {
@@ -1356,13 +1410,14 @@ func (s *Server) unpostDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
-		if err := s.clearMovements(ctx, entity.Name, id); err != nil {
-			return err
-		}
-		return s.store.SetPosted(ctx, entity.Name, id, false)
-	}); err != nil {
+	result, err := s.entitySvc.Unpost(r.Context(), entity, id)
+	if err != nil {
 		http.Error(w, s.errText(r, err), 500)
+		return
+	}
+	if result.DSLError != "" {
+		docURL := "/ui/" + strings.ToLower(string(entity.Kind)) + "/" + entity.Name + "/" + id.String()
+		http.Redirect(w, r, docURL+"?posting_error="+url.QueryEscape(result.DSLError), http.StatusSeeOther)
 		return
 	}
 	// Веб-хук document.unpost (план 29) — после успешной транзакции.
@@ -1445,7 +1500,9 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 
 	// Снятие пометки на удаление (mark=0) — без возврата проведения.
 	if markParam == "0" {
-		if err := s.store.MarkForDeletion(r.Context(), entity.Name, id, false); err != nil {
+		if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
+			return s.markForDeletion(ctx, entity, id, false)
+		}); err != nil {
 			http.Error(w, s.errText(r, err), 500)
 			return
 		}
@@ -1476,17 +1533,30 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		for _, ref := range refs {
 			fmt.Fprintf(&msg, "  • %s.%s (%d %s)\n", ref.EntityName, ref.FieldName, ref.Count, recordsWord)
 		}
-		http.Error(w, msg.String(), 409)
+		http.Error(w, msg.String(), http.StatusConflict)
 		return
 	}
 
+	// Pre-образ живого списка (план 87): читаем строку ДО удаления, чтобы её
+	// увидевшие пользователи убрали её из списка.
+	var delBefore map[string]any
+	if entity.NotifyChanges {
+		delBefore, _ = s.store.GetByID(r.Context(), entity.Name, id, entity)
+	}
 	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
 		if entity.Posting {
 			if err := s.clearMovements(ctx, entity.Name, id); err != nil {
 				return err
 			}
 		}
-		return s.store.Delete(ctx, entity.Name, id)
+		if err := exchange.RegisterOnDelete(ctx, s.store, s.reg.ExchangePlans(), entity, id); err != nil {
+			return err
+		}
+		if err := s.store.Delete(ctx, entity.Name, id); err != nil {
+			return err
+		}
+		s.publishDocChange(ctx, entity, id, "удалён", delBefore)
+		return nil
 	}); err != nil {
 		http.Error(w, s.errText(r, err), 500)
 		return
@@ -1546,6 +1616,9 @@ func (s *Server) deleteMarkedAll(w http.ResponseWriter, r *http.Request) {
 					for _, tp := range entity.TableParts {
 						s.store.Exec(ctx, "DELETE FROM "+metadata.TablePartTableName(entity.Name, tp.Name)+" WHERE parent_id = "+s.store.Dialect().Placeholder(1), id)
 					}
+					if err := exchange.RegisterOnDelete(ctx, s.store, s.reg.ExchangePlans(), entity, id); err != nil {
+						return err
+					}
 					return s.store.Delete(ctx, entity.Name, id)
 				}); err != nil {
 					// Удаление не прошло (откат транзакции) — не рапортуем успех.
@@ -1576,7 +1649,7 @@ func (s *Server) deleteMarkedAll(w http.ResponseWriter, r *http.Request) {
 				EntityName: entity.Name,
 				Kind:       string(entity.Kind),
 				ID:         idStr,
-				Label:      firstStringField(row, entity),
+				Label:      s.maskedRecordLabel(r.Context(), entity, row),
 				HasRefs:    len(refs) > 0,
 			})
 		}
@@ -1627,6 +1700,9 @@ func (s *Server) deleteMarked(w http.ResponseWriter, r *http.Request) {
 				if err := s.clearMovements(ctx, entity.Name, id); err != nil {
 					return err
 				}
+			}
+			if err := exchange.RegisterOnDelete(ctx, s.store, s.reg.ExchangePlans(), entity, id); err != nil {
+				return err
 			}
 			return s.store.Delete(ctx, entity.Name, id)
 		}); err != nil {

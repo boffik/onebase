@@ -70,6 +70,14 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		"isEnum":      func(t any) bool { return strings.HasPrefix(fmt.Sprintf("%v", t), "enum:") },
 		"tileView":    resolveTileView,
 		"listColumns": resolveListColumns,
+		// liveListRefreshOn (план 87, ступень A): имена событий живого списка через
+		// пробел для атрибута data-ob-refresh-on. Пусто — список статичный.
+		"liveListRefreshOn": func(e *metadata.Entity) string {
+			if e == nil {
+				return ""
+			}
+			return strings.Join(e.ListRefreshOn, " ")
+		},
 		"treeColumn":  isTreeListColumn,
 		"hasValue": func(v any) bool {
 			if v == nil {
@@ -322,6 +330,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 				}
 				for _, layout := range []string{
 					time.RFC3339, time.RFC3339Nano,
+					"2006-01-02 15:04:05-07:00",
 					"2006-01-02 15:04:05 -0700 MST",
 					"2006-01-02 15:04:05.999999999 -0700 MST",
 					"2006-01-02T15:04:05", "2006-01-02 15:04:05",
@@ -446,11 +455,9 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			type param interface{ GetName() string }
 			// Use reflection-free approach: just iterate over values map
 			parts := []string{}
-			if values != nil {
-				for k, v := range values {
-					if v != nil && fmt.Sprintf("%v", v) != "" {
-						parts = append(parts, k+"="+url.QueryEscape(fmt.Sprintf("%v", v)))
-					}
+			for k, v := range values {
+				if v != nil && fmt.Sprintf("%v", v) != "" {
+					parts = append(parts, k+"="+url.QueryEscape(fmt.Sprintf("%v", v)))
 				}
 			}
 			if len(parts) == 0 {
@@ -578,17 +585,26 @@ body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-hei
 .sys-menu{position:relative}
 .sys-btn{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:15px;padding:6px 10px;border-radius:5px;line-height:1}
 .sys-btn:hover{background:#334155;color:#fff}
-.sys-drop{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:170px;padding:4px 0;z-index:200}
+.sys-drop{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);width:300px;max-width:calc(100vw - 16px);max-height:calc(100vh - 50px);max-height:calc(100dvh - 50px);overflow-y:auto;overscroll-behavior:contain;padding:4px 0;z-index:200}
 .sys-drop.open{display:block}
-.sys-drop>a,.sys-drop>button,.sys-drop>.sys-sub>a{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;width:100%;text-align:left;background:none;border:none;cursor:pointer;border-bottom:1px solid #f1f5f9}
+.sys-drop>a,.sys-drop>button{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;width:100%;text-align:left;background:none;border:none;cursor:pointer;border-bottom:1px solid #f1f5f9}
 .sys-drop>:last-child>a,.sys-drop>a:last-child,.sys-drop>button:last-child{border-bottom:none}
-.sys-drop>a:hover,.sys-drop>button:hover,.sys-drop>.sys-sub:hover>a{background:#f1f5f9}
-.sys-sub{position:relative}
-.sys-sub>.sys-submenu{display:none;position:absolute;right:100%;top:-4px;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:220px;padding:4px 0;z-index:200}
-.sys-sub:hover>.sys-submenu{display:block}
-.sys-submenu a{display:block;padding:10px 16px;color:#334155;text-decoration:none;font-size:14px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
-.sys-submenu a:last-child{border-bottom:none}
-.sys-submenu a:hover{background:#f1f5f9}
+.sys-drop>a:hover,.sys-drop>button:hover{background:#f1f5f9}
+.sys-drop details.sys-group{margin:0;max-width:none;background:#fff;border-radius:0;box-shadow:none;border-bottom:1px solid #f1f5f9}
+.sys-drop .sys-group>summary{display:flex;align-items:center;gap:8px;padding:10px 16px;color:#334155;font-size:14px;font-weight:600;cursor:pointer;list-style:none;user-select:none}
+.sys-drop .sys-group>summary::-webkit-details-marker{display:none}
+.sys-drop .sys-group>summary::before{content:""}
+.sys-drop .sys-group>summary::after{content:"▸";margin-left:auto;color:#94a3b8;font-size:12px;transition:transform .12s ease}
+.sys-drop .sys-group[open]>summary::after{content:"▸";transform:rotate(90deg)}
+.sys-drop .sys-group>summary:hover{background:#f8fafc;color:#1d4ed8}
+.sys-group-body{padding:2px 0 5px;background:#f8fafc}
+.sys-group-body>a{display:block;padding:8px 16px 8px 34px;color:#475569;text-decoration:none;font-size:13px;border-top:1px solid #f1f5f9}
+.sys-group-body>a:hover{background:#eef2ff;color:#1d4ed8}
+.sys-mode-block{padding:9px 16px 10px 34px;border-top:1px solid #f1f5f9}
+.sys-mode-title{font-size:12px;color:#64748b;margin-bottom:6px;font-weight:600}
+.sys-mode-block label{display:block;font-size:13px;padding:2px 0;cursor:pointer;color:#475569}
+.sys-mode-block .sys-btn{margin-top:6px;background:#e2e8f0;color:#334155;font-size:12px;padding:6px 10px}
+.sys-logout{position:sticky;bottom:-4px;background:#fff;z-index:1;margin:0;padding:0;box-shadow:0 -3px 8px rgba(15,23,42,.06)}
 .tbl{width:100%;border-collapse:collapse}
 .tbl th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
 .tbl td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#334155;font-size:13px}
@@ -676,41 +692,9 @@ details[open] summary::before{content:"▼ "}
 .breadcrumb span{color:#94a3b8;padding:0 2px}
 /* Чтобы контент не накрывало панелью сообщений */
 body{padding-bottom:32px}
-/* ИИ-помощник: плавающая кнопка и панель чата (план 51, F3) */
-#ob-ai-btn{position:fixed;right:18px;bottom:44px;z-index:320;width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 14px rgba(37,99,235,.4)}
-#ob-ai-btn:hover{background:#1d4ed8}
-#ob-ai-panel{position:fixed;right:18px;bottom:44px;z-index:321;width:370px;max-width:calc(100vw - 24px);height:520px;max-height:calc(100vh - 80px);background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;font-family:system-ui,sans-serif}
-#ob-ai-panel.open{display:flex}
-#ob-ai-head{background:#2563eb;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
-#ob-ai-head .sp{flex:1}
-#ob-ai-head button{background:none;border:none;color:#fff;cursor:pointer;font-size:18px;line-height:1}
-#ob-ai-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:#f8fafc}
-#ob-ai-log .m{max-width:85%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
-#ob-ai-log .m.u{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:3px}
-#ob-ai-log .m.a{align-self:flex-start;background:#fff;border:1px solid #e2e8f0;color:#1e293b;border-bottom-left-radius:3px}
-#ob-ai-log .m.err{align-self:stretch;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c}
-#ob-ai-log .hint{color:#94a3b8;font-size:12px;text-align:center;margin:auto 0}
-#ob-ai-foot{border-top:1px solid #e2e8f0;padding:8px;display:flex;gap:6px;background:#fff}
-#ob-ai-input{flex:1;resize:none;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;max-height:90px}
-#ob-ai-send{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:0 14px;cursor:pointer;font-size:14px}
-#ob-ai-send:disabled{opacity:.5;cursor:default}
-/* Панель сообщений (как «Окно сообщений» в 1С) */
-#ob-msg-bar{position:fixed;left:0;right:0;bottom:0;z-index:300;background:#fff;border-top:1px solid #cbd5e1;box-shadow:0 -2px 8px rgba(0,0,0,.08);font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;transform:translateY(calc(100% - 30px));transition:transform .18s ease}
-#ob-msg-bar.open{transform:translateY(0)}
-#ob-msg-bar.hidden{display:none}
-#ob-msg-head{height:30px;display:flex;align-items:center;padding:0 10px;cursor:pointer;background:#f1f5f9;user-select:none;gap:10px}
-#ob-msg-head .ttl{font-weight:600;color:#334155;flex:1;display:flex;align-items:center;gap:8px}
-#ob-msg-head .cnt{background:#ef4444;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;min-width:18px;text-align:center;display:none}
-#ob-msg-head .cnt.show{display:inline-block}
-#ob-msg-head .arr{color:#64748b;font-size:11px;width:14px;text-align:center}
-#ob-msg-bar.open #ob-msg-head .arr{transform:rotate(180deg)}
-#ob-msg-head button{background:none;border:none;color:#64748b;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px}
-#ob-msg-head button:hover{background:#e2e8f0;color:#1e293b}
-#ob-msg-list{max-height:200px;overflow-y:auto;padding:6px 0;background:#fff}
-#ob-msg-list .it{padding:5px 14px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word}
-#ob-msg-list .it:last-child{border-bottom:none}
-#ob-msg-list .it .t{color:#94a3b8;flex-shrink:0;font-size:11px;padding-top:1px}
-#ob-msg-list .empty{padding:10px 14px;color:#94a3b8;font-style:italic}
+/* Стили плавающих виджетов (ИИ-помощник, панель сообщений) инжектирует сам
+   /static/ui.js вместе с их разметкой — они работают и на страницах с
+   собственным <head> (админские). Здесь их не дублировать. */
 /* ===== Мобильная адаптация (этап 45). Правила в @media применяются только на
    узких экранах — десктопная вёрстка выше остаётся неизменной. ===== */
 .nav-toggle{display:none}
@@ -782,42 +766,77 @@ const tplNav = `
     <button class="sys-btn" type="button" data-ob-toggle-target="sysd">&#9881; {{t $.Lang "Система"}} &#9660;</button>
     <div class="sys-drop" id="sysd">
       <a href="/ui/about">{{t $.Lang "О программе"}}</a>
-      {{if .IsAdmin}}
-      <a href="/ui/admin/users">{{t $.Lang "Пользователи"}}</a>
-      <a href="/ui/admin/roles">{{t $.Lang "Роли и права"}}</a>
-      <a href="/ui/admin/sessions">{{t $.Lang "Активные пользователи"}}</a>
-	      <a href="/ui/admin/api-tokens">{{t $.Lang "API-токены"}}</a>
-	      <a href="/ui/admin/audit">{{t $.Lang "Журнал изменений"}}</a>
-	      <a href="/ui/admin/rls">{{t $.Lang "Диагностика RLS"}}</a>
-	      <a href="/ui/admin/webhooks">{{t $.Lang "Журнал веб-хуков"}}</a>
-      <a href="/ui/admin/scheduled">{{t $.Lang "Регламентные задания"}}</a>
-      <a href="/ui/delete-marked">{{t $.Lang "Удалить помеченные"}}</a>
-      <a href="/ui/admin/cleanup">{{t $.Lang "Очистка регистров"}}</a>
+      <details class="sys-group">
+        <summary>{{t $.Lang "Профиль и интерфейс"}}</summary>
+        <div class="sys-group-body">
+          <div class="sys-mode-block">
+            <div class="sys-mode-title">{{t $.Lang "Режим открытия форм"}}</div>
+            <form method="post" action="/ui/form-mode" style="margin:0;padding:0">
+              <label><input type="radio" name="mode" value="pages" {{if eq (printf "%v" .FormOpenModePersonal) "pages"}}checked{{end}}> {{t $.Lang "Отдельные страницы"}}</label>
+              <label><input type="radio" name="mode" value="tabs" {{if eq (printf "%v" .FormOpenModePersonal) "tabs"}}checked{{end}}> {{t $.Lang "Вкладки"}}</label>
+              <label><input type="radio" name="mode" value="default" {{if eq (printf "%v" .FormOpenModePersonal) ""}}checked{{end}}> {{t $.Lang "По умолчанию (глобально)"}}</label>
+              <button type="submit" class="sys-btn">{{t $.Lang "Применить"}}</button>
+            </form>
+          </div>
+          {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">{{t $.Lang "Сменить пароль"}}</a>{{end}}{{end}}
+        </div>
+      </details>
+      {{if not .IsAdmin}}
+      <details class="sys-group">
+        <summary>{{t $.Lang "Платформенные возможности"}}</summary>
+        <div class="sys-group-body">
+          <a href="/ui/pos">{{t $.Lang "Рабочее место кассира (РМК)"}}</a>
+        </div>
+      </details>
       {{end}}
-      <a href="/ui/pos">{{t $.Lang "Рабочее место кассира (РМК)"}}</a>
-      {{if .IsAdmin}}<a href="/ui/settings/agent">{{t $.Lang "Настройки агента оборудования"}}</a>{{end}}
-      {{if .IsAdmin}}<a href="/ui/admin/extforms">{{t $.Lang "Внешние печатные формы"}}</a>{{end}}
-      {{if .IsAdmin}}<a href="/ui/admin/extreports">{{t $.Lang "Внешние отчёты"}}</a>{{end}}
-      {{if .IsAdmin}}<a href="/ui/admin/extprocessors">{{t $.Lang "Внешние обработки"}}</a>{{end}}
-      {{if .IsAdmin}}<a href="/ui/all-functions">{{t $.Lang "Все функции"}}</a>{{end}}
-      {{if .IsAdmin}}<div class="sys-sub"><a href="#" data-ob-prevent>{{t $.Lang "Инструменты разработчика"}} &#9654;</a>
-      <div class="sys-submenu">
-        <a href="/ui/dev/query-console">{{t $.Lang "Консоль запросов"}}</a>
-        <a href="/ui/dev/code-console">{{t $.Lang "Консоль кода"}}</a>
-        <a href="/ui/dev/gengen">{{t $.Lang "Gengen"}}</a>
-      </div>
-    </div>{{end}}
-      <div style="border-top:1px solid #f1f5f9;padding:10px 16px">
-        <div style="font-size:12px;color:#64748b;margin-bottom:6px;font-weight:600">{{t $.Lang "Режим открытия форм"}}</div>
-        <form method="post" action="/ui/form-mode" style="margin:0;padding:0">
-          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="pages" {{if eq (printf "%v" .FormOpenModePersonal) "pages"}}checked{{end}}> {{t $.Lang "Отдельные страницы"}}</label>
-          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="tabs" {{if eq (printf "%v" .FormOpenModePersonal) "tabs"}}checked{{end}}> {{t $.Lang "Вкладки"}}</label>
-          <label style="display:block;font-size:13px;padding:2px 0;cursor:pointer"><input type="radio" name="mode" value="default" {{if eq (printf "%v" .FormOpenModePersonal) ""}}checked{{end}}> {{t $.Lang "По умолчанию (глобально)"}}</label>
-          <button type="submit" class="sys-btn" style="margin-top:6px">{{t $.Lang "Применить"}}</button>
-        </form>
-      </div>
-      {{if .HasAuth}}{{if not .DenyPasswdChange}}<a href="/ui/profile/passwd">{{t $.Lang "Сменить пароль"}}</a>{{end}}{{end}}
-      <form method="POST" action="/logout" style="margin:0;padding:0"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">{{t $.Lang "Выйти"}}</button></form>
+      {{if .IsAdmin}}
+      <details class="sys-group">
+        <summary>{{t $.Lang "Администрирование"}}</summary>
+        <div class="sys-group-body">
+          <a href="/ui/admin/users">{{t $.Lang "Пользователи"}}</a>
+          <a href="/ui/admin/roles">{{t $.Lang "Роли и права"}}</a>
+          <a href="/ui/admin/sessions">{{t $.Lang "Активные пользователи"}}</a>
+          <a href="/ui/admin/api-tokens">{{t $.Lang "API-токены"}}</a>
+          <a href="/ui/admin/audit">{{t $.Lang "Журнал изменений"}}</a>
+          <a href="/ui/admin/rls">{{t $.Lang "Диагностика RLS"}}</a>
+        </div>
+      </details>
+      <details class="sys-group">
+        <summary>{{t $.Lang "Интеграции и задания"}}</summary>
+        <div class="sys-group-body">
+          <a href="/ui/admin/exchange">{{t $.Lang "Обмен данными"}}</a>
+          <a href="/ui/admin/intake">{{t $.Lang "Входная приёмка"}}</a>
+          <a href="/ui/admin/scheduled">{{t $.Lang "Регламентные задания"}}</a>
+          <a href="/ui/admin/webhooks">{{t $.Lang "Журнал веб-хуков"}}</a>
+        </div>
+      </details>
+      <details class="sys-group">
+        <summary>{{t $.Lang "Обслуживание базы"}}</summary>
+        <div class="sys-group-body">
+          <a href="/ui/delete-marked">{{t $.Lang "Удалить помеченные"}}</a>
+          <a href="/ui/admin/cleanup">{{t $.Lang "Очистка регистров"}}</a>
+        </div>
+      </details>
+      <details class="sys-group">
+        <summary>{{t $.Lang "Расширения и оборудование"}}</summary>
+        <div class="sys-group-body">
+          <a href="/ui/settings/agent">{{t $.Lang "Настройки агента оборудования"}}</a>
+          <a href="/ui/admin/extforms">{{t $.Lang "Внешние печатные формы"}}</a>
+          <a href="/ui/admin/extreports">{{t $.Lang "Внешние отчёты"}}</a>
+          <a href="/ui/admin/extprocessors">{{t $.Lang "Внешние обработки"}}</a>
+        </div>
+      </details>
+      <details class="sys-group">
+        <summary>{{t $.Lang "Инструменты разработчика"}}</summary>
+        <div class="sys-group-body">
+          <a href="/ui/all-functions">{{t $.Lang "Все функции"}}</a>
+          <a href="/ui/dev/query-console">{{t $.Lang "Консоль запросов"}}</a>
+          <a href="/ui/dev/code-console">{{t $.Lang "Консоль кода"}}</a>
+          <a href="/ui/dev/gengen">{{t $.Lang "Gengen"}}</a>
+        </div>
+      </details>
+      {{end}}
+      <form class="sys-logout" method="POST" action="/logout"><button type="submit" style="display:block;width:100%;padding:10px 16px;color:#dc2626;text-decoration:none;font-size:14px;text-align:left;background:none;border:none;border-top:1px solid #f1f5f9;cursor:pointer">{{t $.Lang "Выйти"}}</button></form>
     </div>
   </div>
 </header>
@@ -1083,7 +1102,8 @@ const tplList = `
   </form>
 </details>
 
-<div class="card">
+{{$obRefresh := liveListRefreshOn .Entity}}
+<div class="card" data-ob-live="{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}"{{if $obRefresh}} data-ob-refresh-on="{{$obRefresh}}"{{end}}>
 {{if .TreeView}}
 {{/* ===== TREE VIEW ===== */}}
 {{if .TreeRows}}
@@ -1308,7 +1328,7 @@ const tplForm = `
   {{if .IsPopup}}
   <a href="#" data-ob-popup-cancel title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{else}}
-  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  <a href="/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}" data-ob-close-tab title="{{t $.Lang "Закрыть"}}" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{end}}
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
@@ -1459,6 +1479,8 @@ const tplForm = `
       <option value="false" {{if eq (index $.Values $fn) "false"}}selected{{end}}>{{t $.Lang "Нет"}}</option>
       <option value="true"  {{if eq (index $.Values $fn) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
+  {{else if eq (str .Type) "number"}}
+    <input type="text" inputmode="decimal" pattern="[+-]?([0-9]+([.,][0-9]+)?|[.,][0-9]+)" name="{{$fn}}" value="{{index $.Values $fn}}" placeholder="{{$flabel}}" title="{{t $.Lang "Введите число; десятичный разделитель — запятая или точка"}}">
   {{else if isRichText (str .Type)}}
     {{/* textarea — скрытое form-backing поле (хранит санитизированный HTML).
          Без JS остаётся видимым и рабочим (прогрессивное улучшение). С JS
@@ -2291,10 +2313,24 @@ const tplAbout = `
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px">{{.Cfg.AppLicense}}</td>
     </tr>
     {{end}}
+    {{if .Cfg.ConfigSource}}
+    <tr>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "Хранение конфигурации"}}</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569">{{if eq .Cfg.ConfigSource "database"}}{{t $.Lang "В базе данных"}}{{else}}{{t $.Lang "Файлы"}}{{end}}</td>
+    </tr>
+    {{end}}
+    {{if and .IsAdmin .Cfg.ConfigLocation}}
+    <tr>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "Расположение конфигурации"}}</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#475569;word-break:break-all">{{.Cfg.ConfigLocation}}</td>
+    </tr>
+    {{end}}
+    {{if .Cfg.DatabaseLocation}}
     <tr>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "База данных"}}</td>
-      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#475569;word-break:break-all">{{.Cfg.DSN}}</td>
+      <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#475569;word-break:break-all">{{if eq .Cfg.DatabaseType "sqlite"}}SQLite{{else}}PostgreSQL{{end}}{{if .IsAdmin}} · {{.Cfg.DatabaseLocation}}{{end}}</td>
     </tr>
+    {{end}}
     <tr>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px">{{t $.Lang "Метаданные"}}</td>
       <td style="padding:14px 0;border-bottom:1px solid #f1f5f9;font-size:14px">
@@ -2398,14 +2434,15 @@ const tplConstants = `
 <main>
 <h2>{{t $.Lang "Константы"}}</h2>
 {{if .Saved}}<div style="background:#f0fdf4;border:1px solid #86efac;color:#15803d;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px">✓ {{t $.Lang "Константы сохранены"}}</div>{{end}}
+{{if .Error}}<div style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px">⚠ {{.Error}}</div>{{end}}
 <div class="card" style="max-width:700px">
 <form method="POST" action="/ui/constants">
 {{range .Constants}}{{$c := .}}
 <div class="form-group">
-  <label>{{.DisplayLabel $.Lang}}</label>
+  <label>{{.DisplayLabel $.Lang}}{{if .Required}} <span style="color:#dc2626" title="{{t $.Lang "Обязательное поле"}}">*</span>{{end}}</label>
   {{if .RefEntity}}
     <div style="display:flex;gap:6px;align-items:center">
-      <select id="const-{{.Name}}" name="{{.Name}}" data-ref-entity="{{.RefEntity}}" style="flex:1;min-width:0">
+      <select id="const-{{.Name}}" name="{{.Name}}" data-ref-entity="{{.RefEntity}}" style="flex:1;min-width:0"{{if .Required}} required{{end}}>
         <option value="">{{t $.Lang "— не выбрано —"}}</option>
         {{range index $.RefOpts .Name}}
         <option value="{{index . "id"}}" {{if eq (index . "id") (index $.Values $c.Name)}}selected{{end}}>{{index . "_label"}}</option>
@@ -2414,15 +2451,22 @@ const tplConstants = `
       <button type="button" data-ob-ref-picker="const-{{$c.Name}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Выбрать из списка"}}">...</button>
       <button type="button" data-ob-ref-current="const-{{$c.Name}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;flex-shrink:0" title="{{t $.Lang "Открыть карточку"}}">🔍</button>
     </div>
+  {{else if .EnumName}}
+    <select name="{{.Name}}"{{if .Required}} required{{end}}>
+      <option value="">{{t $.Lang "— не выбрано —"}}</option>
+      {{range index $.EnumOpts $c.Name}}
+      <option value="{{.Value}}" {{if eq .Value (index $.Values $c.Name)}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
   {{else if eq (str .Type) "date"}}
-    <input type="date" name="{{.Name}}" value="{{index $.Values .Name}}">
+    <input type="date" name="{{.Name}}" value="{{index $.Values .Name}}"{{if .Required}} required{{end}}>
   {{else if eq (str .Type) "bool"}}
     <select name="{{.Name}}">
       <option value="false" {{if eq (index $.Values .Name) "false"}}selected{{end}}>{{t $.Lang "Нет"}}</option>
       <option value="true"  {{if eq (index $.Values .Name) "true"}}selected{{end}}>{{t $.Lang "Да"}}</option>
     </select>
   {{else}}
-    <input type="text" name="{{.Name}}" value="{{index $.Values .Name}}" placeholder="{{.Name}}">
+    <input type="text" name="{{.Name}}" value="{{index $.Values .Name}}" placeholder="{{.Name}}"{{if .Required}} required{{end}}>
   {{end}}
 </div>
 {{end}}

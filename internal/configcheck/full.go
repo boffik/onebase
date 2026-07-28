@@ -33,19 +33,31 @@ func RunFullWithOptions(dir string, opts Options) Result {
 	if opts.Lint {
 		warnings = append(warnings, CheckLintYAML(dir)...)
 	}
+	appCfg, appCfgErr := project.LoadConfig(dir)
+	if appCfgErr != nil && !AlreadyReported(issues, appCfgErr.Error()) {
+		issues = append(issues, Issue{Message: "config/app.yaml: " + appCfgErr.Error()})
+	}
+	if appCfgErr == nil {
+		warnings = append(warnings, deprecatedAppConfigWarnings(appCfg)...)
+	}
 
 	if proj, err := project.Load(dir); err == nil {
-		strictLexicalScope := strictLexicalScopeEnabled(dir)
+		strictLexicalScope := appCfgErr == nil && appCfg != nil && appCfg.DSL != nil && appCfg.DSL.StrictLexicalScope
 		issues = append(issues, CheckQueries(proj)...)
 		issues = append(issues, CheckReportComposition(proj)...)
 		issues = append(issues, CheckJournalConditional(proj)...)
 		issues = append(issues, CheckFormConditional(proj)...)
 		issues = append(issues, CheckReportOutputFormat(proj)...)
-		roles, _ := auth.LoadRolesYAML(filepath.Join(dir, "roles"))
+		roles, rolesErr := auth.LoadRolesYAML(filepath.Join(dir, "roles"))
+		if rolesErr != nil && !AlreadyReported(issues, rolesErr.Error()) {
+			issues = append(issues, Issue{Message: "roles: " + rolesErr.Error()})
+		}
 		issues = append(issues, CheckCrossRefs(proj, roles)...)
 		warnings = append(warnings, CheckLayoutWarnings(proj)...)
 		warnings = append(warnings, CheckFormFieldFormat(proj)...)
 		issues = append(issues, CheckHTTPServices(proj)...)
+		issues = append(issues, CheckExchangePlans(proj)...)
+		issues = append(issues, CheckIntakes(proj)...)
 		issues = append(issues, CheckPages(proj)...)
 		issues = append(issues, CheckNameCollisions(proj)...)
 		if strictLexicalScope {
@@ -74,11 +86,48 @@ func RunFullWithOptions(dir string, opts Options) Result {
 	return NewResult(issues, warnings)
 }
 
-func strictLexicalScopeEnabled(dir string) bool {
-	cfg, err := project.LoadConfig(dir)
-	return err == nil && cfg != nil && cfg.DSL != nil && cfg.DSL.StrictLexicalScope
+func deprecatedAppConfigWarnings(cfg *project.AppConfig) []Issue {
+	if cfg == nil {
+		return nil
+	}
+	warning := func(key, fix string) Issue {
+		return Issue{
+			File:         "config/app.yaml",
+			Kind:         "Конфигурация приложения",
+			Code:         "config.deprecated-key",
+			Message:      "устаревшая настройка " + key + " принята для совместимости, но игнорируется",
+			SuggestedFix: fix,
+		}
+	}
+	var warnings []Issue
+	if cfg.Attachments != nil {
+		if cfg.Attachments.DeprecatedStorageType != "" {
+			warnings = append(warnings, warning(
+				"attachments.storage_type",
+				"Удалите ключ; режим хранения файлов задаётся в настройках информационной базы.",
+			))
+		}
+		if cfg.Attachments.DeprecatedStorageLocation != "" {
+			warnings = append(warnings, warning(
+				"attachments.storage_location",
+				"Удалите ключ; расположением файлов управляет хранилище OneBase.",
+			))
+		}
+		if len(cfg.Attachments.DeprecatedOfficeAllowedTypes) > 0 {
+			warnings = append(warnings, warning(
+				"attachments.office_allowed_types",
+				"Перенесите нужные расширения в attachments.allowed_types и удалите ключ.",
+			))
+		}
+	}
+	if cfg.DeprecatedRussianPost != nil {
+		warnings = append(warnings, warning(
+			"russian_post",
+			"Перенесите проектные настройки интеграции в собственные метаданные/константы конфигурации.",
+		))
+	}
+	return warnings
 }
-
 func excludeIssueCode(in []Issue, code string) []Issue {
 	if len(in) == 0 {
 		return in

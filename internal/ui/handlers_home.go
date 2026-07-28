@@ -27,8 +27,7 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 			docs++
 		}
 	}
-	cfg := s.cfg
-	cfg.DSN = maskDSN(cfg.DSN)
+	cfg := prepareAboutConfig(s.cfg)
 	user := auth.UserFromContext(r.Context())
 	s.render(w, r, "page-about", map[string]any{
 		"Cfg":       cfg,
@@ -38,6 +37,19 @@ func (s *Server) about(w http.ResponseWriter, r *http.Request) {
 		"Reports":   len(s.reg.Reports()),
 		"User":      user,
 	})
+}
+
+func prepareAboutConfig(cfg Config) Config {
+	if cfg.DatabaseLocation == "" {
+		cfg.DatabaseLocation = cfg.DSN
+	}
+	cfg.DatabaseLocation = maskDSN(cfg.DatabaseLocation)
+	// В database-режиме конфигурация находится там же, где данные. Значение
+	// собираем здесь после маскирования DSN, чтобы пароль не попал в HTML.
+	if cfg.ConfigSource == "database" {
+		cfg.ConfigLocation = cfg.DatabaseLocation
+	}
+	return cfg
 }
 
 func maskDSN(dsn string) string {
@@ -113,6 +125,9 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
+	if !s.requireSubsystemVisible(w, r) {
+		return
+	}
 	s.render(w, r, "page-index", s.homeDashboardData(r))
 }
 
@@ -133,7 +148,13 @@ func (s *Server) hiddenHomeRedirect(r *http.Request, base string) (string, bool)
 	if r.URL.Query().Get("subsystem") != "" || !s.hideGlobalHome() {
 		return "", false
 	}
-	subs := s.reg.Subsystems() // hideGlobalHome гарантирует непустой список
+	// Целимся в первый ВИДИМЫЙ пользователю раздел; если после фильтрации по
+	// правам не осталось ни одного — фейл-сейф: показываем скрытую «Главную»,
+	// иначе пользователь упёрся бы в 403 недоступного раздела.
+	subs := s.visibleSubsystems(r)
+	if len(subs) == 0 {
+		return "", false
+	}
 	q := url.Values{"subsystem": []string{subs[0].Name}}
 	if base == "/ui/app" {
 		q.Set("home", "1")
@@ -181,8 +202,17 @@ func (s *Server) homeDashboardData(r *http.Request) map[string]any {
 		rowRes := make([]widget.Result, 0, len(group))
 		for _, wMeta := range group {
 			res := run(wMeta)
+			// Нет прав на источник — карточку не показываем: ошибка «нет
+			// доступа» на чужом рабочем столе только пугает пользователя.
+			// Настоящие ошибки (compile/SQL) остаются видимыми.
+			if res.AccessDenied {
+				continue
+			}
 			rowRes = append(rowRes, res)
 			flat = append(flat, res)
+		}
+		if len(rowRes) == 0 {
+			continue // ряд опустел целиком — не оставляем пустую полосу
 		}
 		rows = append(rows, rowRes)
 	}

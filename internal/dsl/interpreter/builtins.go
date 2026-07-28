@@ -13,6 +13,13 @@ import (
 // BuiltinFunc is a callable value that can be injected via extraVars (e.g. Сообщить).
 type BuiltinFunc func(args []any, file string, line int) (any, error)
 
+// FallbackBuiltinFunc is an injected platform function that is used only when
+// the application does not declare a procedure with the same name. It is meant
+// for compatibility-sensitive additions to the global DSL namespace: existing
+// common-module and same-file procedures keep their historical meaning, while
+// new configurations can still call the platform function directly.
+type FallbackBuiltinFunc BuiltinFunc
+
 // DSLError is returned by Error() built-in; stops execution and cancels Save.
 type DSLError struct {
 	File string
@@ -439,10 +446,12 @@ func KnownBuiltinNames() map[string]struct{} {
 		"блокировкаданных", "datalock",
 		"текущийпользователь", "currentuser",
 		"имяпользователя", "username",
+		"записатьсобытиеаудита", "writeauditdecision",
 		"справочники", "catalogs",
 		"документы", "documents",
 		"регистрынакопления", "accumulationregisters",
 		"предопределённыезначения", "predefinedvalues",
+		"нумераторы", "numerators",
 		"значениереквизитаобъекта", "objectattributevalue",
 		"значенияреквизитовобъектов", "objectattributevalues",
 		"выполнитькоманду", "executecommand",
@@ -450,6 +459,11 @@ func KnownBuiltinNames() map[string]struct{} {
 		"сохранитькартинку", "putimage",
 		"добавитьправилооформления", "addformattingrule",
 		"очиститьоформление", "clearformatting",
+		// вложения из DSL (план 105, internal/ui/dsl_attachments.go)
+		"присоединитьфайл", "attachfile",
+		"списоквложений", "listattachments",
+		"путьквложению", "attachmentpath",
+		"удалитьвложение", "deleteattachment",
 	} {
 		names[k] = struct{}{}
 	}

@@ -443,8 +443,6 @@ func (i *Interpreter) assign(target ast.Expr, val any, e *env) {
 		switch o := obj.(type) {
 		case This:
 			o.Set(field, val)
-		case *Struct:
-			o.Set(field, val)
 		case *Map:
 			// Симметрично чтению: запись по точке у Соответствия не работает —
 			// раньше тихо терялась, теперь явная ошибка с подсказкой.
@@ -483,10 +481,6 @@ func (i *Interpreter) evalExpr(expr ast.Expr, e *env) any {
 		field := strings.ToLower(v.Field.Literal)
 		switch o := obj.(type) {
 		case This:
-			return o.Get(field)
-		case *Struct:
-			return o.Get(field)
-		case *KeyValue:
 			return o.Get(field)
 		case *Ref:
 			return o.Get(field)
@@ -617,7 +611,7 @@ func (i *Interpreter) evalBinary(b *ast.BinaryExpr, e *env) any {
 		// не затрагивается — гейт срабатывает только на настоящих строках.
 		_, lStr := l.(string)
 		_, rStr := r.(string)
-		if !(lStr && rStr) {
+		if !lStr || !rStr {
 			ld, lok := toDecimal(l)
 			rd, rok := toDecimal(r)
 			if lok && rok {
@@ -689,6 +683,7 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 	switch callee := c.Callee.(type) {
 	case *ast.Ident:
 		fnName := callee.Tok.Literal
+		var fallback FallbackBuiltinFunc
 		// Вычислить(Выражение) — разбор строки как выражения и вычисление в
 		// текущем окружении (видит локальные переменные). Обрабатывается до
 		// обычного поиска builtin, т.к. требует доступа к env.
@@ -702,6 +697,9 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 					panic(dslStop{err: err})
 				}
 				return result
+			}
+			if bf, ok2 := val.(FallbackBuiltinFunc); ok2 {
+				fallback = bf
 			}
 		}
 		if i.LookupProc != nil {
@@ -726,6 +724,13 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 				}
 			}
 		}
+		if fallback != nil {
+			result, err := fallback(args, callee.Tok.File, callee.Tok.Line)
+			if err != nil {
+				panic(dslStop{err: err})
+			}
+			return result
+		}
 		fn, ok := builtins[strings.ToLower(fnName)]
 		if !ok {
 			// Factory-вызов без Новый: ЧтениеТекста(Путь), Запрос(Текст), …
@@ -746,8 +751,6 @@ func (i *Interpreter) evalCall(c *ast.CallExpr, e *env) any {
 		method := strings.ToLower(callee.Field.Literal)
 		switch o := recv.(type) {
 		case MethodCallable:
-			return o.CallMethod(method, args)
-		case *Struct:
 			return o.CallMethod(method, args)
 		}
 		// Если object — идентификатор, не разрешившийся в значение,

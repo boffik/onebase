@@ -67,6 +67,8 @@ type rawEntity struct {
 	BasedOn       []string          `yaml:"based_on"`
 	Activity      *rawActivity      `yaml:"activity"`
 	ListMode      string            `yaml:"list_mode"`
+	ListRefreshOn []string          `yaml:"list_refresh_on"`
+	NotifyChanges bool              `yaml:"notify_changes"`
 	TileView      *rawTileView      `yaml:"tile_view"`
 }
 
@@ -117,6 +119,13 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	// Нормализуем: «Feed», «FEED», « feed » → «feed». Иначе resolveListMode
 	// (сравнение с точной строкой "feed") молча откатывался бы на постранично.
 	e.ListMode = strings.ToLower(strings.TrimSpace(raw.ListMode))
+	// Живой список (план 87, ступень A): имена событий тримуем, пустые отбрасываем.
+	for _, ev := range raw.ListRefreshOn {
+		if ev = strings.TrimSpace(ev); ev != "" {
+			e.ListRefreshOn = append(e.ListRefreshOn, ev)
+		}
+	}
+	e.NotifyChanges = raw.NotifyChanges
 	if raw.TileView != nil {
 		e.TileView = &TileView{
 			Image:    strings.TrimSpace(raw.TileView.Image),
@@ -145,6 +154,22 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	}
 	for _, rf := range raw.Fields {
 		e.Fields = append(e.Fields, parseField(rf))
+	}
+	// A document numerator is the declaration of the standard document number,
+	// not only a formatter for an independently declared field. Keep explicit
+	// Номер metadata untouched, but synthesize the string field when omitted so
+	// describe, DDL, auto-numbering and the query compiler share one contract.
+	if kind == KindDocument && e.Numerator != nil {
+		hasNumber := false
+		for _, f := range e.Fields {
+			if strings.EqualFold(f.Name, "Номер") {
+				hasNumber = true
+				break
+			}
+		}
+		if !hasNumber {
+			e.Fields = append([]Field{{Name: "Номер", Type: FieldTypeString}}, e.Fields...)
+		}
 	}
 	for _, ri := range raw.Indexes {
 		idx := IndexSpec{Fields: trimStringList(ri.Fields), Unique: ri.Unique}
@@ -319,11 +344,12 @@ func LoadEnumFile(path string) (*Enum, error) {
 }
 
 type rawConstant struct {
-	Name    string            `yaml:"name"`
-	Type    string            `yaml:"type"`
-	Default string            `yaml:"default"`
-	Label   string            `yaml:"label"`
-	Labels  map[string]string `yaml:"labels"`
+	Name     string            `yaml:"name"`
+	Type     string            `yaml:"type"`
+	Default  string            `yaml:"default"`
+	Required bool              `yaml:"required"`
+	Label    string            `yaml:"label"`
+	Labels   map[string]string `yaml:"labels"`
 }
 
 type rawConstantsFile struct {
@@ -342,11 +368,12 @@ func LoadConstantsFile(path string) ([]*Constant, error) {
 	var result []*Constant
 	for _, rc := range raw.Constants {
 		c := &Constant{
-			Name:    rc.Name,
-			Type:    FieldType(rc.Type),
-			Default: rc.Default,
-			Label:   rc.Label,
-			Labels:  rc.Labels,
+			Name:     rc.Name,
+			Type:     FieldType(rc.Type),
+			Default:  rc.Default,
+			Required: rc.Required,
+			Label:    rc.Label,
+			Labels:   rc.Labels,
 		}
 		if strings.HasPrefix(rc.Type, "reference:") {
 			c.RefEntity = strings.TrimPrefix(rc.Type, "reference:")

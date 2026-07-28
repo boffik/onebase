@@ -102,18 +102,6 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		title = subName
 	}
 
-	dir := b.Path
-	if b.ConfigSource == "database" {
-		dir, err = workspacePath(b.ID)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	}
-
-	subDir := filepath.Join(dir, "subsystems")
-	os.MkdirAll(subDir, 0o755)
-
 	type yamlContents struct {
 		Catalogs   []string `yaml:"catalogs,omitempty"`
 		Documents  []string `yaml:"documents,omitempty"`
@@ -122,25 +110,20 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		Reports    []string `yaml:"reports,omitempty"`
 		Processors []string `yaml:"processors,omitempty"`
 		Journals   []string `yaml:"journals,omitempty"`
-	}
-	type yamlHomePage struct {
-		Title   string                    `yaml:"title,omitempty"`
-		Titles  map[string]string         `yaml:"titles,omitempty"`
-		Layout  string                    `yaml:"layout,omitempty"`
-		Rows    []metadata.HomePageRow    `yaml:"rows,omitempty"`
-		Widgets []metadata.HomePageWidget `yaml:"widgets,omitempty"`
+		Pages      []string `yaml:"pages,omitempty"`
 	}
 	type yamlSubsystem struct {
-		Name     string            `yaml:"name"`
-		Title    string            `yaml:"title"`
-		Titles   map[string]string `yaml:"titles,omitempty"`
-		Icon     string            `yaml:"icon,omitempty"`
-		Order    int               `yaml:"order"`
-		Contents yamlContents      `yaml:"contents"`
-		HomePage *yamlHomePage     `yaml:"home_page,omitempty"`
+		Name     string             `yaml:"name"`
+		Title    string             `yaml:"title"`
+		Titles   map[string]string  `yaml:"titles,omitempty"`
+		Icon     string             `yaml:"icon,omitempty"`
+		Order    int                `yaml:"order"`
+		Roles    []string           `yaml:"roles,omitempty"`
+		Contents yamlContents       `yaml:"contents"`
+		HomePage *metadata.HomePage `yaml:"home_page,omitempty"`
 	}
 
-	targetFile := filepath.Join(subDir, nameToFilename(subName)+".yaml")
+	relPath := "subsystems/" + nameToFilename(subName) + ".yaml"
 
 	ys := yamlSubsystem{
 		Name:  subName,
@@ -154,22 +137,23 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	ys.Contents.InfoRegs = r.Form["inforegs"]
 	ys.Contents.Reports = r.Form["reports"]
 	ys.Contents.Processors = r.Form["processors"]
+	ys.Contents.Journals = r.Form["journals"]
 
 	// Сохраняем переводы (titles) и метаданные рабочего стола из уже
 	// существующего файла, чтобы перезапись не теряла данные, которых нет в форме.
-	if existing, lerr := metadata.LoadSubsystemFile(targetFile); lerr == nil && existing != nil {
-		if formHasMapField(r, "titles") {
-			ys.Titles = parseMapForm(r, "titles")
-		} else {
-			ys.Titles = existing.Titles
-		}
-		if existing.HomePage != nil {
-			ys.HomePage = &yamlHomePage{
-				Title:   existing.HomePage.Title,
-				Titles:  existing.HomePage.Titles,
-				Layout:  existing.HomePage.Layout,
-				Widgets: existing.HomePage.Widgets,
+	if raw, ok := h.readConfigFileRaw(r.Context(), b, relPath); ok {
+		var existing yamlSubsystem
+		if yaml.Unmarshal(raw, &existing) == nil {
+			// Страницы и роли пока не редактируются этой формой — переносим их
+			// из текущей конфигурации, чтобы сохранение состава их не затирало.
+			ys.Roles = existing.Roles
+			ys.Contents.Pages = existing.Contents.Pages
+			if formHasMapField(r, "titles") {
+				ys.Titles = parseMapForm(r, "titles")
+			} else {
+				ys.Titles = existing.Titles
 			}
+			ys.HomePage = existing.HomePage
 		}
 	} else if formHasMapField(r, "titles") {
 		ys.Titles = parseMapForm(r, "titles")
@@ -181,7 +165,7 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 	rows, layout := rowsFromForm(r)
 	if len(rows) > 0 {
 		if ys.HomePage == nil {
-			ys.HomePage = &yamlHomePage{}
+			ys.HomePage = &metadata.HomePage{}
 		}
 		ys.HomePage.Rows = rows
 		ys.HomePage.Layout = layout
@@ -195,10 +179,12 @@ func (h *handler) configuratorSaveSubsystem(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	out, _ := yaml.Marshal(&ys)
-
+	out, err := yaml.Marshal(&ys)
+	if err == nil {
+		err = saveConfigFile(r, h, b, relPath, out)
+	}
 	data := h.loadCfgData(r.Context(), b, "tree")
-	if err := os.WriteFile(targetFile, out, 0o644); err != nil {
+	if err != nil {
 		data.Error = tr(lang, "Ошибка сохранения") + ": " + err.Error()
 		renderCfg(w, r, data)
 		return
@@ -216,9 +202,14 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// Parse multipart form (up to 2MB for logo)
+	// Parse multipart form (up to 2 MiB for the logo plus framing).
 	lang := resolveLang(r)
-	r.ParseMultipartForm(2 << 20)
+	const maxLogoBytes = int64(2 << 20)
+	r.Body = http.MaxBytesReader(w, r.Body, maxLogoBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxLogoBytes); err != nil {
+		http.Error(w, tr(lang, "Ошибка разбора формы")+": "+err.Error(), requestBodyErrorStatus(err))
+		return
+	}
 	newName := strings.TrimSpace(r.FormValue("app_name"))
 	newVersion := strings.TrimSpace(r.FormValue("app_version"))
 	newLang := strings.TrimSpace(r.FormValue("app_lang"))
@@ -250,15 +241,14 @@ func (h *handler) configuratorSaveApp(w http.ResponseWriter, r *http.Request) {
 	file, header, ferr := r.FormFile("app_logo_file")
 	if ferr == nil {
 		defer file.Close()
-		// Read file content
-		data, rerr := io.ReadAll(file)
+		data, rerr := io.ReadAll(io.LimitReader(file, maxLogoBytes+1))
 		if rerr != nil {
 			data := h.loadCfgData(r.Context(), b, "tree")
 			data.Error = tr(lang, "Ошибка чтения логотипа") + ": " + rerr.Error()
 			renderCfg(w, r, data)
 			return
 		}
-		if len(data) > 2<<20 {
+		if int64(len(data)) > maxLogoBytes {
 			data := h.loadCfgData(r.Context(), b, "tree")
 			data.Error = tr(lang, "Логотип слишком большой (максимум 2 МБ)")
 			renderCfg(w, r, data)

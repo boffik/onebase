@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/entityservice"
+	"github.com/ivantit66/onebase/internal/exchange"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -32,7 +33,10 @@ func (s *Server) refManagerFor(entity *metadata.Entity, ctx context.Context) int
 	ctxSrc := interpreter.NewStaticCtx(ctx)
 	switch entity.Kind {
 	case metadata.KindCatalog:
-		return interpreter.NewCatalogProxy(entity, s.store, ctxSrc).WithRowAccessChecker(s.dslRowAccessChecker())
+		return interpreter.NewCatalogProxy(entity, s.store, ctxSrc).
+			WithRowAccessChecker(s.dslRowAccessChecker()).
+			WithExchangeRegistrar(s.exchangeRegistrar()).
+			WithObjectFactory(s.catObjectFactory(ctxSrc))
 	case metadata.KindDocument:
 		return &docProxy{s: s, ctxSrc: ctxSrc, entity: entity}
 	}
@@ -194,6 +198,16 @@ func (p *docProxy) findByField(field, value string, raw any) any {
 	if r, ok := raw.(*interpreter.Ref); ok {
 		value = r.Name
 	}
+	if p.s.rowAccessRestricted(p.ctx(), p.entity, "read") {
+		ids, displays, err := p.visibleMatches(field, value)
+		if err != nil {
+			interpreter.RaiseUserError("Найти(" + p.entity.Name + "." + field + "): " + err.Error())
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		return &interpreter.Ref{UUID: ids[0], Name: displays[0], Type: p.entity.Name, Manager: p}
+	}
 	idStr, display, found, err := p.s.store.FindCatalogByField(p.ctx(), p.entity, field, value)
 	if err != nil {
 		interpreter.RaiseUserError("Найти(" + p.entity.Name + "." + field + "): " + err.Error())
@@ -218,6 +232,17 @@ func (p *docProxy) findByField(field, value string, raw any) any {
 // Ссылкой (только при ровно одном совпадении) и Количеством.
 func (p *docProxy) matchByField(field string, raw any) any {
 	value := interpreter.MatchValueString(raw)
+	if p.s.rowAccessRestricted(p.ctx(), p.entity, "read") {
+		ids, displays, err := p.visibleMatches(field, value)
+		if err != nil {
+			interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
+		}
+		var ref *interpreter.Ref
+		if len(ids) == 1 {
+			ref = &interpreter.Ref{UUID: ids[0], Name: displays[0], Type: p.entity.Name, Manager: p}
+		}
+		return interpreter.NewMatchResultStruct(ref, len(ids))
+	}
 	idStr, display, count, err := p.s.store.MatchCatalogByField(p.ctx(), p.entity, field, value)
 	if err != nil {
 		interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
@@ -235,10 +260,32 @@ func (p *docProxy) matchByField(field string, raw any) any {
 			interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): " + err.Error())
 		}
 		ref = &interpreter.Ref{UUID: idStr, Name: display, Type: p.entity.Name, Manager: p}
-	} else if count > 1 && p.s.rowAccessRestricted(p.ctx(), p.entity, "read") {
-		interpreter.RaiseUserError("ПроверитьСовпадениеПоРеквизиту(" + p.entity.Name + "." + field + "): row_access требует точной проверки найденных строк")
 	}
 	return interpreter.NewMatchResultStruct(ref, count)
+}
+
+func (p *docProxy) visibleMatches(field, value string) ([]string, []string, error) {
+	ids, displays, err := p.s.store.ListCatalogMatchesByField(p.ctx(), p.entity, field, value)
+	if err != nil {
+		return nil, nil, err
+	}
+	visibleIDs := make([]string, 0, len(ids))
+	visibleDisplays := make([]string, 0, len(displays))
+	for i, idStr := range ids {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("неверный идентификатор найденной записи")
+		}
+		if err := p.s.checkDSLRowAccess(p.ctx(), p.entity, "read", id, nil); err != nil {
+			if errors.Is(err, interpreter.ErrRowAccessDenied) {
+				continue
+			}
+			return nil, nil, err
+		}
+		visibleIDs = append(visibleIDs, idStr)
+		visibleDisplays = append(visibleDisplays, displays[i])
+	}
+	return visibleIDs, visibleDisplays, nil
 }
 
 // DeleteRef реализует interpreter.RefManager — удаление документа по UUID.
@@ -256,17 +303,33 @@ func (p *docProxy) DeleteRef(uuidStr string) error {
 	if err := p.s.checkDSLRowAccess(ctx, p.entity, "delete", id, nil); err != nil {
 		return err
 	}
-	if p.entity.Posting {
-		if err := p.s.clearMovements(ctx, p.entity.Name, id); err != nil {
-			return fmt.Errorf("очистка движений: %w", err)
-		}
+	var delBefore map[string]any
+	if p.entity.NotifyChanges {
+		delBefore, _ = p.s.store.GetByID(ctx, p.entity.Name, id, p.entity)
 	}
-	return p.s.store.Delete(ctx, p.entity.Name, id)
+	return p.s.store.WithTxIfNeeded(ctx, func(ctx context.Context) error {
+		if p.entity.Posting {
+			if err := p.s.clearMovements(ctx, p.entity.Name, id); err != nil {
+				return fmt.Errorf("очистка движений: %w", err)
+			}
+		}
+		if err := exchange.RegisterOnDelete(ctx, p.s.store, p.s.reg.ExchangePlans(), p.entity, id); err != nil {
+			return err
+		}
+		if err := p.s.store.Delete(ctx, p.entity.Name, id); err != nil {
+			return err
+		}
+		p.s.publishDocChange(ctx, p.entity, id, "удалён", delBefore)
+		return nil
+	})
 }
 
-// unpostRef отменяет проведение документа: чистит движения по всем регистрам и
-// снимает posted (аналог UI-хендлера unpostDocument). Использует живой ctx (как
-// DeleteRef) — участвует в открытой DSL-транзакции, если она есть.
+// unpostRef отменяет проведение документа через entityservice.Unpost — тем же
+// путём, что UI-кнопка «Отменить проведение» и REST unpost: чистит движения,
+// снимает posted и запускает ОбработкаУдаленияПроведения (OnUnpost) в одной
+// транзакции (ошибка хука откатывает и движения, и признак проведения). Раньше
+// DSL чистил движения и снимал posted напрямую, молча пропуская хук отката.
+// WithTxIfNeeded внутри Unpost переиспользует открытую DSL-транзакцию, если она есть.
 func (p *docProxy) unpostRef(uuidStr string) error {
 	id, err := uuid.Parse(uuidStr)
 	if err != nil {
@@ -276,12 +339,14 @@ func (p *docProxy) unpostRef(uuidStr string) error {
 	if err := p.s.checkDSLRowAccess(ctx, p.entity, "unpost", id, nil); err != nil {
 		return err
 	}
-	if p.entity.Posting {
-		if err := p.s.clearMovements(ctx, p.entity.Name, id); err != nil {
-			return fmt.Errorf("очистка движений: %w", err)
-		}
+	result, err := p.s.entitySvc.Unpost(ctx, p.entity, id)
+	if err != nil {
+		return err
 	}
-	return p.s.store.SetPosted(ctx, p.entity.Name, id, false)
+	if result.DSLError != "" {
+		return fmt.Errorf("%s", result.DSLError)
+	}
+	return nil
 }
 
 // markRef помечает/снимает пометку на удаление (с авто-отменой проведения при
@@ -314,12 +379,17 @@ func (p *docProxy) LoadObject(uuidStr string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	version, err := p.s.store.EntityVersion(p.ctx(), p.entity.Name, id)
+	if err != nil {
+		return nil, err
+	}
 	return &docWriter{
-		s:      p.s,
-		ctxSrc: p.ctxSrc,
-		entity: p.entity,
-		obj:    obj,
-		loaded: true,
+		s:               p.s,
+		ctxSrc:          p.ctxSrc,
+		entity:          p.entity,
+		obj:             obj,
+		loaded:          true,
+		expectedVersion: &version,
 	}, nil
 }
 
@@ -338,8 +408,9 @@ type docWriter struct {
 	obj    *runtime.Object
 	// loaded — объект получен из БД (Ссылка.ПолучитьОбъект), а не создан.
 	// saved — объект уже записан в этой сессии. Оба используются ЭтоНовый().
-	loaded bool
-	saved  bool
+	loaded          bool
+	saved           bool
+	expectedVersion *int64
 }
 
 func (w *docWriter) ctx() context.Context {
@@ -353,7 +424,7 @@ func (w *docWriter) ctx() context.Context {
 func (w *docWriter) Get(name string) any {
 	for _, tp := range w.entity.TableParts {
 		if strings.EqualFold(tp.Name, name) {
-			return &tpProxy{w: w, tpName: tp.Name}
+			return &tpProxy{obj: w.obj, tpName: tp.Name}
 		}
 	}
 	return w.obj.Get(name)
@@ -382,10 +453,7 @@ func (w *docWriter) CallMethod(method string, args []any) any {
 		if err := w.s.checkDSLRowAccess(w.ctx(), w.entity, "post", w.accessID(), w.obj.Fields); err != nil {
 			interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
 		}
-		if err := w.write(); err != nil {
-			interpreter.RaiseUserError("Провести/Записать(" + w.entity.Name + "): " + err.Error())
-		}
-		if err := w.post(); err != nil {
+		if err := w.conduct(); err != nil {
 			interpreter.RaiseUserError("Провести(" + w.entity.Name + "): " + err.Error())
 		}
 		return w.ref()
@@ -445,6 +513,11 @@ func (w *docWriter) read() error {
 	for _, tp := range w.entity.TableParts {
 		w.s.enrichTPRowsWithRefs(w.ctx(), tp, tpRows[tp.Name])
 	}
+	version, err := w.s.store.EntityVersion(w.ctx(), w.entity.Name, w.obj.ID)
+	if err != nil {
+		return err
+	}
+	w.expectedVersion = &version
 	w.loaded = true
 	return nil
 }
@@ -502,7 +575,7 @@ func (w *docWriter) fill(src any) error {
 // у документа есть строковый реквизит Номер и он ещё не задан. Повторяет
 // поведение веб-хендлера: документ, записанный из обработки, нумеруется
 // так же, как созданный через форму. Явно заданный Док.Номер сохраняется.
-func (w *docWriter) autoNumber() {
+func (w *docWriter) autoNumber(ctx context.Context) {
 	if w.entity.Kind != metadata.KindDocument {
 		return
 	}
@@ -510,8 +583,8 @@ func (w *docWriter) autoNumber() {
 		if !strings.EqualFold(f.Name, "Номер") || f.Type != metadata.FieldTypeString {
 			continue
 		}
-		if cur := w.obj.Get("Номер"); cur == nil || fmt.Sprint(cur) == "" {
-			w.obj.Set("Номер", w.s.generateNumber(w.ctx(), w.entity, w.obj.Fields))
+		if cur := w.obj.Get("Номер"); cur == nil || strings.TrimSpace(fmt.Sprint(cur)) == "" {
+			w.obj.Set("Номер", w.s.generateNumber(ctx, w.entity, w.obj.Fields))
 		}
 		return
 	}
@@ -525,7 +598,33 @@ func (w *docWriter) autoNumber() {
 // Использует живой ctx, поэтому при открытой DSL-транзакции запись
 // участвует в ней; иначе автокоммит.
 func (w *docWriter) write() error {
-	ctx := w.ctx()
+	return w.withLockScope(w.writeInContext)
+}
+
+// withLockScope — WithTxScope + LockCollector в контексте (если его ещё нет,
+// как при вызове из обработки): внутрипроцессные мьютексы, взятые хуком через
+// БлокировкаДанных без явного Разблокировать(), освобождаются после выхода из
+// транзакции, а не утекают навсегда. Зеркалит entityservice.Save
+// (service.go: lockCollector + defer ReleaseAll).
+func (w *docWriter) withLockScope(fn func(ctx context.Context) error) error {
+	base := w.ctx()
+	if runtime.LockCollectorFromContext(base) != nil {
+		return w.s.store.WithTxScope(base, fn)
+	}
+	lc := runtime.NewLockCollector()
+	defer lc.ReleaseAll()
+	return w.s.store.WithTxScope(base, func(ctx context.Context) error {
+		return fn(runtime.ContextWithLockCollector(ctx, lc))
+	})
+}
+
+func (w *docWriter) writeInContext(ctx context.Context) error {
+	// Pre-образ живого списка (план 87): для существующего документа читаем строку
+	// ДО записи, чтобы прежний владелец убрал её из списка при смене прав.
+	var changeBefore map[string]any
+	if w.entity.NotifyChanges && w.loaded {
+		changeBefore, _ = w.s.store.GetByID(ctx, w.entity.Name, w.obj.ID, w.entity)
+	}
 	if w.accessID() == uuid.Nil {
 		if err := w.s.autoFillRowAccessFields(ctx, w.entity, "write", w.obj.Fields); err != nil {
 			return err
@@ -534,24 +633,49 @@ func (w *docWriter) write() error {
 	if err := w.s.checkDSLRowAccess(ctx, w.entity, "write", w.accessID(), w.obj.Fields); err != nil {
 		return err
 	}
-	w.autoNumber()
+	w.autoNumber(ctx)
 	mc := runtime.NewMovementsCollector(w.entity.Name, w.obj.ID)
 	setPeriodFromFields(mc, w.entity, w.obj.Fields)
 	if errMsg, _ := w.s.runOnWriteCtx(ctx, w.obj, mc); errMsg != "" {
 		return fmt.Errorf("%s", errMsg)
 	}
-	if err := w.s.store.Upsert(ctx, w.entity.Name, w.obj.ID, w.obj.Fields, w.entity); err != nil {
-		return err
+	if w.expectedVersion == nil {
+		if err := w.s.store.Upsert(ctx, w.entity.Name, w.obj.ID, w.obj.Fields, w.entity); err != nil {
+			return err
+		}
+	} else {
+		if err := w.s.store.UpsertVersioned(ctx, w.entity.Name, w.obj.ID, w.obj.Fields, w.entity, w.expectedVersion); err != nil {
+			return err
+		}
 	}
 	if err := w.s.saveTablePartsDirect(ctx, w.entity, w.obj.ID, w.obj.TablePartRows); err != nil {
 		return err
 	}
-	w.saved = true
+	// Регистрация изменения для планов обмена (план 86): запись документа из DSL
+	// идёт мимо entityservice.Save. Провести() зовёт write() → регистрируется и оно.
+	if err := exchange.RegisterOnSave(ctx, w.s.store, w.s.reg.ExchangePlans(), w.entity, w.obj.ID, false); err != nil {
+		return err
+	}
 	// Для непроводимых документов движения, записанные в ПриЗаписи, фиксируем.
 	// У проводимых документов движения формирует проведение (post).
 	if !w.entity.Posting {
-		return w.s.saveMovements(ctx, w.entity.Name, w.obj.ID, mc)
+		if err := w.s.saveMovements(ctx, w.entity.Name, w.obj.ID, mc); err != nil {
+			return err
+		}
 	}
+	version, err := w.s.store.EntityVersion(ctx, w.entity.Name, w.obj.ID)
+	if err != nil {
+		return err
+	}
+	wasSaved, previousVersion := w.saved, w.expectedVersion
+	w.saved = true
+	w.expectedVersion = &version
+	storage.DeferUntilTxRollback(ctx, func() {
+		w.saved = wasSaved
+		w.expectedVersion = previousVersion
+	})
+	// Живой список (план 87): отложенная до commit публикация «данные.<сущность>».
+	w.s.publishDocChange(ctx, w.entity, w.obj.ID, "записан", changeBefore)
 	return nil
 }
 
@@ -562,10 +686,24 @@ func (w *docWriter) accessID() uuid.UUID {
 	return uuid.Nil
 }
 
-// post запускает OnPost, собирает движения и фиксирует проведение —
-// та же логика, что в postDocument (UI-проведение).
+// conduct performs the implicit write and posting as one atomic operation.
+// OnWrite, OnPost and all nested DSL writes share the same transaction/scope.
+func (w *docWriter) conduct() error {
+	return w.withLockScope(func(ctx context.Context) error {
+		if err := w.writeInContext(ctx); err != nil {
+			return err
+		}
+		return w.postInContext(ctx)
+	})
+}
+
 func (w *docWriter) post() error {
-	ctx := w.ctx()
+	return w.withLockScope(w.postInContext)
+}
+
+// postInContext запускает OnPost, собирает движения и фиксирует проведение —
+// та же логика, что в postDocument (UI-проведение).
+func (w *docWriter) postInContext(ctx context.Context) error {
 	if err := w.s.checkDSLRowAccess(ctx, w.entity, "post", w.obj.ID, w.obj.Fields); err != nil {
 		return err
 	}
@@ -587,10 +725,25 @@ func (w *docWriter) post() error {
 	if errMsg, _ := w.s.runOnPostCtx(ctx, w.obj, mc); errMsg != "" {
 		return fmt.Errorf("%s", errMsg)
 	}
+	// OnPost мог изменить реквизиты шапки (расчётные поля) — персистим их upsert'ом
+	// после хука, как это делает entityservice.Save при проведении. writeInContext
+	// уже создал ровно одну логическую версию этой операции, поэтому сохраняем
+	// hook-поля без второго инкремента _version.
+	if err := w.s.store.UpsertPreserveVersion(ctx, w.entity.Name, w.obj.ID, w.obj.Fields, w.entity); err != nil {
+		return err
+	}
 	if err := w.s.saveMovements(ctx, w.entity.Name, w.obj.ID, mc); err != nil {
 		return err
 	}
-	return w.s.store.SetPosted(ctx, w.entity.Name, w.obj.ID, true)
+	if err := w.s.store.SetPosted(ctx, w.entity.Name, w.obj.ID, true); err != nil {
+		return err
+	}
+	if err := exchange.RegisterOnSave(ctx, w.s.store, w.s.reg.ExchangePlans(), w.entity, w.obj.ID, false); err != nil {
+		return err
+	}
+	// Живой список (план 87): «проведён» после успешного проведения из DSL.
+	w.s.publishDocChange(ctx, w.entity, w.obj.ID, "проведён", nil)
+	return nil
 }
 
 // ensureSelfRef устанавливает псевдо-реквизит «Ссылка» самого документа, чтобы
@@ -632,8 +785,9 @@ func (w *docWriter) displayName() string {
 }
 
 // tpProxy — табличная часть документа (Док.Товары).
+// tpProxy — табличная часть записываемого объекта (документа или справочника).
 type tpProxy struct {
-	w      *docWriter
+	obj    *runtime.Object
 	tpName string
 }
 
@@ -644,19 +798,19 @@ func (t *tpProxy) Set(_ string, _ any) {}
 // загруженные строки ТЧ. Без этого ТЧ документа, полученного из БД
 // (Ссылка.ПолучитьОбъект / НайтиПоНомеру), нельзя было прочитать в DSL.
 func (t *tpProxy) IterateRows() []map[string]any {
-	return t.w.obj.TablePartRows[t.tpName]
+	return t.obj.TablePartRows[t.tpName]
 }
 
 func (t *tpProxy) CallMethod(method string, args []any) any {
 	switch strings.ToLower(method) {
 	case "добавить", "add":
 		row := map[string]any{}
-		t.w.obj.TablePartRows[t.tpName] = append(t.w.obj.TablePartRows[t.tpName], row)
+		t.obj.TablePartRows[t.tpName] = append(t.obj.TablePartRows[t.tpName], row)
 		return &interpreter.MapThis{M: row}
 	case "очистить", "clear":
-		t.w.obj.TablePartRows[t.tpName] = nil
+		t.obj.TablePartRows[t.tpName] = nil
 	case "количество", "count":
-		return float64(len(t.w.obj.TablePartRows[t.tpName]))
+		return float64(len(t.obj.TablePartRows[t.tpName]))
 	}
 	return nil
 }

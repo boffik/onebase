@@ -3,60 +3,105 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type txKey struct{}
 
+var txScopeSequence atomic.Uint64
+
+// IsNotFound reports the portable no-row condition for both storage drivers.
+func IsNotFound(err error) bool {
+	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows)
+}
+
 // HasTx reports whether ctx already carries an active storage transaction.
 func HasTx(ctx context.Context) bool {
 	return ctx.Value(txKey{}) != nil
 }
 
+// WithTxIfNeeded joins an existing storage transaction or starts a new one.
+// It is the safe entry point for write paths callable both from HTTP and from
+// DSL code that may already run inside an explicit transaction.
+func (db *DB) WithTxIfNeeded(ctx context.Context, fn func(context.Context) error) error {
+	if HasTx(ctx) {
+		return fn(ctx)
+	}
+	return db.WithTx(ctx, fn)
+}
+
+// WithTxScope makes fn atomic even when ctx already carries a transaction.
+// A top-level call owns a regular transaction; a nested/borrowed call owns a
+// savepoint, so returning an error cannot leave provisional rows or hook side
+// effects in the caller's transaction.
+func (db *DB) WithTxScope(ctx context.Context, fn func(context.Context) error) (err error) {
+	if !HasTx(ctx) {
+		return db.WithTx(ctx, fn)
+	}
+
+	savepoint := fmt.Sprintf("onebase_scope_%d", txScopeSequence.Add(1))
+	if _, err := db.Exec(ctx, "SAVEPOINT "+savepoint); err != nil {
+		return fmt.Errorf("create savepoint %s: %w", savepoint, err)
+	}
+	PushTxHookScope(ctx)
+
+	rollback := func() error {
+		_, rollbackErr := db.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint)
+		_, releaseErr := db.Exec(ctx, "RELEASE SAVEPOINT "+savepoint)
+		RollbackTxHookScope(ctx)
+		return errors.Join(rollbackErr, releaseErr)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = rollback()
+			panic(p)
+		}
+	}()
+
+	if err = fn(ctx); err != nil {
+		if rollbackErr := rollback(); rollbackErr != nil {
+			return errors.Join(err, fmt.Errorf("rollback savepoint %s: %w", savepoint, rollbackErr))
+		}
+		return err
+	}
+	if _, err = db.Exec(ctx, "RELEASE SAVEPOINT "+savepoint); err != nil {
+		RollbackTxHookScope(ctx)
+		return fmt.Errorf("release savepoint %s: %w", savepoint, err)
+	}
+	CommitTxHookScope(ctx)
+	return nil
+}
+
 // WithTx runs fn inside a transaction. On fn error the transaction is rolled
 // back; on success it is committed.
 func (db *DB) WithTx(ctx context.Context, fn func(context.Context) error) (err error) {
-	if db.sqlDB != nil {
-		tx, berr := db.sqlDB.BeginTx(ctx, nil)
-		if berr != nil {
-			return berr
-		}
-		// Roll back on panic so a panicking fn does not leave the connection
-		// stuck in an open transaction (fatal for SQLite with MaxOpenConns(1)).
-		defer func() {
-			if p := recover(); p != nil {
-				_ = tx.Rollback()
-				panic(p)
-			}
-		}()
-		txCtx := context.WithValue(ctx, txKey{}, tx)
-		if err = fn(txCtx); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		return tx.Commit()
-	}
-	tx, berr := db.pool.Begin(ctx)
+	tx, txCtx, berr := db.BeginTx(ctx)
 	if berr != nil {
 		return berr
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			_ = tx.Rollback(txCtx)
 			panic(p)
 		}
 	}()
-	txCtx := context.WithValue(ctx, txKey{}, tx)
 	if err = fn(txCtx); err != nil {
-		tx.Rollback(ctx)
+		_ = tx.Rollback(txCtx)
 		return err
 	}
-	return tx.Commit(ctx)
+	return tx.Commit(txCtx)
 }
 
 // ContextWithTx embeds a storage.Tx into ctx so that exec/q/Exec/Query use it.
 func ContextWithTx(ctx context.Context, tx Tx) context.Context {
+	if hooked, ok := tx.(*hookedTx); ok {
+		ctx = context.WithValue(ctx, txHooksKey{}, hooked.hooks)
+		tx = hooked.Tx
+	}
 	switch t := tx.(type) {
 	case *pgxTx:
 		return context.WithValue(ctx, txKey{}, t.tx)
@@ -69,20 +114,23 @@ func ContextWithTx(ctx context.Context, tx Tx) context.Context {
 // BeginTx starts a new transaction and returns it together with a context
 // that has the transaction embedded for use by Exec/Query/QueryRow.
 func (db *DB) BeginTx(ctx context.Context) (Tx, context.Context, error) {
+	hooks := newTxHooks()
 	if db.sqlDB != nil {
 		tx, err := db.sqlDB.BeginTx(ctx, nil)
 		if err != nil {
 			return nil, ctx, err
 		}
 		storTx := &sqlTx{tx: tx}
-		return storTx, context.WithValue(ctx, txKey{}, tx), nil
+		txCtx := context.WithValue(context.WithValue(ctx, txKey{}, tx), txHooksKey{}, hooks)
+		return &hookedTx{Tx: storTx, hooks: hooks}, txCtx, nil
 	}
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
 		return nil, ctx, err
 	}
 	storTx := &pgxTx{tx: tx}
-	return storTx, context.WithValue(ctx, txKey{}, tx), nil
+	txCtx := context.WithValue(context.WithValue(ctx, txKey{}, tx), txHooksKey{}, hooks)
+	return &hookedTx{Tx: storTx, hooks: hooks}, txCtx, nil
 }
 
 // Exec runs a non-query SQL statement, respecting any transaction in ctx.

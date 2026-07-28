@@ -107,11 +107,11 @@ const tplAdminUserCard = `{{define "admin-user-card"}}` + adminHead + `
   <input type="hidden" name="action" value="passwd">
   <div class="form-group">
     <label>Новый пароль</label>
-    <input type="password" name="new_password" autocomplete="new-password">
+    <input type="password" name="new_password" autocomplete="new-password" minlength="{{.MinPasswordLength}}" {{if .PasswordRequired}}required{{end}}>
   </div>
   <div class="form-group">
     <label>Повторите пароль</label>
-    <input type="password" name="confirm_password" autocomplete="new-password">
+    <input type="password" name="confirm_password" autocomplete="new-password" minlength="{{.MinPasswordLength}}" {{if .PasswordRequired}}required{{end}}>
   </div>
   <button class="btn" type="submit" style="background:#f59e0b;color:#fff">Изменить пароль</button>
 </form>
@@ -136,7 +136,7 @@ const tplAdminUserForm = `{{define "admin-user-form"}}` + adminHead + `
   </div>
   <div class="form-group">
     <label>Пароль</label>
-    <input type="password" name="password" required>
+    <input type="password" name="password" minlength="{{.MinPasswordLength}}" {{if .PasswordRequired}}required{{end}}>
   </div>
   <div class="form-group">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -227,6 +227,7 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{"User": u}
+	s.addPasswordPolicyData(data)
 
 	if r.Method == http.MethodPost {
 		r.ParseForm()
@@ -250,8 +251,6 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 		case "passwd":
 			newPwd := r.FormValue("new_password")
 			confirm := r.FormValue("confirm_password")
-			// Пустой пароль допустим — для kiosk/тестового режима.
-			// bcrypt и Authenticate с "" работают корректно.
 			if newPwd != confirm {
 				data["Error"] = s.tr(lang, "Пароли не совпадают")
 			} else if err := s.authRepo.UpdatePassword(r.Context(), userID, newPwd); err != nil {
@@ -267,23 +266,6 @@ func (s *Server) adminUserCard(w http.ResponseWriter, r *http.Request) {
 	adminTmpl.ExecuteTemplate(w, "admin-user-card", data)
 }
 
-func (s *Server) adminUserFormData(r *http.Request, errMsg, login, fullName string, adminChecked bool) map[string]any {
-	firstUser := false
-	if s.authRepo != nil {
-		if has, err := s.authRepo.HasUsers(r.Context()); err == nil && !has {
-			firstUser = true
-			adminChecked = true // первый пользователь — только админ
-		}
-	}
-	return map[string]any{
-		"Error":        errMsg,
-		"FirstUser":    firstUser,
-		"AdminChecked": adminChecked,
-		"Login":        login,
-		"FullName":     fullName,
-	}
-}
-
 func (s *Server) adminUserNew(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
 		s.renderForbidden(w, r)
@@ -291,6 +273,25 @@ func (s *Server) adminUserNew(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	adminTmpl.ExecuteTemplate(w, "admin-user-form", s.adminUserFormData(r, "", "", "", false))
+}
+
+func (s *Server) adminUserFormData(r *http.Request, errMsg, login, fullName string, adminChecked bool) map[string]any {
+	firstUser := false
+	if s.authRepo != nil {
+		if hasUsers, err := s.authRepo.HasUsers(r.Context()); err == nil && !hasUsers {
+			firstUser = true
+			adminChecked = true
+		}
+	}
+	data := map[string]any{
+		"Error":        errMsg,
+		"FirstUser":    firstUser,
+		"AdminChecked": adminChecked,
+		"Login":        login,
+		"FullName":     fullName,
+	}
+	s.addPasswordPolicyData(data)
+	return data
 }
 
 func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
@@ -308,16 +309,18 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 	showInList := r.FormValue("show_in_list") == "1"
 	aiData := r.FormValue("ai_data_access") == "1"
 
-	if login == "" || password == "" {
+	if login == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		adminTmpl.ExecuteTemplate(w, "admin-user-form", s.adminUserFormData(r, s.tr(lang, "Логин и пароль обязательны"), login, fullName, isAdmin))
+		data := s.adminUserFormData(r, s.tr(lang, "Логин обязателен"), login, fullName, isAdmin)
+		adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
 		return
 	}
 
-	u, err := s.authRepo.Create(r.Context(), login, password, fullName, isAdmin)
+	u, err := s.authRepo.CreateManaged(r.Context(), login, password, fullName, isAdmin)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		adminTmpl.ExecuteTemplate(w, "admin-user-form", s.adminUserFormData(r, s.errText(r, err), login, fullName, isAdmin))
+		data := s.adminUserFormData(r, s.errText(r, err), login, fullName, isAdmin)
+		adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
 		return
 	}
 	if denyPasswd || showInList || aiData {
@@ -325,7 +328,8 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		// не глотаем: иначе админ уверен, что выставил флаг, а он не применился.
 		if err := s.authRepo.Update(r.Context(), u.ID, fullName, isAdmin, denyPasswd, showInList, aiData); err != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			adminTmpl.ExecuteTemplate(w, "admin-user-form", s.adminUserFormData(r, s.errText(r, err), login, fullName, isAdmin))
+			data := s.adminUserFormData(r, s.errText(r, err), login, fullName, isAdmin)
+			adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
 			return
 		}
 	}
@@ -370,12 +374,11 @@ func (s *Server) adminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		"BackURL":   "/ui/admin/users",
 		"NeedOld":   false,
 	}
+	s.addPasswordPolicyData(data)
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		newPwd := r.FormValue("new_password")
 		confirm := r.FormValue("confirm_password")
-		// Пустой пароль допустим (kiosk/тестовый режим); проверяем
-		// только совпадение с подтверждением.
 		if newPwd != confirm {
 			data["Error"] = s.tr(lang, "Пароли не совпадают")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -432,6 +435,7 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 		"SelfService": true,
 		"OthersOut":   r.URL.Query().Get("others_out") == "1",
 	}
+	s.addPasswordPolicyData(data)
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		oldPwd := r.FormValue("old_password")
@@ -444,7 +448,6 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 			adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 			return
 		}
-		// Пустой пароль допустим, поэтому валидируем только совпадение.
 		if newPwd != confirm {
 			data["Error"] = s.tr(lang, "Пароли не совпадают")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -464,13 +467,25 @@ func (s *Server) selfPasswd(w http.ResponseWriter, r *http.Request) {
 	adminTmpl.ExecuteTemplate(w, "admin-passwd", data)
 }
 
+func (s *Server) addPasswordPolicyData(data map[string]any) {
+	policy := auth.PasswordPolicy{MinLength: auth.DefaultMinPasswordLength}
+	if s.authRepo != nil {
+		policy = s.authRepo.PasswordPolicy()
+	}
+	data["MinPasswordLength"] = policy.MinLength
+	data["PasswordRequired"] = !policy.AllowEmpty
+}
+
 func (s *Server) adminUserDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
 		s.renderForbidden(w, r)
 		return
 	}
 	id := chi.URLParam(r, "id")
-	s.authRepo.Delete(r.Context(), id)
+	if err := s.authRepo.Delete(r.Context(), id); err != nil {
+		http.Error(w, s.errText(r, err), http.StatusConflict)
+		return
+	}
 	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
 }
 
@@ -795,6 +810,7 @@ func (s *Server) adminUserRolesUpdate(w http.ResponseWriter, r *http.Request) {
 			s.authRepo.UnassignRole(r.Context(), userID, role.ID)
 		}
 	}
+	s.InvalidateWidgetCache()
 	http.Redirect(w, r, "/ui/admin/users", http.StatusFound)
 }
 
@@ -907,18 +923,23 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// isAdmin returns true if the current request has an admin user in context,
-// or if no auth is configured (open access).
+// isAdmin returns true for an authenticated administrator or for the explicit
+// first-run mode where auth middleware confirmed that the reachable database
+// contains no users. Database errors must never turn into administrator access.
 func (s *Server) isAdmin(r *http.Request) bool {
 	if s.authRepo == nil {
 		return true
 	}
-	hasUsers, err := s.authRepo.HasUsers(r.Context())
-	if err != nil || !hasUsers {
-		return true // no auth configured
+	if u := auth.UserFromContext(r.Context()); u != nil {
+		return u.IsAdmin
 	}
-	u := auth.UserFromContext(r.Context())
-	return u != nil && u.IsAdmin
+	if auth.OpenAccessFromContext(r.Context()) {
+		return true
+	}
+	// Direct handler tests and a few internal call sites do not pass through the
+	// middleware. Preserve bootstrap behavior only after a successful query.
+	hasUsers, err := s.authRepo.HasUsers(r.Context())
+	return err == nil && !hasUsers
 }
 
 const tplAdminPasswd = `{{define "admin-passwd"}}` + adminHead + `
@@ -934,16 +955,16 @@ const tplAdminPasswd = `{{define "admin-passwd"}}` + adminHead + `
   {{if .NeedOld}}
   <div class="form-group">
     <label>Текущий пароль</label>
-    <input type="password" name="old_password" required autofocus>
+    <input type="password" name="old_password" {{if .PasswordRequired}}required{{end}} autofocus>
   </div>
   {{end}}
   <div class="form-group">
     <label>Новый пароль</label>
-    <input type="password" name="new_password" required {{if not .NeedOld}}autofocus{{end}} minlength="4">
+    <input type="password" name="new_password" {{if .PasswordRequired}}required{{end}} {{if not .NeedOld}}autofocus{{end}} minlength="{{.MinPasswordLength}}">
   </div>
   <div class="form-group">
     <label>Повторите новый пароль</label>
-    <input type="password" name="confirm_password" required minlength="4">
+    <input type="password" name="confirm_password" {{if .PasswordRequired}}required{{end}} minlength="{{.MinPasswordLength}}">
   </div>
   <div style="display:flex;gap:12px;margin-top:8px">
     <button class="btn btn-primary" type="submit">Сохранить</button>

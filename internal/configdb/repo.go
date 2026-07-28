@@ -35,38 +35,40 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 }
 
 func (r *Repo) ImportFromDir(ctx context.Context, dir string) error {
-	d := r.db.Dialect()
-	if _, err := r.db.Exec(ctx, `DELETE FROM _onebase_config`); err != nil {
-		return fmt.Errorf("configdb: clear: %w", err)
-	}
-
-	return filepath.WalkDir(dir, func(path string, de fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if de.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		rel = strings.ReplaceAll(rel, `\`, `/`)
-		if err := ValidatePath(rel); err != nil {
-			return fmt.Errorf("configdb: unsafe import path %q: %w", rel, err)
+	return r.db.WithTxIfNeeded(ctx, func(txCtx context.Context) error {
+		d := r.db.Dialect()
+		if _, err := r.db.Exec(txCtx, `DELETE FROM _onebase_config`); err != nil {
+			return fmt.Errorf("configdb: clear: %w", err)
 		}
 
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("configdb: read %s: %w", rel, err)
-		}
+		return filepath.WalkDir(dir, func(path string, de fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if de.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			rel = strings.ReplaceAll(rel, `\`, `/`)
+			if err := ValidatePath(rel); err != nil {
+				return fmt.Errorf("configdb: unsafe import path %q: %w", rel, err)
+			}
 
-		_, err = r.db.Exec(ctx, fmt.Sprintf(`
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("configdb: read %s: %w", rel, err)
+			}
+
+			_, err = r.db.Exec(txCtx, fmt.Sprintf(`
 			INSERT INTO _onebase_config (path, content, updated_at)
 			VALUES (%s, %s, %s)
 			ON CONFLICT (path) DO UPDATE SET content = EXCLUDED.content, updated_at = %s
 		`, d.Placeholder(1), d.Placeholder(2), d.Now(), d.Now()), rel, content)
-		return err
+			return err
+		})
 	})
 }
 
@@ -306,10 +308,15 @@ func applyFilesMessage(saves []ConfigFile, deletes []string) string {
 
 // ListByPrefix возвращает все файлы конфигурации, чьи path начинаются
 // с указанного префикса. Префикс может быть пустым — тогда возвращается
-// всё содержимое.
+// всё содержимое. Безопасный каталог с завершающим "/" поддерживается как
+// точная граница префикса, например "forms/" не захватывает "forms_backup/".
 func (r *Repo) ListByPrefix(ctx context.Context, prefix string) ([]ConfigFile, error) {
 	if prefix != "" {
-		if err := ValidatePath(prefix); err != nil {
+		// A directory boundary is a valid and useful prefix: "forms/" must
+		// not also match "forms_backup/...". Validate the directory itself,
+		// but keep the trailing slash in the SQL LIKE pattern.
+		safePrefix := strings.TrimSuffix(prefix, "/")
+		if err := ValidatePath(safePrefix); err != nil {
 			return nil, fmt.Errorf("configdb: unsafe prefix %q: %w", prefix, err)
 		}
 	}

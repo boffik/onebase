@@ -26,10 +26,27 @@ if (window.__obEmbedded) {
     } catch (_) {}
     return true;
   };
+  window.obCloseInShell = function () {
+    var shell = null;
+    try {
+      if (window.parent && window.parent.obOpenTab) shell = window.parent;
+    } catch (_) {}
+    if (!shell) return false;
+    try {
+      shell.postMessage({ source: 'obCloseTab' }, window.location.origin);
+    } catch (_) {
+      return false;
+    }
+    return true;
+  };
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest('a[href]') : null;
     if (!a || a.target === '_blank') return;
+    if (a.hasAttribute('data-ob-close-tab') && window.obCloseInShell()) {
+      e.preventDefault();
+      return;
+    }
     var href = a.getAttribute('href') || '';
     var title = (a.getAttribute('title') || a.textContent || '').replace(/\s+/g, ' ').trim() || 'Форма';
     if (!window.obOpenInShell(href, title)) return;
@@ -967,9 +984,86 @@ obReady(function () {
   obInitFeed();
 });
 
+// Стили плавающих виджетов — ИИ-помощника (план 51, F3) и панели сообщений
+// («Окно сообщений» как в 1С). Разметку обоих строит сам ui.js, поэтому CSS
+// живёт здесь же: страницы с собственным <head> без общего стиля приложения
+// (админские «Система» → Пользователи/Обмен/…) иначе показывали голую
+// разметку виджетов внизу страницы.
+(function () {
+  if (document.getElementById('ob-widget-style')) return;
+  var st = document.createElement('style');
+  st.id = 'ob-widget-style';
+  st.textContent =
+    '#ob-ai-btn{position:fixed;right:18px;bottom:44px;z-index:320;width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 14px rgba(37,99,235,.4)}' +
+    '#ob-ai-btn:hover{background:#1d4ed8}' +
+    '#ob-ai-panel{position:fixed;right:18px;bottom:44px;z-index:321;width:440px;max-width:calc(100vw - 24px);height:540px;max-height:calc(100vh - 80px);background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;font-family:system-ui,sans-serif}' +
+    '#ob-ai-panel.open{display:flex}' +
+    '#ob-ai-head{background:#2563eb;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}' +
+    '#ob-ai-head .sp{flex:1}' +
+    '#ob-ai-head button{background:none;border:none;color:#fff;cursor:pointer;font-size:18px;line-height:1}' +
+    '#ob-ai-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:#f8fafc}' +
+    '#ob-ai-log .m{max-width:85%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word}' +
+    '#ob-ai-log .m.u{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:3px}' +
+    '#ob-ai-log .m.a{align-self:flex-start;background:#fff;border:1px solid #e2e8f0;color:#1e293b;border-bottom-left-radius:3px;white-space:normal;max-width:92%;overflow-x:auto}' +
+    '#ob-ai-log .m.a p{margin:0 0 6px}' +
+    '#ob-ai-log .m.a p:last-child{margin-bottom:0}' +
+    '#ob-ai-log .m.a h1,#ob-ai-log .m.a h2,#ob-ai-log .m.a h3,#ob-ai-log .m.a h4{font-size:13px;font-weight:700;margin:8px 0 4px}' +
+    '#ob-ai-log .m.a ul,#ob-ai-log .m.a ol{margin:4px 0;padding-left:20px}' +
+    '#ob-ai-log .m.a li{margin:2px 0}' +
+    '#ob-ai-log .m.a a{color:#2563eb;text-decoration:underline}' +
+    '#ob-ai-log .m.a code{background:#f1f5f9;border-radius:3px;padding:1px 4px;font-family:ui-monospace,Consolas,monospace;font-size:12px}' +
+    '#ob-ai-log .m.a pre{background:#f1f5f9;border-radius:6px;padding:8px;overflow-x:auto;margin:6px 0}' +
+    '#ob-ai-log .m.a pre code{background:none;padding:0}' +
+    // Таблица живёт в собственной скролл-обёртке .tw и держит естественную
+    // ширину; ячейкам возвращаем word-break:normal — иначе наследованный от .m
+    // break-word даёт min-width колонки в один символ и текст жмётся посимвольно.
+    '#ob-ai-log .m.a .tw{overflow-x:auto;margin:6px 0}' +
+    '#ob-ai-log .m.a table{border-collapse:collapse;margin:0;font-size:12px;width:max-content}' +
+    '#ob-ai-log .m.a th,#ob-ai-log .m.a td{border:1px solid #e2e8f0;padding:4px 7px;text-align:left;vertical-align:top;word-break:normal;max-width:240px}' +
+    '#ob-ai-log .m.a th{background:#f1f5f9;font-weight:600;white-space:nowrap}' +
+    '#ob-ai-log .m.a tbody tr:nth-child(even){background:#f8fafc}' +
+    '#ob-ai-log .m.err{align-self:stretch;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c}' +
+    '#ob-ai-log .hint{color:#94a3b8;font-size:12px;text-align:center;margin:auto 0}' +
+    '#ob-ai-foot{border-top:1px solid #e2e8f0;padding:8px;display:flex;gap:6px;background:#fff}' +
+    '#ob-ai-input{flex:1;resize:none;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;max-height:90px}' +
+    '#ob-ai-send{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:0 14px;cursor:pointer;font-size:14px}' +
+    '#ob-ai-send:disabled{opacity:.5;cursor:default}' +
+    '#ob-ai-rs{position:absolute;left:0;top:0;bottom:0;width:6px;cursor:ew-resize;touch-action:none;z-index:2}' +
+    '#ob-ai-rs:hover,#ob-ai-rs.drag{background:rgba(37,99,235,.25)}' +
+    '#ob-ai-log .m.act{align-self:stretch;max-width:100%;background:#eef2ff;border:1px solid #c7d2fe;color:#1e293b;white-space:normal}' +
+    '#ob-ai-log .m.act .lbl{white-space:pre-wrap;margin-bottom:8px}' +
+    '#ob-ai-log .m.act .btns{display:flex;gap:8px}' +
+    '#ob-ai-log .m.act .btns button{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}' +
+    '#ob-ai-log .m.act .btns button.sec{background:#e2e8f0;color:#334155}' +
+    '#ob-ai-log .m.act .btns button:disabled{opacity:.6;cursor:default}' +
+    '#ob-ai-log .m.act .res{font-size:13px}' +
+    '#ob-ai-log .m.act .res a{color:#2563eb;text-decoration:underline;cursor:pointer}' +
+    '#ob-msg-bar{position:fixed;left:0;right:0;bottom:0;z-index:300;background:#fff;border-top:1px solid #cbd5e1;box-shadow:0 -2px 8px rgba(0,0,0,.08);font-family:system-ui,sans-serif;font-size:13px;color:#1e293b;transform:translateY(calc(100% - 30px));transition:transform .18s ease}' +
+    '#ob-msg-bar.open{transform:translateY(0)}' +
+    '#ob-msg-bar.hidden{display:none}' +
+    '#ob-msg-head{height:30px;display:flex;align-items:center;padding:0 10px;cursor:pointer;background:#f1f5f9;user-select:none;gap:10px}' +
+    '#ob-msg-head .ttl{font-weight:600;color:#334155;flex:1;display:flex;align-items:center;gap:8px}' +
+    '#ob-msg-head .cnt{background:#ef4444;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;min-width:18px;text-align:center;display:none}' +
+    '#ob-msg-head .cnt.show{display:inline-block}' +
+    '#ob-msg-head .arr{color:#64748b;font-size:11px;width:14px;text-align:center}' +
+    '#ob-msg-bar.open #ob-msg-head .arr{transform:rotate(180deg)}' +
+    '#ob-msg-head button{background:none;border:none;color:#64748b;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px}' +
+    '#ob-msg-head button:hover{background:#e2e8f0;color:#1e293b}' +
+    '#ob-msg-list{max-height:200px;overflow-y:auto;padding:6px 0;background:#fff}' +
+    '#ob-msg-list .it{padding:5px 14px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word}' +
+    '#ob-msg-list .it:last-child{border-bottom:none}' +
+    '#ob-msg-list .it .t{color:#94a3b8;flex-shrink:0;font-size:11px;padding-top:1px}' +
+    '#ob-msg-list .empty{padding:10px 14px;color:#94a3b8;font-style:italic}';
+  (document.head || document.documentElement).appendChild(st);
+})();
+
 (function () {
   if (window.__obAiInit) return;
   window.__obAiInit = true;
+  // Во вкладочной оболочке ui.js загружается и в верхнем окне, и внутри
+  // каждой вкладки-iframe. Помощник принадлежит оболочке: если строить его во
+  // фрейме, поверх кнопки оболочки появляется второй робот.
+  if (window.__obEmbedded) return;
   function init() {
     if (document.getElementById('ob-ai-btn')) return;
     fetch('/ui/ai/enabled').then(function (r) { return r.json(); }).then(function (d) {
@@ -983,7 +1077,8 @@ obReady(function () {
     btn.textContent = '🤖';
     var panel = document.createElement('div');
     panel.id = 'ob-ai-panel';
-    panel.innerHTML = '<div id="ob-ai-head"><span>🤖 ИИ-помощник</span><span class="sp"></span><button type="button" id="ob-ai-close" title="Закрыть">×</button></div>' +
+    panel.innerHTML = '<div id="ob-ai-rs" title="Потяните, чтобы изменить ширину; двойной клик — сброс"></div>' +
+      '<div id="ob-ai-head"><span>🤖 ИИ-помощник</span><span class="sp"></span><button type="button" id="ob-ai-close" title="Закрыть">×</button></div>' +
       '<div id="ob-ai-log"><div class="hint">Спросите про данные, отчёт или как что-то сделать.</div></div>' +
       '<div id="ob-ai-foot"><textarea id="ob-ai-input" rows="1" placeholder="Ваш вопрос…"></textarea><button id="ob-ai-send" type="button" title="Отправить">▶</button></div>';
     document.body.appendChild(btn);
@@ -993,6 +1088,43 @@ obReady(function () {
     var send = document.getElementById('ob-ai-send');
     var history = [];
     var busy = false;
+    // Служебные заметки для модели (подтверждение/отмена действий) — уходят
+    // префиксом следующего сообщения пользователя, в журнале чата не видны.
+    var pendingNote = '';
+    // Изменяемая ширина панели: ручка на левой кромке (панель прижата к правому
+    // краю, тянуть естественно влево). Ширина живёт в localStorage.
+    (function () {
+      var rs = document.getElementById('ob-ai-rs');
+      var saved = parseInt(localStorage.getItem('obAiW'), 10);
+      if (saved) panel.style.width = saved + 'px';
+      function clampW(w) {
+        var max = Math.min(Math.round(window.innerWidth * 0.9), window.innerWidth - 24);
+        return Math.max(320, Math.min(max, w));
+      }
+      rs.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        rs.setPointerCapture(e.pointerId);
+        rs.classList.add('drag');
+        function move(ev) {
+          panel.style.width = clampW(window.innerWidth - 18 - ev.clientX) + 'px';
+        }
+        function up() {
+          rs.removeEventListener('pointermove', move);
+          rs.removeEventListener('pointerup', up);
+          rs.removeEventListener('pointercancel', up);
+          rs.classList.remove('drag');
+          var w = parseInt(panel.style.width, 10);
+          if (w) localStorage.setItem('obAiW', String(w));
+        }
+        rs.addEventListener('pointermove', move);
+        rs.addEventListener('pointerup', up);
+        rs.addEventListener('pointercancel', up);
+      });
+      rs.addEventListener('dblclick', function () {
+        panel.style.width = '';
+        localStorage.removeItem('obAiW');
+      });
+    })();
     function open() {
       panel.classList.add('open');
       btn.style.display = 'none';
@@ -1004,22 +1136,196 @@ obReady(function () {
     }
     btn.addEventListener('click', open);
     document.getElementById('ob-ai-close').addEventListener('click', close);
+    // mdToHtml — безопасный мини-рендер Markdown для ответов ассистента. Сначала
+    // экранируем HTML (ответ модели недоверенный → любой <тег> становится
+    // текстом), затем разворачиваем ограниченный набор разметки: таблицы GFM,
+    // заголовки, списки, код, ссылки (только http/https/относительные),
+    // жирный/курсив. Сырой HTML из ответа наружу не попадает.
+    function mdToHtml(src) {
+      src = String(src == null ? '' : src);
+      function esc(s) {
+        return s.replace(/[&<>"]/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+      }
+      function inline(s) {
+        var codes = [];
+        s = s.replace(/`([^`]+)`/g, function (_, c) { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
+        s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_, t, u) {
+          return /^(https?:\/\/|\/)/i.test(u) ? '<a href="' + u + '" target="_blank" rel="noopener">' + t + '</a>' : t;
+        });
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+        s = s.replace(/\u0000(\d+)\u0000/g, function (_, i) { return '<code>' + codes[+i] + '</code>'; });
+        return s;
+      }
+      function cells(l) { return l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); }
+      function isSep(l) { return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(l || ''); }
+      function tcell(tag, align, html) { return '<' + tag + (align ? ' style="text-align:' + align + '"' : '') + '>' + html + '</' + tag + '>'; }
+      var lines = esc(src).replace(/\r\n?/g, '\n').split('\n');
+      var out = [], i = 0;
+      while (i < lines.length) {
+        var line = lines[i];
+        if (/^```/.test(line)) {
+          var buf = []; i++;
+          while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+          i++;
+          out.push('<pre><code>' + buf.join('\n') + '</code></pre>');
+          continue;
+        }
+        if (line.indexOf('|') >= 0 && isSep(lines[i + 1])) {
+          var head = cells(line);
+          // Выравнивание из GFM-разделителя: `---:` → вправо, `:---:` → по центру.
+          var aligns = cells(lines[i + 1]).map(function (c) {
+            var a = /^(:)?-+(:)?$/.exec(c);
+            return a && a[2] ? (a[1] ? 'center' : 'right') : '';
+          });
+          i += 2; var body = '';
+          while (i < lines.length && lines[i].indexOf('|') >= 0 && lines[i].trim() !== '') {
+            var r = cells(lines[i]), tds = '';
+            for (var k = 0; k < head.length; k++) tds += tcell('td', aligns[k], inline(r[k] || ''));
+            body += '<tr>' + tds + '</tr>'; i++;
+          }
+          var ths = ''; for (var h = 0; h < head.length; h++) ths += tcell('th', aligns[h], inline(head[h]));
+          out.push('<div class="tw"><table><thead><tr>' + ths + '</tr></thead><tbody>' + body + '</tbody></table></div>');
+          continue;
+        }
+        var hm = /^(#{1,6})\s+(.*)$/.exec(line);
+        if (hm) { out.push('<h' + hm[1].length + '>' + inline(hm[2]) + '</h' + hm[1].length + '>'); i++; continue; }
+        if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
+          var ol = /^\s*\d+\.\s+/.test(line), lis = '';
+          while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i])) {
+            lis += '<li>' + inline(lines[i].replace(/^\s*([-*+]|\d+\.)\s+/, '')) + '</li>'; i++;
+          }
+          out.push(ol ? '<ol>' + lis + '</ol>' : '<ul>' + lis + '</ul>');
+          continue;
+        }
+        if (line.trim() === '') { i++; continue; }
+        var para = [];
+        while (i < lines.length && lines[i].trim() !== '' && !/^(```|#{1,6}\s|\s*([-*+]|\d+\.)\s)/.test(lines[i]) && !(lines[i].indexOf('|') >= 0 && isSep(lines[i + 1]))) {
+          para.push(lines[i]); i++;
+        }
+        out.push('<p>' + inline(para.join('<br>')) + '</p>');
+      }
+      return out.join('');
+    }
     function addMsg(role, text) {
       var h = log.querySelector('.hint');
       if (h) h.remove();
       var d = document.createElement('div');
       d.className = 'm ' + (role === 'user' ? 'u' : role === 'error' ? 'err' : 'a');
-      d.textContent = text;
+      if (role === 'assistant') d.innerHTML = mdToHtml(text);
+      else d.textContent = text;
       log.appendChild(d);
       log.scrollTop = log.scrollHeight;
       return d;
+    }
+    // Открытие формы из чата: во вкладочной оболочке — новой вкладкой, на
+    // отдельной странице — новым окном (паттерн openRefCurrent).
+    function aiOpenURL(url, title) {
+      try {
+        if (window.__obEmbedded && window.parent && window.parent.obOpenTab) {
+          window.parent.postMessage({ source: 'obOpenTab', url: url, title: title || 'Форма' }, '*');
+          return;
+        }
+      } catch (e) {}
+      window.open(url, '_blank');
+    }
+    // URL собирается на клиенте из провалидированных сервером частей: «вид» —
+    // белый список, сущность/id — через encodeURIComponent. Сырые URL от
+    // сервера/модели не принимаются (нет open redirect / javascript:).
+    function aiActionURL(a) {
+      var v = a['вид'], ent = encodeURIComponent(a['сущность'] || '');
+      if (!ent) return '';
+      if (a.id && (v === 'document' || v === 'catalog')) return '/ui/_ref-open/' + ent + '/' + encodeURIComponent(a.id);
+      if (v === 'document' || v === 'catalog' || v === 'report' || v === 'processor') return '/ui/' + v + '/' + ent;
+      return '';
+    }
+    // Карточка отложенного действия (план 51): создание исполняется только по
+    // кнопке «Создать» (POST /ui/ai/action), «открыть» — просто кнопка перехода.
+    // Всё содержимое вставляется через textContent — HTML из данных не рендерится.
+    function addAction(a) {
+      if (!a || typeof a !== 'object') return;
+      var isCreate = a['тип'] === 'создать';
+      var openURL = a['тип'] === 'открыть' ? aiActionURL(a) : '';
+      if (!isCreate && !openURL) return;
+      var card = document.createElement('div');
+      card.className = 'm act';
+      var lbl = document.createElement('div');
+      lbl.className = 'lbl';
+      lbl.textContent = a['подпись'] || '';
+      card.appendChild(lbl);
+      var btns = document.createElement('div');
+      btns.className = 'btns';
+      function finish(text, link) {
+        btns.remove();
+        var res = document.createElement('div');
+        res.className = 'res';
+        res.textContent = text;
+        if (link) res.appendChild(link);
+        card.appendChild(res);
+        log.scrollTop = log.scrollHeight;
+      }
+      if (isCreate) {
+        var ok = document.createElement('button');
+        ok.type = 'button';
+        ok.textContent = 'Создать';
+        var no = document.createElement('button');
+        no.type = 'button';
+        no.className = 'sec';
+        no.textContent = 'Отмена';
+        ok.addEventListener('click', function () {
+          ok.disabled = no.disabled = true;
+          ok.textContent = 'Создаю…';
+          fetch('/ui/ai/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d && d.ok) {
+                var link = document.createElement('a');
+                link.textContent = d['подпись'] || 'открыть';
+                link.href = d.url || '#';
+                link.addEventListener('click', function (ev) {
+                  ev.preventDefault();
+                  aiOpenURL(d.url, d['подпись']);
+                });
+                finish('✓ Создано: ', link);
+                pendingNote += '[Служебно: пользователь подтвердил действие, создан объект «' + (d['подпись'] || '') + '», id ' + (d.id || '') + '.]\n';
+              } else {
+                finish('✗ ' + ((d && d.error) || 'Ошибка'));
+                pendingNote += '[Служебно: действие не выполнено: ' + ((d && d.error) || 'ошибка') + ']\n';
+              }
+            })
+            .catch(function () {
+              ok.disabled = no.disabled = false;
+              ok.textContent = 'Создать';
+            });
+        });
+        no.addEventListener('click', function () {
+          finish('Отменено');
+          pendingNote += '[Служебно: пользователь отклонил предложенное действие «' + (a['подпись'] || '').split('\n')[0] + '».]\n';
+        });
+        btns.appendChild(ok);
+        btns.appendChild(no);
+      } else {
+        var go = document.createElement('button');
+        go.type = 'button';
+        go.textContent = 'Открыть';
+        go.addEventListener('click', function () { aiOpenURL(openURL, a['сущность']); });
+        btns.appendChild(go);
+      }
+      card.appendChild(btns);
+      log.appendChild(card);
+      log.scrollTop = log.scrollHeight;
     }
     function doSend() {
       var t = input.value.trim();
       if (!t || busy) return;
       input.value = '';
       addMsg('user', t);
-      history.push({ role: 'user', content: t });
+      // Служебные заметки (результаты подтверждений) — префиксом в историю,
+      // чтобы модель знала итог; в журнале чата показан только текст пользователя.
+      history.push({ role: 'user', content: (pendingNote ? pendingNote + '\n' : '') + t });
+      pendingNote = '';
       busy = true;
       send.disabled = true;
       var pend = addMsg('assistant', '…');
@@ -1027,8 +1333,11 @@ obReady(function () {
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d && d.ok) {
-            pend.textContent = d.text;
+            pend.innerHTML = mdToHtml(d.text);
             history.push({ role: 'assistant', content: d.text });
+            if (d.actions && d.actions.length) {
+              for (var i = 0; i < d.actions.length; i++) addAction(d.actions[i]);
+            }
           } else {
             history.pop();
             pend.className = 'm err';
@@ -1148,9 +1457,23 @@ obReady(function () {
         render(d.messages || []);
       }).catch(function () {});
     }
+    window.obReloadMessages = load;
     load();
     setInterval(load, 3000);
     document.addEventListener('submit', function () { setTimeout(load, 400); }, true);
+  }
+  // Во вкладочной оболочке (issue #322/#323) панель сообщений держит только
+  // верхнее окно: каждый iframe со своим setInterval(/ui/messages) + SSE упирал
+  // браузер в лимит ~6 соединений на хост, и переключение вкладок «зависало».
+  // Во фрейме панель не строим и не поллим — после submit просим верхнее окно
+  // обновиться, чтобы сообщение появилось сразу, а не через интервал.
+  if (window.__obEmbedded) {
+    document.addEventListener('submit', function () {
+      setTimeout(function () {
+        try { if (window.top && window.top.obReloadMessages) window.top.obReloadMessages(); } catch (e) {}
+      }, 400);
+    }, true);
+    return;
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
@@ -1751,6 +2074,7 @@ function openItemPicker(payload, elementName) {
 function openRefPicker(selOrId) {
   var sel = (typeof selOrId === 'string') ? document.getElementById(selOrId) : selOrId;
   if (!sel) return;
+  if (sel.disabled || sel.readOnly || sel.hasAttribute('readonly')) return;
   var refEntity = sel.getAttribute('data-ref-entity') || '';
   var allowCreate = sel.getAttribute('data-ref-allow-create') === '1';
   var localOpts = [];
@@ -2031,6 +2355,32 @@ window.onebaseDevice = {
       window.dispatchEvent(ev);
     } catch (_) {}
   }
+  // В режиме вкладок SSE принадлежит оболочке. Ретранслируем уже разобранное
+  // JSON-событие во все её same-origin iframe, чтобы сохранить публичный
+  // контракт window-событий onebase:<имя> для страниц и live-панелей.
+  function forwardOnebaseEvent(msg) {
+    var frames = document.querySelectorAll('.ob-tabbody iframe');
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        if (frames[i].contentWindow) {
+          frames[i].contentWindow.postMessage({
+            source: 'obRealtime',
+            name: msg.name,
+            data: msg.data
+          }, window.location.origin);
+        }
+      } catch (_) {}
+    }
+  }
+  if (window.__obEmbedded) {
+    window.addEventListener('message', function (ev) {
+      // Принимаем realtime-события только от своей same-origin оболочки.
+      if (ev.source !== window.parent || ev.origin !== window.location.origin) return;
+      var msg = ev.data;
+      if (!msg || msg.source !== 'obRealtime' || typeof msg.name !== 'string' || !msg.name) return;
+      emitOnebaseEvent('onebase:' + msg.name, msg.data);
+    });
+  }
   function toast(text) {
     var box = document.getElementById('ob-toasts');
     if (!box) {
@@ -2091,11 +2441,101 @@ window.onebaseDevice = {
       if (el.parentNode) el.remove();
     }, 20000);
   }
-  window.addEventListener('onebase:звонок.входящий', function (ev) { callToast(ev.detail); });
+  // Событие ретранслируется и во фреймы для пользовательских слушателей, но
+  // встроенную всплывашку рисует только оболочка — иначе снова будут дубли.
+  if (!window.__obEmbedded) {
+    window.addEventListener('onebase:звонок.входящий', function (ev) { callToast(ev.detail); });
+  }
+
+  /* Ступень B (план 87): клиентские команды ui.*. Рисует/исполняет только
+     оболочка (как callToast) — событие ретранслируется во фреймы, но всплывашку и
+     открытие вкладки делает верхнее окно, иначе дубли. */
+  function formURL(link) {
+    link = link || {};
+    var kind = String(link['вид'] || link.kind || 'document').toLowerCase();
+    var ent = link['сущность'] || link.entity || '';
+    var id = link['id'] || link.id || '';
+    if (!ent) return '';
+    if (kind === 'processor' || kind === 'report' || kind === 'page') {
+      return '/ui/' + kind + '/' + encodeURIComponent(String(ent));
+    }
+    var base = '/ui/' + kind + '/' + encodeURIComponent(String(ent).toLowerCase());
+    return id ? base + '/' + encodeURIComponent(String(id)) : base;
+  }
+  function openFormTab(link) {
+    var url = formURL(link);
+    if (!url) return;
+    var title = (link && (link['сущность'] || link.entity)) || '';
+    try {
+      // Вкладочная оболочка в этом окне.
+      if (typeof window.obOpenTab === 'function') { window.obOpenTab(url, title); return; }
+      // Мы во фрейме оболочки — просим родителя открыть вкладку.
+      if (window.parent && window.parent !== window && typeof window.parent.obOpenTab === 'function') {
+        window.parent.postMessage({ source: 'obOpenTab', url: url, title: title }, window.location.origin);
+        return;
+      }
+    } catch (_) {}
+    // Нет оболочки (например нативное GUI-окно): переходим в ТЕКУЩЕМ окне, а не
+    // через window.open — иначе WebView2 откроет внешнее окно/браузер с базой.
+    window.location.assign(url);
+  }
+  // Богатый тост (аналог ПоказатьОповещениеПользователя): заголовок/текст,
+  // «важное» не исчезает само, клик по тосту со ссылкой открывает форму.
+  function richToast(d) {
+    d = d || {};
+    var box = document.getElementById('ob-toasts');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'ob-toasts';
+      box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:360px';
+      (document.body || document.documentElement).appendChild(box);
+    }
+    var important = String(d['важность'] || '') === 'важное';
+    var link = d['ссылка'];
+    var el = document.createElement('div');
+    el.style.cssText = 'position:relative;background:' + (important ? '#7c2d12' : '#1f2937') + ';color:#fff;padding:12px 28px 12px 14px;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.3);font-size:14px;line-height:1.4' + (link ? ';cursor:pointer' : '');
+    if (d['заголовок']) {
+      var head = document.createElement('div');
+      head.style.cssText = 'font-weight:600;margin-bottom:4px';
+      head.textContent = d['заголовок'];
+      el.appendChild(head);
+    }
+    if (d['текст']) {
+      var body = document.createElement('div');
+      body.textContent = d['текст'];
+      el.appendChild(body);
+    }
+    if (link) { el.addEventListener('click', function () { openFormTab(link); }); }
+    var x = document.createElement('button');
+    x.textContent = '×';
+    x.setAttribute('aria-label', 'Закрыть');
+    x.style.cssText = 'position:absolute;top:4px;right:8px;background:none;border:none;color:#fff;font-size:18px;line-height:1;cursor:pointer';
+    x.addEventListener('click', function (e) { e.stopPropagation(); el.remove(); });
+    el.appendChild(x);
+    box.appendChild(el);
+    if (!important) {
+      setTimeout(function () { if (el.parentNode) el.remove(); }, 8000);
+    }
+  }
+  if (!window.__obEmbedded) {
+    window.addEventListener('onebase:ui.оповещение', function (ev) { richToast(ev.detail); });
+    window.addEventListener('onebase:ui.открытьФорму', function (ev) { openFormTab(ev.detail); });
+  }
+  var sseOpened = false;
   function connect() {
     if (typeof EventSource === 'undefined') return;
     var es = new EventSource('/ui/events');
     window.__obEvents = es;
+    es.onopen = function () {
+      // План 87: служебные события данные.* не переигрываются из replay-окна.
+      // После РЕконнекта (не первого open) просим живые списки перечитаться —
+      // один актуальный GET безопаснее, чем догадка по устаревшему снимку прав.
+      if (sseOpened) {
+        emitOnebaseEvent('onebase:__oblive_refresh_all__', null);
+        forwardOnebaseEvent({ name: '__oblive_refresh_all__', data: null });
+      }
+      sseOpened = true;
+    };
     es.onmessage = function (ev) {
       var msg;
       try {
@@ -2105,12 +2545,141 @@ window.onebaseDevice = {
       }
       if (!msg || !msg.name) return;
       emitOnebaseEvent('onebase:' + msg.name, msg.data);
+      forwardOnebaseEvent(msg);
       if (msg.name === 'уведомление' || msg.name === 'notify') {
         toast(typeof msg.data === 'string' ? msg.data : JSON.stringify(msg.data));
       }
     };
     es.onerror = function () {};
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', connect);
-  else connect();
+  // Вкладочная оболочка (issue #322/#323): единственный SSE-поток /ui/events
+  // держит верхнее окно оболочки. Во фрейме не подключаемся — иначе N вкладок =
+  // N постоянных соединений (упор в лимит браузера ~6/хост) и дубли тостов
+  // (Hub.Publish доставляет каждому подписчику). Произвольные onebase:<имя>
+  // события оболочка ретранслирует во фреймы через проверенный postMessage.
+  if (!window.__obEmbedded) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', connect);
+    else connect();
+  }
+})();
+
+/* План 87, ступень A — «Живой список». Контейнер списка помечается
+   data-ob-refresh-on="имя1 имя2" (+ data-ob-live="ключ" для сопоставления при
+   перечитывании). Универсальный слушатель ловит window-событие onebase:<имя>,
+   помечает подписанные контейнеры dirty и перечитывает тем же GET (как F5), но с
+   debounce и только в видимой вкладке. Ни одного НОВОГО обязательного запроса:
+   перечитывание — тот же GET, что делает пользователь по F5, реже и лишь когда
+   видно. Событие __oblive_refresh_all__ (SSE reconnect) помечает dirty все. */
+(function () {
+  if (window.__obLiveListInit) return;
+  window.__obLiveListInit = true;
+  var DEBOUNCE = 700;
+  var timers = {}; // key -> timeout id
+  var dirty = {};  // key -> true, ждёт видимости вкладки
+
+  function liveContainers() { return document.querySelectorAll('[data-ob-refresh-on]'); }
+  function keyOf(el, idx) { return el.getAttribute('data-ob-live') || ('__idx' + idx); }
+  function eventsOf(el) {
+    return (el.getAttribute('data-ob-refresh-on') || '').split(/\s+/).filter(Boolean);
+  }
+  function findByKey(root, key) {
+    // data-ob-live есть у всех списков (и статичных) — так императивный
+    // ui.обновитьСписок находит контейнер, даже если он не подписан декларативно.
+    var all = root.querySelectorAll('[data-ob-live]');
+    for (var i = 0; i < all.length; i++) {
+      if (keyOf(all[i], i) === key) return all[i];
+    }
+    return null;
+  }
+
+  function doRefresh(el, key) {
+    var src = el.getAttribute('data-ob-refresh-src') || window.location.href;
+    fetch(src, { credentials: 'same-origin', headers: { 'X-Requested-With': 'obLiveList' } })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var cur = findByKey(document, key);
+        var fresh = findByKey(doc, key);
+        if (!cur || !fresh) return;
+        var sc = cur.scrollTop;
+        cur.innerHTML = fresh.innerHTML; // содержимое; атрибуты контейнера сохраняются
+        try { cur.scrollTop = sc; } catch (_) {}
+      })
+      .catch(function () {}); // офлайн/редирект логина — тихо, F5 пользователя выручит
+  }
+
+  // Помечаем контейнер dirty и планируем перечитывание (или откладываем до
+  // видимости вкладки). Склейка пачки событий в один GET допустима: семантика —
+  // «показать актуальное состояние», от объединения не страдает.
+  function schedule(key) {
+    if (document.visibilityState === 'hidden') { dirty[key] = true; return; }
+    if (timers[key]) clearTimeout(timers[key]);
+    timers[key] = setTimeout(function () {
+      timers[key] = null;
+      var el = findByKey(document, key);
+      if (el) doRefresh(el, key);
+    }, DEBOUNCE);
+  }
+
+  function markAll() {
+    var cs = liveContainers();
+    for (var i = 0; i < cs.length; i++) schedule(keyOf(cs[i], i));
+  }
+
+  // Обработчик конкретного события: помечает те контейнеры, что на него подписаны.
+  function onNamed(name) {
+    var cs = liveContainers();
+    for (var i = 0; i < cs.length; i++) {
+      if (eventsOf(cs[i]).indexOf(name) >= 0) schedule(keyOf(cs[i], i));
+    }
+  }
+
+  // Собираем уникальные имена событий со страницы и вешаем по слушателю на каждое.
+  var bound = {};
+  function bindEvents() {
+    var cs = liveContainers();
+    for (var i = 0; i < cs.length; i++) {
+      var names = eventsOf(cs[i]);
+      for (var j = 0; j < names.length; j++) {
+        (function (name) {
+          if (bound[name]) return;
+          bound[name] = true;
+          window.addEventListener('onebase:' + name, function () { onNamed(name); });
+        })(names[j]);
+      }
+    }
+  }
+
+  // Скрытая вкладка копит dirty; при возврате — один перечитывающий GET.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    var keys = Object.keys(dirty);
+    dirty = {};
+    for (var i = 0; i < keys.length; i++) schedule(keys[i]);
+  });
+
+  // SSE reconnect: события данные.* не переигрываются → перечитать все живые списки.
+  window.addEventListener('onebase:__oblive_refresh_all__', markAll);
+
+  // Ступень B — императивная команда «обнови список сейчас»: ui.обновитьСписок
+  // ({сущность}) дёргает контейнеры этой сущности независимо от YAML-подписки.
+  function refreshByEntity(name) {
+    if (!name) return;
+    var want = String(name).toLowerCase();
+    var all = document.querySelectorAll('[data-ob-live]');
+    for (var i = 0; i < all.length; i++) {
+      var key = all[i].getAttribute('data-ob-live') || '';
+      var slash = key.lastIndexOf('/');
+      var ename = slash >= 0 ? key.slice(slash + 1) : key;
+      if (ename === want) schedule(key);
+    }
+  }
+  window.addEventListener('onebase:ui.обновитьСписок', function (ev) {
+    var d = ev.detail || {};
+    refreshByEntity(d['сущность'] || d.entity);
+  });
+
+  function init() { bindEvents(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();

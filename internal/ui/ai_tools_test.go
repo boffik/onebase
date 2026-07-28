@@ -168,9 +168,6 @@ func TestAITools_NonAdminGetsNoTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Создаём пользователя: теперь HasUsers()==true.
-	if _, err := repo.Create(ctx, "boss", "password1", "Boss", true); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := repo.Create(ctx, "testuser", "password1", "Test User", false); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +178,7 @@ func TestAITools_NonAdminGetsNoTools(t *testing.T) {
 
 	// Запрос без пользователя в контексте → isAdmin==false.
 	r := httptest.NewRequest(http.MethodPost, "/ui/ai/chat", nil)
-	tools, exec := s.aiTools(r)
+	tools, exec, _ := s.aiTools(r)
 	if tools != nil || exec != nil {
 		t.Fatalf("не-админ не должен получать инструменты ИИ: tools=%v exec!=nil=%v", tools, exec != nil)
 	}
@@ -192,7 +189,7 @@ func TestAITools_NonAdminGetsNoTools(t *testing.T) {
 func TestAITools_AdminGetsTools(t *testing.T) {
 	s := aiToolsTestServer(t) // authRepo == nil → isAdmin всегда true
 	r := httptest.NewRequest(http.MethodPost, "/ui/ai/chat", nil)
-	tools, exec := s.aiTools(r)
+	tools, exec, _ := s.aiTools(r)
 	if tools == nil {
 		t.Fatal("администратор должен получать инструменты ИИ, получено nil")
 	}
@@ -237,9 +234,6 @@ func TestAITools_FlaggedUserGetsTools(t *testing.T) {
 	if err := repo.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Create(ctx, "boss", "password1", "Boss", true); err != nil {
-		t.Fatal(err)
-	}
 	u, err := repo.Create(ctx, "flagged", "password1", "Flagged User", false)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +260,7 @@ func TestAITools_FlaggedUserGetsTools(t *testing.T) {
 	// Запрос несёт пользователя с флагом → aiDataAllowed==true.
 	r := httptest.NewRequest(http.MethodPost, "/ui/ai/chat", nil)
 	r = r.WithContext(auth.ContextWithUser(r.Context(), got))
-	tools, exec := s.aiTools(r)
+	tools, exec, _ := s.aiTools(r)
 	if tools == nil || exec == nil {
 		t.Fatalf("пользователь с AIDataAccess должен получать инструменты ИИ: tools=%v exec!=nil=%v", tools, exec != nil)
 	}
@@ -290,7 +284,7 @@ func TestAITools_RoleAIDataAccessGetsToolsInRBACScope(t *testing.T) {
 	}
 	r := httptest.NewRequest(http.MethodPost, "/ui/ai/chat", nil)
 	r = r.WithContext(auth.ContextWithUser(r.Context(), u))
-	tools, exec := s.aiTools(r)
+	tools, exec, _ := s.aiTools(r)
 	if tools == nil || exec == nil {
 		t.Fatalf("роль с ai_data_access должна получать инструменты в rbac: tools=%v exec!=nil=%v", tools, exec != nil)
 	}

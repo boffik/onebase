@@ -136,6 +136,7 @@ func TestPageManagedForm_Renders(t *testing.T) {
 		`accesskey="7"`,
 		`data-ob-hotkey="F7"`,
 		`aria-keyshortcuts="F7"`,
+		`data-ob-close-tab`,
 		`id="ob-managed-config"`,
 		`id="ob-managed-tp-ref-opts"`,
 		`src="/static/managed.js"`,
@@ -165,6 +166,50 @@ func TestPageManagedForm_Renders(t *testing.T) {
 	} {
 		if strings.Contains(tplManagedForm, old) {
 			t.Errorf("templates_managed.go не должен содержать inline handler %q", old)
+		}
+	}
+}
+
+func TestPageManagedForm_ReadOnlyRefDisablesPickerActions(t *testing.T) {
+	ent := &metadata.Entity{
+		Name: "Заказ",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{{
+			Name:      "Клиент",
+			Type:      metadata.FieldType("reference:Клиент"),
+			RefEntity: "Клиент",
+		}},
+	}
+	el := &metadata.FormElement{
+		Kind:     metadata.FormElementField,
+		Name:     "ПолеКлиент",
+		DataPath: "Объект.Клиент",
+		ReadOnly: true,
+	}
+	ctx := map[string]any{
+		"Entity":      ent,
+		"Values":      map[string]string{"Клиент": ""},
+		"RefOptions":  map[string]any{},
+		"EnumOptions": map[string]any{},
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "managed-element", map[string]any{"El": el, "Ctx": ctx}); err != nil {
+		t.Fatalf("execute managed-element: %v", err)
+	}
+	html := buf.String()
+	for _, marker := range []string{
+		`id="ref-Клиент"`,
+		`data-ob-ref-picker="ref-Клиент"`,
+		`data-ob-ref-current="ref-Клиент"`,
+	} {
+		start := strings.Index(html, marker)
+		if start < 0 {
+			t.Fatalf("managed ref control is missing %q:\n%s", marker, html)
+		}
+		end := strings.Index(html[start:], ">")
+		if end < 0 || !strings.Contains(html[start:start+end], " disabled") {
+			t.Errorf("read-only ref control %q must be disabled:\n%s", marker, html)
 		}
 	}
 }

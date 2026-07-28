@@ -143,6 +143,27 @@ C:\onebase\bin\onebase.exe service uninstall --name onebase-docflow
 > `service install --db "postgres://…" --port 8080 --name onebase-docflow`
 > или `service install --sqlite C:\onebase\data\docflow.db --project C:\onebase\project --config-source file --port 8080 --name onebase-docflow`.
 
+### Параметры безопасности окружения
+
+Для production-службы задайте переменные на уровне машины до её запуска:
+
+```powershell
+# OneBase стоит за настроенным HTTPS reverse proxy.
+[Environment]::SetEnvironmentVariable("ONEBASE_SECURE_COOKIES", "true", "Machine")
+
+# Необязательно: изменить минимальную длину новых паролей (по умолчанию 8 символов).
+[Environment]::SetEnvironmentVariable("ONEBASE_MIN_PASSWORD_LENGTH", "12", "Machine")
+```
+
+`ONEBASE_SECURE_COOKIES=true` нужен при завершении TLS на reverse proxy: OneBase
+не доверяет клиентскому `X-Forwarded-Proto` без конфигурации доверенных proxy.
+При прямом TLS атрибут `Secure` устанавливается автоматически.
+
+Пустые пароли по умолчанию запрещены во всех интерфейсах и API. Для явно
+изолированного kiosk-режима их можно разрешить
+`ONEBASE_ALLOW_EMPTY_PASSWORDS=true`; не используйте этот режим для сервера,
+доступного из сети. После изменения переменных перезапустите службу.
+
 ---
 
 ## 5. Smoke-тест
@@ -221,7 +242,7 @@ Copy-Item "C:\onebase\backups\backup_*_$today*" "\\backup-nas\onebase\" -Force
 
 ```powershell
 # С флешки D:\ ; --id берёт имя службы и порт из реестра
-C:\onebase\bin\onebase.exe update --from D:\onebase-v1.1.0.zip --id <ID-базы>
+C:\onebase\bin\onebase.exe update --from D:\onebase-v1.1.0.zip --sha256 <ожидаемый-hex> --id <ID-базы>
 
 # С проверкой контрольной суммы и увеличенным ожиданием готовности
 C:\onebase\bin\onebase.exe update `
@@ -232,12 +253,12 @@ C:\onebase\bin\onebase.exe update `
 Что происходит по шагам:
 
 1. Из `--from` берётся бинарь: `.zip` (внутри ищется `onebase.exe`) или сам `.exe`.
-2. Если задан `--sha256` — сверяется контрольная сумма (до остановки службы).
+2. Обязательная `--sha256` сверяется до остановки службы.
 3. Служба останавливается (ожидание состояния `STOPPED`).
-4. Текущий `onebase.exe` переименовывается в `onebase.exe.old`, на его место
+4. Текущий `onebase.exe` атомарно копируется в `onebase.exe.old`, на его место
    пишется новый бинарь.
-5. Служба запускается; сервер опрашивается по `/healthz` до `--timeout` (30 с по
-   умолчанию).
+5. Служба запускается; `/healthz` должен ответить версией именно нового бинаря
+   до `--timeout` (30 с по умолчанию).
 6. **Успех** → `.old` удаляется, выводится «обновление применено».
    **Неудача** (не поднялся / БД недоступна) → служба останавливается, из `.old`
    восстанавливается прежний бинарь, служба снова запускается; команда сообщает,
@@ -249,20 +270,21 @@ C:\onebase\bin\onebase.exe update `
 |------|-----------|
 | `--from` | путь к `.zip` или `.exe` (обязателен) |
 | `--id` / `--service` | база из реестра / явное имя службы |
-| `--sha256` | ожидаемая контрольная сумма файла обновления (`.zip` или `.exe`) |
+| `--sha256` | ожидаемая контрольная сумма файла обновления (`.zip` или `.exe`), обязательна |
 | `--target` | какой файл заменять (по умолчанию — текущий `onebase.exe`) |
 | `--port` / `--healthz-url` | куда стучаться пробой (по умолчанию порт базы) |
 | `--timeout` | сколько ждать `200` от `/healthz` (по умолчанию 30с) |
 
-> Получить SHA256 файла на флешке: `Get-FileHash D:\onebase-v1.1.0.zip -Algorithm SHA256`.
+> Release публикует рядом файл `<артефакт>.sha256`; в `--sha256` передайте первый
+> столбец из него. Для локальной проверки: `Get-FileHash D:\onebase-v1.1.0.zip -Algorithm SHA256`.
 
 ---
 
 ## 8. Обновление конфигурации без рестарта
 
 **Только вариант А (PostgreSQL, конфигурация в БД).** Если служба запущена с
-`--watch`, сервер сам подхватывает новую конфигурацию после `deploy` — без
-перезапуска и разрыва сеансов.
+`--watch`, сервер сам подхватывает после `deploy` новые метаданные, DSL-модули и
+регламентные задания — без перезапуска и разрыва сеансов.
 
 Служба должна быть установлена с флагом `--watch`. Если она уже стоит без него —
 переустановите:
@@ -281,9 +303,11 @@ C:\onebase\bin\onebase.exe deploy `
   --message "релиз 1.1.0"
 ```
 
-Через несколько секунд сервер применит изменения (в логе — «конфигурация
-перезагружена из БД»). Схему БД миграции деплоя приводят в порядок **до** создания
-версии, поэтому перезагрузка безопасна.
+Через несколько секунд сервер применит изменения (в логе —
+«metadata/DSL/scheduled перезагружены из БД»). Схему БД миграции деплоя приводят
+в порядок **до** создания версии, поэтому перезагрузка безопасна. Настройки
+процесса из `app.yaml`, роли и локали применяются после рестарта службы; watcher
+явно напоминает об этом в логе.
 
 ---
 
@@ -316,7 +340,8 @@ C:\onebase\bin\onebase.exe config diff <версия-до> <версия-пос�
 C:\onebase\bin\onebase.exe config rollback <версия> --db "postgres://…" --message "откат к 1.0.0"
 ```
 
-С `--watch` откат конфигурации подхватится сервером без рестарта.
+С `--watch` метаданные, DSL и регламентные задания откатной версии подхватятся
+без рестарта. Для отката `app.yaml`, ролей или локалей перезапустите службу.
 
 ### Откат данных (восстановление БД)
 
@@ -329,7 +354,7 @@ sc.exe stop onebase-docflow
 C:\onebase\bin\onebase.exe restore --db "postgres://onebase:secret@localhost/docflow" --file C:\onebase\backups\backup_docflow_2026-07-09_02-00-00.sql.gz
 
 # SQLite
-C:\onebase\bin\onebase.exe restore --sqlite C:\onebase\data\docflow.db --file C:\onebase\backups\backup_docflow_2026-07-09_02-00-00.db
+C:\onebase\bin\onebase.exe restore --sqlite C:\onebase\data\docflow.db --file C:\onebase\backups\backup_docflow_2026-07-09_02-00-00.db --force
 
 sc.exe start onebase-docflow
 ```

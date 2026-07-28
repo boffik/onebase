@@ -38,6 +38,36 @@ type FilterValue struct {
 
 // Upsert inserts or updates the object fields.
 func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, fields map[string]any, entity *metadata.Entity) error {
+	return db.upsert(ctx, entityName, id, fields, entity, true, upsertAuditAuto)
+}
+
+// UpsertProvisional inserts a transaction-local parent row without writing an
+// audit event. entityservice uses it before a new-object hook so FK children can
+// refer to the parent. The final UpsertPreserveVersion writes the single
+// externally visible create event after the hook and all final fields succeed.
+func (db *DB) UpsertProvisional(ctx context.Context, entityName string, id uuid.UUID, fields map[string]any, entity *metadata.Entity) error {
+	return db.upsert(ctx, entityName, id, fields, entity, true, upsertAuditSkip)
+}
+
+// UpsertPreserveVersion updates fields without advancing _version on conflict.
+// It is intentionally narrow: entityservice uses it only for the final write of
+// a new row provisionally inserted earlier in the SAME transaction so a hook can
+// create FK children. It records one create event for the final object state;
+// the provisional insert deliberately does not audit. The externally visible
+// committed object still starts at version 1. Ordinary callers must use Upsert.
+func (db *DB) UpsertPreserveVersion(ctx context.Context, entityName string, id uuid.UUID, fields map[string]any, entity *metadata.Entity) error {
+	return db.upsert(ctx, entityName, id, fields, entity, false, upsertAuditCreate)
+}
+
+type upsertAuditMode uint8
+
+const (
+	upsertAuditAuto upsertAuditMode = iota
+	upsertAuditSkip
+	upsertAuditCreate
+)
+
+func (db *DB) upsert(ctx context.Context, entityName string, id uuid.UUID, fields map[string]any, entity *metadata.Entity, bumpVersion bool, auditMode upsertAuditMode) error {
 	d := db.dialect
 	// Read old value for audit diff (best-effort, ignore errors)
 	var oldRow map[string]any
@@ -110,7 +140,9 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 	// Оптимистическая блокировка: на каждом UPDATE инкрементируем _version.
 	// На INSERT — DEFAULT 1 из DDL. См. UpsertVersioned для проверки ожидаемой
 	// ревизии перед записью.
-	updates = append(updates, "_version = "+table+"._version + 1")
+	if bumpVersion {
+		updates = append(updates, "_version = "+table+"._version + 1")
+	}
 
 	var sql string
 	if len(updates) == 0 {
@@ -126,9 +158,15 @@ func (db *DB) Upsert(ctx context.Context, entityName string, id uuid.UUID, field
 
 	// Audit (best-effort, non-blocking)
 	kind := string(entity.Kind)
-	if isNew {
+	switch {
+	case auditMode == upsertAuditSkip:
+		// A provisional row is not externally visible and is followed by the
+		// final create audit in the same transaction.
+	case auditMode == upsertAuditCreate:
 		db.logCreate(ctx, kind, entityName, id)
-	} else if oldRow != nil {
+	case isNew:
+		db.logCreate(ctx, kind, entityName, id)
+	case oldRow != nil:
 		changes := AuditDiff(oldRow, fields, entity)
 		if len(changes) > 0 {
 			db.logUpdate(ctx, kind, entityName, id, changes)
@@ -674,26 +712,34 @@ func (db *DB) UpsertTablePartRows(ctx context.Context, entityName, tpName string
 func (db *DB) Delete(ctx context.Context, entityName string, id uuid.UUID) error {
 	d := db.dialect
 	tbl := metadata.TableName(entityName)
-	// Check if this is a predefined record (column may not exist — ignore error)
-	var isPredefined bool
-	if err := db.QueryRow(ctx,
-		fmt.Sprintf("SELECT _is_predefined FROM %s WHERE id = %s", tbl, d.Placeholder(1)),
-		idArg(d, id),
-	).Scan(&isPredefined); err == nil && isPredefined {
+	isPredefined, err := db.isPredefinedRecord(ctx, tbl, id)
+	if err != nil {
+		return err
+	}
+	if isPredefined {
 		return i18nerr.Errorf("нельзя удалить предопределённый элемент %s", entityName)
 	}
 
-	// For hierarchical catalogs, prevent deleting non-empty folders
-	var childCount int
-	if err := db.QueryRow(ctx,
-		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE parent_id = %s AND deletion_mark = %s",
-			tbl, d.Placeholder(1), boolFalseLit(d)),
-		idArg(d, id),
-	).Scan(&childCount); err == nil && childCount > 0 {
-		return i18nerr.Errorf("нельзя удалить группу: в ней есть элементы (%d шт.)", childCount)
+	// Only hierarchical catalogs have parent_id. Probing the optional column
+	// with a failing SELECT would abort a PostgreSQL transaction.
+	hasParent, err := d.ColumnExists(ctx, db, tbl, "parent_id")
+	if err != nil {
+		return fmt.Errorf("check %s.parent_id: %w", tbl, err)
+	}
+	if hasParent {
+		var childCount int
+		if err := db.QueryRow(ctx,
+			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE parent_id = %s AND deletion_mark = %s",
+				tbl, d.Placeholder(1), boolFalseLit(d)),
+			idArg(d, id),
+		).Scan(&childCount); err != nil {
+			return fmt.Errorf("count children of %s: %w", entityName, err)
+		} else if childCount > 0 {
+			return i18nerr.Errorf("нельзя удалить группу: в ней есть элементы (%d шт.)", childCount)
+		}
 	}
 
-	err := db.exec(ctx,
+	err = db.exec(ctx,
 		fmt.Sprintf("DELETE FROM %s WHERE id = %s", tbl, d.Placeholder(1)), idArg(d, id))
 	if err == nil {
 		if s := db.GetAuditSettings(ctx); s.Enabled && s.Delete {

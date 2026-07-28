@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
@@ -71,8 +73,10 @@ func sanitizeFileName(name string) string {
 }
 
 type handler struct {
-	store  *Store
-	runner *Runner
+	store         *Store
+	runner        *Runner
+	cfgLoginLimit *auth.LoginLimiter
+	cfgLoginOnce  sync.Once
 	// isoBrowser запускает изолированные окна Предприятия (план 78);
 	// в тестах подменяется фейком.
 	isoBrowser isolatedBrowser
@@ -353,36 +357,65 @@ func (h *handler) baseRunning(b *Base) bool {
 	return !portFree(b.Port) && h.runner.Healthy(b)
 }
 
+// ensureBaseReady запускает базу, если она ещё не запущена, и ждёт готовности
+// её сервера. Общий пролог обработчиков start / startIsolated / startNative:
+// при ошибке пишет JSON-ответ и возвращает false.
+func (h *handler) ensureBaseReady(w http.ResponseWriter, r *http.Request, b *Base, lang string) bool {
+	if !h.baseRunning(b) {
+		if b.DBType != "sqlite" {
+			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
+				writeJSON(w, 500, map[string]any{"error": tr(lang, "Не удалось создать БД") + ": " + err.Error()})
+				return false
+			}
+		}
+		if err := h.runner.Start(b); err != nil {
+			writeJSON(w, 500, map[string]any{"error": errText(r, err)})
+			return false
+		}
+		b.LastOpened = time.Now()
+		h.store.Update(b)
+	}
+	// Wait until the base server is ready before handing the URL to the client.
+	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
+		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
+		return false
+	}
+	return true
+}
+
 func (h *handler) start(w http.ResponseWriter, r *http.Request) {
 	b, err := h.store.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 		return
 	}
-	lang := resolveLang(r)
-
-	if !h.baseRunning(b) {
-		if b.DBType != "sqlite" {
-			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
-				writeJSON(w, 500, map[string]any{"error": tr(lang, "Не удалось создать БД") + ": " + err.Error()})
-				return
-			}
-		}
-		if err := h.runner.Start(b); err != nil {
-			writeJSON(w, 500, map[string]any{"error": errText(r, err)})
-			return
-		}
-		b.LastOpened = time.Now()
-		h.store.Update(b)
+	if !h.ensureBaseReady(w, r, b, resolveLang(r)) {
+		return
 	}
+	writeJSON(w, 200, map[string]any{"url": h.runner.BaseURL(b)})
+}
 
-	// Wait until the base server is ready before handing the URL to the browser
-	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
+// startNative (кнопка «Предприятие» в GUI-сборке под Windows): запускает базу и
+// открывает её в нативном WebView2-окне на ОБЩЕМ профиле — окно без адресной
+// строки, в отличие от window.open, который в WebView2 убегает во внешний
+// браузер. Пустой профиль (не изолированный) = единый cookie-jar с лаунчером,
+// т.е. обычный сеанс Предприятия, а не свежий вход под другим пользователем
+// («Новое окно»). В не-GUI-сборках isoBrowser.Open вернёт понятную ошибку, но
+// UI туда и не ходит — при NativeOK=false кнопка открывает браузер.
+func (h *handler) startNative(w http.ResponseWriter, r *http.Request) {
+	b, err := h.store.Get(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if !h.ensureBaseReady(w, r, b, resolveLang(r)) {
+		return
+	}
+	if err := h.isoBrowser.Open("", h.runner.BaseURL(b), isolatedModeNative); err != nil {
 		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
 		return
 	}
-
-	writeJSON(w, 200, map[string]any{"url": h.runner.BaseURL(b)})
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 // startIsolated (план 78, фаза 3): запускает базу (если нужно) и открывает
@@ -395,24 +428,7 @@ func (h *handler) startIsolated(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 		return
 	}
-	lang := resolveLang(r)
-
-	if !h.baseRunning(b) {
-		if b.DBType != "sqlite" {
-			if err := storage.EnsureDatabase(r.Context(), b.DB); err != nil {
-				writeJSON(w, 500, map[string]any{"error": tr(lang, "Не удалось создать БД") + ": " + err.Error()})
-				return
-			}
-		}
-		if err := h.runner.Start(b); err != nil {
-			writeJSON(w, 500, map[string]any{"error": errText(r, err)})
-			return
-		}
-		b.LastOpened = time.Now()
-		h.store.Update(b)
-	}
-	if err := h.runner.WaitReady(b, 15*time.Second); err != nil {
-		writeJSON(w, 500, map[string]any{"error": errText(r, err)})
+	if !h.ensureBaseReady(w, r, b, resolveLang(r)) {
 		return
 	}
 
@@ -516,8 +532,9 @@ func (h *handler) configuratorReorder(w http.ResponseWriter, r *http.Request) {
 	// Клиент шлёт FormData (multipart/form-data). Нельзя ограничиться ParseForm:
 	// для multipart он не читает тело, а после него FormValue/r.Form уже не
 	// триггерят ParseMultipartForm (r.Form != nil) → group и name приходят пустыми.
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil && err != http.ErrNotMultipart {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		writeJSON(w, requestBodyErrorStatus(err), map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	group := r.FormValue("group")
@@ -599,11 +616,13 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := resolveLang(r)
+	backURL := "/bases/" + b.ID + "/configurator?tab=files"
 	if b.ConfigSource != "database" {
 		render(w, r, "page-config-result", map[string]any{
 			"Title":   tr(lang, "onebase — Конфигуратор"),
 			"Message": tr(lang, "Выгрузка доступна только для баз в режиме «В базе данных»."),
 			"Error":   "",
+			"BackURL": backURL,
 		})
 		return
 	}
@@ -612,7 +631,8 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		render(w, r, "page-config-result", map[string]any{
 			"Title": tr(lang, "onebase — Конфигуратор"), "Message": "",
-			"Error": tr(lang, "Ошибка подключения") + ": " + err.Error(),
+			"Error":   tr(lang, "Ошибка подключения") + ": " + err.Error(),
+			"BackURL": backURL,
 		})
 		return
 	}
@@ -628,7 +648,8 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 	if err := repo.ExportToDir(r.Context(), workDir); err != nil {
 		render(w, r, "page-config-result", map[string]any{
 			"Title": tr(lang, "onebase — Конфигуратор"), "Message": "",
-			"Error": tr(lang, "Ошибка выгрузки") + ": " + err.Error(),
+			"Error":   tr(lang, "Ошибка выгрузки") + ": " + err.Error(),
+			"BackURL": backURL,
 		})
 		return
 	}
@@ -639,7 +660,34 @@ func (h *handler) configExport(w http.ResponseWriter, r *http.Request) {
 		"Title":   tr(lang, "onebase — Конфигуратор"),
 		"Message": fmt.Sprintf(tr(lang, "Конфигурация выгружена в папку")+": %s", workDir),
 		"Error":   "",
+		"BackURL": backURL,
 	})
+}
+
+// validateConfigImportDir rejects an empty/non-project directory before
+// configdb.ImportFromDir starts its replace-all transaction. In particular,
+// an untouched ~/.onebase/workspace/<base-id> must not be accepted as a valid
+// zero-file configuration.
+func validateConfigImportDir(srcDir string) error {
+	info, err := os.Stat(srcDir)
+	if err != nil {
+		return fmt.Errorf("папка конфигурации недоступна: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("путь не является папкой: %s", srcDir)
+	}
+	appPath := filepath.Join(srcDir, "config", "app.yaml")
+	if info, err := os.Stat(appPath); err != nil || info.IsDir() {
+		return fmt.Errorf("папка не содержит config/app.yaml: %s", srcDir)
+	}
+	cfg, err := project.LoadConfig(srcDir)
+	if err != nil {
+		return fmt.Errorf("ошибка config/app.yaml: %w", err)
+	}
+	if strings.TrimSpace(cfg.Name) == "" {
+		return fmt.Errorf("в config/app.yaml не заполнено поле name")
+	}
+	return nil
 }
 
 func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
@@ -649,18 +697,34 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := resolveLang(r)
+	backURL := "/bases/" + b.ID + "/configurator?tab=files"
 
 	r.ParseForm()
-	srcDir := r.FormValue("path")
+	srcDir := strings.TrimSpace(r.FormValue("path"))
 	if srcDir == "" {
-		srcDir, _ = workspacePath(b.ID)
+		srcDir, err = workspacePath(b.ID)
+		if err != nil {
+			render(w, r, "page-config-result", map[string]any{
+				"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
+				"Error": tr(lang, "Ошибка загрузки") + ": " + err.Error(), "BackURL": backURL,
+			})
+			return
+		}
+	}
+	if err := validateConfigImportDir(srcDir); err != nil {
+		render(w, r, "page-config-result", map[string]any{
+			"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
+			"Error": tr(lang, "Ошибка загрузки") + ": " + err.Error(), "BackURL": backURL,
+		})
+		return
 	}
 
 	db, err := OpenDB(r.Context(), b)
 	if err != nil {
 		render(w, r, "page-config-result", map[string]any{
 			"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
-			"Error": tr(lang, "Ошибка подключения") + ": " + err.Error(),
+			"Error":   tr(lang, "Ошибка подключения") + ": " + err.Error(),
+			"BackURL": backURL,
 		})
 		return
 	}
@@ -670,7 +734,8 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 	if err := repo.ImportFromDir(r.Context(), srcDir); err != nil {
 		render(w, r, "page-config-result", map[string]any{
 			"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
-			"Error": tr(lang, "Ошибка загрузки") + ": " + err.Error(),
+			"Error":   tr(lang, "Ошибка загрузки") + ": " + err.Error(),
+			"BackURL": backURL,
 		})
 		return
 	}
@@ -680,7 +745,8 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		render(w, r, "page-config-result", map[string]any{
 			"Title": tr(lang, "onebase — Загрузка конфигурации"), "Message": "",
-			"Error": tr(lang, "Ошибка версии конфигурации") + ": " + err.Error(),
+			"Error":   tr(lang, "Ошибка версии конфигурации") + ": " + err.Error(),
+			"BackURL": backURL,
 		})
 		return
 	}
@@ -691,6 +757,7 @@ func (h *handler) configImport(w http.ResponseWriter, r *http.Request) {
 		"Title":   tr(lang, "onebase — Загрузка конфигурации"),
 		"Message": fmt.Sprintf(tr(lang, "Конфигурация загружена из")+": %s\n\n"+tr(lang, "Миграция")+":\n%s", srcDir, out),
 		"Error":   "",
+		"BackURL": backURL,
 	})
 }
 

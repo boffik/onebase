@@ -37,3 +37,82 @@ fields:
 	}
 	t.Fatalf("name collision issue not found: %+v", res.Issues)
 }
+
+func TestRunFullReportsUnknownAppConfigField(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "config", "app.yaml"), "name: Demo\nlimtis:\n  report_max_rows: 10\n")
+
+	res := RunFull(dir)
+	if res.OK {
+		t.Fatal("RunFull returned OK for misspelled app config field")
+	}
+	for _, issue := range res.Issues {
+		if strings.Contains(issue.Message, "field limtis not found") {
+			return
+		}
+	}
+	t.Fatalf("unknown app config field was not reported: %+v", res.Issues)
+}
+
+func TestRunFullWarnsButAcceptsLegacyAppConfigFields(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "config", "app.yaml"), `name: DocFlow
+attachments:
+  storage_type: onebase_attachments
+  storage_location: database:_attachments
+  office_allowed_types: [doc, docx]
+russian_post:
+  enabled: true
+`)
+
+	res := RunFull(dir)
+	if !res.OK {
+		t.Fatalf("legacy app config must not block startup: %+v", res.Issues)
+	}
+	var deprecated int
+	for _, warning := range res.Warnings {
+		if warning.Code == "config.deprecated-key" {
+			deprecated++
+		}
+	}
+	if deprecated != 4 {
+		t.Fatalf("deprecated warnings = %d, want 4; all warnings: %+v", deprecated, res.Warnings)
+	}
+}
+
+func TestRunFullAcceptsNumberQueryForDocumentWithNumerator(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "documents", "номенклатура.yaml"), `name: НоменклатураДелНаГод
+numerator: {prefix: "НД-", length: 6, period: year}
+fields:
+  - name: Дата
+    type: date
+`)
+	mkFile(t, filepath.Join(dir, "reports", "номенклатура.yaml"), `name: НоменклатураДелНаГод
+query: |
+  ВЫБРАТЬ Д.Номер КАК НомерНоменклатуры
+  ИЗ Документ.НоменклатураДелНаГод КАК Д
+`)
+
+	res := RunFull(dir)
+	if !res.OK {
+		t.Fatalf("numerator must expose queryable Номер: %+v", res.Issues)
+	}
+}
+
+func TestRunFullReportsMalformedRole(t *testing.T) {
+	dir := t.TempDir()
+	mkFile(t, filepath.Join(dir, "config", "app.yaml"), "name: Demo\n")
+	mkFile(t, filepath.Join(dir, "roles", "broken.yaml"), "name: [broken\n")
+
+	res := RunFull(dir)
+	if res.OK {
+		t.Fatal("RunFull returned OK for malformed role")
+	}
+	for _, issue := range res.Issues {
+		if strings.Contains(issue.Message, "parse role broken.yaml") {
+			return
+		}
+	}
+	t.Fatalf("malformed role was not reported: %+v", res.Issues)
+}

@@ -12,6 +12,20 @@ import (
 	"github.com/ivantit66/onebase/internal/report"
 )
 
+func TestGetProcedureResolvesOnUnpostAlias(t *testing.T) {
+	prog, err := parser.New(lexer.New(`
+Процедура ОбработкаУдаленияПроведения()
+КонецПроцедуры`, "unpost.os")).ParseProgram()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.Load(LoadOptions{Programs: map[string]*ast.Program{"Документ": prog}})
+	if proc := r.GetProcedure("Документ", "OnUnpost"); proc == nil {
+		t.Fatal("OnUnpost не разрешился в ОбработкаУдаленияПроведения")
+	}
+}
+
 // Legacy YAML-форма СРАЗУ конвертируется в макет v2 при обращении к реестру:
 // PrintFormRef.Decl несёт результат ConvertLegacy (план 64, этап 4).
 func TestGetAllPrintForms_LegacyConvertedToDecl(t *testing.T) {
@@ -406,5 +420,37 @@ func TestGetPrintFormRef(t *testing.T) {
 	}
 	if _, ok := r.GetPrintFormRef("РеализацияТоваров", "нет"); ok {
 		t.Error("несуществующая форма не должна находиться")
+	}
+}
+
+func TestReplaceProjectFromSwapsProjectAndPreservesExternalObjects(t *testing.T) {
+	current := NewRegistry()
+	current.Load(LoadOptions{
+		Entities: []*metadata.Entity{{Name: "Старый", Kind: metadata.KindCatalog}},
+		Reports:  []*report.Report{{Name: "СтарыйОтчёт"}},
+	})
+	current.SetExternalReports([]*report.Report{{Name: "ВнешнийОтчёт"}})
+	current.SetExternalProcessors([]*processor.Processor{{Name: "ВнешняяОбработка"}}, nil)
+
+	next := NewRegistry()
+	next.Load(LoadOptions{
+		Entities: []*metadata.Entity{{Name: "Новый", Kind: metadata.KindDocument}},
+		Reports:  []*report.Report{{Name: "НовыйОтчёт"}},
+	})
+	next.LoadProcessors([]*processor.Processor{{Name: "НоваяОбработка"}})
+	next.LoadExchangePlans([]*metadata.ExchangePlan{{Name: "НовыйОбмен"}})
+
+	current.ReplaceProjectFrom(next)
+	if current.GetEntity("Старый") != nil || current.GetReport("СтарыйОтчёт") != nil {
+		t.Fatal("старые project-owned объекты остались после reload")
+	}
+	if current.GetEntity("Новый") == nil || current.GetReport("НовыйОтчёт") == nil || current.GetProcessor("НоваяОбработка") == nil {
+		t.Fatal("новый проект опубликован не полностью")
+	}
+	if current.GetExchangePlan("НовыйОбмен") == nil {
+		t.Fatal("планы обмена не попали в атомарную замену")
+	}
+	if current.GetReport("ВнешнийОтчёт") == nil || current.GetProcessor("ВнешняяОбработка") == nil {
+		t.Fatal("внешние объекты не должны исчезать при reload проекта")
 	}
 }

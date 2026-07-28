@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/i18n"
 	"github.com/ivantit66/onebase/internal/webassets"
 	"github.com/ivantit66/onebase/internal/websec"
@@ -24,6 +25,36 @@ func init() {
 
 var staticHTTP http.Handler
 
+// noStore гасит кэширование embed-статики (configurator.js, Monaco, ECharts,
+// SlickGrid). Эти байты живут в бинаре и обновляются только при пересборке, а
+// embed.FS отдаёт стабильный Last-Modified — поэтому WebView2/браузер отвечают
+// 304 Not Modified и бесконечно переиспользуют копию из предыдущей сборки
+// (обычный F5 против этого бессилен). no-store заставляет клиента всегда
+// тянуть свежие байты после обновления onebase-gui.exe.
+func noStore(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(&noStoreResponseWriter{ResponseWriter: w}, r)
+	})
+}
+
+// noStoreResponseWriter applies the policy at the moment headers are written.
+// This matters for vendor handlers: they set their own immutable cache policy
+// inside ServeHTTP and would otherwise overwrite a header set by middleware
+// before the call.
+type noStoreResponseWriter struct {
+	http.ResponseWriter
+}
+
+func (w *noStoreResponseWriter) WriteHeader(statusCode int) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *noStoreResponseWriter) Write(p []byte) (int, error) {
+	w.Header().Set("Cache-Control", "no-store")
+	return w.ResponseWriter.Write(p)
+}
+
 // Server is the launcher HTTP server (list of registered bases).
 type Server struct {
 	h       *handler
@@ -38,7 +69,10 @@ func NewServer(store *Store, runner *Runner) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &handler{store: store, runner: runner, isoBrowser: systemBrowser{}}
+	h := &handler{
+		store: store, runner: runner, isoBrowser: systemBrowser{},
+		cfgLoginLimit: auth.NewLoginLimiter(5, time.Minute),
+	}
 	if b, err := i18n.Load(i18n.EmbeddedLocales, ""); err == nil {
 		launcherBundle = b
 	}
@@ -75,18 +109,19 @@ func (s *Server) ListenAndServe() error {
 	r.Use(websec.SecurityHeaders)
 	r.Use(websec.CSRFProtect)
 
-	// Static assets (embedded)
-	r.Handle("/static/*", http.StripPrefix("/static/", staticHTTP))
+	// Static assets (embedded). noStore — чтобы после пересборки бинаря клиент
+	// не обслуживал прошивку embed-статики из кэша (см. комментарий у noStore).
+	r.Handle("/static/*", noStore(http.StripPrefix("/static/", staticHTTP)))
 	// Monaco editor (shared vendored tree) — отдельный путь, чтобы не
 	// конфликтовать с catch-all /static/*. Конфигуратор и редактор форм
 	// грузят его офлайн вместо CDN.
-	r.Handle("/vendor/monaco/*", http.StripPrefix("/vendor/monaco/", webassets.MonacoHandler()))
+	r.Handle("/vendor/monaco/*", noStore(http.StripPrefix("/vendor/monaco/", webassets.MonacoHandler())))
 	// ECharts (тот же вендоренный пакет, что и у базы) — предпросмотр виджета
 	// в конфигураторе рисуется тем же графическим движком, что и рабочий стол.
-	r.Handle("/vendor/echarts/*", http.StripPrefix("/vendor/echarts/", webassets.EChartsHandler()))
+	r.Handle("/vendor/echarts/*", noStore(http.StripPrefix("/vendor/echarts/", webassets.EChartsHandler())))
 	// SlickGrid (6pac fork, MIT) — грид для редактируемых табличных частей в
 	// managed-формах. Самохостинг вместо CDN: UI работает офлайн.
-	r.Handle("/vendor/slickgrid/*", http.StripPrefix("/vendor/slickgrid/", webassets.SlickGridHandler()))
+	r.Handle("/vendor/slickgrid/*", noStore(http.StripPrefix("/vendor/slickgrid/", webassets.SlickGridHandler())))
 
 	// Launcher pages (no auth)
 	r.Get("/", s.h.index)
@@ -99,6 +134,7 @@ func (s *Server) ListenAndServe() error {
 	r.Post("/bases/{id}/delete", s.h.delete)
 	r.Post("/bases/{id}/move", s.h.move)
 	r.Post("/bases/{id}/start", s.h.start)
+	r.Post("/bases/{id}/start-native", s.h.startNative)
 	r.Post("/bases/{id}/start-isolated", s.h.startIsolated)
 	r.Post("/bases/{id}/profiles/clean", s.h.cleanProfiles)
 	r.Post("/bases/{id}/stop", s.h.stop)
@@ -153,6 +189,8 @@ func (s *Server) ListenAndServe() error {
 		r.Post("/bases/{id}/configurator/widget-preview", s.h.configuratorWidgetPreview)
 		r.Post("/bases/{id}/configurator/page", s.h.configuratorSavePage)
 		r.Post("/bases/{id}/configurator/page-delete", s.h.configuratorDeletePage)
+		r.Post("/bases/{id}/configurator/journal", s.h.configuratorSaveJournal)
+		r.Post("/bases/{id}/configurator/journal-delete", s.h.configuratorDeleteJournal)
 		r.Post("/bases/{id}/configurator/home-page", s.h.configuratorSaveHomePage)
 		r.Post("/bases/{id}/configurator/home-page-yaml", s.h.configuratorSaveHomePageYAML)
 		r.Post("/bases/{id}/configurator/check", s.h.configuratorCheck)

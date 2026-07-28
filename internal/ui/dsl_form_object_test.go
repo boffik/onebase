@@ -2,12 +2,16 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/ivantit66/onebase/internal/dsl/ast"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // План 37, этап 8: formObjectThis должен возвращать formTpProxy при Get
@@ -37,6 +41,114 @@ func TestFormObjectThis_GetReturnsTpProxy(t *testing.T) {
 	}
 	if tp.tpName != "Товары" {
 		t.Errorf("tpName = %q, ожидалось \"Товары\"", tp.tpName)
+	}
+}
+
+// formObjectThis должен сохранять контракты идентичности и строкового
+// представления runtime.Object. Иначе запись `Дв.Документ = this` передаёт в
+// драйвер БД внутренний *formObjectThis вместо UUID/display-строки.
+func TestFormObjectThis_DelegatesIdentityAndString(t *testing.T) {
+	id := uuid.New()
+	obj := &runtime.Object{
+		ID:     id,
+		Type:   "ПриходныйКассовыйОрдер",
+		Fields: map[string]any{"номер": "ПКО-00001"},
+	}
+	this := &formObjectThis{obj: obj}
+
+	if got := this.GetRefUUID(); got != id.String() {
+		t.Errorf("GetRefUUID() = %q, ожидался %q", got, id.String())
+	}
+	if got := this.String(); got != "ПКО-00001" {
+		t.Errorf("String() = %q, ожидался номер документа", got)
+	}
+}
+
+// Оборачивание объекта для формы не должно скрывать его методы. В частности,
+// posting-модули используют this.МоментВремени() для корректных срезов остатков.
+func TestFormObjectThis_DelegatesObjectMethods(t *testing.T) {
+	id := uuid.New()
+	period := time.Date(2026, time.July, 22, 12, 30, 0, 0, time.UTC)
+	obj := &runtime.Object{
+		ID:     id,
+		Type:   "РеализацияТоваров",
+		Fields: map[string]any{"дата": period},
+	}
+	this := &formObjectThis{obj: obj}
+
+	got, ok := this.CallMethod("моментвремени", nil).(*runtime.MomentTime)
+	if !ok {
+		t.Fatalf("МоментВремени() = %T, ожидался *runtime.MomentTime", got)
+	}
+	if got.DocID != id || got.DocType != obj.Type || !got.Period.Equal(period) {
+		t.Errorf("МоментВремени() = %+v, ожидались ID=%s, Type=%s, Period=%s", got, id, obj.Type, period)
+	}
+}
+
+// Сквозная регрессия: UI проводит документ через formObjectThis, а posting-код
+// кладёт сам this одновременно в строковый и ссылочный атрибуты регистра.
+// PostgreSQL раньше падал на string-поле с "cannot find encode plan"; SQLite
+// также не должен получать внутренний тип UI на границе storage.
+func TestFormObjectThis_DirectValueWritesToRegister(t *testing.T) {
+	doc := &metadata.Entity{
+		Name:    "ПриходныйКассовыйОрдер",
+		Kind:    metadata.KindDocument,
+		Posting: true,
+		Fields:  []metadata.Field{{Name: "Номер", Type: metadata.FieldTypeString}},
+	}
+	reg := &metadata.Register{
+		Name:       "ДенежныеСредства",
+		Dimensions: []metadata.Field{{Name: "Касса", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Сумма", Type: metadata.FieldTypeNumber}},
+		Attributes: []metadata.Field{
+			{Name: "Документ", Type: metadata.FieldTypeString},
+			{Name: "ДокументСсылка", Type: "reference:ПриходныйКассовыйОрдер", RefEntity: "ПриходныйКассовыйОрдер"},
+		},
+	}
+	s, ctx := newSubmitTestServer(t, []*metadata.Entity{doc})
+	if err := s.store.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatal(err)
+	}
+	posting := mustParse(t, `Процедура ОбработкаПроведения()
+	Дв = Движения.ДенежныеСредства.Добавить();
+	Дв.Касса = "Основная";
+	Дв.Сумма = 100;
+	Дв.Документ = this;
+	Дв.ДокументСсылка = this;
+КонецПроцедуры`)
+	s.reg.Load(runtime.LoadOptions{
+		Entities:  []*metadata.Entity{doc},
+		Programs:  map[string]*ast.Program{doc.Name: posting},
+		Registers: []*metadata.Register{reg},
+	})
+
+	id := uuid.New()
+	res, err := s.entitySvc.Save(ctx, entityservice.SaveRequest{
+		Entity: doc,
+		ID:     id,
+		IsNew:  true,
+		Fields: map[string]any{"Номер": "ПКО-00001"},
+		Action: "post",
+	})
+	if err != nil {
+		t.Fatalf("проведение вернуло техническую ошибку: %v", err)
+	}
+	if res.DSLError != "" {
+		t.Fatalf("проведение вернуло DSL-ошибку: %s", res.DSLError)
+	}
+
+	rows, err := s.store.GetMovements(ctx, reg.Name, reg, storage.RegFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ожидалось одно движение, получено %d", len(rows))
+	}
+	if got := rows[0]["Документ"]; got != "ПКО-00001" {
+		t.Errorf("Документ = %v, ожидалось ПКО-00001", got)
+	}
+	if got := rows[0]["ДокументСсылка"]; got != id.String() {
+		t.Errorf("ДокументСсылка = %v, ожидалось %s", got, id)
 	}
 }
 

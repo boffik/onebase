@@ -67,7 +67,7 @@ func TestLoginLimiter_BlockExpires(t *testing.T) {
 // после успешного входа в новом окне счётчик сбрасывается.
 func TestLoginSubmit_RateLimited(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", true); err != nil {
+	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", false); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	h := &auth.Handlers{Repo: repo, LoginLimit: auth.NewLoginLimiter(3, time.Minute)}
@@ -99,7 +99,7 @@ func TestLoginSubmit_RateLimited(t *testing.T) {
 
 func TestLoginJSON_RateLimited(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", true); err != nil {
+	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", false); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	h := &auth.Handlers{Repo: repo, LoginLimit: auth.NewLoginLimiter(2, time.Minute)}
@@ -126,7 +126,7 @@ func TestLoginJSON_RateLimited(t *testing.T) {
 // Успешный вход сбрасывает счётчик неудач для ключа.
 func TestLoginSubmit_SuccessResetsLimiter(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", true); err != nil {
+	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", false); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	limiter := auth.NewLoginLimiter(3, time.Minute)

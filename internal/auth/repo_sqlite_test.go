@@ -8,6 +8,9 @@ package auth_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +22,11 @@ import (
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/storage"
 )
+
+func sessionDigest(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
 
 // newTestRepo поднимает чистую SQLite-базу со схемой auth.
 func newTestRepo(t *testing.T) (*auth.Repo, context.Context) {
@@ -56,34 +64,16 @@ func TestCreateAndAuthenticate(t *testing.T) {
 		t.Fatal("свежая база не должна содержать пользователей")
 	}
 
-	// Первый пользователь без is_admin — отказ (controlling#130).
-	if _, err := repo.Create(ctx, "clerk", "secret123", "Клерк", false); err == nil {
-		t.Fatal("первый Create без is_admin должен вернуть ошибку")
-	} else if err != auth.ErrFirstUserMustBeAdmin {
-		t.Fatalf("ожидался ErrFirstUserMustBeAdmin, получено %v", err)
-	}
-	if has, _ := repo.HasUsers(ctx); has {
-		t.Fatal("после отказанного Create база должна остаться без пользователей")
-	}
-
-	user, err := repo.Create(ctx, "ivan", "secret123", "Иван Петров", true)
+	user, err := repo.Create(ctx, "ivan", "secret123", "Иван Петров", false)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if user.ID == "" {
 		t.Fatal("Create должен присвоить ID")
 	}
-	if !user.IsAdmin {
-		t.Fatal("первый пользователь должен быть администратором")
-	}
 
 	if has, _ := repo.HasUsers(ctx); !has {
 		t.Fatal("после Create HasUsers должен вернуть true")
-	}
-
-	// После первого админа можно создать обычного пользователя.
-	if _, err := repo.Create(ctx, "clerk", "secret123", "Клерк", false); err != nil {
-		t.Fatalf("второй Create без is_admin должен пройти: %v", err)
 	}
 
 	// Верный пароль.
@@ -108,23 +98,23 @@ func TestCreateAndAuthenticate(t *testing.T) {
 
 func TestUpdatePasswordInvalidatesOldPassword(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "petr", "oldpass", "", true)
+	user, _ := repo.Create(ctx, "petr", "oldpassword", "", false)
 
-	if err := repo.UpdatePassword(ctx, user.ID, "newpass"); err != nil {
+	if err := repo.UpdatePassword(ctx, user.ID, "newpassword"); err != nil {
 		t.Fatalf("UpdatePassword: %v", err)
 	}
 
-	if _, err := repo.Authenticate(ctx, "petr", "oldpass"); err == nil {
+	if _, err := repo.Authenticate(ctx, "petr", "oldpassword"); err == nil {
 		t.Fatal("старый пароль не должен работать после смены")
 	}
-	if _, err := repo.Authenticate(ctx, "petr", "newpass"); err != nil {
+	if _, err := repo.Authenticate(ctx, "petr", "newpassword"); err != nil {
 		t.Fatalf("новый пароль должен работать: %v", err)
 	}
 }
 
 func TestSessionsLifecycle(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "sess", "pass", "", true)
+	user, _ := repo.Create(ctx, "sess", "password", "", false)
 
 	token, err := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
 	if err != nil {
@@ -158,7 +148,7 @@ func TestSessionsLifecycle(t *testing.T) {
 
 func TestAPITokensLifecycle(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "api", "pass", "API User", true)
+	user, _ := repo.Create(ctx, "api", "password", "API User", false)
 	role := []*auth.Role{{
 		Name: "API runner",
 		Permissions: auth.Permission{
@@ -226,7 +216,7 @@ func TestAPITokensLifecycle(t *testing.T) {
 // Мультисессии (план 78): новая сессия НЕ выбивает прежние — оба окна живут.
 func TestCreateSessionKeepsOtherSessions(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "multi", "pass", "", true)
+	user, _ := repo.Create(ctx, "multi", "password", "", false)
 
 	first, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
 	second, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
@@ -239,14 +229,38 @@ func TestCreateSessionKeepsOtherSessions(t *testing.T) {
 	}
 }
 
+func TestCreateSessionStoresOnlyTokenDigest(t *testing.T) {
+	repo, db, ctx := newTestRepoDB(t)
+	user, err := repo.Create(ctx, "digest", "password", "", false)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	token, err := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	var storedToken, storedHash string
+	if err := db.QueryRow(ctx, `SELECT token, token_hash FROM _sessions WHERE user_id = ?`, user.ID).Scan(&storedToken, &storedHash); err != nil {
+		t.Fatalf("read stored session: %v", err)
+	}
+	want := sessionDigest(token)
+	if storedToken != want || storedHash != want {
+		t.Fatalf("session storage = (%q, %q), want digest only", storedToken, storedHash)
+	}
+	if strings.Contains(storedToken, token) || strings.Contains(storedHash, token) {
+		t.Fatal("raw bearer token leaked into session storage")
+	}
+}
+
 // CreateSession подчищает истёкшие сессии (единственное, что она удаляет).
 func TestCreateSessionCleansExpired(t *testing.T) {
 	repo, db, ctx := newTestRepoDB(t)
-	user, _ := repo.Create(ctx, "expired", "pass", "", true)
+	user, _ := repo.Create(ctx, "expired", "password", "", false)
 
 	old, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
 	// Состариваем сессию напрямую (сеттера TTL у репозитория нет намеренно).
-	if _, err := db.Exec(ctx, `UPDATE _sessions SET expires_at = '2000-01-01 00:00:00' WHERE token = ?`, old); err != nil {
+	if _, err := db.Exec(ctx, `UPDATE _sessions SET expires_at = '2000-01-01 00:00:00' WHERE token_hash = ?`, sessionDigest(old)); err != nil {
 		t.Fatalf("состарить сессию: %v", err)
 	}
 
@@ -255,7 +269,7 @@ func TestCreateSessionCleansExpired(t *testing.T) {
 		t.Fatalf("свежая сессия должна работать: %v", err)
 	}
 	var count int
-	if err := db.QueryRow(ctx, `SELECT count(*) FROM _sessions WHERE token = ?`, old).Scan(&count); err != nil {
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM _sessions WHERE token_hash = ?`, sessionDigest(old)).Scan(&count); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 0 {
@@ -265,9 +279,9 @@ func TestCreateSessionCleansExpired(t *testing.T) {
 
 func TestDeleteExpiredSessions(t *testing.T) {
 	repo, db, ctx := newTestRepoDB(t)
-	user, _ := repo.Create(ctx, "sweeper", "pass", "", true)
+	user, _ := repo.Create(ctx, "sweeper", "password", "", false)
 	token, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
-	if _, err := db.Exec(ctx, `UPDATE _sessions SET expires_at = '2000-01-01 00:00:00' WHERE token = ?`, token); err != nil {
+	if _, err := db.Exec(ctx, `UPDATE _sessions SET expires_at = '2000-01-01 00:00:00' WHERE token_hash = ?`, sessionDigest(token)); err != nil {
 		t.Fatalf("состарить сессию: %v", err)
 	}
 	if err := repo.DeleteExpiredSessions(ctx); err != nil {
@@ -280,7 +294,7 @@ func TestDeleteExpiredSessions(t *testing.T) {
 
 func TestKickUserDropsSession(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "kickme", "pass", "", true)
+	user, _ := repo.Create(ctx, "kickme", "password", "", false)
 	token, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
 
 	if err := repo.KickUser(ctx, "kickme"); err != nil {
@@ -294,7 +308,7 @@ func TestKickUserDropsSession(t *testing.T) {
 // ActiveSessions возвращает по строке на сессию с метаданными (план 78).
 func TestActiveSessionsMultiRowsAndMeta(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "meta", "pass", "Мета Тестов", true)
+	user, _ := repo.Create(ctx, "meta", "password", "Мета Тестов", false)
 
 	entToken, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{
 		Kind: auth.SessionKindEnterprise, IP: "127.0.0.1:5555", UserAgent: "Mozilla/5.0 Chrome/126",
@@ -329,6 +343,7 @@ func TestActiveSessionsMultiRowsAndMeta(t *testing.T) {
 	ent, cfg := kinds[auth.SessionKindEnterprise], kinds[auth.SessionKindConfigurator]
 	if ent == nil || cfg == nil {
 		t.Fatalf("ожидались kind enterprise и configurator, получено %v", kinds)
+		return
 	}
 	if ent.IP != "127.0.0.1:5555" || cfg.IP != "127.0.0.1:6666" {
 		t.Fatalf("IP не сохранился: %q / %q", ent.IP, cfg.IP)
@@ -341,7 +356,7 @@ func TestActiveSessionsMultiRowsAndMeta(t *testing.T) {
 // KickSession по public_id завершает только одну сессию (план 78).
 func TestKickSessionByPublicID(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "kickone", "pass", "", true)
+	user, _ := repo.Create(ctx, "kickone", "password", "", false)
 
 	entToken, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
 	cfgToken, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindConfigurator})
@@ -376,8 +391,8 @@ func TestKickSessionByPublicID(t *testing.T) {
 // KickOtherSessions — «выйти со всех устройств, кроме текущего».
 func TestKickOtherSessions(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "others", "pass", "", true)
-	stranger, _ := repo.Create(ctx, "stranger", "pass", "", true)
+	user, _ := repo.Create(ctx, "others", "password", "", false)
+	stranger, _ := repo.Create(ctx, "stranger", "password", "", false)
 
 	current, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
 	other1, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
@@ -404,7 +419,7 @@ func TestKickOtherSessions(t *testing.T) {
 // смене пароля администратором).
 func TestKickUserSessionsByID(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "byid", "pass", "", true)
+	user, _ := repo.Create(ctx, "byid", "password", "", false)
 	t1, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
 	t2, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
 
@@ -432,13 +447,13 @@ func TestSessionLimitDisplacesOldestEnterprise(t *testing.T) {
 		t.Fatalf("лимит должен сохраниться: %d", got)
 	}
 
-	user, _ := repo.Create(ctx, "limited", "pass", "", true)
+	user, _ := repo.Create(ctx, "limited", "password", "", false)
 	e1, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
 	e2, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
 	cfg, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindConfigurator})
 
 	// Делаем e1 заведомо самой давней по активности.
-	if _, err := db.Exec(ctx, `UPDATE _sessions SET last_seen_at = '2000-01-01 00:00:00' WHERE token = ?`, e1); err != nil {
+	if _, err := db.Exec(ctx, `UPDATE _sessions SET last_seen_at = '2000-01-01 00:00:00' WHERE token_hash = ?`, sessionDigest(e1)); err != nil {
 		t.Fatalf("состарить last_seen: %v", err)
 	}
 
@@ -463,7 +478,7 @@ func TestSessionLimitOneKeepsConfigurator(t *testing.T) {
 	if err := db.SaveMaxSessionsPerUser(ctx, 1); err != nil {
 		t.Fatalf("SaveMaxSessionsPerUser: %v", err)
 	}
-	user, _ := repo.Create(ctx, "single2", "pass", "", true)
+	user, _ := repo.Create(ctx, "single2", "password", "", false)
 
 	cfg, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindConfigurator})
 	e1, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
@@ -483,7 +498,7 @@ func TestSessionLimitOneKeepsConfigurator(t *testing.T) {
 // TouchSession обновляет last_seen_at не чаще раза в 5 минут (троттлинг).
 func TestTouchSessionThrottled(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "toucher", "pass", "", true)
+	user, _ := repo.Create(ctx, "toucher", "password", "", false)
 	token, _ := repo.CreateSession(ctx, user.ID, auth.SessionMeta{})
 
 	lastSeen := func() time.Time {
@@ -557,7 +572,7 @@ func TestEnsureSchemaUpgradesLegacySessions(t *testing.T) {
 		t.Fatalf("повторный EnsureSchema: %v", err)
 	}
 
-	user, err := repo.Create(ctx, "legacy", "pass", "", true)
+	user, err := repo.Create(ctx, "legacy", "password", "", false)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -577,12 +592,57 @@ func TestEnsureSchemaUpgradesLegacySessions(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaHashesLegacySessionWithoutInvalidatingCookie(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "legacy-token.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	t.Cleanup(db.Close)
+
+	if _, err := db.Exec(ctx, `CREATE TABLE _users (
+		id TEXT PRIMARY KEY, login TEXT UNIQUE NOT NULL, password_hash BLOB NOT NULL,
+		full_name TEXT NOT NULL DEFAULT '', is_admin INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')))`); err != nil {
+		t.Fatalf("legacy _users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `CREATE TABLE _sessions (
+		token TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES _users(id) ON DELETE CASCADE,
+		expires_at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("legacy _sessions: %v", err)
+	}
+
+	repo := auth.NewRepo(db)
+	user, err := repo.Create(ctx, "legacy-cookie", "password", "", false)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	const rawToken = "legacy-plaintext-bearer-token"
+	if _, err := db.Exec(ctx, `INSERT INTO _sessions(token, user_id, expires_at)
+		VALUES (?, ?, '2999-01-01 00:00:00')`, rawToken, user.ID); err != nil {
+		t.Fatalf("insert legacy session: %v", err)
+	}
+
+	if err := repo.EnsureSchema(ctx); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+	if _, err := repo.LookupSession(ctx, rawToken); err != nil {
+		t.Fatalf("legacy cookie no longer authenticates after migration: %v", err)
+	}
+	var storedToken, storedHash string
+	if err := db.QueryRow(ctx, `SELECT token, token_hash FROM _sessions WHERE user_id = ?`, user.ID).Scan(&storedToken, &storedHash); err != nil {
+		t.Fatalf("read migrated session: %v", err)
+	}
+	want := sessionDigest(rawToken)
+	if storedToken != want || storedHash != want {
+		t.Fatalf("migrated session = (%q, %q), want %q", storedToken, storedHash, want)
+	}
+}
+
 func TestRolesAssignAndPermissions(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	if _, err := repo.Create(ctx, "boss", "pass", "Босс", true); err != nil {
-		t.Fatal(err)
-	}
-	user, _ := repo.Create(ctx, "manager", "pass", "Менеджер", false)
+	user, _ := repo.Create(ctx, "manager", "password", "Менеджер", false)
 
 	roles := []*auth.Role{{
 		Name:        "Продажник",
@@ -679,8 +739,8 @@ func TestSyncRolesUpsert(t *testing.T) {
 
 func TestListForSelectionFiltersByShowInList(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	visible, _ := repo.Create(ctx, "visible", "p", "", true)
-	repo.Create(ctx, "hidden", "p", "", true)
+	visible, _ := repo.Create(ctx, "visible", "password", "", false)
+	repo.Create(ctx, "hidden", "password", "", false)
 
 	if err := repo.SetShowInList(ctx, visible.ID, true); err != nil {
 		t.Fatalf("SetShowInList: %v", err)
@@ -704,6 +764,9 @@ func TestMiddlewareRequiresSessionWhenUsersExist(t *testing.T) {
 	repo, ctx := newTestRepo(t)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth.UserFromContext(r.Context()) == nil && !auth.OpenAccessFromContext(r.Context()) {
+			t.Fatal("anonymous pass-through must be explicitly marked as open access")
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 	handler := repo.Middleware(next)
@@ -716,7 +779,7 @@ func TestMiddlewareRequiresSessionWhenUsersExist(t *testing.T) {
 	}
 
 	// Появился пользователь — теперь нужна сессия.
-	user, _ := repo.Create(ctx, "guard", "pass", "", true)
+	user, _ := repo.Create(ctx, "guard", "password", "", false)
 
 	reqNoCookie := httptest.NewRequest(http.MethodGet, "/ui", nil)
 	reqNoCookie.Header.Set("Accept", "text/html")
@@ -737,9 +800,74 @@ func TestMiddlewareRequiresSessionWhenUsersExist(t *testing.T) {
 	}
 }
 
+func TestMiddlewareFailsClosedWhenAuthDatabaseErrors(t *testing.T) {
+	repo, db, _ := newTestRepoDB(t)
+	db.Close()
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	for name, handler := range map[string]http.Handler{
+		"session": repo.Middleware(next),
+		"api":     repo.APITokenOrSessionMiddleware(next),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/protected", nil))
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if called {
+				t.Fatal("protected handler was called after auth database error")
+			}
+		})
+	}
+}
+
+func TestManagedUserInvariants(t *testing.T) {
+	repo, ctx := newTestRepo(t)
+
+	if _, err := repo.CreateManaged(ctx, "user", "password", "", false); !errors.Is(err, auth.ErrFirstUserMustBeAdmin) {
+		t.Fatalf("first non-admin error=%v, want ErrFirstUserMustBeAdmin", err)
+	}
+	admin1, err := repo.CreateManaged(ctx, "admin1", "password", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := repo.CreateManaged(ctx, "user", "password", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Update(ctx, admin1.ID, "", false, false, false, false); !errors.Is(err, auth.ErrLastAdmin) {
+		t.Fatalf("demote last admin error=%v, want ErrLastAdmin", err)
+	}
+	if err := repo.Delete(ctx, admin1.ID); !errors.Is(err, auth.ErrLastAdmin) {
+		t.Fatalf("delete last admin error=%v, want ErrLastAdmin", err)
+	}
+	if err := repo.Delete(ctx, user.ID); err != nil {
+		t.Fatalf("delete ordinary user: %v", err)
+	}
+	if err := repo.Delete(ctx, admin1.ID); !errors.Is(err, auth.ErrLastUser) {
+		t.Fatalf("delete final user error=%v, want ErrLastUser", err)
+	}
+
+	admin2, err := repo.CreateManaged(ctx, "admin2", "password", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, admin1.ID, "", false, false, false, false); err != nil {
+		t.Fatalf("demote admin while another remains: %v", err)
+	}
+	if err := repo.Delete(ctx, admin2.ID); !errors.Is(err, auth.ErrLastAdmin) {
+		t.Fatalf("delete sole remaining admin error=%v, want ErrLastAdmin", err)
+	}
+}
+
 func TestAPITokenOrSessionMiddleware(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, _ := repo.Create(ctx, "guard", "pass", "", true)
+	user, _ := repo.Create(ctx, "guard", "password", "", false)
 	rawToken := ""
 	_, rawToken, err := repo.CreateAPIToken(ctx, "integration", user.ID, nil)
 	if err != nil {

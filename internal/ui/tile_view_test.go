@@ -114,6 +114,100 @@ func TestResolveListColumns(t *testing.T) {
 	}
 }
 
+func TestResolveListColumnsEntityListForm(t *testing.T) {
+	ent := &metadata.Entity{
+		Name: "Показания",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "ДатаНачала", Type: metadata.FieldTypeDate},
+			{Name: "ДатаОкончания", Type: metadata.FieldTypeDate},
+			{Name: "ПоказанияНачала", Type: metadata.FieldTypeNumber},
+		},
+		ListForm: []string{"ДатаНачала", "Наименование"},
+		TileView: &metadata.TileView{Title: "ПоказанияНачала"},
+	}
+
+	var names []string
+	for _, field := range resolveListColumns(ent) {
+		names = append(names, field.Name)
+	}
+	if got, want := strings.Join(names, ","), "ДатаНачала,Наименование"; got != want {
+		t.Fatalf("колонки list_form = %q, ожидалось %q", got, want)
+	}
+}
+
+func TestResolveListColumnsManagedListForm(t *testing.T) {
+	form := &metadata.FormModule{
+		Name:       "ФормаСписка",
+		Kind:       "list",
+		LayoutKind: metadata.FormLayoutManaged,
+		Elements: []*metadata.FormElement{
+			{
+				Kind:     metadata.FormElementTable,
+				Name:     "Список",
+				DataPath: "Список",
+				Children: []*metadata.FormElement{
+					{Kind: metadata.FormElementColumn, Name: "КолПоказания", DataPath: "Список.ПоказанияНачала"},
+					{Kind: metadata.FormElementColumn, Name: "КолНаименование", DataPath: "Список.Наименование"},
+				},
+			},
+		},
+	}
+	ent := &metadata.Entity{
+		Name: "Показания",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "ДатаНачала", Type: metadata.FieldTypeDate},
+			{Name: "ПоказанияНачала", Type: metadata.FieldTypeNumber},
+		},
+		ListForm: []string{"ДатаНачала"},
+		Forms:    []*metadata.FormModule{form},
+	}
+
+	var names []string
+	for _, field := range resolveListColumns(ent) {
+		names = append(names, field.Name)
+	}
+	if got, want := strings.Join(names, ","), "ПоказанияНачала,Наименование"; got != want {
+		t.Fatalf("колонки управляемой формы списка = %q, ожидалось %q", got, want)
+	}
+}
+
+func TestPageList_HonorsEntityListForm(t *testing.T) {
+	ent := &metadata.Entity{
+		Name: "Показания",
+		Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{
+			{Name: "Наименование", Type: metadata.FieldTypeString},
+			{Name: "ДатаНачала", Type: metadata.FieldTypeDate},
+			{Name: "ДатаОкончания", Type: metadata.FieldTypeDate},
+			{Name: "ПоказанияНачала", Type: metadata.FieldTypeNumber},
+		},
+		ListForm: []string{"Наименование", "ДатаНачала"},
+	}
+	html := renderPageList(t, map[string]any{
+		"Entity": ent,
+		"Rows": []map[string]any{{
+			"id": "1", "Наименование": "Счётчик 1", "ДатаНачала": "2026-07-01T00:00:00Z",
+			"ДатаОкончания": "2099-12-31T00:00:00Z", "ПоказанияНачала": "987654.321",
+		}},
+		"Params": storage.ListParams{}, "RefFilterOptions": map[string]any{},
+		"Lang": "ru", "Total": 1, "Page": 1, "TotalPages": 1,
+	})
+	for _, want := range []string{"Счётчик 1", "01.07.2026"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("список не содержит выбранное значение %q", want)
+		}
+	}
+	for _, unwanted := range []string{"2099", "987654.321"} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("список показал значение невыбранной колонки %q", unwanted)
+		}
+	}
+}
+
 // Табличный режим списка (страницы/лента) теперь уважает tile_view.fields:
 // выбранные колонки показываются, невыбранные — нет (#216).
 func TestPageList_ListViewHonorsTileFields(t *testing.T) {

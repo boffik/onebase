@@ -26,11 +26,18 @@ import (
 
 // Common — параметры базовой DSL-карты. Заполните поля и вызовите Build().
 type Common struct {
-	Ctx       context.Context
+	Ctx context.Context
+	// CtxSource, when set, supplies the current DSL transaction context to
+	// write-capable common objects. nil wraps Ctx as a static source.
+	CtxSource interpreter.CtxSource
 	Reg       *runtime.Registry
 	Store     *storage.DB
-	Mailer    interpreter.EmailSender     // nil допустим — email-функции запаникуют при вызове, не при сборке
-	Movements *runtime.MovementsCollector // nil допустим — попадёт в карту как Движения=nil (совместимо с прежним поведением)
+	Mailer    interpreter.EmailSender // nil допустим — email-функции запаникуют при вызове, не при сборке
+	// EmailFileResolver authorizes paths used as email attachments. UI supplies
+	// an RLS-aware resolver for files from attachment storage; nil keeps the
+	// ordinary DSL file-sandbox behavior.
+	EmailFileResolver interpreter.EmailFileResolver
+	Movements         *runtime.MovementsCollector // nil допустим — попадёт в карту как Движения=nil (совместимо с прежним поведением)
 	// NetGuard вызывается перед каждой сетевой операцией DSL (HTTP-клиент,
 	// email). Возвращает ошибку, если сеть заблокирована предохранителем
 	// (план 62). nil → сеть не ограничивается (для тестов/совместимости).
@@ -43,6 +50,11 @@ type Common struct {
 	// (план 74). nil → функции ОтправитьУведомление/PublishNotification
 	// остаются тихим no-op (фоновые задания/тесты без подключённой шины).
 	Notifier interpreter.Notifier
+	// Interp — интерпретатор конфигурации. Нужен ТОЛЬКО объекту ПланыОбмена, чтобы
+	// правило конфликта hook (ПриКонфликтеОбмена) работало при загрузке пакета из
+	// DSL (ЗагрузитьПакет). nil → hook на DSL-пути откатывается к by_time (как
+	// прежде); остальные DSL-переменные от Interp не зависят.
+	Interp *interpreter.Interpreter
 }
 
 // Build возвращает map с пересечением DSL-переменных, общих для UI и scheduler.
@@ -76,7 +88,7 @@ func (c Common) Build() map[string]any {
 	for k, v := range interpreter.NewHTTPFunctions(c.NetGuard) {
 		vars[k] = v
 	}
-	for k, v := range interpreter.NewEmailFunctions(c.Mailer, c.NetGuard) {
+	for k, v := range interpreter.NewEmailFunctions(c.Mailer, c.NetGuard, c.EmailFileResolver) {
 		vars[k] = v
 	}
 	for k, v := range interpreter.NewFileFunctions(nil) {
@@ -172,5 +184,32 @@ func (c Common) Build() map[string]any {
 	})
 	vars["СсылкаНаОбъект"] = objectRef
 	vars["ObjectRef"] = objectRef
+
+	// Планы обмена (план 86): ПланыОбмена.<План>.ВыгрузитьИзменения("узел") /
+	// .ЗагрузитьПакет(Пакет). Нужны и store, и реестр; без них не инжектируем.
+	if c.Store != nil && c.Reg != nil {
+		exchangeRoot := interpreter.NewExchangePlansRoot(c.Ctx, c.Store, c.Reg)
+		// С доступным интерпретатором подключаем обработчик правила конфликта hook
+		// к загрузке пакета из DSL (иначе hook на этом пути откатывается к by_time).
+		if c.Interp != nil {
+			exchangeRoot = exchangeRoot.WithHook(NewExchangeHook(c.Store, c.Reg, c.Interp))
+		}
+		vars["ПланыОбмена"] = exchangeRoot
+		vars["ExchangePlans"] = exchangeRoot
+	}
+
+	// Нумераторы (issue #358): Нумераторы.СледующийНомер("Сущность"[, Дата]) —
+	// доступ из DSL к тому же атомарному счётчику автонумерации, что и REST/UI-путь
+	// создания записи. Нужен объектам, создаваемым из обработок/заданий, которые
+	// идут мимо автонумерации хендлеров.
+	if c.Store != nil && c.Reg != nil {
+		ctxSource := c.CtxSource
+		if ctxSource == nil {
+			ctxSource = interpreter.NewStaticCtx(c.Ctx)
+		}
+		numerators := interpreter.NewNumeratorsRoot(ctxSource, c.Store, c.Reg)
+		vars["Нумераторы"] = numerators
+		vars["Numerators"] = numerators
+	}
 	return vars
 }

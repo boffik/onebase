@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/ivantit66/onebase/internal/exchange"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -331,7 +332,16 @@ func (s *Server) infoRegSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.InfoRegSet(r.Context(), ir, dims, resources, periodPtr); err != nil {
+	// Запись и регистрация изменения в планах обмена (план 86) — в одной
+	// транзакции. RegisterInfoRegOnSave пропускает периодические регистры и те,
+	// что не входят в состав обмена.
+	plans := s.reg.ExchangePlans()
+	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
+		if err := s.store.InfoRegSet(ctx, ir, dims, resources, periodPtr); err != nil {
+			return err
+		}
+		return exchange.RegisterInfoRegOnSave(ctx, s.store, plans, ir, dims, false)
+	}); err != nil {
 		s.render(w, r, "page-inforeg-form", map[string]any{
 			"InfoReg": ir,
 			"Values":  formValuesFromRequest(r, ir),
@@ -371,7 +381,13 @@ func (s *Server) infoRegDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.rowAllowedFor(w, r, "inforeg", ir.Name, "delete", storage.InfoRegisterPredicateEntity(ir), row) {
 		return
 	}
-	if err := s.store.InfoRegDelete(r.Context(), ir, dims, periodPtr); err != nil {
+	plans := s.reg.ExchangePlans()
+	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
+		if err := s.store.InfoRegDelete(ctx, ir, dims, periodPtr); err != nil {
+			return err
+		}
+		return exchange.RegisterInfoRegOnSave(ctx, s.store, plans, ir, dims, true)
+	}); err != nil {
 		http.Error(w, s.errText(r, err), 500)
 		return
 	}
@@ -443,38 +459,57 @@ func parseInfoRegFieldValue(f metadata.Field, val string) any {
 }
 
 func (s *Server) constantsList(w http.ResponseWriter, r *http.Request) {
-	consts := s.reg.Constants()
-	sort.Slice(consts, func(i, j int) bool { return consts[i].Name < consts[j].Name })
-
 	values, _ := s.store.ListConstants(r.Context())
 	valStrs := make(map[string]string, len(values))
 	for k, v := range values {
 		valStrs[k] = fmt.Sprintf("%v", v)
 	}
+	s.renderConstantsPage(w, r, valStrs, r.URL.Query().Get("saved") == "1", "")
+}
 
-	// ref options for reference-type constants
+// renderConstantsPage рендерит форму «Константы» с заданными значениями. Общий
+// путь для GET (сохранённые значения) и для ошибки валидации при POST (введённые
+// значения + сообщение errMsg), чтобы оператор не терял ввод.
+func (s *Server) renderConstantsPage(w http.ResponseWriter, r *http.Request, valStrs map[string]string, saved bool, errMsg string) {
+	consts := s.reg.Constants()
+	sort.Slice(consts, func(i, j int) bool { return consts[i].Name < consts[j].Name })
+
+	lang := s.resolveLang(r)
+	// Опции выбора для ссылочных и enum-констант.
 	refOpts := make(map[string][]map[string]any)
+	enumOpts := make(map[string][]EnumOption)
 	for _, c := range consts {
-		if c.RefEntity == "" {
-			continue
+		switch {
+		case c.RefEntity != "":
+			refEntity := s.reg.GetEntity(c.RefEntity)
+			if refEntity == nil {
+				continue
+			}
+			rows, err := s.initialReferenceOptions(r.Context(), refEntity, refOptionsChoice, []string{valStrs[c.Name]})
+			if err != nil {
+				continue
+			}
+			refOpts[c.Name] = rows
+		case c.EnumName != "":
+			en := s.reg.GetEnum(c.EnumName)
+			if en == nil {
+				continue
+			}
+			list := make([]EnumOption, 0, len(en.Values))
+			for _, v := range en.Values {
+				list = append(list, EnumOption{Value: v, Label: en.ValueTitle(v, lang)})
+			}
+			enumOpts[c.Name] = list
 		}
-		refEntity := s.reg.GetEntity(c.RefEntity)
-		if refEntity == nil {
-			continue
-		}
-		rows, err := s.initialReferenceOptions(r.Context(), refEntity, refOptionsChoice, []string{valStrs[c.Name]})
-		if err != nil {
-			continue
-		}
-		refOpts[c.Name] = rows
 	}
 
-	msg := r.URL.Query().Get("saved")
 	s.render(w, r, "page-constants", map[string]any{
 		"Constants": consts,
 		"Values":    valStrs,
 		"RefOpts":   refOpts,
-		"Saved":     msg == "1",
+		"EnumOpts":  enumOpts,
+		"Saved":     saved,
+		"Error":     errMsg,
 	})
 }
 
@@ -484,20 +519,85 @@ func (s *Server) constantsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	consts := s.reg.Constants()
+	lang := s.resolveLang(r)
+
+	// Сначала собираем и валидируем все значения — записываем, только если
+	// всё корректно (иначе получился бы частичный upsert части констант).
+	submitted := make(map[string]string, len(consts))
 	for _, c := range consts {
-		val := r.FormValue(c.Name)
-		var v any
-		if val == "" {
-			v = nil
-		} else {
-			v = val
-		}
-		if err := s.store.SetConstant(r.Context(), c.Name, v); err != nil {
-			http.Error(w, s.errText(r, err), 500)
+		submitted[c.Name] = strings.TrimSpace(r.FormValue(c.Name))
+	}
+	for _, c := range consts {
+		if msg := s.validateConstant(r.Context(), c, lang, submitted[c.Name]); msg != "" {
+			s.renderConstantsPage(w, r, submitted, false, msg)
 			return
 		}
 	}
+
+	// Запись констант и регистрация изменений в планах обмена (план 86) — в одной
+	// транзакции, чтобы сбой регистрации откатывал запись (как для сущностей).
+	plans := s.reg.ExchangePlans()
+	err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
+		for _, c := range consts {
+			val := submitted[c.Name]
+			var v any
+			if val != "" {
+				v = val
+			}
+			if err := s.store.SetConstant(ctx, c.Name, v); err != nil {
+				return err
+			}
+			if err := exchange.RegisterConstantOnSave(ctx, s.store, plans, c.Name); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		http.Error(w, s.errText(r, err), 500)
+		return
+	}
 	http.Redirect(w, r, "/ui/constants?saved=1", http.StatusSeeOther)
+}
+
+// validateConstant проверяет введённое значение константы против её описания:
+// обязательность (required), принадлежность домену перечисления (enum) и
+// существование элемента справочника (reference). Возвращает пустую строку,
+// если значение допустимо, иначе — понятное сообщение об ошибке (на русском).
+func (s *Server) validateConstant(ctx context.Context, c *metadata.Constant, lang, val string) string {
+	label := c.DisplayLabel(lang)
+	if val == "" {
+		if c.Required {
+			return fmt.Sprintf("Константа «%s» обязательна для заполнения", label)
+		}
+		return ""
+	}
+	switch {
+	case c.EnumName != "":
+		en := s.reg.GetEnum(c.EnumName)
+		if en == nil {
+			return fmt.Sprintf("Константа «%s»: перечисление %s не найдено", label, c.EnumName)
+		}
+		for _, v := range en.Values {
+			if v == val {
+				return ""
+			}
+		}
+		return fmt.Sprintf("Константа «%s»: недопустимое значение «%s» (не входит в перечисление %s)", label, val, c.EnumName)
+	case c.RefEntity != "":
+		ent := s.reg.GetEntity(c.RefEntity)
+		if ent == nil {
+			return fmt.Sprintf("Константа «%s»: справочник %s не найден", label, c.RefEntity)
+		}
+		id, err := uuid.Parse(val)
+		if err != nil {
+			return fmt.Sprintf("Константа «%s»: неверная ссылка «%s»", label, val)
+		}
+		if _, err := s.store.GetByID(ctx, c.RefEntity, id, ent); err != nil {
+			return fmt.Sprintf("Константа «%s»: выбранный элемент не найден", label)
+		}
+	}
+	return ""
 }
 
 func formValuesFromRequest(r *http.Request, ir *metadata.InfoRegister) map[string]string {

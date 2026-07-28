@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +12,47 @@ import (
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
+
+// InfoRegGetExact reads the exact record by full primary key (dimensions, plus
+// period for periodic registers). Returns (nil, nil) if there is no such record.
+// Used by exchange (план 86) to re-read a changed record's current resources when
+// building an outgoing package.
+func (db *DB) InfoRegGetExact(ctx context.Context, ir *metadata.InfoRegister, dimKey map[string]any, period *time.Time) (map[string]any, error) {
+	d := db.dialect
+	table := metadata.InfoRegTableName(ir.Name)
+	where, args := dimWhere(d, ir, dimKey, 1)
+	if ir.Periodic && period != nil {
+		where = fmt.Sprintf("%s AND period = %s", where, d.Placeholder(len(args)+1))
+		args = append(args, *period)
+	}
+	sql2 := fmt.Sprintf("SELECT %s FROM %s WHERE %s LIMIT 1",
+		strings.Join(resourceAndDimCols(ir), ", "), table, where)
+	rec, err := db.infoRegScan(ctx, ir, sql2, args)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return rec, err
+}
+
+// InfoRegApplyExchange применяет запись регистра сведений из пакета обмена
+// (план 86). Значения измерений/ресурсов приходят канонизированными (ссылки —
+// строкой-UUID, даты — RFC3339), поэтому приводим их к аргументам БД тем же
+// normalizeRegArg, что и запись движений. deletion=true удаляет запись по ключу.
+func (db *DB) InfoRegApplyExchange(ctx context.Context, ir *metadata.InfoRegister, dims, resources map[string]any, period *time.Time, deletion bool) error {
+	d := db.dialect
+	cdims := make(map[string]any, len(ir.Dimensions))
+	for _, f := range ir.Dimensions {
+		cdims[f.Name] = normalizeRegArg(d, dims[f.Name], f.RefEntity != "")
+	}
+	if deletion {
+		return db.InfoRegDelete(ctx, ir, cdims, period)
+	}
+	cres := make(map[string]any, len(ir.Resources))
+	for _, f := range ir.Resources {
+		cres[f.Name] = normalizeRegArg(d, resources[f.Name], f.RefEntity != "")
+	}
+	return db.InfoRegSet(ctx, ir, cdims, cres, period)
+}
 
 // InfoRegSet upserts a record in an info register.
 // For periodic registers, period must be non-nil.
@@ -148,7 +191,7 @@ func (db *DB) InfoRegList(ctx context.Context, ir *metadata.InfoRegister, f RegF
 			// period_key — машинный ключ для round-trip через HTML-форму
 			// удаления (см. ParseRegPeriod и ui.infoRegDelete). На PostgreSQL
 			// период приходит как time.Time → RFC3339 несёт инстант; на SQLite
-			// как TEXT-строка стенных часов → её и отдаём ключом.
+			// как TEXT-строка UTC → её и отдаём ключом.
 			switch v := dest[0].(type) {
 			case time.Time:
 				row["period"] = v.Format("02.01.2006")
@@ -156,7 +199,7 @@ func (db *DB) InfoRegList(ctx context.Context, ir *metadata.InfoRegister, f RegF
 			case string:
 				row["period_key"] = v
 				if t, ok := ParseRegPeriod(v); ok {
-					row["period"] = t.Format("02.01.2006")
+					row["period"] = t.In(time.Local).Format("02.01.2006")
 				} else {
 					row["period"] = v
 				}
@@ -182,10 +225,16 @@ func (db *DB) InfoRegList(ctx context.Context, ir *metadata.InfoRegister, f RegF
 // сериализуется в period_key (InfoRegList) и принимается обратно при удалении.
 // RFC3339 несёт инстант (PostgreSQL timestamptz); зононезависимые форматы —
 // стенные часы (SQLite TEXT, см. sqliteTimeLayout). time.Parse трактует
-// зононезависимый ввод как UTC, а normalizeSQLiteArgs форматирует стенные часы
-// как есть, поэтому сравнение period в SQLite совпадает независимо от зоны.
+// зононезависимый ввод как UTC; normalizeSQLiteArgs тоже хранит UTC,
+// поэтому сравнение period одинаково на SQLite и PostgreSQL.
 var regPeriodLayouts = []string{
 	time.RFC3339,
+	"2006-01-02 15:04:05-07:00",
+	"2006-01-02 15:04:05-07",
+	"2006-01-02 15:04:05Z07:00",
+}
+
+var localRegPeriodLayouts = []string{
 	"2006-01-02 15:04:05",
 	"2006-01-02T15:04:05",
 	"2006-01-02T15:04",
@@ -203,6 +252,13 @@ func ParseRegPeriod(s string) (time.Time, bool) {
 	}
 	for _, layout := range regPeriodLayouts {
 		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	// Legacy SQLite values did not contain an offset and represented local
+	// wall time. Preserve that interpretation while all new values carry UTC.
+	for _, layout := range localRegPeriodLayouts {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
 			return t, true
 		}
 	}

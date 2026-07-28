@@ -32,6 +32,9 @@
 > enterprise-auth, бизнес-процессы, обмен данными) и этап **79F** (storage-
 > чокпоинт RLS) — см. «Направление Л» ниже. `35-1c-feature-inventory` приведён
 > к факту (RLS/СКД — ✅).
+> Сверка 2026-07-27: `staticcheck` включён в блокирующий CI; оставшееся
+> ужесточение по `bodyclose`, `unused`, `errcheck` и `gosec` вынесено в
+> исполнимый план **109** с актуальным полным baseline и порядком PR.
 
 ## Текущий приоритет, 2026-07-07
 
@@ -152,6 +155,7 @@
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
 | 43 | [43-audit-techdebt.md](43-audit-techdebt.md) | Техдолг по итогам аудита: покрытие непротестированных пакетов, полный graceful shutdown, единый slog, раскол монолитов | 12–18 дней | 🟡 CI/race/coverage, `slog`, `onebase lint`, debugger/processor coverage и graceful shutdown закрыты; остаток — точечное покрытие `ui`/`launcher`/`mcp`/`widget` и раскол монолитов |
+| 109 | [109-ci-linter-hardening.md](109-ci-linter-hardening.md) | Поэтапное включение `bodyclose`, `unused`, `errcheck`, `gosec` в блокирующий CI без широких suppressions | 10.75–17.75 дня | ⬜ Проект; baseline зафиксирован 2026-07-27 |
 
 ### Направление З — ИИ для бизнеса
 
@@ -213,7 +217,7 @@
 | 83 | [83-secrets-management.md](83-secrets-management.md) | Управление секретами at-rest: единый резолвер `env:`/`file:`/`enc:`, шифрование, гигиена экспорта/бэкапа | 4–6 дней | 🟡 Первый шаг (env-ссылки ИИ) сделан |
 | 84 | [84-enterprise-auth.md](84-enterprise-auth.md) | Enterprise-аутентификация: TOTP-2FA, SSO (OIDC), опц. LDAP — всё opt-in | 7–10 дней | ⬜ Проект |
 | 85 | [85-business-processes-tasks.md](85-business-processes-tasks.md) | Бизнес-процессы и задачи: карта маршрута, «Мои задачи», согласование документов | 2–3 недели | ⬜ Проект |
-| 86 | [86-data-exchange.md](86-data-exchange.md) | Обмен данными между базами: планы обмена, регистрация изменений, пакеты, конфликты | 3–4 недели | ⬜ Проект |
+| 86 | [86-data-exchange.md](86-data-exchange.md) | Обмен данными между базами: планы обмена, регистрация изменений, пакеты, конфликты | 3–4 недели | 🟡 Фаза 1 (файловый обмен) сделана |
 | 79F | [79-row-level-access.md](79-row-level-access.md) | RLS defense-in-depth: storage-чокпоинт вместо enforcement по соглашению в хендлерах | 2–3 дня | ⬜ Проект (этап плана 79) |
 
 > SOAP-веб-сервисы сознательно **не** вносятся: их роль закрывают HTTP-сервисы

@@ -180,6 +180,58 @@ fields:
 	}
 }
 
+func TestLoadFile_DocumentNumeratorAddsQueryableNumberField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.yaml")
+	yaml := `name: НоменклатураДелНаГод
+numerator:
+  prefix: "НД-"
+  length: 6
+  period: year
+fields:
+  - name: Дата
+    type: date
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, err := LoadFile(path, KindDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Fields) != 2 {
+		t.Fatalf("Fields = %+v, want implicit Номер plus Дата", e.Fields)
+	}
+	if got := e.Fields[0]; got.Name != "Номер" || got.Type != FieldTypeString {
+		t.Fatalf("implicit field = %+v, want string Номер", got)
+	}
+}
+
+func TestLoadFile_DocumentNumeratorKeepsExplicitNumberField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.yaml")
+	yaml := `name: АрхивноеДело
+numerator: {prefix: "Д-", length: 6, period: year}
+fields:
+  - name: Номер
+    title: Регистрационный номер
+    type: string
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, err := LoadFile(path, KindDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Fields) != 1 {
+		t.Fatalf("explicit Номер was duplicated: %+v", e.Fields)
+	}
+	if e.Fields[0].Title != "Регистрационный номер" {
+		t.Fatalf("explicit Номер metadata was replaced: %+v", e.Fields[0])
+	}
+}
+
 func TestLoadFile_Indexes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cat.yaml")

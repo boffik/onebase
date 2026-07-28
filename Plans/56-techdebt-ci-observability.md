@@ -1,12 +1,14 @@
 # План 56 — Техдолг, CI и наблюдаемость
 
-**Статус:** ✅ Реализовано. Этапы 1, 2, 4 — 2026-06-10 (ветка `feature/ci-race-lint`); этап 3 (RBAC вложений) — 2026-06-19 (`fix/review-2day-followups`); `/metrics` есть (PR #19); этапы 5 (`slog`) и 6 (`onebase lint`) — 2026-06-25.
+**Статус:** ✅ Реализовано. Этапы 1, 2, 4 — 2026-06-10 (ветка `feature/ci-race-lint`); baseline `staticcheck` закрыт и линтер включён в блокирующий CI в 2026-07; этап 3 (RBAC вложений) — 2026-06-19 (`fix/review-2day-followups`); `/metrics` есть (PR #19); этапы 5 (`slog`) и 6 (`onebase lint`) — 2026-06-25.
 
 > **Как реализовано.** Этап 1: CI гоняет `go test -race -coverprofile` на
 > ubuntu (первый улов — гонка Add/Wait в `locks_test.go`), coverage —
-> артефактом. Этап 2: `.golangci.yml` — стартово govet+ineffassign (3 находки
-> ineffassign починены); baseline для прогрессивного включения зафиксирован в
-> конфиге: errcheck 50, staticcheck 27, unused 24 (2026-06-10). Этап 4:
+> артефактом. Этап 2: `.golangci.yml` блокирует PR по `govet`, `ineffassign`
+> и `staticcheck`; baseline `staticcheck` закрыт в 2026-07. В очереди
+> прогрессивного включения остаются `errcheck`, `unused`, `gosec` и
+> `bodyclose`; исполнимое продолжение с актуальным baseline вынесено в
+> [план 109](109-ci-linter-hardening.md). Этап 4:
 > планы 52-60 и анализ-источник закоммичены, `demo/` в .gitignore, локальные
 > заметки перенесены в `docs/`, `improvement-roadmap.md` помечен архивным,
 > go-version CI поднят до 1.26.x. Этап 5: общий `internal/logging` на `slog`
@@ -35,16 +37,16 @@
 
 ## Этап 2 — `golangci-lint`
 
-Подключить с набором: `errcheck`, `ineffassign`, `gosec`, `govet`, `staticcheck`,
-`bodyclose`. Конфиг `.golangci.yml`. Запуск в CI (отдельный job, не блокирующий на старте —
-сначала зафиксировать baseline, затем ужесточать).
+CI использует `.golangci.yml`; `govet`, `ineffassign` и `staticcheck` уже
+блокируют merge. Следующие кандидаты для поэтапного включения: `errcheck`,
+`unused`, `gosec`, `bodyclose`. Порядок PR, критерии включения и полный baseline
+на 2026-07-27 зафиксированы в [плане 109](109-ci-linter-hardening.md).
 
-Ожидаемые находки (уже видны вручную):
-- **90 проглоченных ошибок** `_ = ...` в не-тестовом коде. Большинство безобидны
-  (redirect по Referer, best-effort логирование), но точечно проверить запись/удаление —
-  напр. `CreateSession` молча игнорирует ошибку удаления старых сессий
-  (`auth/users.go:238 r.db.Exec(...)` без проверки `err`).
-- `gosec` — частично пересечётся с планом 53 (заголовки, токен).
+Актуальный полный замер закреплённой CI-версией `v2.11.4`: `bodyclose` — 0,
+`unused` — 29, `errcheck` — 968, `gosec` — 1522. Прежняя оценка в 90 `_ =`
+учитывала только один синтаксический шаблон и не являлась baseline `errcheck`.
+Из находок `gosec` 577 относятся к `G104` и должны исчезнуть вместе с закрытием
+`errcheck`; остальные правила требуют отдельного security-разбора.
 
 eslint/prettier для вынесенного фронта (план 55) — сюда же, в отдельный JS-job.
 
@@ -106,7 +108,9 @@ launcher, device-agent, devserver, scheduler и командах `run`/`dev`/`st
 
 - CI сам себя проверяет (race/lint/build).
 - `attachments_rbac_test.go` — download/delete чужого вложения без прав → 403.
-- `errcheck` baseline зафиксирован; регрессии новые `_ =` не добавляют (CI).
+- Полный baseline оставшихся линтеров и стратегия защиты от новых регрессий
+  зафиксированы в плане 109. До фактического включения линтера обычный lint job
+  его нарушения не блокирует.
 
 ## Verification
 
@@ -121,6 +125,7 @@ launcher, device-agent, devserver, scheduler и командах `run`/`dev`/`st
 - План 53 — редактирование секретов в логах (общий механизм).
 - План 54 — метрика расхода токенов ИИ.
 - План 55 — eslint для вынесенного фронта.
+- План 109 — продолжение этапа 2: `bodyclose`, `unused`, `errcheck`, `gosec`.
 - План 43 — пересекается (единый slog, покрытие) — этот план его конкретизирует.
 
 ## Эстимейт

@@ -1,6 +1,9 @@
 package interpreter
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Notifier публикует уведомление в real-time-шину «сервер → браузер» (план 74).
 // Интерфейс объявлен здесь, чтобы пакет interpreter не зависел от
@@ -25,14 +28,52 @@ func NewNotifyFunctions(n Notifier) map[string]any {
 		}
 		var data any
 		if len(args) >= 3 {
-			data = args[2]
+			// DSL-значение (Структура/Соответствие/Массив/Ссылка) → JSON-нативное:
+			// SSE-кадр сериализуется обычным json.Marshal, а у *Struct/*Map поля
+			// неэкспортируемые (без конвертации на клиент пришло бы «{}»).
+			data = valueToJSON(args[2])
 		}
 		n.Publish(notifyArgString(args[0]), notifyArgString(args[1]), data)
 		return nil, nil
 	})
+	// ПоказатьОповещениеПользователя(Кому, Заголовок, Текст[, Ссылка[, Важность]])
+	// — сахар над ОтправитьУведомление(Кому, "ui.оповещение", …) (план 87, ступень B).
+	// Первый параметр Кому — потому что вызов серверный (в 1С «УведомлениеКлиента»
+	// на клиенте). Важность "важное" — тост не исчезает сам. Ссылка — Структура
+	// {вид, сущность, id}: клик по тосту откроет форму объекта во вкладке.
+	showNotify := BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+		if len(args) < 3 {
+			return nil, fmt.Errorf("ПоказатьОповещениеПользователя: ожидаются (Кому, Заголовок, Текст[, Ссылка[, Важность]])")
+		}
+		if n == nil {
+			return nil, nil
+		}
+		payload := map[string]any{
+			"заголовок": notifyArgString(args[1]),
+			"текст":     notifyArgString(args[2]),
+			"важность":  "обычное",
+		}
+		// Ссылка (Структура/Соответствие/Ссылка) → JSON-нативное значение, чтобы
+		// SSE-кадр (обычный json.Marshal) сериализовался корректно.
+		if len(args) >= 4 && args[3] != nil {
+			if link := valueToJSON(args[3]); link != nil {
+				payload["ссылка"] = link
+			}
+		}
+		if len(args) >= 5 {
+			v := strings.ToLower(strings.TrimSpace(notifyArgString(args[4])))
+			if v == "важное" || v == "important" {
+				payload["важность"] = "важное"
+			}
+		}
+		n.Publish(notifyArgString(args[0]), "ui.оповещение", payload)
+		return nil, nil
+	})
 	return map[string]any{
-		"ОтправитьУведомление": publish,
-		"PublishNotification":  publish,
+		"ОтправитьУведомление":          publish,
+		"PublishNotification":           publish,
+		"ПоказатьОповещениеПользователя": showNotify,
+		"ShowUserNotification":          showNotify,
 	}
 }
 

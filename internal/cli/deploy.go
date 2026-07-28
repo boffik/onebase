@@ -46,6 +46,11 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	dsn := dsnFromFlags(cmd)
 	ctx := context.Background()
 
+	appCfg, err := project.LoadConfig(dir)
+	if err != nil {
+		return fmt.Errorf("load app config: %w", err)
+	}
+
 	fmt.Fprintln(os.Stdout, "→ Проверка / создание базы данных...")
 	if err := storage.EnsureDatabase(ctx, dsn); err != nil {
 		return fmt.Errorf("создание БД: %w", err)
@@ -65,6 +70,12 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 	if err := db.EnsureAuditSchema(ctx); err != nil {
 		return fmt.Errorf("audit schema: %w", err)
+	}
+	if err := db.EnsureExchangeSchema(ctx); err != nil {
+		return fmt.Errorf("exchange schema: %w", err)
+	}
+	if err := db.EnsureIntakeSchema(ctx); err != nil {
+		return fmt.Errorf("intake schema: %w", err)
 	}
 	if err := db.EnsureScheduledRunsTable(ctx); err != nil {
 		return fmt.Errorf("scheduled runs: %w", err)
@@ -122,7 +133,6 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("sync predefined: %w", err)
 	}
 
-	appCfg, _ := project.LoadConfig(dir)
 	versionMessage := deployVersionMessage(dir, messageFlag, appCfg)
 	version, err := cfgRepo.CreateVersion(ctx, configdb.VersionOptions{Message: versionMessage})
 	if err != nil {

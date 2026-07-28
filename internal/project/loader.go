@@ -3,10 +3,12 @@ package project
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -42,9 +44,11 @@ type Project struct {
 	ServicePrograms  map[string]*ast.Program // план 61: service name → обработчики .service.os (отдельный namespace, чтобы не затирать модуль одноимённого документа)
 	PagePrograms     map[string]*ast.Program // план 66: page name → обработчики .page.os (отдельный namespace, как у сервисов)
 	Processors       []*processor.Processor
-	HTTPServices     []*httpservice.Service  // план 61: опубликованные HTTP-сервисы
-	Pages            []*page.Page            // план 66: страницы (произвольные представления на DSL)
-	Modules          map[string]*ast.Program // module name → parsed procs
+	HTTPServices     []*httpservice.Service   // план 61: опубликованные HTTP-сервисы
+	Pages            []*page.Page             // план 66: страницы (произвольные представления на DSL)
+	ExchangePlans    []*metadata.ExchangePlan // план 86: планы обмена данными между базами
+	Intakes          []*metadata.Intake       // план 90: входные шлюзы приёмки (идемпотентность + DLQ)
+	Modules          map[string]*ast.Program  // module name → parsed procs
 	Subsystems       []*metadata.Subsystem
 	Journals         []*metadata.Journal
 	ScheduledJobs    []*metadata.ScheduledJob
@@ -53,13 +57,20 @@ type Project struct {
 	Widgets          []*metadata.Widget
 	HomePage         *metadata.HomePage
 	cleanup          func()
+	cleanupOnce      sync.Once
 }
 
 // Close releases resources (e.g., temp dirs) associated with this Project.
 func (p *Project) Close() {
-	if p.cleanup != nil {
-		p.cleanup()
+	if p == nil {
+		return
 	}
+	p.cleanupOnce.Do(func() {
+		if p.cleanup != nil {
+			p.cleanup()
+			p.cleanup = nil
+		}
+	})
 }
 
 // EmailConfig holds SMTP configuration from app.yaml section "email".
@@ -76,6 +87,13 @@ type EmailConfig struct {
 type AttachmentsConfig struct {
 	MaxFileSizeMB int      `yaml:"max_file_size_mb"`
 	AllowedTypes  []string `yaml:"allowed_types"`
+	// Deprecated compatibility keys accepted since v0.9.3 used a permissive
+	// YAML decoder. They were never applied by the runtime; keeping them here
+	// lets existing projects start while `onebase check` reports migration
+	// warnings instead of rejecting the whole configuration.
+	DeprecatedStorageType        string   `yaml:"storage_type,omitempty"`
+	DeprecatedStorageLocation    string   `yaml:"storage_location,omitempty"`
+	DeprecatedOfficeAllowedTypes []string `yaml:"office_allowed_types,omitempty"`
 }
 
 // DemoConfig holds demo-mode settings from app.yaml section "demo".
@@ -138,11 +156,15 @@ type AppConfig struct {
 	Logo        string             `yaml:"logo,omitempty"`
 	Email       *EmailConfig       `yaml:"email,omitempty"`
 	Attachments *AttachmentsConfig `yaml:"attachments,omitempty"`
-	Demo        *DemoConfig        `yaml:"demo,omitempty"`
-	Backup      *BackupConfig      `yaml:"backup,omitempty"`
-	AI          *AIConfig          `yaml:"ai,omitempty"`
-	Limits      *LimitsConfig      `yaml:"limits,omitempty"`
-	DSL         *DSLConfig         `yaml:"dsl,omitempty"`
+	// DeprecatedRussianPost preserves the permissive v0.9.3 behavior for
+	// downstream project-owned integration settings. OneBase does not consume
+	// this block; `onebase check` asks projects to move it out of app.yaml.
+	DeprecatedRussianPost map[string]any `yaml:"russian_post,omitempty"`
+	Demo                  *DemoConfig    `yaml:"demo,omitempty"`
+	Backup                *BackupConfig  `yaml:"backup,omitempty"`
+	AI                    *AIConfig      `yaml:"ai,omitempty"`
+	Limits                *LimitsConfig  `yaml:"limits,omitempty"`
+	DSL                   *DSLConfig     `yaml:"dsl,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в
@@ -156,13 +178,31 @@ type AppConfig struct {
 
 // LoadConfig reads config/app.yaml from the project directory.
 func LoadConfig(dir string) (*AppConfig, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "config", "app.yaml"))
+	path := filepath.Join(dir, "config", "app.yaml")
+	f, err := os.Open(path)
 	if err != nil {
-		return &AppConfig{Name: filepath.Base(dir)}, nil
+		if os.IsNotExist(err) {
+			return &AppConfig{Name: filepath.Base(dir)}, nil
+		}
+		return nil, fmt.Errorf("project: read %s: %w", path, err)
 	}
+	defer f.Close()
+
 	var cfg AppConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		if err == io.EOF {
+			return &AppConfig{Name: filepath.Base(dir)}, nil
+		}
+		return nil, fmt.Errorf("project: parse %s: %w", path, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("project: parse %s: multiple YAML documents are not allowed", path)
+		}
+		return nil, fmt.Errorf("project: parse %s: %w", path, err)
 	}
 	if cfg.LLM != nil {
 		expandLLMEnv(cfg.LLM)
@@ -245,6 +285,9 @@ func Load(dir string) (*Project, error) {
 	if err := metadata.Validate(p.Entities, p.Enums); err != nil {
 		return nil, err
 	}
+	if err := metadata.ValidateConstants(p.Constants, p.Entities, p.Enums); err != nil {
+		return nil, err
+	}
 	if err := p.loadDSL(); err != nil {
 		return nil, err
 	}
@@ -264,6 +307,12 @@ func Load(dir string) (*Project, error) {
 		return nil, err
 	}
 	if err := p.loadPages(); err != nil {
+		return nil, err
+	}
+	if err := p.loadExchangePlans(); err != nil {
+		return nil, err
+	}
+	if err := p.loadIntakes(); err != nil {
 		return nil, err
 	}
 	if err := p.loadSubsystems(); err != nil {
@@ -379,6 +428,43 @@ func (p *Project) loadPages() error {
 		return fmt.Errorf("project: load pages: %w", err)
 	}
 	p.Pages = pages
+	return nil
+}
+
+// loadExchangePlans читает exchange/*.yaml (план 86). Обработчики конфликтов
+// (.exchange.os) грузятся отдельно; для файлового цикла достаточно метаданных.
+func (p *Project) loadExchangePlans() error {
+	plans, err := metadata.LoadExchangePlanDir(filepath.Join(p.Dir, "exchange"))
+	if err != nil {
+		return fmt.Errorf("project: load exchange plans: %w", err)
+	}
+	// Адреса узлов допускают ${env:VAR} — удобно для per-deploy хостов.
+	for _, pl := range plans {
+		for i := range pl.Nodes {
+			pl.Nodes[i].URL = expandEnvRefs(pl.Nodes[i].URL)
+		}
+	}
+	p.ExchangePlans = plans
+	return nil
+}
+
+// loadIntakes читает intake/*.yaml (план 90). Каждый шлюз валидируется сразу —
+// битое объявление ловится на загрузке, до рантайма. Обработчик (handler) —
+// процедура модуля, резолвится транспортным слоем при вызове.
+func (p *Project) loadIntakes() error {
+	intakes, err := metadata.LoadIntakeDir(filepath.Join(p.Dir, "intake"))
+	if err != nil {
+		return fmt.Errorf("project: load intakes: %w", err)
+	}
+	for _, in := range intakes {
+		// Валидируем ДО раскрытия ${env:…}: плейсхолдер считается заданным
+		// секретом (onebase check проходит без выставленных переменных окружения).
+		if err := in.Validate(); err != nil {
+			return fmt.Errorf("project: intake %q: %w", in.Name, err)
+		}
+		in.Secret = expandEnvRefs(in.Secret)
+	}
+	p.Intakes = intakes
 	return nil
 }
 

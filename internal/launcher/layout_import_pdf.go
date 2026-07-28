@@ -42,6 +42,10 @@ func (h *handler) configuratorImportPDFLayout(w http.ResponseWriter, r *http.Req
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxPDFUpload)
 	if err := r.ParseMultipartForm(maxPDFUpload); err != nil {
+		if requestBodyErrorStatus(err) == http.StatusRequestEntityTooLarge {
+			http.Error(w, tr(lang, "Файл слишком большой или форма повреждена"), http.StatusRequestEntityTooLarge)
+			return
+		}
 		h.layoutCreateError(w, r, b, lang, tr(lang, "Файл слишком большой или форма повреждена"))
 		return
 	}
@@ -53,6 +57,13 @@ func (h *handler) configuratorImportPDFLayout(w http.ResponseWriter, r *http.Req
 	}
 	if !validLayoutName(layoutName) {
 		h.layoutCreateError(w, r, b, lang, tr(lang, "Недопустимое имя файла"))
+		return
+	}
+	// Привязка к документу обязательна: без document: форма не попадает в
+	// список печати (runtime индексирует декларативные формы по Document).
+	document := strings.TrimSpace(r.FormValue("document"))
+	if document == "" {
+		h.layoutCreateError(w, r, b, lang, tr(lang, "Для макета выберите документ/справочник"))
 		return
 	}
 
@@ -82,6 +93,7 @@ func (h *handler) configuratorImportPDFLayout(w http.ResponseWriter, r *http.Req
 		return
 	}
 	lt.Name = layoutName
+	lt.Document = document
 
 	src, merr := marshalLayout(lt)
 	if merr != nil {
@@ -128,6 +140,7 @@ func (h *handler) configuratorImportPDFLayout(w http.ResponseWriter, r *http.Req
 	data := h.loadCfgData(r.Context(), b, "tree")
 	data.FieldsSaved = true
 	data.FieldsSavedEntity = layoutName
+	data.SavedMessage = tr(lang, "✓ Макет") + " «" + layoutName + "» " + tr(lang, "создан из PDF — черновик открыт в редакторе. Перезапустите базу, чтобы форма появилась в списке печати.")
 	data.SelectedTreeID = "mkt-" + layoutName
 	renderCfg(w, r, data)
 }

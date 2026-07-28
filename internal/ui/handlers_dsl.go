@@ -15,9 +15,23 @@ import (
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/dslvars"
+	"github.com/ivantit66/onebase/internal/exchange"
+	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
 )
+
+// exchangeRegistrar строит замыкание регистрации изменений в планах обмена
+// (план 86) для прямых записей из DSL (справочники/документы), минующих
+// entityservice.Save. Регистрация — no-op, если планов нет или this-node не задан.
+func (s *Server) exchangeRegistrar() interpreter.ExchangeRegistrar {
+	return func(ctx context.Context, entity *metadata.Entity, id uuid.UUID, deletion bool) error {
+		if deletion {
+			return exchange.RegisterOnDelete(ctx, s.store, s.reg.ExchangePlans(), entity, id)
+		}
+		return exchange.RegisterOnSave(ctx, s.store, s.reg.ExchangePlans(), entity, id, deletion)
+	}
+}
 
 // langCtxKeyT — ключ контекста, несущий разрешённый язык интерфейса для
 // request-scoped builtin'ов (НСтр). Вне запроса (планировщик/headless/фоновые
@@ -47,35 +61,56 @@ func (s *Server) runOnWrite(obj *runtime.Object, mc *runtime.MovementsCollector)
 }
 
 func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollector) map[string]any {
+	// TxState is created before the common variable set so path resolvers and
+	// all write-capable DSL objects observe the same live transaction context.
+	txState := interpreter.NewTxState(ctx)
 	// Базовый набор (Перечисления, Константы, Запрос, Предопределённые,
 	// Движения, HTTP, Email) — общий с scheduler, см. internal/dslvars.
 	vars := dslvars.Common{
-		Ctx: ctx, Reg: s.reg, Store: s.store, Mailer: s.mailer, Movements: mc,
-		NetGuard:  s.netGuard(ctx),
-		ExecGuard: s.execGuard(ctx),
-		Notifier:  s.notifier(),
+		Ctx: ctx, CtxSource: txState, Reg: s.reg, Store: s.store, Mailer: s.mailer, Movements: mc,
+		NetGuard:          s.netGuard(ctx),
+		ExecGuard:         s.execGuard(ctx),
+		Notifier:          s.notifier(),
+		Interp:            s.interp, // для hook-правила конфликта в ПланыОбмена.ЗагрузитьПакет
+		EmailFileResolver: s.emailAttachmentPathResolver(txState.Ctx),
 	}.Build()
 
 	// TxState несёт «живой» контекст. Транзакционные функции
 	// (НачатьТранзакцию и т.д.) и запись справочников из обработки
 	// (Справочники.X.Создать().Записать()) используют txState.Ctx(),
 	// поэтому запись участвует в открытой DSL-транзакции.
-	txState := interpreter.NewTxState(ctx)
 	// Caller подключается ДО создания CatalogsRoot.WithManagerCaller —
 	// он использует ctx как контекст для вызова процедур менеджера.
 	mgrCaller := &managerCaller{s: s, ctx: ctx}
 	rowAccess := s.dslRowAccessChecker()
 	catalogs := interpreter.NewCatalogsRoot(txState, s.store, s.reg).
 		WithManagerCaller(mgrCaller).
-		WithRowAccessChecker(rowAccess)
+		WithRowAccessChecker(rowAccess).
+		WithExchangeRegistrar(s.exchangeRegistrar()).
+		WithObjectFactory(s.catObjectFactory(txState))
 	// Документы.X.Создать()/.Записать()/.Провести() из обработки.
 	documents := newDocsRoot(s, txState)
 	// РегистрыНакопления.X.Остатки()/.Движения()/.ВыбратьПоРегистратору(Док).
 	accumRegs := newAccumRegsRoot(s, txState)
 	// #2 managed locks: builtin БлокировкаДанных() возвращает свежий LockObject,
-	// привязанный к глобальному менеджеру server'а.
+	// привязанный к глобальному менеджеру server'а. Заблокировать() внутри
+	// транзакции проведения сразу берёт pg_advisory_xact_lock — конкурирующее
+	// проведение упрётся в блокировку ДО чтения остатков, а не после хука
+	// (issue #458: двойное списание партий при параллельном ФИФО). Вне
+	// транзакции (обработка без НачатьТранзакцию) поведение прежнее:
+	// только внутрипроцессный мьютекс.
 	lockFactory := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
-		return runtime.NewLockObjectWithCollector(s.lockMgr, runtime.LockCollectorFromContext(ctx)), nil
+		lo := runtime.NewLockObjectWithCollector(s.lockMgr, runtime.LockCollectorFromContext(ctx))
+		lo.WithAdvisory(func(keys []string) {
+			c := txState.Ctx()
+			if !storage.HasTx(c) {
+				return
+			}
+			if err := s.store.AdvisoryXactLock(c, keys); err != nil {
+				interpreter.RaiseUserError(err.Error())
+			}
+		})
+		return lo, nil
 	})
 
 	// API текущего пользователя для персональных настроек.
@@ -95,6 +130,39 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	})
 	userNameFn := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
 		return curUserLogin, nil
+	})
+	// Compatibility-sensitive fallback: before v0.9.6 configurations could
+	// freely declare an application procedure named ЗаписатьСобытиеАудита.
+	// Such a procedure must win over the platform governance API.
+	auditDecisionFn := interpreter.FallbackBuiltinFunc(func(args []any, _ string, _ int) (any, error) {
+		if len(args) < 5 {
+			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: нужны действие, вид, объект, ссылка и идентификатор решения")
+		}
+		action := strings.ToLower(strings.TrimSpace(fmt.Sprint(args[0])))
+		if action != "publish" && action != "rollback" {
+			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: действие должно быть publish или rollback")
+		}
+		kind := strings.TrimSpace(fmt.Sprint(args[1]))
+		entityName := strings.TrimSpace(fmt.Sprint(args[2]))
+		recordID := refValueString(args[3])
+		if _, err := uuid.Parse(recordID); err != nil {
+			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: некорректная ссылка записи")
+		}
+		decisionID := strings.TrimSpace(fmt.Sprint(args[4]))
+		if decisionID == "" {
+			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: идентификатор решения обязателен")
+		}
+		author := curUserLogin
+		if len(args) > 5 && strings.TrimSpace(fmt.Sprint(args[5])) != "" {
+			author = strings.TrimSpace(fmt.Sprint(args[5]))
+		}
+		if author == "" {
+			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: автор обязателен")
+		}
+		if err := s.store.LogDecisionAction(txState.Ctx(), action, kind, entityName, recordID, decisionID, author); err != nil {
+			return nil, fmt.Errorf("ЗаписатьСобытиеАудита: %w", err)
+		}
+		return nil, nil
 	})
 
 	// ЗначениеРеквизитаОбъекта(Ссылка, "Реквизит") — чтение реквизита по
@@ -176,12 +244,17 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	vars["CurrentUser"] = currentUserFn
 	vars["ИмяПользователя"] = userNameFn
 	vars["UserName"] = userNameFn
+	vars["ЗаписатьСобытиеАудита"] = auditDecisionFn
+	vars["WriteAuditDecision"] = auditDecisionFn
 	vars["ЗначениеРеквизитаОбъекта"] = attrValueFn
 	vars["ObjectAttributeValue"] = attrValueFn
 	vars["ЗначенияРеквизитовОбъектов"] = attrValuesFn
 	vars["ObjectAttributeValues"] = attrValuesFn
 	vars["СохранитьКартинку"] = putImageFn
 	vars["PutImage"] = putImageFn
+	// Вложения из DSL (план 105): ПрисоединитьФайл/СписокВложений/
+	// ПутьКВложению/УдалитьВложение. Живой контекст — как у транзакций.
+	s.registerAttachmentBuiltins(vars, txState.Ctx)
 	queryFactory := interpreter.NewQueryFactoryWithCompiler(txState.Ctx(), s.store, s.reg, s.compileDSLQueryWithRowAccess)
 	vars["__factory_Запрос"] = queryFactory
 	vars["__factory_Query"] = queryFactory
@@ -246,6 +319,14 @@ func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *run
 	// и Строка(ref) работали в ПриЗаписи так же, как при проведении.
 	if entity := s.reg.GetEntity(obj.Type); entity != nil {
 		s.enrichHeaderRefs(ctx, entity, obj)
+		for _, tp := range entity.TableParts {
+			for name, rows := range obj.TablePartRows {
+				if strings.EqualFold(name, tp.Name) {
+					s.enrichTPRowsWithRefs(ctx, tp, rows)
+					break
+				}
+			}
+		}
 	}
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)

@@ -12,11 +12,14 @@ package entityservice
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/ivantit66/onebase/internal/exchange"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -81,6 +84,43 @@ type Service struct {
 	// настроены. Событие отправляется ПОСЛЕ успешной транзакции (асинхронно):
 	// document.save/document.post или catalog.save в зависимости от вида и Action.
 	Hooks *webhook.Dispatcher
+
+	// ChangePublisher — опциональный потребитель события «строка изменилась»
+	// (план 87, ступень A, живой список). nil = автопубликация выключена
+	// (тесты/procrun/migrate). Реализация в ui рассылает служебное событие
+	// живым спискам с адресацией строго по RLS.
+	ChangePublisher ChangePublisher
+}
+
+// ChangePublisher принимает уведомление об успешном изменении строки сущности
+// (после commit). entity — имя сущности; action ∈ {записан, проведён, удалён};
+// before/after — immutable pre/post-образы строки (nil для create/delete
+// соответственно) для адресации по правам.
+type ChangePublisher interface {
+	PublishChange(ctx context.Context, entity, action string, before, after map[string]any)
+}
+
+// publishChange публикует «данные.<сущность>» живым спискам после успешного
+// сохранения (план 87). before захвачен до записи; after читается уже после
+// commit свежим контекстом (tx-контекст после commit использовать нельзя).
+func (s *Service) publishChange(ctx context.Context, req SaveRequest, isPosting bool, before map[string]any) {
+	if s.ChangePublisher == nil || !req.Entity.NotifyChanges {
+		return
+	}
+	action := "записан"
+	if isPosting {
+		action = "проведён"
+	}
+	entity, id, meta := req.Entity.Name, req.ID, req.Entity
+	publish := func() {
+		bg := context.Background()
+		after, _ := s.Store.GetByID(bg, entity, id, meta)
+		s.ChangePublisher.PublishChange(bg, entity, action, before, after)
+	}
+	if storage.DeferUntilTxCommit(ctx, publish) {
+		return
+	}
+	publish()
 }
 
 // dispatchSaved отправляет веб-хук о записи/проведении объекта.
@@ -88,20 +128,28 @@ func (s *Service) dispatchSaved(ctx context.Context, req SaveRequest, isPosting 
 	if !s.Hooks.Enabled() {
 		return
 	}
-	event := "catalog.save"
+	eventName := "catalog.save"
 	if req.Entity.Kind == metadata.KindDocument {
-		event = "document.save"
+		eventName = "document.save"
 		if isPosting {
-			event = "document.post"
+			eventName = "document.post"
 		}
 	}
-	s.Hooks.Dispatch(webhook.Event{
-		Name:   event,
+	event := webhook.Event{
+		Name:   eventName,
 		Entity: req.Entity.Name,
 		ID:     req.ID.String(),
 		User:   storage.AuditUserLogin(ctx),
 		Record: webhookRecord(req.Fields),
-	})
+	}
+	dispatch := func() { s.Hooks.Dispatch(event) }
+	// Save may join an explicit DSL transaction. Do not publish a webhook for
+	// data that can still be rolled back; the storage transaction invokes this
+	// callback only after the outer commit.
+	if storage.DeferUntilTxCommit(ctx, dispatch) {
+		return
+	}
+	dispatch()
 }
 
 // webhookRecord копирует поля записи для шаблона тела хука, отбрасывая
@@ -159,7 +207,6 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 	mc := runtime.NewMovementsCollector(req.Entity.Name, req.ID)
 	SetPeriodFromFields(mc, req.Entity, req.Fields)
 	lockCollector := runtime.NewLockCollector()
-	hookCtx := runtime.ContextWithLockCollector(ctx, lockCollector)
 	defer lockCollector.ReleaseAll()
 
 	obj := &runtime.Object{
@@ -220,34 +267,67 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 	proc := s.Reg.GetProcedure(req.Entity.Name, hookName)
 
 	var msgs []string
-	if proc != nil {
-		var vars map[string]any
-		if s.BuildVars != nil {
-			vars = s.BuildVars(hookCtx, mc, &msgs)
-		}
-		var thisVal interpreter.This = obj
-		if s.MakeThis != nil {
-			thisVal = s.MakeThis(hookCtx, obj, req.Entity)
-		}
-		if err := s.Interp.Run(proc, thisVal, vars); err != nil {
-			// DSL-ошибка (бизнес-правило), а не технический сбой: отдаём текст
-			// в DSLError, БД не трогаем. И *interpreter.DSLError, и обычная
-			// ошибка форматируются одинаково через Error().
-			return SaveResult{ID: req.ID, DSLError: err.Error(), DSLMessages: msgs, Movements: mc}, nil
-		}
+	wasPosted := false
+	// Pre-образ для живого списка (план 87): читаем строку ДО записи, чтобы
+	// прежний владелец убрал её из своего списка при смене прав. Только когда
+	// автопубликация реально включена — иначе лишнего чтения нет.
+	var changeBefore map[string]any
+	if s.ChangePublisher != nil && req.Entity.NotifyChanges && !req.IsNew {
+		changeBefore, _ = s.Store.GetByID(ctx, req.Entity.Name, req.ID, req.Entity)
 	}
+	// Хук и все его DB-побочные записи выполняются в той же транзакции, что
+	// шапка, ТЧ, движения и проведение. Для нового объекта сначала вставляется
+	// полноценная шапка: FK-ссылки из создаваемых хуком объектов уже валидны, но
+	// при любой последующей ошибке откатываются вместе с родителем.
+	err := s.Store.WithTxScope(ctx, func(txCtx context.Context) error {
+		if req.Entity.Posting && !req.IsNew && !isPosting {
+			stored, err := s.Store.GetByID(txCtx, req.Entity.Name, req.ID, req.Entity)
+			if err != nil {
+				return err
+			}
+			wasPosted, _ = stored["posted"].(bool)
+		}
+		if proc != nil {
+			if req.IsNew {
+				if err := s.Store.UpsertProvisional(txCtx, req.Entity.Name, req.ID, obj.Fields, req.Entity); err != nil {
+					return err
+				}
+			}
+			txHookCtx := runtime.ContextWithLockCollector(txCtx, lockCollector)
+			var vars map[string]any
+			if s.BuildVars != nil {
+				vars = s.BuildVars(txHookCtx, mc, &msgs)
+			}
+			var thisVal interpreter.This = obj
+			if s.MakeThis != nil {
+				thisVal = s.MakeThis(txHookCtx, obj, req.Entity)
+			}
+			if err := s.Interp.Run(proc, thisVal, vars); err != nil {
+				return &hookRunError{err: err}
+			}
+		}
 
-	// Транзакция: upsert + ТЧ + движения + проведение.
-	err := s.Store.WithTx(ctx, func(ctx context.Context) error {
-		if err := s.Store.AdvisoryXactLock(ctx, lockCollector.Keys()); err != nil {
+		if err := s.Store.AdvisoryXactLock(txCtx, lockCollector.Keys()); err != nil {
 			return err
 		}
-		if req.IsNew || req.ExpectedVersion == nil {
-			if err := s.Store.Upsert(ctx, req.Entity.Name, req.ID, obj.Fields, req.Entity); err != nil {
+		if req.IsNew {
+			var err error
+			if proc != nil {
+				// Строка уже вставлена перед hook. Обновляем изменённые hook-поля,
+				// сохраняя стартовую _version=1.
+				err = s.Store.UpsertPreserveVersion(txCtx, req.Entity.Name, req.ID, obj.Fields, req.Entity)
+			} else {
+				err = s.Store.Upsert(txCtx, req.Entity.Name, req.ID, obj.Fields, req.Entity)
+			}
+			if err != nil {
+				return err
+			}
+		} else if req.ExpectedVersion == nil {
+			if err := s.Store.Upsert(txCtx, req.Entity.Name, req.ID, obj.Fields, req.Entity); err != nil {
 				return err
 			}
 		} else {
-			if err := s.Store.UpsertVersioned(ctx, req.Entity.Name, req.ID, obj.Fields, req.Entity, req.ExpectedVersion); err != nil {
+			if err := s.Store.UpsertVersioned(txCtx, req.Entity.Name, req.ID, obj.Fields, req.Entity, req.ExpectedVersion); err != nil {
 				return err
 			}
 		}
@@ -266,50 +346,155 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 			if rows == nil {
 				rows = []map[string]any{}
 			}
-			if err := s.Store.UpsertTablePartRows(ctx, req.Entity.Name, tp.Name, req.ID, rows, tp); err != nil {
+			if err := s.Store.UpsertTablePartRows(txCtx, req.Entity.Name, tp.Name, req.ID, rows, tp); err != nil {
 				return err
 			}
 		}
-		if err := s.writeMovements(ctx, req.Entity.Name, req.ID, mc); err != nil {
+		if err := s.writeMovements(txCtx, req.Entity.Name, req.ID, mc); err != nil {
+			return err
+		}
+		// Регистрация изменения для планов обмена (план 86): объект из состава
+		// плана → строки очереди каждому узлу-получателю. В той же транзакции —
+		// регистрация атомарна с записью объекта.
+		if err := s.registerExchange(txCtx, req.Entity, req.ID, false); err != nil {
 			return err
 		}
 		if req.Entity.Posting {
 			if isPosting {
-				return s.Store.SetPosted(ctx, req.Entity.Name, req.ID, true)
+				return s.Store.SetPosted(txCtx, req.Entity.Name, req.ID, true)
 			}
-			// «Записать» для уже проведённого документа (только при редактировании,
-			// при IsNew проведения нет в принципе) — сбрасываем движения по ВСЕМ
-			// типам регистров (накопления, бухгалтерии, сведений) и снимаем флаг
-			// проведения. Раньше чистились только регистры накопления, из-за чего
-			// движения бухгалтерии/сведений оставались осиротевшими.
-			if !req.IsNew {
-				for _, reg := range s.Reg.Registers() {
-					if err := s.Store.WriteMovements(ctx, reg.Name, req.Entity.Name, req.ID, nil, reg, nil); err != nil {
-						return err
-					}
-				}
-				for _, ar := range s.Reg.AccountRegisters() {
-					if err := s.Store.WriteAccountMovements(ctx, ar.Name, req.Entity.Name, req.ID, nil, ar, nil); err != nil {
-						return err
-					}
-				}
-				for _, ir := range s.Reg.InfoRegisters() {
-					if err := s.Store.WriteInfoMovements(ctx, ir.Name, req.Entity.Name, req.ID, nil, ir, nil); err != nil {
-						return err
-					}
-				}
-				return s.Store.SetPosted(ctx, req.Entity.Name, req.ID, false)
+			// Обычная запись существующего проводимого документа сохраняет
+			// прежнюю семантику: это полноценная отмена проведения. Поэтому
+			// недостаточно снять флаг и очистить движения — должен выполниться
+			// OnUnpost в той же транзакции.
+			if !req.IsNew && wasPosted {
+				unpostMovements := runtime.NewMovementsCollector(req.Entity.Name, req.ID)
+				SetPeriodFromFields(unpostMovements, req.Entity, obj.Fields)
+				return s.unpostInTx(txCtx, req.Entity, req.ID, unpostMovements, &msgs, lockCollector)
 			}
 		}
 		return nil
 	})
 	if err != nil {
+		var hookErr *hookRunError
+		if errors.As(err, &hookErr) {
+			return SaveResult{ID: req.ID, DSLError: hookErr.err.Error(), DSLMessages: msgs, Movements: mc}, nil
+		}
 		return SaveResult{}, err
 	}
 
 	s.dispatchSaved(ctx, req, isPosting)
+	s.publishChange(ctx, req, isPosting, changeBefore)
 
 	return SaveResult{ID: req.ID, DSLMessages: msgs, Movements: mc}, nil
+}
+
+// hookRunError distinguishes a DSL business error from a technical storage
+// error. Returning it from WithTx rolls the transaction back; Unpost then
+// exposes the message through SaveResult, consistently with Save.
+type hookRunError struct{ err error }
+
+func (e *hookRunError) Error() string { return e.err.Error() }
+func (e *hookRunError) Unwrap() error { return e.err }
+
+func (s *Service) unpostInTx(
+	txCtx context.Context,
+	entity *metadata.Entity,
+	id uuid.UUID,
+	movements *runtime.MovementsCollector,
+	messages *[]string,
+	lockCollector *runtime.LockCollector,
+) error {
+	if err := s.clearMovements(txCtx, entity.Name, id); err != nil {
+		return err
+	}
+	if err := s.Store.SetPosted(txCtx, entity.Name, id, false); err != nil {
+		return err
+	}
+	proc := s.Reg.GetProcedure(entity.Name, "OnUnpost")
+	if proc == nil {
+		return nil
+	}
+
+	fields, err := s.Store.GetByID(txCtx, entity.Name, id, entity)
+	if err != nil {
+		return fmt.Errorf("отмена проведения %s: чтение документа: %w", entity.Name, err)
+	}
+	tpRows := make(map[string][]map[string]any, len(entity.TableParts))
+	for _, tp := range entity.TableParts {
+		rows, err := s.Store.GetTablePartRows(txCtx, entity.Name, tp.Name, id, tp)
+		if err != nil {
+			return fmt.Errorf("отмена проведения %s: чтение ТЧ %s: %w", entity.Name, tp.Name, err)
+		}
+		tpRows[tp.Name] = rows
+	}
+
+	obj := &runtime.Object{
+		Type:          entity.Name,
+		Kind:          entity.Kind,
+		ID:            id,
+		Fields:        fields,
+		TablePartRows: tpRows,
+	}
+	if obj.Fields == nil {
+		obj.Fields = map[string]any{}
+	}
+	selfRef := &interpreter.Ref{UUID: id.String(), Type: entity.Name}
+	obj.Fields["ссылка"] = selfRef
+	obj.Fields["reference"] = selfRef
+
+	hookCtx := runtime.ContextWithLockCollector(txCtx, lockCollector)
+	if s.PrepareHook != nil {
+		s.PrepareHook(hookCtx, entity, obj)
+	}
+	if s.EnrichTPRows != nil {
+		for _, tp := range entity.TableParts {
+			if rows, ok := obj.TablePartRows[tp.Name]; ok {
+				s.EnrichTPRows(hookCtx, tp, rows)
+			}
+		}
+	}
+	SetPeriodFromFields(movements, entity, obj.Fields)
+
+	var vars map[string]any
+	if s.BuildVars != nil {
+		vars = s.BuildVars(hookCtx, movements, messages)
+	}
+	var thisVal interpreter.This = obj
+	if s.MakeThis != nil {
+		thisVal = s.MakeThis(hookCtx, obj, entity)
+	}
+	if err := s.Interp.Run(proc, thisVal, vars); err != nil {
+		return &hookRunError{err: err}
+	}
+	return s.Store.AdvisoryXactLock(txCtx, lockCollector.Keys())
+}
+
+// Unpost cancels document posting atomically: removes every movement, sets
+// posted=false and then runs OnUnpost/ОбработкаУдаленияПроведения. The hook is
+// deliberately executed after the storage changes but inside the same
+// transaction, so it observes the unposted state and any hook error restores
+// both the posted flag and the removed movements.
+func (s *Service) Unpost(ctx context.Context, entity *metadata.Entity, id uuid.UUID) (SaveResult, error) {
+	result := SaveResult{
+		ID:        id,
+		Movements: runtime.NewMovementsCollector(entity.Name, id),
+	}
+	lockCollector := runtime.NewLockCollector()
+	defer lockCollector.ReleaseAll()
+
+	err := s.Store.WithTxScope(ctx, func(txCtx context.Context) error {
+		return s.unpostInTx(txCtx, entity, id, result.Movements, &result.DSLMessages, lockCollector)
+	})
+	if err != nil {
+		var hookErr *hookRunError
+		if errors.As(err, &hookErr) {
+			result.DSLError = hookErr.err.Error()
+			return result, nil
+		}
+		return SaveResult{}, err
+	}
+	return result, nil
 }
 
 // FillRequest — входной DTO для Service.Fill (ввод на основании).
@@ -507,6 +692,129 @@ func errBadRequest(msg string) error { return &fillBadRequest{msg: msg} }
 func IsBadRequest(err error) bool {
 	_, ok := err.(*fillBadRequest)
 	return ok
+}
+
+// registerExchange регистрирует изменение объекта в планах обмена (план 86).
+// nil-Reg и отсутствие планов — быстрый выход без обращения к БД (обмен не
+// настроен). deletion=true передаётся из пути пометки на удаление.
+func (s *Service) registerExchange(ctx context.Context, entity *metadata.Entity, id uuid.UUID, deletion bool) error {
+	if s.Reg == nil {
+		return nil
+	}
+	plans := s.Reg.ExchangePlans()
+	if len(plans) == 0 {
+		return nil
+	}
+	return exchange.RegisterOnSave(ctx, s.Store, plans, entity, id, deletion)
+}
+
+// Repost перепроводит уже записанный документ: перечитывает его из БД, запускает
+// ОбработкаПроведения (OnPost), пишет движения в регистры и ставит признак
+// проведения — БЕЗ повторного Upsert, без регистрации в обмене (нет эха) и без
+// изменения _version. Используется загрузкой пакета обмена (план 86, repost) для
+// переноса проведённости документа на приёмник. Открывает собственную транзакцию,
+// поэтому вызывается ВНЕ транзакции загрузки.
+func (s *Service) Repost(ctx context.Context, entityName string, id uuid.UUID) error {
+	ent := s.Reg.GetEntity(entityName)
+	if ent == nil {
+		return fmt.Errorf("перепроведение: сущность %q не найдена", entityName)
+	}
+	if !ent.Posting {
+		return nil // сущность не проводится — нечего делать
+	}
+	fields, err := s.Store.GetByID(ctx, ent.Name, id, ent)
+	if err != nil {
+		return fmt.Errorf("перепроведение %s: чтение документа: %w", ent.Name, err)
+	}
+	tps := make(map[string][]map[string]any, len(ent.TableParts))
+	for _, tp := range ent.TableParts {
+		rows, err := s.Store.GetTablePartRows(ctx, ent.Name, tp.Name, id, tp)
+		if err != nil {
+			return fmt.Errorf("перепроведение %s: чтение ТЧ %s: %w", ent.Name, tp.Name, err)
+		}
+		tps[tp.Name] = rows
+	}
+
+	mc := runtime.NewMovementsCollector(ent.Name, id)
+	SetPeriodFromFields(mc, ent, fields)
+	// Дата запрета проведения (свёртка базы, план 74): в замороженный период не
+	// перепроводим, иначе движения вернутся и дадут двойной счёт с опорными остатками.
+	if mc.Period != nil {
+		if lock, ok := s.Store.GetPostingLockDate(ctx); ok && storage.PostingFrozen(lock, *mc.Period) {
+			return storage.PostingFrozenError(lock)
+		}
+	}
+	lockCollector := runtime.NewLockCollector()
+	defer lockCollector.ReleaseAll()
+
+	obj := &runtime.Object{Type: ent.Name, Kind: ent.Kind, ID: id, Fields: fields, TablePartRows: tps}
+	if obj.Fields == nil {
+		obj.Fields = map[string]any{}
+	}
+	selfRef := &interpreter.Ref{UUID: id.String(), Type: ent.Name}
+	obj.Fields["ссылка"] = selfRef
+	obj.Fields["reference"] = selfRef
+	if s.PrepareHook != nil {
+		s.PrepareHook(ctx, ent, obj)
+	}
+	if s.EnrichTPRows != nil {
+		for _, tp := range ent.TableParts {
+			if rows, ok := obj.TablePartRows[tp.Name]; ok {
+				s.EnrichTPRows(ctx, tp, rows)
+			}
+		}
+	}
+
+	// Хук выполняется ВНУТРИ транзакции записи (issue #458): раньше OnPost
+	// работал вне её — БлокировкаДанных из хука не могла взять advisory lock,
+	// а между чтением остатков и записью движений оставалось окно гонки.
+	proc := s.Reg.GetProcedure(ent.Name, "OnPost")
+	return s.Store.WithTx(ctx, func(txCtx context.Context) error {
+		if proc != nil {
+			hookCtx := runtime.ContextWithLockCollector(txCtx, lockCollector)
+			var msgs []string
+			var vars map[string]any
+			if s.BuildVars != nil {
+				vars = s.BuildVars(hookCtx, mc, &msgs)
+			}
+			var thisVal interpreter.This = obj
+			if s.MakeThis != nil {
+				thisVal = s.MakeThis(hookCtx, obj, ent)
+			}
+			if err := s.Interp.Run(proc, thisVal, vars); err != nil {
+				return fmt.Errorf("перепроведение %s: ОбработкаПроведения: %w", ent.Name, err)
+			}
+		}
+		if err := s.Store.AdvisoryXactLock(txCtx, lockCollector.Keys()); err != nil {
+			return err
+		}
+		if err := s.writeMovements(txCtx, ent.Name, id, mc); err != nil {
+			return err
+		}
+		return s.Store.SetPosted(txCtx, ent.Name, id, true)
+	})
+}
+
+// clearMovements removes every register row recorded by the document. Passing
+// nil rows to the storage writers performs only DELETE-by-recorder, therefore
+// it is safe to visit registers the document did not write to.
+func (s *Service) clearMovements(ctx context.Context, entityName string, id uuid.UUID) error {
+	for _, reg := range s.Reg.Registers() {
+		if err := s.Store.WriteMovements(ctx, reg.Name, entityName, id, nil, reg, nil); err != nil {
+			return err
+		}
+	}
+	for _, ir := range s.Reg.InfoRegisters() {
+		if err := s.Store.WriteInfoMovements(ctx, ir.Name, entityName, id, nil, ir, nil); err != nil {
+			return err
+		}
+	}
+	for _, ar := range s.Reg.AccountRegisters() {
+		if err := s.Store.WriteAccountMovements(ctx, ar.Name, entityName, id, nil, ar, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeMovements распределяет накопленные в mc движения по нужным типам

@@ -67,8 +67,8 @@ const tplManagedForm = `
             <option value="{{index . "id"}}" {{if eq (index . "id") (index $ctx.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
-          <button type="button" data-ob-ref-picker="ref-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">…</button>
-          <button type="button" data-ob-ref-current="ref-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px" title="Открыть карточку">🔍</button>
+          <button type="button" data-ob-ref-picker="ref-{{$fn}}"{{if $el.ReadOnly}} disabled{{end}} style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">…</button>
+          <button type="button" data-ob-ref-current="ref-{{$fn}}"{{if $el.ReadOnly}} disabled{{end}} style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px" title="Открыть карточку">🔍</button>
         </div>
       {{else if isEnum (str $f.Type)}}
         <select name="{{$fn}}"{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $el.ReadOnly}} disabled{{end}}{{if $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
@@ -84,6 +84,8 @@ const tplManagedForm = `
           <option value="false" {{if eq (index $ctx.Values $fn) "false"}}selected{{end}}>Нет</option>
           <option value="true" {{if eq (index $ctx.Values $fn) "true"}}selected{{end}}>Да</option>
         </select>
+      {{else if eq (str $f.Type) "number"}}
+        <input type="text" inputmode="decimal" pattern="[+-]?([0-9]+([.,][0-9]+)?|[.,][0-9]+)" name="{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="{{$fn}}" title="Введите число; десятичный разделитель — запятая или точка"{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $el.ReadOnly}} readonly{{end}}{{if $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
       {{else if isRichText (str $f.Type)}}
         {{/* textarea — скрытое form-backing поле; Quill (этап 2) монтируется на
              .richtext-editor и синхронизирует HTML обратно перед submit. Без JS
@@ -393,7 +395,7 @@ const tplManagedForm = `
   {{if .IsPopup}}
   <a href="#" data-ob-ref-cancel title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{else}}
-  <a href="{{if .IsProcessor}}/ui/{{else}}/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{end}}" title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
+  <a href="{{if .IsProcessor}}/ui/{{else}}/ui/{{lower (str .Entity.Kind)}}/{{lower .Entity.Name}}{{end}}" data-ob-close-tab title="Закрыть" style="font-size:22px;line-height:1;color:#94a3b8;text-decoration:none;padding:2px 8px;border-radius:5px;background:#f1f5f9;font-weight:300">×</a>
   {{end}}
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}

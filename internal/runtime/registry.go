@@ -43,10 +43,12 @@ type Registry struct {
 	moduleProcs     map[string]*ast.ProcedureDecl            // flat: proc name → decl
 	moduleByName    map[string]map[string]*ast.ProcedureDecl // lowercase module → procs in it
 	processors      map[string]*processor.Processor
-	httpServices    map[string]*httpservice.Service // lowercase name → HTTP-сервис
-	pages           map[string]*page.Page           // lowercase name → страница (план 66)
-	extProcessors   map[string]*processor.Processor // внешние обработки (из БД), ключ — Name
-	subsystems      []*metadata.Subsystem           // sorted by Order
+	httpServices    map[string]*httpservice.Service   // lowercase name → HTTP-сервис
+	pages           map[string]*page.Page             // lowercase name → страница (план 66)
+	exchangePlans   map[string]*metadata.ExchangePlan // lowercase name → план обмена (план 86)
+	intakes         map[string]*metadata.Intake       // lowercase name → входной шлюз (план 90)
+	extProcessors   map[string]*processor.Processor   // внешние обработки (из БД), ключ — Name
+	subsystems      []*metadata.Subsystem             // sorted by Order
 	journals        map[string]*metadata.Journal
 	accountRegs     map[string]*metadata.AccountRegister
 	chartsOfAccount map[string]*metadata.ChartOfAccounts
@@ -82,6 +84,8 @@ func NewRegistry() *Registry {
 		processors:      make(map[string]*processor.Processor),
 		httpServices:    make(map[string]*httpservice.Service),
 		pages:           make(map[string]*page.Page),
+		exchangePlans:   make(map[string]*metadata.ExchangePlan),
+		intakes:         make(map[string]*metadata.Intake),
 		extProcessors:   make(map[string]*processor.Processor),
 		extProcs:        make(map[string]map[string]*ast.ProcedureDecl),
 		serviceProcs:    make(map[string]map[string]*ast.ProcedureDecl),
@@ -90,6 +94,49 @@ func NewRegistry() *Registry {
 		chartsOfAccount: make(map[string]*metadata.ChartOfAccounts),
 		widgets:         make(map[string]*metadata.Widget),
 	}
+}
+
+// ReplaceProjectFrom atomically publishes all project-owned registry data from
+// src. External reports/forms/processors loaded from the database remain intact.
+// Readers therefore observe either the complete old project or the complete new
+// project, never an intermediate mixture assembled by multiple Load* calls.
+func (r *Registry) ReplaceProjectFrom(src *Registry) {
+	if src == nil || src == r {
+		return
+	}
+	src.mu.RLock()
+	defer src.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entities = src.entities
+	r.entitySlug = src.entitySlug
+	r.registers = src.registers
+	r.inforegs = src.inforegs
+	r.enums = src.enums
+	r.constants = src.constants
+	r.reports = src.reports
+	r.printForms = src.printForms
+	r.dslPrintForms = src.dslPrintForms
+	r.layoutForms = src.layoutForms
+	r.procs = src.procs
+	r.serviceProcs = src.serviceProcs
+	r.pageProcs = src.pageProcs
+	r.managerProcs = src.managerProcs
+	r.moduleProcs = src.moduleProcs
+	r.moduleByName = src.moduleByName
+	r.processors = src.processors
+	r.httpServices = src.httpServices
+	r.pages = src.pages
+	r.exchangePlans = src.exchangePlans
+	r.intakes = src.intakes
+	r.subsystems = src.subsystems
+	r.journals = src.journals
+	r.accountRegs = src.accountRegs
+	r.chartsOfAccount = src.chartsOfAccount
+	r.widgets = src.widgets
+	r.widgetOrder = src.widgetOrder
+	r.homePage = src.homePage
+	r.basedOnIndex = src.basedOnIndex
 }
 
 // LoadWidgets registers dashboard widgets by name (case-insensitive).
@@ -784,9 +831,10 @@ func (r *Registry) Entities() []*metadata.Entity {
 
 // eventAliases maps lowercase English event names to their Russian equivalents.
 var eventAliases = map[string]string{
-	"onwrite": "призаписи",
-	"onpost":  "обработкапроведения",
-	"onfill":  "обработказаполнения",
+	"onwrite":  "призаписи",
+	"onpost":   "обработкапроведения",
+	"onunpost": "обработкаудаленияпроведения",
+	"onfill":   "обработказаполнения",
 }
 
 func (r *Registry) LoadModules(modules map[string]*ast.Program) {
@@ -1015,6 +1063,68 @@ func (r *Registry) GetPageProcedure(pageName, procName string) *ast.ProcedureDec
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return lookupProc(r.pageProcs, pageName, procName)
+}
+
+// LoadExchangePlans регистрирует планы обмена по имени (регистронезависимо,
+// план 86). Зеркало LoadHTTPServices: движок обмена ищет план через
+// GetExchangePlan, а регистрация изменений в entityservice.Save перебирает
+// ExchangePlans().
+func (r *Registry) LoadExchangePlans(plans []*metadata.ExchangePlan) {
+	m := make(map[string]*metadata.ExchangePlan, len(plans))
+	for _, p := range plans {
+		m[strings.ToLower(p.Name)] = p
+	}
+	r.mu.Lock()
+	r.exchangePlans = m
+	r.mu.Unlock()
+}
+
+// ExchangePlans возвращает все зарегистрированные планы обмена.
+func (r *Registry) ExchangePlans() []*metadata.ExchangePlan {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*metadata.ExchangePlan, 0, len(r.exchangePlans))
+	for _, p := range r.exchangePlans {
+		out = append(out, p)
+	}
+	return out
+}
+
+// GetExchangePlan ищет план обмена по имени (регистронезависимо). nil, если нет.
+func (r *Registry) GetExchangePlan(name string) *metadata.ExchangePlan {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.exchangePlans[strings.ToLower(name)]
+}
+
+// LoadIntakes регистрирует входные шлюзы по имени (регистронезависимо, план 90).
+// Зеркало LoadExchangePlans: транспортный шов ищет шлюз через GetIntake.
+func (r *Registry) LoadIntakes(intakes []*metadata.Intake) {
+	m := make(map[string]*metadata.Intake, len(intakes))
+	for _, in := range intakes {
+		m[strings.ToLower(in.Name)] = in
+	}
+	r.mu.Lock()
+	r.intakes = m
+	r.mu.Unlock()
+}
+
+// Intakes возвращает все зарегистрированные входные шлюзы.
+func (r *Registry) Intakes() []*metadata.Intake {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*metadata.Intake, 0, len(r.intakes))
+	for _, in := range r.intakes {
+		out = append(out, in)
+	}
+	return out
+}
+
+// GetIntake ищет входной шлюз по имени (регистронезависимо). nil, если нет.
+func (r *Registry) GetIntake(name string) *metadata.Intake {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.intakes[strings.ToLower(name)]
 }
 
 func (r *Registry) LoadSubsystems(subs []*metadata.Subsystem) {

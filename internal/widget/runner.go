@@ -4,6 +4,7 @@ package widget
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,10 @@ type Result struct {
 	Title string
 	Span  int
 	Error string
+	// AccessDenied — у пользователя нет прав на источник данных виджета (или на
+	// все его кнопки-действия). Дашборд такие карточки не рендерит вовсе, в
+	// отличие от настоящих ошибок (compile/SQL), которые остаются видимыми.
+	AccessDenied bool
 
 	// kpi
 	KPI *KPIResult
@@ -135,7 +140,7 @@ type Runner struct {
 	Store       *storage.DB
 	CurrentUser string // login of the user looking at the dashboard (for recent.scope=current_user)
 	User        *auth.User
-	Cache       *Cache // optional — when set, results are cached by widget name + user
+	Cache       *Cache // optional — key includes widget, user and authorization fingerprint
 }
 
 // New creates a Runner. The Resolve hook is optional — when non-nil it is
@@ -151,7 +156,11 @@ func New(reg *runtime.Registry, store *storage.DB) *Runner {
 // "actions" widget type is purely declarative so it skips the cache.
 func (r *Runner) Run(ctx context.Context, w *metadata.Widget) Result {
 	if r.Cache != nil && w.Type != metadata.WidgetTypeActions {
-		key := cacheKey(w.Name, r.CurrentUser)
+		security, cacheable := securityFingerprint(r.User)
+		if !cacheable {
+			return r.runOnce(ctx, w)
+		}
+		key := cacheKey(w.Name, r.CurrentUser, security)
 		if cached, ok := r.Cache.get(key); ok {
 			return cached
 		}
@@ -188,7 +197,7 @@ func (r *Runner) runOnce(ctx context.Context, w *metadata.Widget) Result {
 func (r *Runner) runKPI(ctx context.Context, w *metadata.Widget, res *Result) {
 	rows, _, err := r.runQuery(ctx, w)
 	if err != nil {
-		res.Error = err.Error()
+		setResultError(res, err)
 		return
 	}
 	if len(rows) == 0 {
@@ -202,7 +211,7 @@ func (r *Runner) runKPI(ctx context.Context, w *metadata.Widget, res *Result) {
 func (r *Runner) runList(ctx context.Context, w *metadata.Widget, res *Result) {
 	rows, cols, err := r.runQuery(ctx, w)
 	if err != nil {
-		res.Error = err.Error()
+		setResultError(res, err)
 		return
 	}
 	if w.Limit > 0 && len(rows) > w.Limit {
@@ -216,7 +225,7 @@ func (r *Runner) runList(ctx context.Context, w *metadata.Widget, res *Result) {
 func (r *Runner) runChart(ctx context.Context, w *metadata.Widget, res *Result) {
 	rows, cols, err := r.runQuery(ctx, w)
 	if err != nil {
-		res.Error = err.Error()
+		setResultError(res, err)
 		return
 	}
 	x := resolveFieldName(cols, w.XField)
@@ -288,6 +297,7 @@ func resolveFieldName(cols []string, declared string) string {
 }
 
 func (r *Runner) runActions(w *metadata.Widget, res *Result) {
+	deniedSome := false
 	for _, item := range w.Items {
 		link := ActionLink{Label: item.Label}
 		switch {
@@ -298,11 +308,20 @@ func (r *Runner) runActions(w *metadata.Widget, res *Result) {
 			if ent == nil {
 				continue
 			}
+			// Кнопка создания видна только тем, кто может записать сущность.
+			if !r.canWrite(string(ent.Kind), ent.Name) {
+				deniedSome = true
+				continue
+			}
 			link.URL = "/ui/" + strings.ToLower(string(ent.Kind)) + "/" + ent.Name + "/new"
 		default:
 			continue
 		}
 		res.Actions = append(res.Actions, link)
+	}
+	// Все кнопки отфильтрованы правами → карточку целиком прячем с дашборда.
+	if len(res.Actions) == 0 && deniedSome {
+		res.AccessDenied = true
 	}
 }
 
@@ -418,6 +437,7 @@ func (r *Runner) resolveUUIDs(ctx context.Context, rows []map[string]any) {
 				continue
 			}
 			if refRow, err := r.Store.GetByID(ctx, entity.Name, id, entity); err == nil {
+				r.maskRecord(entity, refRow)
 				for _, f := range entity.Fields {
 					if s, ok := refRow[f.Name].(string); ok && strings.TrimSpace(s) != "" {
 						uuidToLabel[idStr] = s
@@ -466,13 +486,55 @@ func (r *Runner) runQuery(ctx context.Context, w *metadata.Widget) ([]map[string
 		return nil, nil, fmt.Errorf("compile: %w", err)
 	}
 	if denied := r.deniedQuerySource(compiled.Sources); denied != "" {
-		return nil, nil, fmt.Errorf("нет доступа к объекту: %s", denied)
+		return nil, nil, &accessDeniedError{object: denied}
 	}
-	return r.Store.RunQuery(ctx, compiled.SQL, compiled.Args)
+	if denied := access.DeniedMaskedColumn(r.User, compiled.Sources, compiled.ProjectionFields, r.sourceMeta); denied != "" {
+		return nil, nil, &accessDeniedError{object: "поле «" + denied + "»"}
+	}
+	rows, cols, err := r.Store.RunQuery(ctx, compiled.SQL, compiled.Args)
+	if err != nil {
+		return rows, cols, err
+	}
+	return rows, cols, nil
+}
+
+func (r *Runner) sourceMeta(kind, name string) *metadata.Entity {
+	if e := r.Reg.GetEntity(name); e != nil {
+		return e
+	}
+	if reg := r.Reg.GetRegister(name); reg != nil {
+		return storage.RegisterPredicateEntity(reg)
+	}
+	if ir := r.Reg.GetInfoRegister(name); ir != nil {
+		return storage.InfoRegisterPredicateEntity(ir)
+	}
+	if ar := r.Reg.GetAccountRegister(name); ar != nil {
+		return storage.AccountRegisterPredicateEntity(ar)
+	}
+	return nil
+}
+
+// accessDeniedError сигналит, что источник запроса недоступен пользователю —
+// setResultError переводит его в Result.AccessDenied.
+type accessDeniedError struct{ object string }
+
+func (e *accessDeniedError) Error() string {
+	return "нет доступа к объекту: " + e.object
+}
+
+// setResultError записывает ошибку в Result, помечая отказ в доступе.
+func setResultError(res *Result, err error) {
+	res.Error = err.Error()
+	var denied *accessDeniedError
+	res.AccessDenied = errors.As(err, &denied)
 }
 
 func (r *Runner) canRead(kind, name string) bool {
 	return r.User == nil || r.User.Has(kind, name, "read")
+}
+
+func (r *Runner) canWrite(kind, name string) bool {
+	return r.User == nil || r.User.Has(kind, name, "write")
 }
 
 func (r *Runner) rowAllowedID(ctx context.Context, entity *metadata.Entity, op string, id uuid.UUID) bool {
@@ -646,6 +708,7 @@ func recordPresentation(ctx context.Context, r *Runner, entityName, idStr string
 	if err != nil || row == nil {
 		return shortID(idStr)
 	}
+	r.maskRecord(ent, row)
 	if ent.Kind == metadata.KindDocument {
 		num := fmt.Sprintf("%v", firstNonEmpty(row, "Номер", "Number"))
 		dateRaw := firstNonEmpty(row, "Дата", "Date")
@@ -667,6 +730,15 @@ func recordPresentation(ctx context.Context, r *Runner, entityName, idStr string
 		}
 	}
 	return shortID(idStr)
+}
+
+// maskRecord applies the same field-level policy as UI read paths before a
+// UUID-derived label enters a widget result (and potentially its cache).
+func (r *Runner) maskRecord(entity *metadata.Entity, row map[string]any) {
+	if entity == nil {
+		return
+	}
+	access.MaskRecord(access.FieldDecisions(r.User, string(entity.Kind), entity.Name, entity), row)
 }
 
 func firstNonEmpty(row map[string]any, keys ...string) any {

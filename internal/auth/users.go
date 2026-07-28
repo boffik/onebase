@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,13 +15,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ivantit66/onebase/internal/storage"
-)
-
-// ErrFirstUserMustBeAdmin — первый пользователь обязан быть администратором.
-// Иначе после появления записи в _users включается auth, а управлять
-// пользователями некому (controlling#130).
-var ErrFirstUserMustBeAdmin = errors.New(
-	"первый пользователь должен быть администратором: иначе вход потребуется всем, а управлять пользователями будет некому",
 )
 
 type User struct {
@@ -38,13 +32,20 @@ type User struct {
 }
 
 type Repo struct {
-	db *storage.DB
+	db             *storage.DB
+	passwordPolicy PasswordPolicy
 }
+
+var (
+	ErrFirstUserMustBeAdmin = errors.New("первый пользователь должен быть администратором")
+	ErrLastAdmin            = errors.New("нельзя удалить или разжаловать последнего администратора")
+	ErrLastUser             = errors.New("нельзя удалить последнего пользователя; авторизация должна отключаться отдельным действием")
+)
 
 // NewRepo wires the auth repository to the storage layer. Internally Exec/
 // Query/QueryRow are routed to PostgreSQL or SQLite via the DB abstraction.
 func NewRepo(db *storage.DB) *Repo {
-	return &Repo{db: db}
+	return &Repo{db: db, passwordPolicy: passwordPolicyFromEnv()}
 }
 
 func (r *Repo) EnsureSchema(ctx context.Context) error {
@@ -61,9 +62,20 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	if _, err := r.db.Exec(ctx, usersDDL); err != nil {
 		return fmt.Errorf("auth: create _users: %w", err)
 	}
+	// Единственная строка служит переносимым mutex для инвариантов пользователей:
+	// UPDATE берёт write-lock в SQLite и row-lock в PostgreSQL.
+	if _, err := r.db.Exec(ctx, `CREATE TABLE IF NOT EXISTS _auth_user_guard (
+		id INTEGER PRIMARY KEY CHECK (id = 1)
+	)`); err != nil {
+		return fmt.Errorf("auth: create user guard: %w", err)
+	}
+	if _, err := r.db.Exec(ctx, `INSERT INTO _auth_user_guard (id) VALUES (1) ON CONFLICT (id) DO NOTHING`); err != nil {
+		return fmt.Errorf("auth: seed user guard: %w", err)
+	}
 	sessionsDDL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS _sessions (
 			token TEXT PRIMARY KEY,
+			token_hash TEXT NOT NULL,
 			user_id %s NOT NULL REFERENCES _users(id) ON DELETE CASCADE,
 			expires_at %s NOT NULL,
 			public_id TEXT,
@@ -82,11 +94,19 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	if err := r.EnsureAPITokenSchema(ctx); err != nil {
 		return err
 	}
-	// idempotent migrations: add columns if missing
-	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN deny_passwd_change %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
-	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN show_in_list %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
-	r.db.Exec(ctx, `ALTER TABLE _users ADD COLUMN lang TEXT NOT NULL DEFAULT ''`)
-	r.db.Exec(ctx, fmt.Sprintf(`ALTER TABLE _users ADD COLUMN ai_data_access %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)))
+	// Idempotent user migrations. Ignore only an actual duplicate-column error:
+	// swallowing SQLITE_BUSY, permission, or connection errors leaves a partially
+	// migrated schema that fails later on unrelated requests.
+	for _, ddl := range []string{
+		fmt.Sprintf(`ALTER TABLE _users ADD COLUMN deny_passwd_change %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)),
+		fmt.Sprintf(`ALTER TABLE _users ADD COLUMN show_in_list %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)),
+		`ALTER TABLE _users ADD COLUMN lang TEXT NOT NULL DEFAULT ''`,
+		fmt.Sprintf(`ALTER TABLE _users ADD COLUMN ai_data_access %s NOT NULL DEFAULT %s`, d.TypeBool(), boolFalseFor(d)),
+	} {
+		if _, err := r.db.Exec(ctx, ddl); err != nil && !isDuplicateColumnErr(err) {
+			return fmt.Errorf("auth: migrate _users: %w", err)
+		}
+	}
 	// Мультисессии (план 78): служебные метаданные сессии. Колонки nullable без
 	// DEFAULT — SQLite не разрешает ни UNIQUE, ни CURRENT_TIMESTAMP в ADD COLUMN;
 	// уникальность public_id обеспечивает отдельный индекс. EnsureSchema зовётся
@@ -94,6 +114,7 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 	// есть» — молча проглоченный SQLITE_BUSY оставил бы колонку несозданной и
 	// сломал INSERT сессий.
 	for _, ddl := range []string{
+		`ALTER TABLE _sessions ADD COLUMN token_hash TEXT`,
 		`ALTER TABLE _sessions ADD COLUMN public_id TEXT`,
 		`ALTER TABLE _sessions ADD COLUMN kind TEXT`,
 		fmt.Sprintf(`ALTER TABLE _sessions ADD COLUMN created_at %s`, d.TypeTimestamp()),
@@ -105,7 +126,11 @@ func (r *Repo) EnsureSchema(ctx context.Context) error {
 			return fmt.Errorf("auth: migrate _sessions: %w", err)
 		}
 	}
+	if err := r.migrateSessionTokens(ctx); err != nil {
+		return fmt.Errorf("auth: hash legacy session tokens: %w", err)
+	}
 	for _, ddl := range []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS ix_sessions_token_hash ON _sessions(token_hash)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ix_sessions_public_id ON _sessions(public_id)`,
 		`CREATE INDEX IF NOT EXISTS ix_sessions_user_id ON _sessions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS ix_sessions_expires_at ON _sessions(expires_at)`,
@@ -190,11 +215,27 @@ func (r *Repo) GetByID(ctx context.Context, userID string) (*User, error) {
 
 // Update saves editable fields on a user.
 func (r *Repo) Update(ctx context.Context, userID, fullName string, isAdmin, denyPasswdChange, showInList, aiDataAccess bool) error {
-	d := r.db.Dialect()
-	q := fmt.Sprintf(`UPDATE _users SET full_name=%s, is_admin=%s, deny_passwd_change=%s, show_in_list=%s, ai_data_access=%s WHERE id=%s`,
-		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6))
-	_, err := r.db.Exec(ctx, q, fullName, isAdmin, denyPasswdChange, showInList, aiDataAccess, userID)
-	return err
+	return r.withUserInvariantLock(ctx, func(txCtx context.Context) error {
+		d := r.db.Dialect()
+		var currentAdmin any
+		qCurrent := fmt.Sprintf(`SELECT is_admin FROM _users WHERE id = %s`, d.Placeholder(1))
+		if err := r.db.QueryRow(txCtx, qCurrent, userID).Scan(&currentAdmin); err != nil {
+			return err
+		}
+		if scanBool(currentAdmin) && !isAdmin {
+			admins, err := r.adminCount(txCtx)
+			if err != nil {
+				return err
+			}
+			if admins <= 1 {
+				return ErrLastAdmin
+			}
+		}
+		q := fmt.Sprintf(`UPDATE _users SET full_name=%s, is_admin=%s, deny_passwd_change=%s, show_in_list=%s, ai_data_access=%s WHERE id=%s`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6))
+		_, err := r.db.Exec(txCtx, q, fullName, isAdmin, denyPasswdChange, showInList, aiDataAccess, userID)
+		return err
+	})
 }
 
 // SetShowInList toggles the show_in_list flag for a user.
@@ -251,14 +292,9 @@ func scanTime(v any) time.Time {
 }
 
 func (r *Repo) Create(ctx context.Context, login, password, fullName string, isAdmin bool) (*User, error) {
-	hasUsers, err := r.HasUsers(ctx)
-	if err != nil {
+	if err := r.passwordPolicy.validate(password); err != nil {
 		return nil, err
 	}
-	if !hasUsers && !isAdmin {
-		return nil, ErrFirstUserMustBeAdmin
-	}
-
 	d := r.db.Dialect()
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -274,11 +310,71 @@ func (r *Repo) Create(ctx context.Context, login, password, fullName string, isA
 	return &User{ID: id, Login: login, FullName: fullName, IsAdmin: isAdmin}, nil
 }
 
+// CreateManaged is the user-management entry point. Unlike low-level Create,
+// it enforces that authentication can only be enabled by an administrator.
+func (r *Repo) CreateManaged(ctx context.Context, login, password, fullName string, isAdmin bool) (*User, error) {
+	if !isAdmin {
+		err := r.withUserInvariantLock(ctx, func(txCtx context.Context) error {
+			hasUsers, err := r.HasUsers(txCtx)
+			if err != nil {
+				return err
+			}
+			if !hasUsers {
+				return ErrFirstUserMustBeAdmin
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r.Create(ctx, login, password, fullName, isAdmin)
+}
+
 func (r *Repo) Delete(ctx context.Context, id string) error {
-	d := r.db.Dialect()
-	q := fmt.Sprintf(`DELETE FROM _users WHERE id = %s`, d.Placeholder(1))
-	_, err := r.db.Exec(ctx, q, id)
-	return err
+	return r.withUserInvariantLock(ctx, func(txCtx context.Context) error {
+		d := r.db.Dialect()
+		var targetAdmin any
+		qTarget := fmt.Sprintf(`SELECT is_admin FROM _users WHERE id = %s`, d.Placeholder(1))
+		if err := r.db.QueryRow(txCtx, qTarget, id).Scan(&targetAdmin); err != nil {
+			return err
+		}
+		var users int
+		if err := r.db.QueryRow(txCtx, `SELECT count(*) FROM _users`).Scan(&users); err != nil {
+			return err
+		}
+		if users <= 1 {
+			return ErrLastUser
+		}
+		if scanBool(targetAdmin) {
+			admins, err := r.adminCount(txCtx)
+			if err != nil {
+				return err
+			}
+			if admins <= 1 {
+				return ErrLastAdmin
+			}
+		}
+		q := fmt.Sprintf(`DELETE FROM _users WHERE id = %s`, d.Placeholder(1))
+		_, err := r.db.Exec(txCtx, q, id)
+		return err
+	})
+}
+
+func (r *Repo) withUserInvariantLock(ctx context.Context, fn func(context.Context) error) error {
+	return r.db.WithTxScope(ctx, func(txCtx context.Context) error {
+		if _, err := r.db.Exec(txCtx, `UPDATE _auth_user_guard SET id = 1 WHERE id = 1`); err != nil {
+			return fmt.Errorf("auth: lock user invariants: %w", err)
+		}
+		return fn(txCtx)
+	})
+}
+
+func (r *Repo) adminCount(ctx context.Context) (int, error) {
+	var count int
+	q := fmt.Sprintf(`SELECT count(*) FROM _users WHERE is_admin = %s`, r.db.Dialect().Placeholder(1))
+	err := r.db.QueryRow(ctx, q, true).Scan(&count)
+	return count, err
 }
 
 func (r *Repo) Authenticate(ctx context.Context, login, password string) (*User, error) {
@@ -326,14 +422,61 @@ func (r *Repo) CreateSession(ctx context.Context, userID string, meta SessionMet
 		return "", err
 	}
 	token := hex.EncodeToString(b)
+	tokenHash := sessionTokenHash(token)
 	now := time.Now()
 	expires := now.Add(24 * time.Hour)
-	q := fmt.Sprintf(`INSERT INTO _sessions (token, user_id, expires_at, public_id, kind, created_at, last_seen_at, ip, user_agent)
-		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)`,
+	q := fmt.Sprintf(`INSERT INTO _sessions (token, token_hash, user_id, expires_at, public_id, kind, created_at, last_seen_at, ip, user_agent)
+		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)`,
 		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5),
-		d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9))
-	_, err := r.db.Exec(ctx, q, token, userID, expires, uuid.New().String(), meta.Kind, now, now, meta.IP, meta.UserAgent)
+		d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9), d.Placeholder(10))
+	_, err := r.db.Exec(ctx, q, tokenHash, tokenHash, userID, expires, uuid.New().String(), meta.Kind, now, now, meta.IP, meta.UserAgent)
 	return token, err
+}
+
+const sessionTokenHashPrefix = "sha256:"
+
+func sessionTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return sessionTokenHashPrefix + hex.EncodeToString(sum[:])
+}
+
+// migrateSessionTokens replaces legacy plaintext bearer tokens in-place with
+// one-way digests. The new token_hash column is also the idempotence marker:
+// if startup is interrupted after ADD COLUMN, the next startup resumes the
+// backfill. Existing browser cookies continue to work because lookups hash the
+// cookie before querying.
+func (r *Repo) migrateSessionTokens(ctx context.Context) error {
+	return r.db.WithTxScope(ctx, func(txCtx context.Context) error {
+		rows, err := r.db.Query(txCtx, `SELECT token FROM _sessions WHERE token_hash IS NULL OR token_hash = ''`)
+		if err != nil {
+			return err
+		}
+		var legacyTokens []string
+		for rows.Next() {
+			var token string
+			if err := rows.Scan(&token); err != nil {
+				rows.Close()
+				return err
+			}
+			legacyTokens = append(legacyTokens, token)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		d := r.db.Dialect()
+		q := fmt.Sprintf(`UPDATE _sessions SET token = %s, token_hash = %s
+			WHERE token = %s AND (token_hash IS NULL OR token_hash = '')`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
+		for _, token := range legacyTokens {
+			digest := sessionTokenHash(token)
+			if _, err := r.db.Exec(txCtx, q, digest, digest, token); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // enforceSessionLimit применяет политику `auth.max_sessions_per_user`
@@ -393,10 +536,11 @@ const touchInterval = 5 * time.Minute
 // SQLite single-writer, а лаунчер и процесс базы пишут в один файл — лишние
 // записи ни к чему. now передаётся параметром ради детерминизма в тестах.
 func (r *Repo) TouchSession(ctx context.Context, token string, now time.Time) error {
-	if last, ok := touchThrottle.Load(token); ok && now.Sub(last.(time.Time)) < touchInterval {
+	tokenHash := sessionTokenHash(token)
+	if last, ok := touchThrottle.Load(tokenHash); ok && now.Sub(last.(time.Time)) < touchInterval {
 		return nil
 	}
-	touchThrottle.Store(token, now)
+	touchThrottle.Store(tokenHash, now)
 	// Попутная уборка записей умерших сессий (не чаще реальных touch'ей).
 	touchThrottle.Range(func(k, v any) bool {
 		if now.Sub(v.(time.Time)) > 24*time.Hour {
@@ -405,8 +549,8 @@ func (r *Repo) TouchSession(ctx context.Context, token string, now time.Time) er
 		return true
 	})
 	d := r.db.Dialect()
-	q := fmt.Sprintf(`UPDATE _sessions SET last_seen_at = %s WHERE token = %s`, d.Placeholder(1), d.Placeholder(2))
-	_, err := r.db.Exec(ctx, q, now, token)
+	q := fmt.Sprintf(`UPDATE _sessions SET last_seen_at = %s WHERE token_hash = %s`, d.Placeholder(1), d.Placeholder(2))
+	_, err := r.db.Exec(ctx, q, now, tokenHash)
 	return err
 }
 
@@ -417,9 +561,9 @@ func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
 	q := fmt.Sprintf(`
 		SELECT u.id, u.login, u.full_name, u.is_admin, u.deny_passwd_change, u.ai_data_access, u.lang
 		FROM _sessions s JOIN _users u ON u.id = s.user_id
-		WHERE s.token = %s AND s.expires_at > %s
+		WHERE s.token_hash = %s AND s.expires_at > %s
 	`, d.Placeholder(1), d.Now())
-	err := r.db.QueryRow(ctx, q, token).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &aiData, &u.Lang)
+	err := r.db.QueryRow(ctx, q, sessionTokenHash(token)).Scan(&u.ID, &u.Login, &u.FullName, &u.IsAdmin, &u.DenyPasswdChange, &aiData, &u.Lang)
 	if err != nil {
 		return nil, err
 	}
@@ -429,8 +573,8 @@ func (r *Repo) LookupSession(ctx context.Context, token string) (*User, error) {
 
 func (r *Repo) DeleteSession(ctx context.Context, token string) error {
 	d := r.db.Dialect()
-	q := fmt.Sprintf(`DELETE FROM _sessions WHERE token = %s`, d.Placeholder(1))
-	_, err := r.db.Exec(ctx, q, token)
+	q := fmt.Sprintf(`DELETE FROM _sessions WHERE token_hash = %s`, d.Placeholder(1))
+	_, err := r.db.Exec(ctx, q, sessionTokenHash(token))
 	return err
 }
 
@@ -519,6 +663,7 @@ func parseSessionTime(v any) time.Time {
 		// Try standard formats first, then Go's own String() format.
 		for _, layout := range []string{
 			time.RFC3339Nano, time.RFC3339,
+			"2006-01-02 15:04:05-07:00",
 			"2006-01-02 15:04:05.999999999 -0700 MST",
 			"2006-01-02 15:04:05 -0700 MST",
 			"2006-01-02 15:04:05",
@@ -543,6 +688,9 @@ func (r *Repo) SetDenyPasswdChange(ctx context.Context, userID string, deny bool
 
 // UpdatePassword sets a new bcrypt-hashed password for the given user ID.
 func (r *Repo) UpdatePassword(ctx context.Context, userID, newPassword string) error {
+	if err := r.passwordPolicy.validate(newPassword); err != nil {
+		return err
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -586,8 +734,15 @@ func (r *Repo) KickSession(ctx context.Context, publicID string) error {
 // «выйти со всех устройств кроме этого» (план 78).
 func (r *Repo) KickOtherSessions(ctx context.Context, userID, currentToken string) error {
 	d := r.db.Dialect()
-	q := fmt.Sprintf(`DELETE FROM _sessions WHERE user_id = %s AND token <> %s`,
+	q := fmt.Sprintf(`DELETE FROM _sessions WHERE user_id = %s AND token_hash <> %s`,
 		d.Placeholder(1), d.Placeholder(2))
-	_, err := r.db.Exec(ctx, q, userID, currentToken)
+	_, err := r.db.Exec(ctx, q, userID, sessionTokenHash(currentToken))
 	return err
+}
+
+// PasswordPolicy reports the policy captured when this repository was
+// created. Handlers use it only for UI hints; validation always happens in
+// Create and UpdatePassword.
+func (r *Repo) PasswordPolicy() PasswordPolicy {
+	return r.passwordPolicy
 }

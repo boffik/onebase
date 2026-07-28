@@ -197,6 +197,10 @@ const tplIndex = `
 
 <script>
 var _sel = '{{if .Selected}}{{.Selected.ID}}{{end}}';
+// GUI-сборка под Windows умеет нативные WebView2-окна — «Предприятие»
+// открывается в таком окне (без адресной строки), а не через window.open,
+// который в WebView2 убегает во внешний браузер. В остальных сборках — браузер.
+var _nativeOK = {{if .NativeOK}}true{{else}}false{{end}};
 function selectBase(id) {
   if (_sel === id) return;
   window.location.href = '/?sel=' + id;
@@ -268,11 +272,20 @@ function showStartError(win, msg) {
   alert('Ошибка запуска:\n' + text);
 }
 function startBase(el, id) {
+  if (_nativeOK) return startBaseNative(el, id);
   el.preventDefault ? el.preventDefault() : (el.returnValue = false);
   var btn = el.target || el;
   var origText = btn.textContent || '';
   if (btn.innerHTML) btn.innerHTML = '⏳ Запуск...';
   var win = window.open('', '_blank');
+  // Заготовка вместо белого экрана: первый запуск мигрирует схему БД до открытия
+  // порта и может длиться дольше минуты — окно всё это время ждёт ответ /start.
+  if (win) {
+    try {
+      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>onebase</title></head><body style="font-family:Segoe UI,Arial,sans-serif;padding:28px"><h3 style="margin:0 0 12px">⏳ Запуск базы…</h3><p style="color:#555;max-width:48em">При первом запуске создаётся схема базы данных — это может занять несколько минут. Окно откроется автоматически.</p></body></html>');
+      win.document.close();
+    } catch (e) {}
+  }
   fetch('/bases/' + id + '/start', {method:'POST'})
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -287,6 +300,30 @@ function startBase(el, id) {
     .catch(function(e){
       showStartError(win, e);
       if (btn.innerHTML) btn.innerHTML = origText;
+    });
+  return false;
+}
+// startBaseNative открывает базу в нативном WebView2-окне (сервер запускает его
+// сам, без window.open — иначе WebView2 отдал бы URL внешнему браузеру с
+// адресной строкой). Окно на общем профиле = обычный сеанс Предприятия.
+function startBaseNative(el, id) {
+  el.preventDefault ? el.preventDefault() : (el.returnValue = false);
+  var btn = el.target || el;
+  var origHTML = btn.innerHTML;
+  if (btn.innerHTML) btn.innerHTML = '⏳ Запуск...';
+  fetch('/bases/' + id + '/start-native', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.error) {
+        alert('Ошибка запуска:\n' + d.error);
+        if (btn.innerHTML) btn.innerHTML = origHTML;
+      } else {
+        setTimeout(function(){ window.location.href = '/?sel=' + id; }, 500);
+      }
+    })
+    .catch(function(e){
+      alert('Ошибка запуска: ' + e);
+      if (btn.innerHTML) btn.innerHTML = origHTML;
     });
   return false;
 }
@@ -468,7 +505,7 @@ const tplConfigResult = `
   <h2>{{.Title}}</h2>
   <p style="margin-bottom:12px;font-size:13px;color:#555">{{.Message}}</p>
   {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
-  <div style="margin-top:14px"><a class="btn-cancel" href="/">← {{t $.Lang "Назад"}}</a></div>
+  <div style="margin-top:14px"><a class="btn-cancel" href="{{if .BackURL}}{{.BackURL}}{{else}}/{{end}}">← {{t $.Lang "Назад"}}</a></div>
 </div>
 </body></html>
 {{end}}

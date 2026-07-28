@@ -176,6 +176,108 @@ func TestLockManager_ReleaseCleansUp(t *testing.T) {
 	}
 }
 
+// refStub имитирует ссылку (interpreter.Ref): String() — отображаемое имя,
+// GetRefUUID() — стабильный идентификатор.
+type refStub struct{ name, uuid string }
+
+func (r refStub) String() string     { return r.name }
+func (r refStub) GetRefUUID() string { return r.uuid }
+
+// Ключ блокировки для ссылочного значения строится по UUID, а не по имени:
+// имя ссылки в разных путях проведения бывает то заполненным, то пустым —
+// ключи не пересекались бы и блокировка не срабатывала (issue #458).
+func TestLockObject_RefValuesKeyedByUUID(t *testing.T) {
+	mgr := NewLockManager()
+	buildFor := func(v any) string {
+		lo := NewLockObject(mgr)
+		le := lo.CallMethod("добавить", []any{"ПартииТоваров"}).(*LockElement)
+		le.CallMethod("установитьзначение", []any{"Номенклатура", v})
+		return lo.buildKeys()[0]
+	}
+	withName := buildFor(refStub{name: "Тумбочка", uuid: "u-1"})
+	withoutName := buildFor(refStub{uuid: "u-1"})
+	if withName != withoutName {
+		t.Fatalf("ключи должны совпадать независимо от имени ссылки: %q vs %q", withName, withoutName)
+	}
+	if withName != "ПартииТоваров|номенклатура=u-1" {
+		t.Fatalf("ключ = %q, ожидался UUID в значении", withName)
+	}
+	// Пустой UUID — откат к строковому представлению.
+	if k := buildFor(refStub{name: "Тумбочка"}); k != "ПартииТоваров|номенклатура=Тумбочка" {
+		t.Fatalf("ключ без UUID = %q", k)
+	}
+}
+
+// Заблокировать() вызывает advisory-функцию с нормализованными ключами:
+// БД-блокировка берётся в момент DSL-вызова, ДО чтения остатков (issue #458).
+func TestLockObject_AdvisoryCalledOnLock(t *testing.T) {
+	mgr := NewLockManager()
+	var got [][]string
+	lo := NewLockObject(mgr).WithAdvisory(func(keys []string) {
+		got = append(got, keys)
+	})
+	le := lo.CallMethod("добавить", []any{"Партии"}).(*LockElement)
+	le.CallMethod("установитьзначение", []any{"Склад", "Основной"})
+	lo.CallMethod("заблокировать", nil)
+	defer lo.ReleaseAll()
+	if len(got) != 1 || len(got[0]) != 1 || got[0][0] != "Партии|склад=Основной" {
+		t.Fatalf("advisory получил %v", got)
+	}
+}
+
+// Паника advisory-функции должна сама отпускать внутрипроцессные мьютексы.
+// В произвольной DSL-транзакции LockCollector может отсутствовать, поэтому
+// полагаться только на внешний defer нельзя: следующий запрос к ключу зависнет.
+func TestLockObject_AdvisoryPanicReleasesWithoutCollector(t *testing.T) {
+	mgr := NewLockManager()
+	lo := NewLockObject(mgr).WithAdvisory(func([]string) {
+		panic("лок-таймаут")
+	})
+	lo.CallMethod("добавить", []any{"X"})
+	func() {
+		defer func() { _ = recover() }()
+		lo.CallMethod("заблокировать", nil)
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		mgr.Acquire([]string{"X|"})
+		mgr.Release([]string{"X|"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("мьютекс не освобождён после паники advisory без LockCollector")
+	}
+}
+
+// Внешний LockCollector после аварийной самоочистки объекта остаётся безопасно
+// вызывать из defer Save/postDocument: повторный ReleaseAll идемпотентен.
+func TestLockObject_CollectorCleanupAfterAdvisoryPanic(t *testing.T) {
+	mgr := NewLockManager()
+	collector := NewLockCollector()
+	lo := NewLockObjectWithCollector(mgr, collector).WithAdvisory(func([]string) {
+		panic("лок-таймаут")
+	})
+	lo.CallMethod("добавить", []any{"X"})
+	panicked := false
+	func() {
+		defer func() { panicked = recover() != nil }()
+		lo.CallMethod("заблокировать", nil)
+	}()
+	if !panicked {
+		t.Fatal("ожидалась паника advisory-функции")
+	}
+	collector.ReleaseAll()
+	mgr.mu.Lock()
+	n := len(mgr.locks)
+	mgr.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("после повторной очистки осталось %d блокировок", n)
+	}
+}
+
 func TestLockCollectorTracksKeysAndReleasesHeldObjects(t *testing.T) {
 	mgr := NewLockManager()
 	collector := NewLockCollector()

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 )
+
+var ErrAttachmentTooLarge = errors.New("attachment exceeds maximum size")
 
 // Attachment represents a file attached to a document or catalog record.
 type Attachment struct {
@@ -122,7 +125,7 @@ func (db *DB) ListAttachments(ctx context.Context, ownerKind, ownerName string, 
 		WHERE owner_kind=%s AND owner_name=%s AND owner_id=%s
 		ORDER BY uploaded_at DESC
 	`, d.Placeholder(1), d.Placeholder(2), d.Placeholder(3))
-	rows, err := db.Query(ctx, q, ownerKind, ownerName, ownerID.String())
+	rows, err := db.Query(ctx, q, ownerKind, ownerName, idArg(d, ownerID))
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +150,7 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 		return Attachment{}, err
 	}
 	filePath := filepath.Join(dir, id.String())
-	f, err := os.Create(filePath)
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return Attachment{}, err
 	}
@@ -160,8 +163,19 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 		return Attachment{}, err
 	}
 	if n > maxSizeBytes {
+		_ = f.Close()
 		os.Remove(filePath)
-		return Attachment{}, i18nerr.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024))
+		return Attachment{}, fmt.Errorf("%w: %s", ErrAttachmentTooLarge,
+			i18nerr.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024)))
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(filePath)
+		return Attachment{}, err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(filePath)
+		return Attachment{}, err
 	}
 
 	q := fmt.Sprintf(`
@@ -170,7 +184,7 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 		`, d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4),
 		d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8))
 	if _, err := db.Exec(ctx, q,
-		id.String(), ownerKind, ownerName, ownerID.String(), filename, mimeType, n, uploadedBy,
+		idArg(d, id), ownerKind, ownerName, idArg(d, ownerID), filename, mimeType, n, uploadedBy,
 	); err != nil {
 		os.Remove(filePath)
 		return Attachment{}, err
@@ -180,6 +194,10 @@ func (db *DB) UploadAttachment(ctx context.Context, ownerKind, ownerName string,
 		os.Remove(filePath)
 		return Attachment{}, err
 	}
+	// The metadata INSERT may belong to an explicit DSL transaction. If that
+	// transaction (or the current savepoint) rolls back, remove the physical
+	// file as compensation so it cannot become an orphan.
+	DeferUntilTxRollback(ctx, func() { _ = os.Remove(filePath) })
 	return *a, nil
 }
 
@@ -190,7 +208,7 @@ func (db *DB) GetAttachment(ctx context.Context, id uuid.UUID) (*Attachment, err
 		SELECT id, owner_kind, owner_name, owner_id, filename, mime_type, size_bytes, uploaded_at, uploaded_by
 		FROM _attachments WHERE id=%s
 	`, d.Placeholder(1))
-	row := db.QueryRow(ctx, q, id.String())
+	row := db.QueryRow(ctx, q, idArg(d, id))
 	return scanAttachment(row)
 }
 
@@ -208,7 +226,9 @@ func (db *DB) OpenAttachment(ctx context.Context, id uuid.UUID) (*os.File, *Atta
 	return f, a, nil
 }
 
-// DeleteAttachment removes the file from disk and deletes the database record.
+// DeleteAttachment deletes metadata and removes the file from disk. Inside a
+// transaction the physical removal is delayed until the outer commit, so a
+// rollback cannot leave a restored metadata row pointing to a missing file.
 func (db *DB) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
 	d := db.dialect
 	a, err := db.GetAttachment(ctx, id)
@@ -216,10 +236,15 @@ func (db *DB) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	filePath := filepath.Join(db.filesDir, a.OwnerName, id.String())
-	os.Remove(filePath)
 	q := fmt.Sprintf(`DELETE FROM _attachments WHERE id=%s`, d.Placeholder(1))
-	_, err = db.Exec(ctx, q, id.String())
-	return err
+	if _, err = db.Exec(ctx, q, idArg(d, id)); err != nil {
+		return err
+	}
+	removeFile := func() { _ = os.Remove(filePath) }
+	if !DeferUntilTxCommit(ctx, removeFile) {
+		removeFile()
+	}
+	return nil
 }
 
 // attachmentScanner is satisfied by both sql.Row and sql.Rows.

@@ -23,7 +23,7 @@ func TestTouchAPITokenThrottled(t *testing.T) {
 	if err := repo.EnsureSchema(ctx); err != nil {
 		t.Fatalf("EnsureSchema: %v", err)
 	}
-	user, err := repo.Create(ctx, "api", "pass", "", true)
+	user, err := repo.Create(ctx, "api", "password", "", false)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

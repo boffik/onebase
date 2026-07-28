@@ -33,6 +33,36 @@ type formObjectThis struct {
 	refResolver *dslRefAttrResolver
 }
 
+// GetRefUUID сохраняет ссылочную идентичность runtime.Object у формовой
+// обёртки. Storage использует этот контракт при записи this/ЭтотОбъект в
+// reference-поля сущностей и регистров.
+func (f *formObjectThis) GetRefUUID() string {
+	if f == nil || f.obj == nil {
+		return ""
+	}
+	return f.obj.GetRefUUID()
+}
+
+// String сохраняет строковое представление runtime.Object. В частности, это
+// позволяет писать this/ЭтотОбъект в строковые атрибуты регистра так же, как
+// до оборачивания объекта для управляемой формы.
+func (f *formObjectThis) String() string {
+	if f == nil || f.obj == nil {
+		return ""
+	}
+	return f.obj.String()
+}
+
+// CallMethod делегирует объектные методы (например, МоментВремени) исходному
+// runtime.Object. Специальное поведение формовой обёртки относится к Get/Set и
+// табличным частям, остальные возможности объекта должны оставаться доступны.
+func (f *formObjectThis) CallMethod(method string, args []any) any {
+	if f == nil || f.obj == nil {
+		return nil
+	}
+	return f.obj.CallMethod(method, args)
+}
+
 func (f *formObjectThis) Get(name string) any {
 	if f == nil || f.obj == nil {
 		return nil
@@ -61,10 +91,10 @@ func (f *formObjectThis) Get(name string) any {
 	v := f.obj.Get(name)
 	if ref, ok := v.(*interpreter.Ref); ok && f.refResolver != nil {
 		if fd := entityField(f.entity, name); fd != nil && fd.RefEntity != "" {
-			return f.refResolver.attachRef(ref, fd.RefEntity)
+			return f.refResolver.bindRefToContext(ref, fd.RefEntity)
 		}
 		if f.entity != nil && (strings.EqualFold(name, "Ссылка") || strings.EqualFold(name, "Reference")) {
-			return f.refResolver.attachRef(ref, f.entity.Name)
+			return f.refResolver.bindRefToContext(ref, f.entity.Name)
 		}
 	}
 	// Дефолты по типу: пустой numeric → 0, иначе `Объект.Сумма + 100` в DSL

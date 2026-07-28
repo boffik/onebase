@@ -306,6 +306,86 @@ func TestUniversalSafeSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUniversalExchangeStateRestoreModes(t *testing.T) {
+	ctx := context.Background()
+	src := newSQLite(t, "exchange-src")
+	if err := src.EnsureExchangeSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.SaveExchangeThisNode(ctx, "Обмен", "center"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.SaveExchangeToken(ctx, "Обмен", "source-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.RegisterExchangeChange(ctx, storage.ExchangeChange{
+		Plan: "Обмен", ObjectType: "Товар", ObjectID: "id-1", NodeCode: "fil01", Version: 7, ChangedAt: 123,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec(ctx, `INSERT INTO _exchange_peers(plan,node_code,sent_no,ack_no,recv_no) VALUES ('Обмен','fil01',3,2,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec(ctx, `INSERT INTO _exchange_applied(plan,object_type,object_id,changed_at) VALUES ('Обмен','Товар','id-2',456)`); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := ExportUniversal(ctx, src, "file", t.TempDir(), "", "test", &buf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Disaster recovery restores node identity, queue and watermarks, but never
+	// restores the Bearer token.
+	dr := newSQLite(t, "exchange-dr")
+	if err := dr.EnsureExchangeSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := dr.SaveExchangeToken(ctx, "Обмен", "old-target-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportUniversalWithOptions(ctx, dr, "file", t.TempDir(), "", bytes.NewReader(buf.Bytes()), int64(buf.Len()), ImportOptions{ExchangeMode: ExchangeRestoreDisasterRecovery}); err != nil {
+		t.Fatal(err)
+	}
+	if node, _ := dr.GetExchangeThisNode(ctx, "Обмен"); node != "center" {
+		t.Fatalf("DR node=%q", node)
+	}
+	if token, _ := dr.GetExchangeToken(ctx, "Обмен"); token != "" {
+		t.Fatalf("DR leaked/preserved token %q", token)
+	}
+	for _, table := range exchangeTables {
+		var count int
+		if err := dr.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("DR %s count=%d err=%v", table, count, err)
+		}
+	}
+
+	// Clone is isolated even when restoring over a target that previously
+	// participated in exchange.
+	clone := newSQLite(t, "exchange-clone")
+	if err := clone.EnsureExchangeSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_ = clone.SaveExchangeThisNode(ctx, "Обмен", "fil02")
+	_ = clone.SaveExchangeToken(ctx, "Обмен", "clone-secret")
+	_ = clone.RegisterExchangeChange(ctx, storage.ExchangeChange{Plan: "Обмен", ObjectType: "Товар", ObjectID: "old", NodeCode: "center", Version: 1})
+	if _, err := ImportUniversal(ctx, clone, "file", t.TempDir(), "", bytes.NewReader(buf.Bytes()), int64(buf.Len())); err != nil {
+		t.Fatal(err)
+	}
+	if node, _ := clone.GetExchangeThisNode(ctx, "Обмен"); node != "" {
+		t.Fatalf("clone retained node %q", node)
+	}
+	if token, _ := clone.GetExchangeToken(ctx, "Обмен"); token != "" {
+		t.Fatalf("clone retained token %q", token)
+	}
+	for _, table := range exchangeTables {
+		var count int
+		if err := clone.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("clone %s count=%d err=%v", table, count, err)
+		}
+	}
+}
+
 func TestUniversalReportPresetsRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	src := newSQLite(t, "report-presets-src")
@@ -513,6 +593,13 @@ func TestAttachmentsExportRestore(t *testing.T) {
 	tmpDir := t.TempDir()
 	extractZip(buf.Bytes(), tmpDir)
 	attSrc := filepath.Join(tmpDir, "attachments")
+	existing := filepath.Join(dstAttDir, "Реализация", "abc123-uuid")
+	if err := os.MkdirAll(filepath.Dir(existing), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existing, []byte("old content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(attSrc); err == nil {
 		n, err := restoreAttachments(attSrc, dstAttDir)
 		if err != nil {
@@ -973,5 +1060,26 @@ func TestMigrateSchema_CreatesAccountsTable(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("_accounts rows for plan Хозрасчётный: got %d, want 2", n)
+	}
+}
+
+func TestImportConfigRejectsSymlinkedDestinationParent(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "catalogs")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, "catalogs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "catalogs", "item.yaml"), []byte("name: Item\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := importConfig(context.Background(), nil, "file", root, src); err == nil {
+		t.Fatal("expected symlinked destination parent to be rejected")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "item.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("import escaped through destination symlink: %v", err)
 	}
 }

@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -260,8 +261,8 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": err.Error()})
 		return
 	}
-	if req.Login == "" || req.Password == "" {
-		writeJSON(w, 400, map[string]any{"error": tr(lang, "Логин и пароль обязательны")})
+	if req.Login == "" {
+		writeJSON(w, 400, map[string]any{"error": tr(lang, "Логин обязателен")})
 		return
 	}
 	db, err := getAuthDB(r.Context(), b)
@@ -270,11 +271,40 @@ func (h *handler) cfgAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	repo := auth.NewRepo(db)
-	if _, err := repo.Create(r.Context(), req.Login, req.Password, req.FullName, req.IsAdmin); err != nil {
+	hadUsers, err := repo.HasUsers(r.Context())
+	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true})
+	// Иначе первый обычный пользователь мгновенно включает авторизацию и
+	// навсегда закрывает конфигуратор: войти в него может только admin.
+	if !hadUsers && !req.IsAdmin {
+		writeJSON(w, 400, map[string]any{"error": tr(lang, "Первый пользователь должен быть администратором")})
+		return
+	}
+	user, err := repo.CreateManaged(r.Context(), req.Login, req.Password, req.FullName, req.IsAdmin)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if isPasswordPolicyError(err) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error()})
+		return
+	}
+	// До создания первого пользователя текущая страница была открыта без
+	// cookie. Сразу начинаем configurator-сессию, чтобы cfgAdmin('users') после
+	// AJAX не получил HTML логина внутри панели (его form submit давал HTTP 405).
+	if !hadUsers {
+		token, err := repo.CreateSession(r.Context(), user.ID, auth.SessionMeta{
+			Kind: auth.SessionKindConfigurator, IP: r.RemoteAddr, UserAgent: r.UserAgent(),
+		})
+		if err != nil {
+			writeJSON(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+		setConfiguratorSessionCookie(w, token)
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "sessionStarted": !hadUsers})
 }
 
 func (h *handler) cfgAdminUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -297,7 +327,11 @@ func (h *handler) cfgAdminUserDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := auth.NewRepo(db)
 	if err := repo.Delete(r.Context(), req.ID); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, auth.ErrLastAdmin) || errors.Is(err, auth.ErrLastUser) {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error()})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -322,9 +356,6 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": tr(lang, "id обязателен")})
 		return
 	}
-	// Пустой пароль разрешён сознательно (kiosk/dev/тестовый аккаунт);
-	// bcrypt с "" хеширует валидно, Authenticate тоже принимает пустую
-	// строку — пользователь сможет войти, оставив поле пароля пустым.
 	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
@@ -332,7 +363,11 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := auth.NewRepo(db)
 	if err := repo.UpdatePassword(r.Context(), req.ID, req.Password); err != nil {
-		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if isPasswordPolicyError(err) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error()})
 		return
 	}
 	// Политика плана 78: смена пароля из конфигуратора — админское действие,
@@ -344,6 +379,12 @@ func (h *handler) cfgAdminUserPasswd(w http.ResponseWriter, r *http.Request) {
 	}
 	logCfgSessionAudit(r, db, "password_change_sessions_revoked", targetLogin, req.ID)
 	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+func isPasswordPolicyError(err error) bool {
+	return errors.Is(err, auth.ErrPasswordRequired) ||
+		errors.Is(err, auth.ErrPasswordTooShort) ||
+		errors.Is(err, auth.ErrPasswordTooLong)
 }
 
 // logCfgSessionAudit пишет событие сессионного аудита от имени администратора
@@ -957,7 +998,21 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 		platVer += `</span>`
 	}
 
-	html := fmt.Sprintf(`<div style="padding:24px;max-width:400px">
+	dbLocation := baseDatabaseLocation(b)
+	configMode := "Файлы"
+	configLocation := b.Path
+	if b.ConfigSource == "database" {
+		configMode = "В базе данных"
+		configLocation = dbLocation
+	}
+	if configLocation == "" {
+		configLocation = "—"
+	}
+	if dbLocation == "" {
+		dbLocation = "—"
+	}
+
+	html := fmt.Sprintf(`<div style="padding:24px;max-width:560px">
 	<div style="text-align:center;margin-bottom:20px">
 	  %s
 	  <div style="font-size:18px;font-weight:600;color:#1a5fa8">OneBase</div>
@@ -967,7 +1022,8 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 	<tr><td style="padding:6px 0;color:#888;width:140px">Версия платформы</td><td style="padding:6px 0">%s</td></tr>
 	%s
 	<tr><td style="padding:6px 0;color:#888">Режим конфигурации</td><td style="padding:6px 0">%s</td></tr>
-	<tr><td style="padding:6px 0;color:#888">База данных</td><td style="padding:6px 0">%s</td></tr>
+	<tr><td style="padding:6px 0;color:#888">Расположение конфигурации</td><td style="padding:6px 0;word-break:break-all">%s</td></tr>
+	<tr><td style="padding:6px 0;color:#888">База данных</td><td style="padding:6px 0;word-break:break-all">%s</td></tr>
 	<tr><td style="padding:6px 0;color:#888">Порт</td><td style="padding:6px 0">:%d</td></tr>
 	</table>
 	</div>`,
@@ -975,8 +1031,9 @@ func (h *handler) cfgAdminAbout(w http.ResponseWriter, r *http.Request) {
 		userRow,
 		platVer,
 		cfgRows,
-		escHTML(b.ConfigSource),
-		maskDSN(escHTML(b.DB)),
+		escHTML(configMode),
+		escHTML(configLocation),
+		escHTML(dbLocation),
 		b.Port)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
@@ -1088,4 +1145,17 @@ func maskDSN(dsn string) string {
 		return dsn[:end] + "***"
 	}
 	return dsn
+}
+
+// baseDatabaseLocation returns the same database location the launcher uses,
+// including the actual file path for SQLite and a password-masked PostgreSQL
+// connection string. The empty DBType/DB fallback mirrors OpenDB.
+func baseDatabaseLocation(b *Base) string {
+	if b.DBType == "sqlite" || (b.DBType == "" && b.DB == "") {
+		if b.DBPath != "" {
+			return b.DBPath
+		}
+		return filepath.Join(os.TempDir(), "onebase_"+b.ID+".db")
+	}
+	return maskDSN(b.DB)
 }

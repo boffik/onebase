@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -27,6 +28,12 @@ import (
 type hookSink struct {
 	mu     sync.Mutex
 	bodies []map[string]any
+}
+
+func (h *hookSink) count() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.bodies)
 }
 
 func (h *hookSink) handler() http.HandlerFunc {
@@ -54,6 +61,11 @@ func newWebhookSvc(t *testing.T, entities []*metadata.Entity, hooks []webhook.Co
 	registry := runtime.NewRegistry()
 	registry.Load(runtime.LoadOptions{Entities: entities})
 	d := webhook.New(hooks, nil)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = d.Close(ctx)
+	})
 	return &Service{Store: db, Reg: registry, Interp: interpreter.New(), Hooks: d}, d
 }
 
@@ -161,5 +173,65 @@ EndProcedure`
 	d.Wait()
 	if len(sink.bodies) != 0 {
 		t.Fatalf("веб-хук ушёл при отменённом сохранении: %+v", sink.bodies)
+	}
+}
+
+func TestSave_DefersWebhookUntilExplicitTransactionCommit(t *testing.T) {
+	sink := &hookSink{}
+	srv := httptest.NewServer(sink.handler())
+	defer srv.Close()
+
+	cat := &metadata.Entity{
+		Name: "Товары", Kind: metadata.KindCatalog,
+		Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+	}
+	svc, d := newWebhookSvc(t, []*metadata.Entity{cat}, []webhook.Config{{
+		Name: "tx-hook", On: "catalog.save", URL: srv.URL, Body: `{"id":"{{id}}"}`,
+	}})
+
+	tx, txCtx, err := svc.Store.BeginTx(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rolledBackID := uuid.New()
+	if _, err := svc.Save(txCtx, SaveRequest{
+		Entity: cat, ID: rolledBackID, IsNew: true,
+		Fields: map[string]any{"Наименование": "Откат"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.Wait()
+	if got := sink.count(); got != 0 {
+		t.Fatalf("webhook dispatched before rollback: %d", got)
+	}
+	if err := tx.Rollback(txCtx); err != nil {
+		t.Fatal(err)
+	}
+	d.Wait()
+	if got := sink.count(); got != 0 {
+		t.Fatalf("webhook dispatched for rolled-back save: %d", got)
+	}
+
+	tx, txCtx, err = svc.Store.BeginTx(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	committedID := uuid.New()
+	if _, err := svc.Save(txCtx, SaveRequest{
+		Entity: cat, ID: committedID, IsNew: true,
+		Fields: map[string]any{"Наименование": "Коммит"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.Wait()
+	if got := sink.count(); got != 0 {
+		t.Fatalf("webhook dispatched before commit: %d", got)
+	}
+	if err := tx.Commit(txCtx); err != nil {
+		t.Fatal(err)
+	}
+	d.Wait()
+	if got := sink.count(); got != 1 {
+		t.Fatalf("webhook count after commit = %d, want 1", got)
 	}
 }

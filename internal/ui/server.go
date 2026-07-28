@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivantit66/onebase/internal/auth"
@@ -24,30 +26,33 @@ import (
 	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/webhook"
 	"github.com/ivantit66/onebase/internal/widget"
-	"time"
 )
 
 // Config holds static info shown in «О программе».
 type Config struct {
-	AppName       string
-	AppVersion    string
-	AppAuthor     string // автор конфигурации (app.yaml: author)
-	AppCopyright  string // правообладатель конфигурации (app.yaml: copyright)
-	AppLicense    string // лицензия конфигурации (app.yaml: license)
-	PlatAuthor    string // правообладатель платформы (version.Author)
-	PlatLicense   string // лицензия платформы (version.License)
-	DSN           string
-	PlatVersion   string
-	PlatCommit    string // короткий git SHA сборки (version.Commit())
-	PlatDate      string // дата коммита сборки, дд.мм.гг (version.CommitDate())
-	Logo          string // path to logo file (png/svg/jpg)
-	Mailer        *mailer.Mailer
-	MaxFileSizeMB int      // 0 = use default 50
-	AllowedTypes  []string // attachments.allowed_types (расширения); пусто = без ограничений
-	DemoMode      bool
-	DemoMessage   string
-	Lang          string       // base language from config
-	Bundle        *i18n.Bundle // translations
+	AppName          string
+	AppVersion       string
+	AppAuthor        string // автор конфигурации (app.yaml: author)
+	AppCopyright     string // правообладатель конфигурации (app.yaml: copyright)
+	AppLicense       string // лицензия конфигурации (app.yaml: license)
+	PlatAuthor       string // правообладатель платформы (version.Author)
+	PlatLicense      string // лицензия платформы (version.License)
+	DSN              string // legacy PostgreSQL location; use DatabaseLocation in UI
+	DatabaseType     string // "postgres" or "sqlite"
+	DatabaseLocation string // PostgreSQL DSN or absolute SQLite file path
+	ConfigSource     string // "file" or "database"
+	ConfigLocation   string // absolute project path or database location
+	PlatVersion      string
+	PlatCommit       string // короткий git SHA сборки (version.Commit())
+	PlatDate         string // дата коммита сборки, дд.мм.гг (version.CommitDate())
+	Logo             string // path to logo file (png/svg/jpg)
+	Mailer           *mailer.Mailer
+	MaxFileSizeMB    int      // 0 = use default 50
+	AllowedTypes     []string // attachments.allowed_types (расширения); пусто = без ограничений
+	DemoMode         bool
+	DemoMessage      string
+	Lang             string       // base language from config
+	Bundle           *i18n.Bundle // translations
 	// DebugToken — общий секрет для debug API. Пустой → debug-маршруты не
 	// монтируются (см. api.New). Непустой → каждый запрос к /debug/global/*
 	// должен нести его в заголовке X-OneBase-Debug-Token.
@@ -88,7 +93,14 @@ type Server struct {
 	tmpl                   *template.Template
 	hub                    *realtime.Hub // real-time-шина уведомлений сервер→браузер (план 74)
 	ops                    *operationLimiter
+	exportJobsMu           sync.Mutex
 	exportJobs             *exportJobStore
+	closeOnce              sync.Once
+	lifecycleMu            sync.Mutex
+	backgroundCtx          context.Context
+	backgroundCancel       context.CancelFunc
+	backgroundWG           sync.WaitGroup
+	closing                bool
 }
 
 func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpreter, authRepo *auth.Repo, cfg Config, sched *scheduler.Scheduler) *Server {
@@ -100,28 +112,9 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	if loginLimit == nil {
 		loginLimit = auth.NewLoginLimiter(5, time.Minute)
 	}
-	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, allowedAttachmentTypes: cfg.AllowedTypes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub(), ops: newOperationLimiter(), exportJobs: newExportJobStore(defaultExportJobTTL)}
-	s.entitySvc = &entityservice.Service{
-		Store:  store,
-		Reg:    reg,
-		Interp: interp,
-		// PrepareHook/EnrichTPRows зовут уже существующие методы Server'а —
-		// enrichHeaderRefs (замена UUID → *Ref в шапке) и enrichTPRowsWithRefs
-		// (то же для строк ТЧ).
-		PrepareHook:  s.enrichHeaderRefs,
-		EnrichTPRows: s.enrichTPRowsWithRefs,
-		// BuildVars — полный набор с locks/users/документами + Сообщить с
-		// захватом и в message store, и в локальный slice msgs (для SaveResult).
-		BuildVars: s.buildDSLVarsWithMessages,
-		// MakeThis — обёртка над *runtime.Object с поддержкой методов ТЧ
-		// (this.Товары.Добавить() и т.п.). Без неё ОбработкаЗаполнения не
-		// смогла бы построить строки табличной части в приёмнике.
-		MakeThis: func(ctx context.Context, obj *runtime.Object, e *metadata.Entity) interpreter.This {
-			return s.newFormObjectThis(ctx, obj, e, nil)
-		},
-		// Исходящие веб-хуки (план 29): save/post диспетчеризуются из Save.
-		Hooks: cfg.Webhooks,
-	}
+	backgroundCtx, backgroundCancel := context.WithCancel(context.Background())
+	s := &Server{reg: reg, store: store, interp: interp, authRepo: authRepo, cfg: cfg, sched: sched, mailer: cfg.Mailer, maxFileSizeBytes: maxBytes, allowedAttachmentTypes: cfg.AllowedTypes, globalDebug: debugger.NewGlobalDebugController(), messages: NewMessageStore(), widgetCache: widget.NewCache(60 * time.Second), lockMgr: runtime.NewLockManager(), aiChatLimit: newAIWindowLimiter(10, time.Minute), loginLimit: loginLimit, extforms: extform.New(store), extreports: extform.NewReports(store), extprocessors: extform.NewProcessors(store), tmpl: template.Must(newTemplate(cfg.Bundle)), hub: realtime.NewHub(), ops: newOperationLimiter(), backgroundCtx: backgroundCtx, backgroundCancel: backgroundCancel}
+	s.entitySvc = s.newEntityService(cfg.Webhooks)
 	// Отладчик подключается к исполнению через DebugSource: каждый запуск DSL
 	// захватывает текущую сессию глобального контроллера в свой execCtx.
 	// Устанавливается однократно здесь, до начала обслуживания HTTP, — сам
@@ -155,6 +148,107 @@ func (s *Server) SSESubscriberCount() int {
 		return 0
 	}
 	return s.hub.SubscriberCount()
+}
+
+// CloseEventStreams disconnects long-lived SSE streams so the outer HTTP
+// server can begin a graceful shutdown without waiting for clients to leave.
+func (s *Server) CloseEventStreams() {
+	if s != nil && s.hub != nil {
+		s.hub.Close()
+	}
+}
+
+// BeginShutdown prevents new detached work, cancels running background jobs,
+// and disconnects SSE clients. It is safe to call more than once.
+func (s *Server) BeginShutdown() {
+	if s == nil {
+		return
+	}
+	s.CloseEventStreams()
+	s.lifecycleMu.Lock()
+	s.ensureBackgroundContextLocked()
+	if !s.closing {
+		s.closing = true
+		s.backgroundCancel()
+	}
+	s.lifecycleMu.Unlock()
+}
+
+// Shutdown drains detached background jobs and releases server-owned
+// resources. Jobs receive cancellation even when runtime limits are disabled.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.BeginShutdown()
+	done := make(chan struct{})
+	go func() {
+		s.backgroundWG.Wait()
+		close(done)
+	}()
+	var waitErr error
+	select {
+	case <-done:
+	case <-ctx.Done():
+		waitErr = ctx.Err()
+	}
+	s.closeOnce.Do(func() {
+		s.exportJobsMu.Lock()
+		jobs := s.exportJobs
+		s.exportJobsMu.Unlock()
+		if jobs != nil {
+			jobs.Close()
+		}
+	})
+	return waitErr
+}
+
+// Close is the unbounded convenience form used by tests and direct owners.
+func (s *Server) Close() {
+	_ = s.Shutdown(context.Background())
+}
+
+func (s *Server) ensureBackgroundContextLocked() {
+	if s.backgroundCtx != nil {
+		return
+	}
+	s.backgroundCtx, s.backgroundCancel = context.WithCancel(context.Background())
+	if s.closing {
+		s.backgroundCancel()
+	}
+}
+
+func (s *Server) beginBackgroundJob() (func(), bool) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.ensureBackgroundContextLocked()
+	if s.closing {
+		return nil, false
+	}
+	s.backgroundWG.Add(1)
+	var once sync.Once
+	return func() {
+		once.Do(s.backgroundWG.Done)
+	}, true
+}
+
+// backgroundRequestContext keeps request values while replacing the request
+// cancellation with the server lifecycle cancellation.
+func (s *Server) backgroundRequestContext(requestCtx context.Context) (context.Context, func()) {
+	base := context.WithoutCancel(requestCtx)
+	s.lifecycleMu.Lock()
+	s.ensureBackgroundContextLocked()
+	lifecycle := s.backgroundCtx
+	s.lifecycleMu.Unlock()
+	ctx, cancel := context.WithCancel(base)
+	stop := context.AfterFunc(lifecycle, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // InvalidateWidgetCache drops every cached widget result. The dev/reload path
@@ -240,6 +334,9 @@ func (s *Server) Mount(r chi.Router) {
 	r.Post("/ui/{kind}/{entity}/{id}/post", s.postDocument)
 	r.Post("/ui/{kind}/{entity}/{id}/unpost", s.unpostDocument)
 
+	// Раскрытие замаскированного поля ПДн под аудитом (план 88, CC-SEC-004)
+	r.Post("/ui/{kind}/{entity}/{id}/disclose", s.discloseField)
+
 	// Delete record / mark for deletion
 	r.Post("/ui/{kind}/{entity}/{id}/activity", s.setRecordActivity)
 	r.Post("/ui/{kind}/{entity}/{id}/delete", s.deleteRecord)
@@ -259,6 +356,12 @@ func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui/admin/users/{id}/passwd", s.adminUserPasswd)
 	r.Post("/ui/admin/users/{id}/passwd", s.adminUserPasswd)
 	r.Post("/ui/admin/users/{id}/deny-passwd", s.adminUserDenyPasswd)
+
+	// Admin: монитор обмена данными (план 86)
+	r.Get("/ui/admin/exchange", s.exchangeMonitor)
+	r.Post("/ui/admin/exchange/sync", s.exchangeMonitorSync)
+	r.Get("/ui/admin/intake", s.intakeMonitor)
+	r.Post("/ui/admin/intake/replay", s.intakeMonitorReplay)
 
 	// Self-service: change own password
 	r.Get("/ui/profile/passwd", s.selfPasswd)
@@ -391,6 +494,8 @@ func (s *Server) Mount(r chi.Router) {
 	// AI assistant chat (план 51, F3)
 	r.Get("/ui/ai/enabled", s.aiEnabled)
 	r.Post("/ui/ai/chat", s.aiChat)
+	// Подтверждённое действие ИИ-чата (создание черновика) — план 51, фаза 2.
+	r.Post("/ui/ai/action", s.aiActionRun)
 }
 
 // MountDebug registers debug API routes gated by an internal shared token

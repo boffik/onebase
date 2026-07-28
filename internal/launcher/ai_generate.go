@@ -83,6 +83,8 @@ func kindSubdir(kind string) (string, bool) {
 		return "reports", true
 	case "виджет", "widget":
 		return "widgets", true
+	case "журнал", "журнал документов", "journal":
+		return "journals", true
 	case "обработка", "processor":
 		return "processors", true
 	case "страница", "page":
@@ -93,8 +95,12 @@ func kindSubdir(kind string) (string, bool) {
 		return "roles", true
 	case "http-сервис", "http service", "сервис", "service":
 		return "services", true
-	case "регламентное задание", "scheduled", "job":
+	case "регламентное задание", "задание", "scheduled", "job":
 		return "scheduled", true
+	case "константы", "константа", "constants":
+		return "constants", true
+	case "печатная форма", "печатнаяформа", "printform":
+		return "printforms", true
 	default:
 		return "", false
 	}
@@ -141,6 +147,11 @@ func (g *genSession) createObject(kind, name, yamlText string) error {
 	fname, err := safeFileName(name)
 	if err != nil {
 		return err
+	}
+	if subdir == "printforms" {
+		// Печатная форма живёт в <имя>.layout.yaml — имя формы загрузчик берёт
+		// из имени файла (printform.LoadDir).
+		fname = strings.TrimSuffix(fname, ".yaml") + ".layout.yaml"
 	}
 	rel := subdir + "/" + fname
 	full, err := safeGeneratedFullPath(g.overlay, rel)
@@ -331,10 +342,21 @@ func (g *genSession) showObject(name string) string {
 	if err != nil {
 		return "ошибка: " + err.Error()
 	}
-	for _, sub := range []string{"catalogs", "documents", "registers", "inforegs", "enums", "accounts", "accountregs"} {
-		p := filepath.Join(g.overlay, sub, fname)
-		if data, err := os.ReadFile(p); err == nil {
-			return string(data)
+	// Ищем во всех подкаталогах, где объект — один YAML-файл. Пробуем и нижний
+	// регистр (как пишет генератор), и исходный (как в examples/). Формы
+	// (forms/<сущность>/<форма>.form.yaml) сюда не попадают — их читают через
+	// «прочитать_файл» по полному пути.
+	origName := strings.TrimSpace(name) + ".yaml"
+	for _, sub := range []string{
+		"catalogs", "documents", "registers", "inforegs", "enums", "accounts",
+		"accountregs", "reports", "widgets", "journals", "processors",
+		"subsystems", "pages", "roles", "services", "scheduled",
+	} {
+		for _, fn := range []string{fname, origName} {
+			p := filepath.Join(g.overlay, sub, fn)
+			if data, err := os.ReadFile(p); err == nil {
+				return string(data)
+			}
 		}
 	}
 	return fmt.Sprintf("объект %q не найден", name)
@@ -377,7 +399,7 @@ func (g *genSession) impact(object, field, procedure string) string {
 			return err
 		}
 		lowPath := strings.ToLower(p)
-		if !(strings.HasSuffix(lowPath, ".yaml") || strings.HasSuffix(lowPath, ".yml") || strings.HasSuffix(lowPath, ".os")) {
+		if !strings.HasSuffix(lowPath, ".yaml") && !strings.HasSuffix(lowPath, ".yml") && !strings.HasSuffix(lowPath, ".os") {
 			return nil
 		}
 		data, err := os.ReadFile(p)
@@ -545,7 +567,7 @@ func (g *genSession) tools() ([]llm.Tool, llm.ToolExecutor) {
 	tools := []llm.Tool{
 		{
 			Name:        "создать_объект",
-			Description: "Создать черновик объекта метаданных в конфигурации. тип: справочник|документ|регистр накопления|регистр сведений|перечисление|план счетов|регистр бухгалтерии. имя — на русском. yaml — содержимое файла объекта (без модулей .os).",
+			Description: "Создать черновик объекта метаданных в конфигурации. тип: справочник|документ|регистр накопления|регистр сведений|перечисление|план счетов|регистр бухгалтерии|отчёт|виджет|журнал|обработка|страница|подсистема|роль|сервис|задание|константы|печатная форма. имя — на русском. yaml — содержимое файла объекта (без модулей .os).",
 			Schema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -558,7 +580,7 @@ func (g *genSession) tools() ([]llm.Tool, llm.ToolExecutor) {
 		},
 		{
 			Name:        "создать_файл",
-			Description: "Создать или заменить whitelist-файл в staging. Разрешены YAML в каталогах метаданных/forms/roles/services/widgets/reports/pages/processors/subsystems/scheduled и .os в src или forms/<объект>/.",
+			Description: "Создать или заменить whitelist-файл в staging. Разрешены YAML в каталогах метаданных/forms/roles/services/widgets/reports/pages/journals/processors/subsystems/scheduled/constants/printforms и .os в src или forms/<объект>/.",
 			Schema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -621,6 +643,15 @@ func (g *genSession) tools() ([]llm.Tool, llm.ToolExecutor) {
 			},
 		},
 		{
+			Name:        "пример_объекта",
+			Description: "Показать эталонный пример формата для типа объекта: справочник|документ|регистр|регистр сведений|перечисление|отчёт|виджет|план счетов|регистр бухгалтерии|роль|сервис|задание|страница|журнал|подсистема|форма|проведение|обработка|константы|печатная форма. Копируй формат из примера, не угадывай.",
+			Schema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"тип": map[string]any{"type": "string"}},
+				"required":   []any{"тип"},
+			},
+		},
+		{
 			Name:        "объяснить_impact",
 			Description: "Показать, где в staging встречается объект, поле или процедура.",
 			Schema: map[string]any{
@@ -669,6 +700,11 @@ func (g *genSession) tools() ([]llm.Tool, llm.ToolExecutor) {
 			return record(llm.ToolResult{ID: call.ID, Content: g.runQuery(ctx, strInput(call, "запрос"), mapInput(call, "параметры"), intInput(call, "лимит", 20))})
 		case "показать_объект":
 			return record(llm.ToolResult{ID: call.ID, Content: g.showObject(strInput(call, "имя"))})
+		case "пример_объекта":
+			if ex, ok := exampleForType(strInput(call, "тип")); ok {
+				return record(llm.ToolResult{ID: call.ID, Content: ex})
+			}
+			return record(llm.ToolResult{ID: call.ID, Content: "неизвестный тип; доступны: " + strings.Join(exampleTypeNames(), ", "), IsError: true})
 		case "объяснить_impact":
 			return record(llm.ToolResult{ID: call.ID, Content: g.impact(strInput(call, "объект"), strInput(call, "поле"), strInput(call, "процедура"))})
 		default:
@@ -698,15 +734,113 @@ const metadataFormatGuide = `Формат объекта метаданных (�
 Справочник: hierarchical: true (иерархия).
 Если в задаче есть состав/строки/товары/табличная часть — ОБЯЗАТЕЛЬНО добавь tableparts (в том числе справочнику).`
 
+// journalFormatGuide — формат журнала документов для промпта. У журнала своя
+// схема (ключ field/label), не совпадающая с metadataFormatGuide, — без него
+// модель угадывает name:/type: и генерирует битый файл.
+const journalFormatGuide = `Формат журнала документов (тип «журнал», файл journals/<Имя>.yaml):
+  name: ИмяЖурнала            # без пробелов
+  title: Человекочитаемый заголовок
+  documents: [Документ1, Документ2]   # какие документы объединяет журнал
+  columns:                    # колонки адресуют поля документов ключом field (НЕ name)
+    - {field: Дата, label: Дата, format: date}   # format: date|number (необязательно)
+    - {field: Сумма, label: Сумма}
+  filters:                    # только date_range и reference:<Справочник>
+    - {field: Дата, label: Дата, type: date_range}
+    - {field: Контрагент, label: Контрагент, type: reference:Контрагент}
+  conditional:                # условное оформление (необязательно)
+    - {when: 'Статус = "Опубликован"', field: Статус, style: {color: "#0b6e2d", bold: true}}
+    - {when: 'Статус = "Черновик"', style: {background: "#fff4d6"}}   # field пуст = вся строка
+У журнала НЕТ ключа type и НЕТ tableparts. Каждое поле в columns/filters/conditional должно существовать хотя бы в одном из documents. Фильтров enum: у журнала нет (только date_range|reference:). В when строковые литералы — в двойных кавычках.`
+
+// subsystemFormatGuide — формат подсистемы (раздел меню) и её рабочего стола.
+// Подсистема связывает УЖЕ существующие объекты, поэтому её создают последней и
+// все имена в contents/home_page должны существовать — иначе check не пройдёт.
+const subsystemFormatGuide = `Формат подсистемы (тип «подсистема», файл subsystems/<Имя>.yaml):
+  name: ИмяРаздела            # без пробелов
+  title: Человекочитаемый заголовок
+  icon: layout-dashboard      # (необязательно) имя иконки lucide
+  order: 10                   # (необязательно) порядок в панели разделов
+  contents:                   # что показать в левом меню — ТОЛЬКО существующие объекты
+    documents:  [Документ1]
+    catalogs:   [Справочник1, Справочник2]
+    journals:   [Журнал1]
+    reports:    [Отчёт1]
+    processors: [Обработка1]
+    pages:      [Страница1]
+    registers:  [Регистр1]
+    inforegs:   [РегистрСведений1]
+  home_page:                  # (необязательно) рабочий стол раздела из виджетов
+    layout: rows              # rows | auto
+    rows:
+      - {widgets: [Виджет1, Виджет2]}
+    # либо плоский список при layout: auto — widgets: [{name: Виджет1}, {name: Виджет2}]
+Каждое имя в contents/home_page ОБЯЗАНО существовать в конфигурации. Поэтому подсистему создавай ПОСЛЕДНЕЙ, когда все объекты уже есть, иначе «проверить_конфигурацию» покажет «объект не найден».`
+
+// managedFormFormatGuide — формат управляемой формы. Самый частый провал
+// генератора: метаданные формы кладутся на верхний уровень вместо блока form:,
+// а поля/ТЧ — в attributes/tableparts вместо дерева elements.
+const managedFormFormatGuide = `Формат управляемой формы (файл forms/<сущность-в-нижнем-регистре>/<Форма>.form.yaml):
+  schema: onebase.form/v1
+  form: {name: ФормаОбъекта, kind: object, entity: <Документ>, title: {ru: "Заголовок"}}
+  attributes:
+    - {name: Объект, type: DocumentRef.<Документ>, main: true, save: true}   # справочник → CatalogRef.<Имя>
+  elements:                    # ДЕРЕВО макета; поля и ТЧ привязываются через data_path
+    - {kind: ПолеВвода, name: ПолеДата, data_path: Объект.Дата}
+    - {kind: ТабличнаяЧасть, name: ТабСтроки, data_path: Объект.<ТабЧасть>}
+  events: {ПриОткрытии: ПриОткрытииФормы}   # (необяз.) обработчики из <Форма>.form.os
+Ключевое: name/kind/entity/title лежат ПОД ключом form: (иначе «form.name пустой»); title — map, не строка; тип — form.kind, не type. Реквизит один — Объект (DocumentRef/CatalogRef, main+save); поля и табличные части идут в elements через data_path, НЕ через attributes/tableparts/columns.
+ВАЖНО: у документа и справочника форма уже АВТОГЕНЕРИРУЕТСЯ. Не пиши .form.yaml без явной нужды в кастомном макете — просьба «нужна форма» обычно закрывается автоформой.`
+
+// postingModuleGuide — модуль проведения и API движений. Генератор часто
+// выдумывает РегистрыНакопления.X.СоздатьДвижение() — такого нет.
+const postingModuleGuide = `Проведение документа — модуль src/<Документ>.posting.os, процедура без параметров:
+  Процедура ОбработкаПроведения()
+      Движения.<Регистр>.Очистить();
+      Для Каждого Стр Из this.<ТабЧасть> Цикл
+          Дв = Движения.<Регистр>.Добавить();
+          Дв.ВидДвижения = "Приход";       // регистр остатков: Приход|Расход
+          Дв.<Измерение> = Стр.<Поле>;      // реквизит шапки — this.<Реквизит>
+          Дв.<Ресурс>    = Стр.Количество;
+      КонецЦикла;
+  КонецПроцедуры
+Движения пишутся ТОЛЬКО через Движения.<Регистр>.Добавить()/.Очистить(); НЕ РегистрыНакопления.X.СоздатьДвижение() (такого API нет). Реквизиты шапки и табличные части документа — через this.<Имя> (this.Товары, this.Дата). Период движения по умолчанию = дата документа. Файл именно <Документ>.posting.os (не просто .os) — иначе проведение не подхватится.`
+
+// otherFormatGuides — компактные схемы остальных типов, которых нет в гайдах выше.
+const otherFormatGuides = `Схемы прочих объектов (по одному YAML-файлу):
+- Отчёт (reports/<Имя>.yaml): name, title, params: [{name, type, label}], query: |<ВЫБРАТЬ … ИЗ РегистрНакопления.X.Остатки(&П)>. Параметры — &Имя.
+- Виджет (widgets/<Имя>.yaml): name, type: kpi|list|chart|actions|recent, title, format: number|money|percent, query: |<ВЫБРАТЬ … КАК Значение>.
+- План счетов (accounts/<Имя>.yaml): name, title, accounts: [{code: "51", name: Расчётный счёт, kind: active|passive|active-passive, parent: "51"}].
+- Регистр бухгалтерии (accountregs/<Имя>.yaml): name, title, accounts: <ИмяПланаСчетов>, resources: [{name: Сумма, type: number}], subconto: [{name, type: reference:X}].
+- Регистр накопления (registers/<Имя>.yaml): name, dimensions: [{name, type}], resources: [{name, type: number}], attributes: [...]. Ключа type НЕТ.
+- Регистр сведений (inforegs/<Имя>.yaml): name, periodic: false, dimensions: [...], resources: [...].
+- Роль (roles/<Имя>.yaml): name, description, permissions: {catalogs: {Имя: [read,write]}, documents: {Имя: [read,write,post,unpost]}, registers: {Имя: [read]}, reports: {Имя: [run]}}.
+- HTTP-сервис (services/<Имя>.yaml): name, root_url, auth: none|basic|session, templates: [{template: /путь, methods: {GET: ИмяПроцедуры}}] + обработчики в src/<Сервис>.service.os.
+- Регламентное задание (scheduled/<Имя>.yaml): name, schedule: "*/5 * * * *" (cron), processor: <ИмяОбработки>, params: {...}, enabled: true, on_error: continue|stop, timeout: 60.
+- Страница (pages/<Имя>.yaml): name, title, icon; обработчик в src/<Страница>.page.os (Процедура ПриФормировании(Страница, Параметры) Экспорт).
+- Обработка (processors/<Имя>.yaml): name, title; код — src/<имя>.proc.os (нижний регистр, пробелы → «_»), точка входа Процедура Выполнить().
+- Константы (constants/<файл>.yaml): constants: [{name, type: string|number|date|bool|enum:<Имя>|reference:<Справочник>, label, default, required}] — список в одном файле (обычно constants/константы.yaml).
+- Печатная форма (printforms/<Имя>.layout.yaml): name, document: <Документ>, columns, areas (rows/cells: text «{{Поле}}»/«{{Поле | date}}» или parameter), binding: {sequence: [...], repeat: [{area, source: <ТабЧасть>, parameters: {...}}]}. Точный формат — «пример_объекта» тип «печатная форма».`
+
+// pathConventionsGuide — куда класть файлы: генератор жжёт раунды на неверных
+// путях (forms в корне, вложенный src и т.п.).
+const pathConventionsGuide = `Пути файлов для «создать_файл» (частые ошибки):
+  метаданные — плоско в своём каталоге: <catalogs|documents|registers|inforegs|enums|accounts|accountregs|reports|widgets|journals|processors|subsystems|roles|services|scheduled|constants>/<Имя>.yaml
+  модули .os — ПЛОСКО в src/, без подпапок: проведение src/<Документ>.posting.os, обработка src/<имя>.proc.os, модуль объекта src/<Имя>.module.os, отчёт src/<Отчёт>.rep.os, страница src/<Страница>.page.os, сервис src/<Сервис>.service.os
+  печатные формы — printforms/<имя>.layout.yaml (суффикс .layout.yaml обязателен)
+  формы — forms/<сущность-в-нижнем-регистре>/<Форма>.form.yaml (+ одноимённый .form.os)`
+
 // aiGenerateSystem — роль генератора каркаса конфигурации.
 var aiGenerateSystem = "Ты — генератор каркаса конфигурации OneBase (платформа учёта, похожая на 1С). " +
 	"По описанию задачи на русском создавай рабочий feature slice: YAML-метаданные через «создать_объект» " +
-	"или «создать_файл», при необходимости .os-модули, формы, отчёты, виджеты, страницы, роли и сервисы. " +
+	"или «создать_файл», при необходимости .os-модули, формы, отчёты, виджеты, журналы, страницы, подсистемы, роли, сервисы, обработки, печатные формы и константы. " +
 	"После создания набора файлов обязательно вызывай «проверить_конфигурацию» с full=true и исправляй ошибки. " +
 	"Перед финальным ответом вызывай «форматировать»; для отчётов и виджетов проверяй запросы через «прогнать_запрос». " +
 	"Используй существующие объекты (через «список_объектов», «показать_объект», «прочитать_файл») вместо дублирования. " +
+	"Не уверен в формате типа — сначала вызови «пример_объекта», не угадывай. " +
 	"Имена и типы полей бери реальные; не выдумывай несуществующие типы. Известные функции: " + builtinReference +
-	"\n\n" + metadataFormatGuide
+	"\n\n" + metadataFormatGuide + "\n\n" + journalFormatGuide + "\n\n" + subsystemFormatGuide +
+	"\n\n" + managedFormFormatGuide + "\n\n" + postingModuleGuide + "\n\n" + otherFormatGuides +
+	"\n\n" + pathConventionsGuide
 
 func runGenWithCorrections(ctx context.Context, runner genLLMRunner, system, prompt string, tools []llm.Tool, exec llm.ToolExecutor, g *genSession) (genRunResult, error) {
 	var out genRunResult

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/entityservice"
+	"github.com/ivantit66/onebase/internal/exchange"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -68,33 +71,163 @@ type createUpdateBody struct {
 	Action        string                      `json:"__action,omitempty"`
 }
 
-// decodeBody парсит JSON в createUpdateBody, отделяя служебные ключи (__tableparts,
-// __action) от собственных полей сущности. Делаем это вручную через generic map,
-// чтобы пользователю не нужно было оборачивать поля в "fields": {...}.
+var errIfMatchRequired = errors.New("If-Match header is required")
+
+// decodeBody парсит ровно один JSON-объект в createUpdateBody, отделяя
+// служебные ключи (__tableparts, __action) от собственных полей сущности.
+// Делаем это вручную через generic map, чтобы пользователю не нужно было
+// оборачивать поля в "fields": {...}.
 func decodeBody(r *http.Request) (createUpdateBody, error) {
+	return decodeRESTBody(r)
+}
+
+func decodeRESTBody(r *http.Request) (createUpdateBody, error) {
 	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&raw); err != nil {
 		return createUpdateBody{}, err
+	}
+	if raw == nil {
+		return createUpdateBody{}, errors.New("request body must be a JSON object")
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return createUpdateBody{}, errors.New("request body must contain a single JSON object")
+		}
+		return createUpdateBody{}, fmt.Errorf("invalid trailing data: %w", err)
 	}
 	body := createUpdateBody{Fields: make(map[string]any, len(raw))}
 	if v, ok := raw["__tableparts"]; ok {
 		if err := json.Unmarshal(v, &body.TablePartRows); err != nil {
-			return createUpdateBody{}, err
+			return createUpdateBody{}, fmt.Errorf("__tableparts: %w", err)
 		}
 		delete(raw, "__tableparts")
 	}
 	if v, ok := raw["__action"]; ok {
-		_ = json.Unmarshal(v, &body.Action)
+		if err := json.Unmarshal(v, &body.Action); err != nil {
+			return createUpdateBody{}, fmt.Errorf("__action: %w", err)
+		}
 		delete(raw, "__action")
 	}
 	for k, v := range raw {
+		if strings.HasPrefix(k, "__") {
+			return createUpdateBody{}, fmt.Errorf("unknown metadata field %q", k)
+		}
 		var val any
 		if err := json.Unmarshal(v, &val); err != nil {
-			return createUpdateBody{}, err
+			return createUpdateBody{}, fmt.Errorf("%s: %w", k, err)
 		}
 		body.Fields[k] = val
 	}
 	return body, nil
+}
+
+func decodeBodyForEntity(r *http.Request, entity *metadata.Entity) (createUpdateBody, error) {
+	body, err := decodeRESTBody(r)
+	if err != nil {
+		return createUpdateBody{}, err
+	}
+	if err := validateRESTBody(&body, entity); err != nil {
+		return createUpdateBody{}, err
+	}
+	return body, nil
+}
+
+// decodeOptionalBodyForEntity distinguishes an absent body from an empty JSON
+// object. It deliberately attempts a decode when Content-Length is unknown
+// (HTTP/1.1 chunked and HTTP/2), instead of treating -1 as an empty request.
+func decodeOptionalBodyForEntity(r *http.Request, entity *metadata.Entity) (createUpdateBody, bool, error) {
+	if r.Body == nil || r.ContentLength == 0 {
+		return createUpdateBody{}, false, nil
+	}
+	body, err := decodeRESTBody(r)
+	if errors.Is(err, io.EOF) {
+		return createUpdateBody{}, false, nil
+	}
+	if err != nil {
+		return createUpdateBody{}, false, err
+	}
+	if err := validateRESTBody(&body, entity); err != nil {
+		return createUpdateBody{}, false, err
+	}
+	return body, true, nil
+}
+
+func validateRESTBody(body *createUpdateBody, entity *metadata.Entity) error {
+	if body == nil || entity == nil {
+		return errors.New("entity metadata is required")
+	}
+
+	fields := make(map[string]string, len(entity.Fields)+2)
+	for _, field := range entity.Fields {
+		fields[strings.ToLower(field.Name)] = field.Name
+	}
+	if entity.Hierarchical {
+		fields["parent_id"] = "parent_id"
+		fields["is_folder"] = "is_folder"
+	}
+	normalizedFields := make(map[string]any, len(body.Fields))
+	for name, value := range body.Fields {
+		canonical, ok := fields[strings.ToLower(name)]
+		if !ok {
+			return fmt.Errorf("unknown field %q", name)
+		}
+		if _, duplicate := normalizedFields[canonical]; duplicate {
+			return fmt.Errorf("duplicate field %q", canonical)
+		}
+		normalizedFields[canonical] = value
+	}
+	body.Fields = normalizedFields
+
+	tableParts := make(map[string]metadata.TablePart, len(entity.TableParts))
+	for _, tp := range entity.TableParts {
+		tableParts[strings.ToLower(tp.Name)] = tp
+	}
+	normalizedTPs := make(map[string][]map[string]any, len(body.TablePartRows))
+	for name, rows := range body.TablePartRows {
+		tp, ok := tableParts[strings.ToLower(name)]
+		if !ok {
+			return fmt.Errorf("unknown table part %q", name)
+		}
+		if _, duplicate := normalizedTPs[tp.Name]; duplicate {
+			return fmt.Errorf("duplicate table part %q", tp.Name)
+		}
+		rowFields := make(map[string]string, len(tp.Fields))
+		for _, field := range tp.Fields {
+			rowFields[strings.ToLower(field.Name)] = field.Name
+		}
+		normalizedRows := make([]map[string]any, len(rows))
+		for i, row := range rows {
+			normalizedRow := make(map[string]any, len(row))
+			for fieldName, value := range row {
+				canonical, ok := rowFields[strings.ToLower(fieldName)]
+				if !ok {
+					return fmt.Errorf("unknown field %q in table part %q row %d", fieldName, tp.Name, i+1)
+				}
+				if _, duplicate := normalizedRow[canonical]; duplicate {
+					return fmt.Errorf("duplicate field %q in table part %q row %d", canonical, tp.Name, i+1)
+				}
+				normalizedRow[canonical] = value
+			}
+			normalizedRows[i] = normalizedRow
+		}
+		normalizedTPs[tp.Name] = normalizedRows
+	}
+	body.TablePartRows = normalizedTPs
+
+	action := strings.ToLower(strings.TrimSpace(body.Action))
+	switch action {
+	case "":
+	case "post", "post_and_close":
+		if entity.Kind != metadata.KindDocument || !entity.Posting {
+			return fmt.Errorf("action %q is not supported for entity %q", action, entity.Name)
+		}
+	default:
+		return fmt.Errorf("unknown action %q", body.Action)
+	}
+	body.Action = action
+	return nil
 }
 
 func (h *handler) createObject(kind metadata.Kind) http.HandlerFunc {
@@ -107,7 +240,7 @@ func (h *handler) createObject(kind metadata.Kind) http.HandlerFunc {
 			return
 		}
 		limitRESTBody(w, r)
-		body, err := decodeBody(r)
+		body, err := decodeBodyForEntity(r, entity)
 		if err != nil {
 			writeDecodeError(w, err)
 			return
@@ -164,7 +297,7 @@ func (h *handler) createObject(kind metadata.Kind) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":       result.ID.String(),
 			"messages": result.DSLMessages,
@@ -196,6 +329,7 @@ func (h *handler) getObject(kind metadata.Kind) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "forbidden", "", 0)
 			return
 		}
+		h.maskRecord(r.Context(), entity, result)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(result)
 	}
@@ -230,6 +364,7 @@ func (h *handler) listObjects(kind metadata.Kind) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
 			return
 		}
+		h.maskRecords(r.Context(), entity, rows)
 		w.Header().Set("X-Total-Count", strconv.Itoa(total))
 		w.Header().Set("X-Limit", strconv.Itoa(params.Limit))
 		w.Header().Set("X-Offset", strconv.Itoa(params.Offset))
@@ -253,7 +388,7 @@ func (h *handler) updateObject(kind metadata.Kind) http.HandlerFunc {
 			return
 		}
 		limitRESTBody(w, r)
-		body, err := decodeBody(r)
+		body, err := decodeBodyForEntity(r, entity)
 		if err != nil {
 			writeDecodeError(w, err)
 			return
@@ -274,11 +409,16 @@ func (h *handler) updateObject(kind metadata.Kind) http.HandlerFunc {
 		// при чтении; если в БД сейчас другая — 409 Conflict вместо тихого
 		// перетирания чужих правок. Без заголовка проверка не делается
 		// (обратная совместимость для клиентов которые её ещё не используют).
-		var expectedVersion *int64
-		if ifMatch := r.Header.Get("If-Match"); ifMatch != "" {
-			if v, perr := strconv.ParseInt(strings.Trim(ifMatch, `"`), 10, 64); perr == nil {
-				expectedVersion = &v
-			}
+		expectedVersion, err := parseIfMatch(r, false)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error(), "", 0)
+			return
+		}
+
+		// План 88: масковый пользователь не перезаписывает реальное значение.
+		if err := h.protectMaskedFieldsOnWrite(r.Context(), entity, id, body.Fields); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
+			return
 		}
 
 		result, err := h.entitySvc.Save(r.Context(), entityservice.SaveRequest{
@@ -329,13 +469,16 @@ func (h *handler) deleteObject(kind metadata.Kind) http.HandlerFunc {
 			return
 		}
 		if err := h.store.WithTx(r.Context(), func(ctx context.Context) error {
-			// Clear movements for documents before deleting
+			// Recorder columns intentionally have no FK: register rows may
+			// reference different document tables. Every delete path must
+			// therefore clear all movement kinds explicitly in this transaction.
 			if kind == metadata.KindDocument {
-				for _, reg := range h.reg.Registers() {
-					if err := h.store.WriteMovements(ctx, reg.Name, entityName, id, nil, reg, nil); err != nil {
-						return err
-					}
+				if err := h.clearMovements(ctx, entityName, id); err != nil {
+					return err
 				}
+			}
+			if err := exchange.RegisterOnDelete(ctx, h.store, h.reg.ExchangePlans(), entity, id); err != nil {
+				return err
 			}
 			return h.store.Delete(ctx, entityName, id)
 		}); err != nil {
@@ -381,16 +524,16 @@ func (h *handler) postDocument() http.HandlerFunc {
 		// Тело опционально. Если есть — используем как обновление перед проведением;
 		// если пусто — читаем текущее состояние из БД, чтобы OnPost увидел актуальные
 		// данные документа.
+		limitRESTBody(w, r)
+		body, hasBody, decErr := decodeOptionalBodyForEntity(r, entity)
+		if decErr != nil {
+			writeDecodeError(w, decErr)
+			return
+		}
 		var fields map[string]any
 		var tpRows map[string][]map[string]any
-		if r.ContentLength > 0 {
+		if hasBody {
 			if !requireRESTPerm(w, r, metadata.KindDocument, entityName, "write") {
-				return
-			}
-			limitRESTBody(w, r)
-			body, decErr := decodeBody(r)
-			if decErr != nil {
-				writeDecodeError(w, decErr)
 				return
 			}
 			if !h.rowAllowedUpdate(r.Context(), entity, "write", id, body.Fields) ||
@@ -468,7 +611,7 @@ func requireRESTPerm(w http.ResponseWriter, r *http.Request, kind metadata.Kind,
 func canREST(ctx context.Context, kind, entity, op string) bool {
 	u := auth.UserFromContext(ctx)
 	if u == nil {
-		return true
+		return auth.OpenAccessFromContext(ctx)
 	}
 	return u.Has(kind, entity, op)
 }
@@ -482,6 +625,30 @@ func isPostAction(action string) bool {
 	}
 }
 
+func parseIfMatch(r *http.Request, required bool) (*int64, error) {
+	raw := strings.TrimSpace(r.Header.Get("If-Match"))
+	if raw == "" {
+		if required {
+			return nil, errIfMatchRequired
+		}
+		return nil, nil
+	}
+	if strings.HasPrefix(raw, "W/") || strings.Contains(raw, ",") {
+		return nil, errors.New("invalid If-Match header")
+	}
+	if strings.HasPrefix(raw, `"`) || strings.HasSuffix(raw, `"`) {
+		if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+			return nil, errors.New("invalid If-Match header")
+		}
+		raw = raw[1 : len(raw)-1]
+	}
+	version, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || version < 0 {
+		return nil, errors.New("invalid If-Match header")
+	}
+	return &version, nil
+}
+
 func limitRESTBody(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, restMaxBodyBytes)
 }
@@ -492,7 +659,7 @@ func writeDecodeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusRequestEntityTooLarge, "request body too large", "", 0)
 		return
 	}
-	writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error(), "", 0)
+	writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error(), "", 0)
 }
 
 // generateAutoNumber генерирует номер документа для API так же, как UI: при

@@ -106,7 +106,12 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		data.ConfigFileTree = h.buildConfigFileTree(ctx, b, proj)
 	}
 
-	if appCfg, _ := project.LoadConfig(proj.Dir); appCfg != nil {
+	appCfg, cfgErr := project.LoadConfig(proj.Dir)
+	if cfgErr != nil {
+		data.Error = tr(l, "Ошибка config/app.yaml") + ": " + cfgErr.Error()
+		return data
+	}
+	if appCfg != nil {
 		data.AppName = appCfg.Name
 		data.AppVersion = appCfg.Version
 		data.AppLogo = appCfg.Logo
@@ -255,9 +260,46 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 		}
 		data.DSLPrintForms = append(data.DSLPrintForms, cpf)
 	}
+
+	// Декларативные формы — standalone .layout.yaml без парного .os (план 64,
+	// этап 3; сюда попадают макеты из «+ Печатная форма (макет)» и импорта из
+	// PDF). Раньше они не показывались вовсе: после создания конфигуратор
+	// «терял» форму, а SelectedTreeID=mkt-<имя> указывал на несуществующий
+	// узел, и дерево сбрасывалось на первый элемент.
+	for _, lf := range proj.LayoutForms {
+		cpf := cfgDSLPrintForm{
+			Name:       lf.Name,
+			Document:   lf.Document,
+			HasLayout:  true,
+			LayoutOnly: true,
+		}
+		if lf.Layout != nil {
+			cpf.LayoutPreview = template.HTML(lf.Layout.PreviewHTML())
+		}
+		if lf.Path != "" {
+			if raw, err := os.ReadFile(lf.Path); err == nil {
+				cpf.LayoutYAML = string(raw)
+			}
+		}
+		if cpf.LayoutYAML == "" && lf.Layout != nil {
+			if raw, err := marshalLayout(lf.Layout); err == nil {
+				cpf.LayoutYAML = string(raw)
+			}
+		}
+		data.DSLPrintForms = append(data.DSLPrintForms, cpf)
+	}
+
+	// Обратный индекс «документ → DSL/декларативные формы» для вкладки
+	// «Печатные формы» сущности (там раньше были видны только legacy YAML).
+	dslByDoc := make(map[string][]cfgDSLPrintForm)
+	for _, cpf := range data.DSLPrintForms {
+		key := strings.ToLower(cpf.Document)
+		dslByDoc[key] = append(dslByDoc[key], cpf)
+	}
 	for _, e := range data.Entities {
 		data.AllEntityNames = append(data.AllEntityNames, e.Name)
 		e.LinkedPrintForms = pfByDoc[strings.ToLower(e.Name)]
+		e.LinkedDSLForms = dslByDoc[strings.ToLower(e.Name)]
 		if e.Kind == "Справочник" {
 			data.Catalogs = append(data.Catalogs, e)
 		} else {
@@ -376,6 +418,31 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 			Roles:  append([]string(nil), pg.Roles...),
 			Params: append([]string(nil), pg.Params...),
 			Source: pageSources[strings.ToLower(pg.Name)],
+		})
+	}
+
+	// Journals (журналы документов): сырой YAML journals/*.yaml для редактора.
+	// proj.Journals уже отсортирован по имени (journal.LoadDir).
+	journalSources := readJournalSources(proj.Dir)
+	for _, j := range proj.Journals {
+		source, ok := journalSources[j.Name]
+		if !ok {
+			for sourceName, candidate := range journalSources {
+				if strings.EqualFold(sourceName, j.Name) {
+					source = candidate
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok {
+			source.RelPath = journalYAMLRelPath(j.Name)
+		}
+		data.Journals = append(data.Journals, cfgJournal{
+			Name:    j.Name,
+			Title:   j.Title,
+			YAML:    source.YAML,
+			RelPath: source.RelPath,
 		})
 	}
 
@@ -828,6 +895,44 @@ func readPageSources(dir string) map[string]string {
 		}
 		base := strings.ToLower(strings.TrimSuffix(e.Name(), ".page.os"))
 		result[base] = string(raw)
+	}
+	return result
+}
+
+// readJournalSources читает journals/*.yaml из экспортированного каталога проекта
+// и раскладывает сырой YAML по имени журнала (ключ «name:», иначе имя файла) —
+// чтобы редактор показывал исходный текст без повторного marshal.
+type journalSource struct {
+	YAML    string
+	RelPath string
+}
+
+func readJournalSources(dir string) map[string]journalSource {
+	result := make(map[string]journalSource)
+	entries, err := os.ReadDir(filepath.Join(dir, "journals"))
+	if err != nil {
+		return result
+	}
+	type nameOnly struct {
+		Name string `yaml:"name"`
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".yaml") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, "journals", e.Name()))
+		if err != nil {
+			continue
+		}
+		var no nameOnly
+		key := strings.TrimSuffix(e.Name(), ".yaml")
+		if yaml.Unmarshal(raw, &no) == nil && no.Name != "" {
+			key = no.Name
+		}
+		result[key] = journalSource{
+			YAML:    string(raw),
+			RelPath: "journals/" + e.Name(),
+		}
 	}
 	return result
 }

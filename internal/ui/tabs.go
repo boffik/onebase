@@ -27,6 +27,9 @@ func (s *Server) appShell(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
+	if !s.requireSubsystemVisible(w, r) {
+		return
+	}
 	s.render(w, r, "page-app-shell", s.homeDashboardData(r))
 }
 
@@ -129,6 +132,7 @@ const tplAppShell = `{{define "page-app-shell"}}
     if(ev.origin!==location.origin)return;
     var d=ev.data; if(!d||typeof d!=='object')return;
     if(d.source==='obOpenTab' && d.url){ var ou=String(d.url); if(!openable(ou))return; openTab(ou, d.title?String(d.title):'Форма', {allowDup:!!d.allowDup}); }
+    else if(d.source==='obCloseTab'){ var ct=tabByWindow(ev.source); if(ct)closeTab(ct); }
     else if(d.source==='obSetTitle' && active && d.title){ active.title=String(d.title); active.label.textContent=active.title; active.btn.title=active.title; persist(); }
     else if(d.source==='obDirty'){ var dt=tabByWindow(ev.source); if(dt){ dt.dirty=!!d.dirty; dt.btn.classList.toggle('dirty',dt.dirty); } } // фаза 3
   });

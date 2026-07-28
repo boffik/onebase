@@ -797,63 +797,220 @@ func (h *handler) configuratorDeleteEntity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	entityName := r.FormValue("entity")
-	if entityName == "" {
-		http.Error(w, "entity name required", 400)
+	if !validObjectName(entityName) {
+		http.Error(w, "valid entity name required", 400)
 		return
 	}
+	objectKind := r.FormValue("kind")
 
-	var delErr error
-	if b.ConfigSource == "database" {
-		delErr = h.deleteEntityFromDB(r.Context(), b, entityName)
-	} else {
-		delErr = deleteEntityFromFile(b.Path, entityName)
-	}
-
+	delErr := h.deleteConfiguratorObject(r, b, objectKind, entityName)
 	data := h.loadCfgData(r.Context(), b, "tree")
 	if delErr != nil {
 		data.Error = tr(lang, "Ошибка удаления") + ": " + errText(r, delErr)
 	} else {
-		data.Error = tr(lang, "Сущность «") + entityName + tr(lang, "» удалена")
+		data.SavedMessage = tr(lang, "Сущность «") + entityName + tr(lang, "» удалена")
 	}
 	renderCfg(w, r, data)
 }
 
-func deleteEntityFromFile(dir, entityName string) error {
-	path, err := findEntityFilePath(dir, entityName)
-	if err != nil {
-		return err
-	}
-	return os.Remove(path)
+type configuratorDeleteSpec struct {
+	metadataDirs []string
+	sourceSuffix []string
+	forms        bool
 }
 
-func (h *handler) deleteEntityFromDB(ctx context.Context, b *Base, entityName string) error {
-	db, err := OpenDB(ctx, b)
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	defer db.Close()
-	repo := configdb.New(db)
+var configuratorDeleteSpecs = map[string]configuratorDeleteSpec{
+	"catalog":    {metadataDirs: []string{"catalogs"}, sourceSuffix: []string{".manager.os", ".os"}, forms: true},
+	"document":   {metadataDirs: []string{"documents"}, sourceSuffix: []string{".posting.os", ".manager.os", ".os"}, forms: true},
+	"entity":     {metadataDirs: []string{"catalogs", "documents"}, sourceSuffix: []string{".posting.os", ".manager.os", ".os"}, forms: true},
+	"register":   {metadataDirs: []string{"registers"}},
+	"inforeg":    {metadataDirs: []string{"inforegs"}},
+	"accountreg": {metadataDirs: []string{"accountregs"}},
+	"enum":       {metadataDirs: []string{"enums"}},
+	"report":     {metadataDirs: []string{"reports"}, sourceSuffix: []string{".rep.os"}},
+	"processor":  {metadataDirs: []string{"processors"}, sourceSuffix: []string{".proc.layout.yaml", ".proc.os"}, forms: true},
+	"module":     {sourceSuffix: []string{".module.os"}},
+	"printform":  {metadataDirs: []string{"printforms"}},
+	"subsystem":  {metadataDirs: []string{"subsystems"}},
+}
 
-	// Scan all YAML-object folders so deletion works for catalogs, documents,
-	// registers, enums, reports and subsystems alike (not just catalogs/documents).
-	rows, err := db.Query(ctx,
-		`SELECT path, content FROM _onebase_config WHERE path LIKE 'catalogs/%.yaml' OR path LIKE 'documents/%.yaml' OR path LIKE 'registers/%.yaml' OR path LIKE 'inforegisters/%.yaml' OR path LIKE 'accountregisters/%.yaml' OR path LIKE 'enums/%.yaml' OR path LIKE 'reports/%.yaml' OR path LIKE 'subsystems/%.yaml'`)
+var configuratorDeleteKindFallback = []string{
+	"catalog", "document", "register", "inforeg", "accountreg", "enum",
+	"report", "processor", "module", "printform", "subsystem",
+}
+
+func (h *handler) deleteConfiguratorObject(r *http.Request, b *Base, kind, name string) error {
+	files, err := h.listConfiguratorFiles(r.Context(), b)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var p string
+	paths, resolvedKind, err := configuratorObjectDeletePaths(files, kind, name)
+	if err != nil {
+		return err
+	}
+	return deleteConfigFilesWithVersion(r, h, b, paths, configdb.VersionOptions{
+		AuthorLogin: cfgLogin(r.Context()),
+		Message:     "delete " + resolvedKind + " " + name,
+	})
+}
+
+// listConfiguratorFiles читает снимок конфигурации и закрывает соединение до
+// начала удаления. Раньше deleteEntityFromDB вызывал Repo.DeleteFile, пока
+// SELECT-курсор ещё держал единственное SQLite-соединение, и навсегда ждал
+// свободного connection slot. В PostgreSQL результат зависел от размера пула.
+func (h *handler) listConfiguratorFiles(ctx context.Context, b *Base) ([]configdb.ConfigFile, error) {
+	if b.ConfigSource == "database" {
+		db, err := OpenDB(ctx, b)
+		if err != nil {
+			return nil, fmt.Errorf("connect: %w", err)
+		}
+		defer db.Close()
+		return configdb.New(db).ListByPrefix(ctx, "")
+	}
+
+	var files []configdb.ConfigFile
+	err := filepath.WalkDir(b.Path, func(full string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", ".onebase", "backups", "node_modules", "workspace":
+				if full != b.Path {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(b.Path, full)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if err := configdb.ValidatePath(rel); err != nil {
+			return err
+		}
 		var content []byte
-		if err := rows.Scan(&p, &content); err != nil {
+		ext := strings.ToLower(filepath.Ext(rel))
+		if ext == ".yaml" || ext == ".yml" {
+			content, err = os.ReadFile(full)
+			if err != nil {
+				return err
+			}
+		}
+		files = append(files, configdb.ConfigFile{Path: rel, Content: content})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
+}
+
+func configuratorObjectDeletePaths(files []configdb.ConfigFile, kind, name string) ([]string, string, error) {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		for _, candidate := range configuratorDeleteKindFallback {
+			paths, _, err := configuratorObjectDeletePaths(files, candidate, name)
+			if err == nil {
+				return paths, candidate, nil
+			}
+		}
+		return nil, "", i18nerr.Errorf("сущность %q не найдена", name)
+	}
+	spec, ok := configuratorDeleteSpecs[kind]
+	if !ok {
+		return nil, "", i18nerr.Errorf("Неизвестный тип объекта")
+	}
+
+	var metadataPaths []string
+	for _, file := range files {
+		rel := filepath.ToSlash(file.Path)
+		dir, base := filepath.ToSlash(filepath.Dir(rel)), filepath.Base(rel)
+		if !stringInSlice(dir, spec.metadataDirs) ||
+			(!strings.HasSuffix(strings.ToLower(base), ".yaml") && !strings.HasSuffix(strings.ToLower(base), ".yml")) {
 			continue
 		}
 		var hdr struct {
 			Name string `yaml:"name"`
 		}
-		if yaml.Unmarshal(content, &hdr) == nil && hdr.Name == entityName {
-			return repo.DeleteFile(ctx, p)
+		if yaml.Unmarshal(file.Content, &hdr) == nil && strings.EqualFold(hdr.Name, name) {
+			metadataPaths = append(metadataPaths, rel)
 		}
 	}
-	return i18nerr.Errorf("сущность %q не найдена", entityName)
+	if len(spec.metadataDirs) > 0 && len(metadataPaths) == 0 {
+		return nil, "", i18nerr.Errorf("сущность %q не найдена", name)
+	}
+
+	associated := make(map[string]struct{})
+	foundSource := false
+	for _, file := range files {
+		rel := filepath.ToSlash(file.Path)
+		if configuratorSourceBelongsToObject(rel, name, spec.sourceSuffix) {
+			associated[rel] = struct{}{}
+			foundSource = true
+			continue
+		}
+		if spec.forms && configuratorFormBelongsToObject(rel, name) {
+			associated[rel] = struct{}{}
+		}
+	}
+	if len(spec.metadataDirs) == 0 && !foundSource {
+		return nil, "", i18nerr.Errorf("сущность %q не найдена", name)
+	}
+
+	sort.Strings(metadataPaths)
+	associatedPaths := make([]string, 0, len(associated))
+	for rel := range associated {
+		if !stringInSlice(rel, metadataPaths) {
+			associatedPaths = append(associatedPaths, rel)
+		}
+	}
+	sort.Strings(associatedPaths)
+	return append(metadataPaths, associatedPaths...), kind, nil
+}
+
+func configuratorSourceBelongsToObject(rel, name string, suffixes []string) bool {
+	if filepath.ToSlash(filepath.Dir(rel)) != "src" {
+		return false
+	}
+	base := filepath.Base(rel)
+	for _, suffix := range suffixes {
+		if !strings.HasSuffix(strings.ToLower(base), strings.ToLower(suffix)) {
+			continue
+		}
+		stem := base[:len(base)-len(suffix)]
+		if strings.EqualFold(stem, name) ||
+			strings.EqualFold(strings.ReplaceAll(stem, "_", " "), name) {
+			return true
+		}
+	}
+	return false
+}
+
+func configuratorFormBelongsToObject(rel, name string) bool {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) >= 3 && parts[0] == "forms" {
+		if strings.EqualFold(parts[1], name) ||
+			strings.EqualFold(strings.ReplaceAll(parts[1], "_", " "), name) {
+			return true
+		}
+	}
+	if len(parts) != 2 || parts[0] != "src" || !strings.HasSuffix(strings.ToLower(parts[1]), ".form.os") {
+		return false
+	}
+	stem := strings.TrimSuffix(parts[1], ".form.os")
+	nameLower := strings.ToLower(name)
+	stemLower := strings.ToLower(stem)
+	return stemLower == nameLower || strings.HasPrefix(stemLower, nameLower+"_")
+}
+
+func stringInSlice(value string, values []string) bool {
+	for _, candidate := range values {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
 }

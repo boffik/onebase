@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -158,6 +159,13 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	login := r.FormValue("login")
 	password := r.FormValue("password")
+	limiter := h.configuratorLoginLimiter()
+	loginKey := auth.LoginKey(r, login)
+	if ok, retry := limiter.Allow(loginKey); !ok {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+		renderErr(http.StatusTooManyRequests, tr(lang, "Слишком много попыток входа — повторите позже"))
+		return
+	}
 
 	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
@@ -173,6 +181,7 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 	user, err := repo.Authenticate(r.Context(), login, password)
 	if err != nil {
+		limiter.Fail(loginKey)
 		renderErr(401, tr(lang, "Неверное имя пользователя или пароль"))
 		return
 	}
@@ -181,6 +190,7 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		renderErr(403, tr(lang, "Доступ запрещён. Только для администраторов."))
 		return
 	}
+	limiter.Reset(loginKey)
 
 	token, err := repo.CreateSession(r.Context(), user.ID, auth.SessionMeta{
 		Kind: auth.SessionKindConfigurator, IP: r.RemoteAddr, UserAgent: r.UserAgent(),
@@ -190,6 +200,25 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setConfiguratorSessionCookie(w, token)
+
+	http.Redirect(w, r, "/bases/"+id+"/configurator", http.StatusFound)
+}
+
+func (h *handler) configuratorLoginLimiter() *auth.LoginLimiter {
+	h.cfgLoginOnce.Do(func() {
+		if h.cfgLoginLimit == nil {
+			h.cfgLoginLimit = auth.NewLoginLimiter(5, time.Minute)
+		}
+	})
+	return h.cfgLoginLimit
+}
+
+// setConfiguratorSessionCookie starts the dedicated configurator session in
+// the browser. It is shared by the normal login and by first-admin bootstrap:
+// before the first user exists the configurator is intentionally open, so the
+// create-user AJAX response must establish a session before the next request.
+func setConfiguratorSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "onebase_session",
 		Value:    token,
@@ -197,8 +226,6 @@ func (h *handler) cfgLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-
-	http.Redirect(w, r, "/bases/"+id+"/configurator", http.StatusFound)
 }
 
 func (h *handler) cfgLogout(w http.ResponseWriter, r *http.Request) {
@@ -232,19 +259,22 @@ func (h *handler) cfgAuthMiddleware(next http.Handler) http.Handler {
 
 		db, err := getAuthDB(r.Context(), b)
 		if err != nil {
-			// Cannot connect to DB — let request through (base may not exist yet)
-			next.ServeHTTP(w, r)
+			http.Error(w, "authentication service unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
 		repo := auth.NewRepo(db)
 		if err := repo.EnsureSchema(r.Context()); err != nil {
-			next.ServeHTTP(w, r)
+			http.Error(w, "authentication service unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
 		hasUsers, err := repo.HasUsers(r.Context())
-		if err != nil || !hasUsers {
+		if err != nil {
+			http.Error(w, "authentication service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if !hasUsers {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -275,32 +305,32 @@ func (h *handler) cfgAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// cfgAdminAuthorized повторяет проверку cfgAuthMiddleware, но возвращает bool
-// вместо 302-редиректа — для API-эндпоинтов (debug-прокси), которые зовёт JS:
-// им нужен 401 JSON, а не HTML логина. Passthrough-кейсы (БД недоступна, нет
-// схемы, нет пользователей) совпадают с cfgAuthMiddleware, чтобы поведение
-// первого запуска не отличалось. Жёсткая защита всё равно на app-стороне:
-// процесс базы требует X-OneBase-Debug-Token.
-func (h *handler) cfgAdminAuthorized(r *http.Request, b *Base) bool {
+// cfgAdminAuthorized повторяет проверку cfgAuthMiddleware, но возвращает ошибку
+// отдельно от отказа в доступе. Только успешно подтверждённое отсутствие
+// пользователей включает first-run режим; сбой БД должен закрывать доступ.
+func (h *handler) cfgAdminAuthorized(r *http.Request, b *Base) (bool, error) {
 	db, err := getAuthDB(r.Context(), b)
 	if err != nil {
-		return true
+		return false, err
 	}
 	repo := auth.NewRepo(db)
 	if err := repo.EnsureSchema(r.Context()); err != nil {
-		return true
+		return false, err
 	}
 	hasUsers, err := repo.HasUsers(r.Context())
-	if err != nil || !hasUsers {
-		return true
+	if err != nil {
+		return false, err
+	}
+	if !hasUsers {
+		return true, nil
 	}
 	cookie, err := r.Cookie("onebase_session")
 	if err != nil {
-		return false
+		return false, nil
 	}
 	user, err := repo.LookupSession(r.Context(), cookie.Value)
 	if err != nil || user == nil || !user.IsAdmin {
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
