@@ -17,7 +17,11 @@ import (
 // Правила разбора:
 //   - наличие "%" в конце → умножить значение на 100, добавить суффикс "%"
 //   - наличие "," до точки → группировать целую часть по 3 знака (неразрывный пробел " ")
-//   - число знаков после "." = количество символов 0/# после точки (0 если точки нет)
+//   - в дробной части "0" — обязательный разряд (добивается нулём), "#" —
+//     опциональный: печатается только если правее есть значащая цифра.
+//     Так "#,##0.00####" = «минимум 2 знака, максимум 6»: 409 → "409,00",
+//     0,000111 → "0,000111". Формат из одних "0" ведёт себя как раньше
+//     (фиксированное число знаков).
 //   - десятичный разделитель — ","
 func FormatNumber(d decimal.Decimal, format string) string {
 	if format == "" {
@@ -42,11 +46,18 @@ func FormatNumber(d decimal.Decimal, format string) string {
 	// Нужна ли разрядность?
 	grouped := strings.Contains(intPart, ",")
 
-	// Число знаков после точки
-	decimals := int32(0)
+	// Знаки после точки: "0" — обязательный (min), "#" — опциональный.
+	// minDecimals добивается нулями, до maxDecimals округляем; лишние нули
+	// в диапазоне (min, max] обрезаются ниже после StringFixed.
+	minDecimals := int32(0)
+	maxDecimals := int32(0)
 	for _, ch := range fracPart {
-		if ch == '0' || ch == '#' {
-			decimals++
+		switch ch {
+		case '0':
+			minDecimals++
+			maxDecimals++
+		case '#':
+			maxDecimals++
 		}
 	}
 
@@ -55,11 +66,11 @@ func FormatNumber(d decimal.Decimal, format string) string {
 		d = d.Mul(decimal.NewFromInt(100))
 	}
 
-	// Округляем до нужного количества знаков
-	d = d.Round(decimals)
+	// Округляем до максимального количества знаков
+	d = d.Round(maxDecimals)
 
-	// Получаем строку с фиксированным числом знаков (точка как разделитель)
-	s := d.StringFixed(decimals)
+	// Получаем строку с максимальным числом знаков (точка как разделитель)
+	s := d.StringFixed(maxDecimals)
 
 	// Разбираем знак, целую и дробную части
 	sign := ""
@@ -76,6 +87,13 @@ func FormatNumber(d decimal.Decimal, format string) string {
 		fracStr = s[dotIdx+1:]
 	}
 
+	// Обрезаем хвостовые нули опциональных разрядов "#" — но не короче
+	// minDecimals (обязательные "0" остаются). Формат из одних "0" даёт
+	// min == max, обрезка не срабатывает — поведение как раньше.
+	for int32(len(fracStr)) > minDecimals && strings.HasSuffix(fracStr, "0") {
+		fracStr = fracStr[:len(fracStr)-1]
+	}
+
 	// Группируем целую часть по 3 знака справа налево (неразрывный пробел)
 	if grouped {
 		intStr = groupDigits(intStr)
@@ -85,7 +103,7 @@ func FormatNumber(d decimal.Decimal, format string) string {
 	var result strings.Builder
 	result.WriteString(sign)
 	result.WriteString(intStr)
-	if decimals > 0 {
+	if len(fracStr) > 0 {
 		result.WriteString(",")
 		result.WriteString(fracStr)
 	}
