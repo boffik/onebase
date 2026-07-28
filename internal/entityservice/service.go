@@ -378,7 +378,7 @@ func (s *Service) Save(ctx context.Context, req SaveRequest) (SaveResult, error)
 	if err != nil {
 		var hookErr *hookRunError
 		if errors.As(err, &hookErr) {
-			return SaveResult{ID: req.ID, DSLError: hookErr.err.Error(), DSLMessages: msgs, Movements: mc}, nil
+			return SaveResult{ID: req.ID, DSLError: interpreter.FormatUserError(hookErr.err), DSLMessages: msgs, Movements: mc}, nil
 		}
 		return SaveResult{}, err
 	}
@@ -489,7 +489,7 @@ func (s *Service) Unpost(ctx context.Context, entity *metadata.Entity, id uuid.U
 	if err != nil {
 		var hookErr *hookRunError
 		if errors.As(err, &hookErr) {
-			result.DSLError = hookErr.err.Error()
+			result.DSLError = interpreter.FormatUserError(hookErr.err)
 			return result, nil
 		}
 		return SaveResult{}, err
@@ -637,7 +637,7 @@ func (s *Service) Fill(ctx context.Context, req FillRequest) (FillResult, error)
 	if err := s.Interp.Run(proc, thisVal, vars); err != nil {
 		normalizeTPRowKeys(recvObj.TablePartRows, req.Receiver)
 		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: dslErr.Error(), DSLMessages: msgs}, nil
+			return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: dslErr.UserMessage(), DSLMessages: msgs}, nil
 		}
 		return FillResult{Fields: recvObj.Fields, TablePartRows: recvObj.TablePartRows, DSLError: err.Error(), DSLMessages: msgs}, nil
 	}
