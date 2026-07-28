@@ -147,13 +147,26 @@ func (q *queryProxy) execute() *Array {
 	}
 	arr := &Array{}
 	for _, row := range rows {
-		s := &Struct{vals: make(map[string]any)}
-		for k, v := range row {
-			k = strings.ToLower(k)
-			s.keys = append(s.keys, k)
-			s.vals[k] = v
-		}
-		arr.items = append(arr.items, s)
+		arr.items = append(arr.items, newQueryResultRow(row))
 	}
 	return arr
+}
+
+func newQueryResultRow(row map[string]any) *Struct {
+	s := NewStructFromMap(row)
+	id, hasID := s.vals["id"]
+	if !hasID {
+		return s
+	}
+
+	// The query compiler intentionally maps the reserved output names
+	// Ссылка/Reference/Ref to the SQL alias "id". Keep that SQL contract while
+	// making the materialized value available through the DSL names that
+	// produced it.
+	for _, alias := range []string{"ссылка", "reference", "ref"} {
+		if _, exists := s.vals[alias]; !exists {
+			s.Set(alias, id)
+		}
+	}
+	return s
 }
