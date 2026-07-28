@@ -95,6 +95,47 @@ func TestQuery_Execute_AccessFields(t *testing.T) {
 	assert.Equal(t, "Кабель", result)
 }
 
+func TestQuery_Execute_AccessReferenceReservedAlias(t *testing.T) {
+	const id = "11111111-1111-1111-1111-111111111111"
+	tests := []struct {
+		name  string
+		query string
+		field string
+	}{
+		{
+			name:  "Russian",
+			query: "ВЫБРАТЬ О.Ссылка КАК Ссылка ИЗ Документ.Обращение КАК О",
+			field: "Ссылка",
+		},
+		{
+			name:  "English",
+			query: "SELECT O.Reference AS Reference FROM Document.Обращение AS O",
+			field: "Reference",
+		},
+		{
+			name:  "short English alias",
+			query: "SELECT O.Ref AS Ref FROM Document.Обращение AS O",
+			field: "Ref",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := &stubDB{rows: []map[string]any{{"id": id}}}
+			src := `Процедура Тест()
+				Запрос = Новый Запрос;
+				Запрос.Текст = "` + tt.query + `";
+				Результат = Запрос.Выполнить();
+				Возврат Результат[0].` + tt.field + `;
+			КонецПроцедуры`
+
+			result := evalQuery(t, src, db, &stubReg{})
+
+			assert.Equal(t, id, result)
+		})
+	}
+}
+
 func TestQuery_SetParameter(t *testing.T) {
 	var capturedSQL string
 	var capturedArgs []any
