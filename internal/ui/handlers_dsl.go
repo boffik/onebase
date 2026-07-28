@@ -331,10 +331,7 @@ func (s *Server) runOnWriteCtx(ctx context.Context, obj *runtime.Object, mc *run
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
 	if err := s.interp.Run(proc, obj, vars); err != nil {
-		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return dslErr.Error(), msgs
-		}
-		return err.Error(), msgs
+		return interpreter.FormatUserError(err), msgs
 	}
 	return "", msgs
 }
@@ -385,10 +382,7 @@ func (s *Server) runOnPostCtx(ctx context.Context, obj *runtime.Object, mc *runt
 	var msgs []string
 	vars := s.buildDSLVarsWithMessages(ctx, mc, &msgs)
 	if err := s.interp.Run(proc, obj, vars); err != nil {
-		if dslErr, ok := err.(*interpreter.DSLError); ok {
-			return dslErr.Error(), msgs
-		}
-		return err.Error(), msgs
+		return interpreter.FormatUserError(err), msgs
 	}
 	return "", msgs
 }
