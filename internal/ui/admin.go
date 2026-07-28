@@ -50,7 +50,7 @@ const tplAdminUsers = `{{define "admin-users"}}` + adminHead + `
 </tbody>
 </table>
 {{else}}
-<p class="empty">Пользователей нет — вход в систему без пароля.<br>Добавьте пользователя, чтобы включить авторизацию.</p>
+<p class="empty">Пользователей нет — вход в систему без пароля.<br>Первый пользователь должен быть администратором: после его создания вход потребуется всем.</p>
 {{end}}
 </div>
 </main></body></html>
@@ -123,15 +123,16 @@ const tplAdminUserForm = `{{define "admin-user-form"}}` + adminHead + `
 <main>
 <h2>Добавить пользователя</h2>
 {{if .Error}}<div class="error" style="max-width:500px">{{.Error}}</div>{{end}}
+{{if .FirstUser}}<div style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412;padding:12px 16px;border-radius:7px;margin-bottom:16px;font-size:14px;max-width:500px">После создания первого пользователя вход в систему потребуется всем, включая вас. Первый пользователь должен быть администратором — иначе управлять учётными записями будет некому.</div>{{end}}
 <div class="card" style="max-width:500px">
 <form method="POST">
   <div class="form-group">
     <label>Логин</label>
-    <input type="text" name="login" required autofocus>
+    <input type="text" name="login" value="{{.Login}}" required autofocus>
   </div>
   <div class="form-group">
     <label>Полное имя</label>
-    <input type="text" name="full_name">
+    <input type="text" name="full_name" value="{{.FullName}}">
   </div>
   <div class="form-group">
     <label>Пароль</label>
@@ -139,7 +140,7 @@ const tplAdminUserForm = `{{define "admin-user-form"}}` + adminHead + `
   </div>
   <div class="form-group">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-      <input type="checkbox" name="is_admin" value="1"> Администратор
+      <input type="checkbox" name="is_admin" value="1"{{if .AdminChecked}} checked{{end}}> Администратор
     </label>
   </div>
   <div class="form-group">
@@ -271,9 +272,26 @@ func (s *Server) adminUserNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := map[string]any{"Error": ""}
+	adminTmpl.ExecuteTemplate(w, "admin-user-form", s.adminUserFormData(r, "", "", "", false))
+}
+
+func (s *Server) adminUserFormData(r *http.Request, errMsg, login, fullName string, adminChecked bool) map[string]any {
+	firstUser := false
+	if s.authRepo != nil {
+		if hasUsers, err := s.authRepo.HasUsers(r.Context()); err == nil && !hasUsers {
+			firstUser = true
+			adminChecked = true
+		}
+	}
+	data := map[string]any{
+		"Error":        errMsg,
+		"FirstUser":    firstUser,
+		"AdminChecked": adminChecked,
+		"Login":        login,
+		"FullName":     fullName,
+	}
 	s.addPasswordPolicyData(data)
-	adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
+	return data
 }
 
 func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
@@ -293,8 +311,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 
 	if login == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data := map[string]any{"Error": s.tr(lang, "Логин обязателен")}
-		s.addPasswordPolicyData(data)
+		data := s.adminUserFormData(r, s.tr(lang, "Логин обязателен"), login, fullName, isAdmin)
 		adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
 		return
 	}
@@ -302,8 +319,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 	u, err := s.authRepo.CreateManaged(r.Context(), login, password, fullName, isAdmin)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data := map[string]any{"Error": s.errText(r, err)}
-		s.addPasswordPolicyData(data)
+		data := s.adminUserFormData(r, s.errText(r, err), login, fullName, isAdmin)
 		adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
 		return
 	}
@@ -312,8 +328,7 @@ func (s *Server) adminUserCreate(w http.ResponseWriter, r *http.Request) {
 		// не глотаем: иначе админ уверен, что выставил флаг, а он не применился.
 		if err := s.authRepo.Update(r.Context(), u.ID, fullName, isAdmin, denyPasswd, showInList, aiData); err != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			data := map[string]any{"Error": s.errText(r, err)}
-			s.addPasswordPolicyData(data)
+			data := s.adminUserFormData(r, s.errText(r, err), login, fullName, isAdmin)
 			adminTmpl.ExecuteTemplate(w, "admin-user-form", data)
 			return
 		}
