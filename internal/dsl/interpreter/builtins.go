@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -36,6 +37,28 @@ func (e *DSLError) Error() string {
 		return fmt.Sprintf("%s:%d: %s", e.File, e.Line, e.Msg)
 	}
 	return e.Msg
+}
+
+// UserMessage — текст для пользователя (UI/REST), без пути к модулю и номера строки.
+// Error() по-прежнему отдаёт file:line: msg для check, логов и отладчика.
+func (e *DSLError) UserMessage() string {
+	if e == nil {
+		return ""
+	}
+	return e.Msg
+}
+
+// FormatUserError отдаёт пользовательский текст бизнес-ошибки DSL.
+// Для *DSLError — только Msg; иначе err.Error().
+func FormatUserError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var dsl *DSLError
+	if errors.As(err, &dsl) {
+		return dsl.UserMessage()
+	}
+	return err.Error()
 }
 
 func (e *DSLError) Unwrap() error { return e.Err }
