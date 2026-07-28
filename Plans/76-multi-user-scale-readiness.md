@@ -193,8 +193,11 @@ Acceptance:
   освобождает забытые process-local locks в конце `entityservice.Save`;
 - storage helper `AdvisoryXactLock` берёт PostgreSQL transaction-scoped advisory
   locks по стабильному FNV64 namespace hash; SQLite path — no-op;
-- `entityservice.Save` вызывает advisory locks первым шагом внутри `WithTx`,
-  до upsert, табличных частей, движений и `posted=true`;
+- `entityservice.Save` вызывает advisory locks внутри `WithTx` до upsert,
+  табличных частей, движений и `posted=true` — но ПОСЛЕ хука
+  `ОбработкаПроведения`, который и читает остатки. Окно «прочитал → взял
+  блокировку» закрыто позже (issue #458): `Заблокировать()` берёт
+  `pg_advisory_xact_lock` сразу, в момент DSL-вызова;
 - добавлен integration-тест PostgreSQL с двумя соединениями под тегом
   `integration`.
 

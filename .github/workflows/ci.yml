@@ -129,6 +129,7 @@ jobs:
           go test -count=1 -timeout 5m -tags integration ./internal/auth
           go test -count=1 -timeout 5m -tags integration ./internal/storage
           go test -count=1 -timeout 5m -tags integration ./internal/configdb
+          go test -count=1 -timeout 5m -tags integration ./internal/entityservice
 
   vuln:
     # Сканирование известных уязвимостей в зависимостях и stdlib. govulncheck

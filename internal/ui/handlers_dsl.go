@@ -93,9 +93,24 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 	// РегистрыНакопления.X.Остатки()/.Движения()/.ВыбратьПоРегистратору(Док).
 	accumRegs := newAccumRegsRoot(s, txState)
 	// #2 managed locks: builtin БлокировкаДанных() возвращает свежий LockObject,
-	// привязанный к глобальному менеджеру server'а.
+	// привязанный к глобальному менеджеру server'а. Заблокировать() внутри
+	// транзакции проведения сразу берёт pg_advisory_xact_lock — конкурирующее
+	// проведение упрётся в блокировку ДО чтения остатков, а не после хука
+	// (issue #458: двойное списание партий при параллельном ФИФО). Вне
+	// транзакции (обработка без НачатьТранзакцию) поведение прежнее:
+	// только внутрипроцессный мьютекс.
 	lockFactory := interpreter.BuiltinFunc(func(_ []any, _ string, _ int) (any, error) {
-		return runtime.NewLockObjectWithCollector(s.lockMgr, runtime.LockCollectorFromContext(ctx)), nil
+		lo := runtime.NewLockObjectWithCollector(s.lockMgr, runtime.LockCollectorFromContext(ctx))
+		lo.WithAdvisory(func(keys []string) {
+			c := txState.Ctx()
+			if !storage.HasTx(c) {
+				return
+			}
+			if err := s.store.AdvisoryXactLock(c, keys); err != nil {
+				interpreter.RaiseUserError(err.Error())
+			}
+		})
+		return lo, nil
 	})
 
 	// API текущего пользователя для персональных настроек.

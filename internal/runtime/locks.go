@@ -178,6 +178,7 @@ func (lm *LockManager) Release(keys []string) {
 type LockObject struct {
 	mgr       *LockManager
 	collector *LockCollector
+	advisory  func(keys []string)
 	elements  []*LockElement
 	held      []string // ключи которые удерживаем
 }
@@ -193,6 +194,18 @@ func NewLockObjectWithCollector(mgr *LockManager, collector *LockCollector) *Loc
 		collector.Track(obj)
 	}
 	return obj
+}
+
+// WithAdvisory задаёт функцию, которую Заблокировать() вызывает сразу после
+// взятия внутрипроцессных мьютексов. Через неё storage-слой берёт
+// pg_advisory_xact_lock ещё ДО чтения остатков DSL-кодом — иначе между
+// «прочитал остатки» и «взял блокировку после хука» остаётся окно гонки
+// (двойное списание партий, issue #458). Функция вправе паниковать
+// RaiseUserError — Заблокировать освободит уже взятые внутрипроцессные
+// мьютексы перед пробросом паники.
+func (lo *LockObject) WithAdvisory(fn func(keys []string)) *LockObject {
+	lo.advisory = fn
+	return lo
 }
 
 func (lo *LockObject) Get(name string) any    { return nil }
@@ -220,6 +233,17 @@ func (lo *LockObject) CallMethod(method string, args []any) any {
 		if lo.collector != nil {
 			lo.collector.Add(lo.held)
 		}
+		if lo.advisory != nil {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						lo.ReleaseAll()
+						panic(r)
+					}
+				}()
+				lo.advisory(lo.held)
+			}()
+		}
 		return nil
 	case "разблокировать", "unlock":
 		lo.ReleaseAll()
@@ -240,11 +264,19 @@ func (lo *LockObject) ReleaseAll() {
 
 // buildKeys формирует ключи блокировок в виде "регистр|изм1=знач&изм2=знач..."
 // Значения отсортированы по имени измерения для детерминированности.
+// Ссылочные значения нормализуются к UUID: у *interpreter.Ref метод String()
+// возвращает отображаемое имя, которое в разных путях проведения бывает то
+// заполненным, то пустым — ключи расходились бы и блокировка не пересекалась.
 func (lo *LockObject) buildKeys() []string {
 	keys := make([]string, 0, len(lo.elements))
 	for _, el := range lo.elements {
 		var pairs []string
 		for k, v := range el.values {
+			if r, ok := v.(interface{ GetRefUUID() string }); ok {
+				if id := r.GetRefUUID(); id != "" {
+					v = id
+				}
+			}
 			pairs = append(pairs, fmt.Sprintf("%s=%v", k, v))
 		}
 		sort.Strings(pairs)

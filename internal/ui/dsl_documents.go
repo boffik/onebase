@@ -598,7 +598,24 @@ func (w *docWriter) autoNumber(ctx context.Context) {
 // Использует живой ctx, поэтому при открытой DSL-транзакции запись
 // участвует в ней; иначе автокоммит.
 func (w *docWriter) write() error {
-	return w.s.store.WithTxScope(w.ctx(), w.writeInContext)
+	return w.withLockScope(w.writeInContext)
+}
+
+// withLockScope — WithTxScope + LockCollector в контексте (если его ещё нет,
+// как при вызове из обработки): внутрипроцессные мьютексы, взятые хуком через
+// БлокировкаДанных без явного Разблокировать(), освобождаются после выхода из
+// транзакции, а не утекают навсегда. Зеркалит entityservice.Save
+// (service.go: lockCollector + defer ReleaseAll).
+func (w *docWriter) withLockScope(fn func(ctx context.Context) error) error {
+	base := w.ctx()
+	if runtime.LockCollectorFromContext(base) != nil {
+		return w.s.store.WithTxScope(base, fn)
+	}
+	lc := runtime.NewLockCollector()
+	defer lc.ReleaseAll()
+	return w.s.store.WithTxScope(base, func(ctx context.Context) error {
+		return fn(runtime.ContextWithLockCollector(ctx, lc))
+	})
 }
 
 func (w *docWriter) writeInContext(ctx context.Context) error {
@@ -672,7 +689,7 @@ func (w *docWriter) accessID() uuid.UUID {
 // conduct performs the implicit write and posting as one atomic operation.
 // OnWrite, OnPost and all nested DSL writes share the same transaction/scope.
 func (w *docWriter) conduct() error {
-	return w.s.store.WithTxScope(w.ctx(), func(ctx context.Context) error {
+	return w.withLockScope(func(ctx context.Context) error {
 		if err := w.writeInContext(ctx); err != nil {
 			return err
 		}
@@ -681,7 +698,7 @@ func (w *docWriter) conduct() error {
 }
 
 func (w *docWriter) post() error {
-	return w.s.store.WithTxScope(w.ctx(), w.postInContext)
+	return w.withLockScope(w.postInContext)
 }
 
 // postInContext запускает OnPost, собирает движения и фиксирует проведение —
