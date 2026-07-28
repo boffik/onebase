@@ -859,6 +859,65 @@ func TestDocsRoot_OnWriteRunsOnSave(t *testing.T) {
 	}
 }
 
+// ПриЗаписи (OnWrite) на DSL-пути записи должен видеть заполненный псевдо-реквизит
+// «Ссылка» самого документа — симметрично OnPost и entityservice.Save. Регресс:
+// ensureSelfRef ранее вызывался только перед OnPost, из-за чего this.Ссылка в
+// ПриЗаписи был пуст (запись ссылки на себя и чтение пре-образа по своей ссылке
+// в хуке не работали).
+func TestDocsRoot_OnWriteHasSelfRef(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	doc := &metadata.Entity{
+		Name: "СамоДок",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Номер", Type: metadata.FieldTypeString},
+			{Name: "ЕстьСсылка", Type: metadata.FieldTypeNumber},
+		},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{doc}); err != nil {
+		t.Fatal(err)
+	}
+
+	onWriteSrc := `Процедура ПриЗаписи()
+  Если ЗначениеЗаполнено(ЭтотОбъект.Ссылка) Тогда
+    ЭтотОбъект.ЕстьСсылка = 1;
+  Иначе
+    ЭтотОбъект.ЕстьСсылка = 0;
+  КонецЕсли;
+КонецПроцедуры`
+	prog := mustParse(t, onWriteSrc)
+
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{
+		Entities: []*metadata.Entity{doc},
+		Programs: map[string]*ast.Program{"СамоДок": prog},
+	})
+
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+	s := &Server{store: db, reg: registry, interp: interp, lockMgr: runtime.NewLockManager(), messages: NewMessageStore()}
+
+	root := newDocsRoot(s, interpreter.NewTxState(ctx))
+	dp := root.Get("СамоДок").(*docProxy)
+	w := dp.CallMethod("создать", nil).(*docWriter)
+	w.Set("Номер", "СД-1")
+	w.CallMethod("записать", nil)
+
+	var flag float64
+	if err := db.QueryRow(ctx, "SELECT естьссылка FROM самодок LIMIT 1").Scan(&flag); err != nil {
+		t.Fatal(err)
+	}
+	if flag != 1 {
+		t.Errorf("this.Ссылка в ПриЗаписи не заполнена (ЕстьСсылка=%v, ожидалось 1) — ensureSelfRef не вызван на пути записи", flag)
+	}
+}
+
 // parseNum приводит значение из БД (число или строка вида "300.0") к float64.
 func parseNum(v any) float64 {
 	switch n := v.(type) {
