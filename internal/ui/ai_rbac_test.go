@@ -142,6 +142,9 @@ func flaggedUserAndServer(t *testing.T) (*Server, *http.Request) {
 	if err := repo.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := repo.Create(ctx, "boss", "password1", "Boss", true); err != nil {
+		t.Fatal(err)
+	}
 	u, err := repo.Create(ctx, "flagged", "password1", "Flagged User", false)
 	if err != nil {
 		t.Fatal(err)

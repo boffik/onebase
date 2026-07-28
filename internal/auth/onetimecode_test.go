@@ -61,7 +61,7 @@ func TestOneTimeCodes_Unknown(t *testing.T) {
 func newSessionFixture(t *testing.T) (*auth.Handlers, string) {
 	t.Helper()
 	repo, ctx := newTestRepo(t)
-	user, err := repo.Create(ctx, "ivan", "secret123", "Иван", false)
+	user, err := repo.Create(ctx, "ivan", "secret123", "Иван", true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestIssueOneTimeCode_RequiresSession(t *testing.T) {
 // Middleware больше не принимает токен из query (?_tk=) — только cookie.
 func TestMiddleware_TkQueryParamRejected(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	user, err := repo.Create(ctx, "ivan", "secret123", "Иван", false)
+	user, err := repo.Create(ctx, "ivan", "secret123", "Иван", true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

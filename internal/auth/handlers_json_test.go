@@ -12,7 +12,7 @@ import (
 
 func TestLoginJSONSetsSessionCookieAndDoesNotReturnToken(t *testing.T) {
 	repo, ctx := newTestRepo(t)
-	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", false); err != nil {
+	if _, err := repo.Create(ctx, "ivan", "secret123", "Иван", true); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	h := &auth.Handlers{Repo: repo}

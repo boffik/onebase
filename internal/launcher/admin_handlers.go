@@ -49,17 +49,24 @@ func (h *handler) cfgAdminUsers(w http.ResponseWriter, r *http.Request) {
 			langOptsJS += fmt.Sprintf(`,{v:'%s',l:'%s'}`, l.Code, jsEscape(l.Native))
 		}
 	}
+	firstUserHint := ""
+	adminChecked := ""
+	if len(users) == 0 {
+		firstUserHint = `<div style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412;padding:10px 12px;border-radius:4px;margin-bottom:12px;font-size:12px">После создания первого пользователя вход потребуется всем. Первый пользователь должен быть администратором — иначе управлять учётными записями будет некому.</div>`
+		adminChecked = " checked"
+	}
 	html := `<div style="padding:16px">
 	<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
 	  <h3 style="margin:0;font-size:15px">Пользователи</h3>
 	  <button onclick="cfgUserNew()" style="background:#1a5fa8;color:#fff;border:none;padding:5px 14px;border-radius:3px;cursor:pointer;font-size:12px">+ Добавить</button>
 	</div>
+	` + firstUserHint + `
 	<div id="cfg-user-new" style="display:none;margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
 	  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
 	    <div style="flex:1;min-width:120px"><label style="font-size:11px;color:#666">Логин</label><input id="cfg-un" style="width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:3px;font-size:12px"></div>
 	    <div style="flex:1;min-width:120px"><label style="font-size:11px;color:#666">Пароль</label><input id="cfg-up" type="password" style="width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:3px;font-size:12px"></div>
 	    <div style="flex:1;min-width:120px"><label style="font-size:11px;color:#666">Полное имя</label><input id="cfg-ufn" style="width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:3px;font-size:12px"></div>
-	    <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="cfg-ua"> Админ</label>
+	    <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="cfg-ua"` + adminChecked + `> Админ</label>
 	    <button onclick="cfgUserCreate()" style="background:#16a34a;color:#fff;border:none;padding:5px 12px;border-radius:3px;cursor:pointer;font-size:12px">Создать</button>
 	    <button onclick="document.getElementById('cfg-user-new').style.display='none'" style="background:#e2e8f0;color:#333;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;font-size:12px">Отмена</button>
 	  </div>

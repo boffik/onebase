@@ -168,6 +168,9 @@ func TestAITools_NonAdminGetsNoTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Создаём пользователя: теперь HasUsers()==true.
+	if _, err := repo.Create(ctx, "boss", "password1", "Boss", true); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repo.Create(ctx, "testuser", "password1", "Test User", false); err != nil {
 		t.Fatal(err)
 	}
@@ -232,6 +235,9 @@ func TestAITools_FlaggedUserGetsTools(t *testing.T) {
 
 	repo := auth.NewRepo(authDB)
 	if err := repo.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Create(ctx, "boss", "password1", "Boss", true); err != nil {
 		t.Fatal(err)
 	}
 	u, err := repo.Create(ctx, "flagged", "password1", "Flagged User", false)

@@ -40,7 +40,7 @@ func TestRepo_CreateAndAuthenticate(t *testing.T) {
 	db.Exec(ctx, `DELETE FROM _sessions`)
 	db.Exec(ctx, `DELETE FROM _users WHERE login = 'testuser'`)
 
-	user, err := repo.Create(ctx, "testuser", "secret123", "Тестовый Юзер", false)
+	user, err := repo.Create(ctx, "testuser", "secret123", "Тестовый Юзер", true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestRepo_Sessions(t *testing.T) {
 	db.Exec(ctx, `DELETE FROM _sessions`)
 	db.Exec(ctx, `DELETE FROM _users WHERE login = 'sesstest'`)
 
-	user, _ := repo.Create(ctx, "sesstest", "pass", "", false)
+	user, _ := repo.Create(ctx, "sesstest", "pass", "", true)
 
 	token, err := repo.CreateSession(ctx, user.ID, auth.SessionMeta{Kind: auth.SessionKindEnterprise})
 	if err != nil {
@@ -144,7 +144,7 @@ func TestMiddleware_WithUsers_RequiresSession(t *testing.T) {
 
 	db.Exec(ctx, `DELETE FROM _sessions`)
 	db.Exec(ctx, `DELETE FROM _users WHERE login = 'mwtest'`)
-	repo.Create(ctx, "mwtest", "pass", "", false)
+	repo.Create(ctx, "mwtest", "pass", "", true)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -13,6 +14,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ivantit66/onebase/internal/storage"
+)
+
+// ErrFirstUserMustBeAdmin — первый пользователь обязан быть администратором.
+// Иначе после появления записи в _users включается auth, а управлять
+// пользователями некому (controlling#130).
+var ErrFirstUserMustBeAdmin = errors.New(
+	"первый пользователь должен быть администратором: иначе вход потребуется всем, а управлять пользователями будет некому",
 )
 
 type User struct {
@@ -243,6 +251,14 @@ func scanTime(v any) time.Time {
 }
 
 func (r *Repo) Create(ctx context.Context, login, password, fullName string, isAdmin bool) (*User, error) {
+	hasUsers, err := r.HasUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !hasUsers && !isAdmin {
+		return nil, ErrFirstUserMustBeAdmin
+	}
+
 	d := r.db.Dialect()
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

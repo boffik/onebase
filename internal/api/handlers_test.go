@@ -1106,6 +1106,7 @@ func TestAPIV2_ReportUsesBearerTokenRBAC(t *testing.T) {
 	if err := authRepo.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
+	_, _ = authRepo.Create(ctx, "boss", "pass", "", true)
 	allowedUser, _ := authRepo.Create(ctx, "runner", "pass", "", false)
 	deniedUser, _ := authRepo.Create(ctx, "reader", "pass", "", false)
 	role := []*auth.Role{{

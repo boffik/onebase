@@ -204,7 +204,7 @@ func TestService_Index(t *testing.T) {
 
 func TestService_BasicAuth(t *testing.T) {
 	s, ctx := newServiceTestServer(t)
-	if _, err := s.authRepo.Create(ctx, "ivan", "pass", "Иван", false); err != nil {
+	if _, err := s.authRepo.Create(ctx, "ivan", "pass", "Иван", true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,6 +278,9 @@ func TestService_CORS_Preflight(t *testing.T) {
 
 func TestService_RolesGate(t *testing.T) {
 	s, ctx := newServiceTestServer(t)
+	if _, err := s.authRepo.Create(ctx, "seed", "pw", "Seed", true); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.authRepo.Create(ctx, "clerk", "pw", "Клерк", false); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +357,7 @@ func TestService_Docs(t *testing.T) {
 	}
 
 	// Появился пользователь → docs требуют админ-сессии → без сессии редирект на /login.
-	if _, err := s.authRepo.Create(ctx, "u1", "pw", "U", false); err != nil {
+	if _, err := s.authRepo.Create(ctx, "u1", "pw", "U", true); err != nil {
 		t.Fatal(err)
 	}
 	w = httptest.NewRecorder()
