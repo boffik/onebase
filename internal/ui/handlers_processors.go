@@ -202,23 +202,12 @@ func (s *Server) processorRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userKey := userKeyFromRequest(r)
 	var messages []string
-	msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
-		if len(args) > 0 {
-			text := fmt.Sprintf("%v", args[0])
-			messages = append(messages, text)
-			s.messages.Push(userKey, text)
-		}
-		return nil, nil
-	})
 
 	paramsThis := &interpreter.MapThis{M: paramValues}
 	mc := runtime.NewMovementsCollector("processor", uuid.Nil)
-	dslVars := s.buildDSLVars(opCtx, mc)
+	dslVars := s.buildDSLVarsWithMessages(opCtx, mc, &messages)
 	dslVars["Параметры"] = paramsThis
-	dslVars["Сообщить"] = msgFunc
-	dslVars["Message"] = msgFunc
 	interpreter.InjectMaket(dslVars, proc.Layout)
 	var err error
 	if timeout := s.operationTimeout(opProcessorRun); timeout > 0 {

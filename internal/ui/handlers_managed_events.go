@@ -800,23 +800,12 @@ func (s *Server) handleProcessorFormEvent(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		userKey := userKeyFromRequest(r)
 		var msgs []string
-		msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
-			if len(args) > 0 {
-				text := fmt.Sprintf("%v", args[0])
-				msgs = append(msgs, text)
-				s.messages.Push(userKey, text)
-			}
-			return nil, nil
-		})
 
 		paramsThis := &interpreter.MapThis{M: paramValues}
 		mc := runtime.NewMovementsCollector("processor", uuid.Nil)
-		dslVars := s.buildDSLVars(r.Context(), mc)
+		dslVars := s.buildDSLVarsWithMessages(r.Context(), mc, &msgs)
 		dslVars["Параметры"] = paramsThis
-		dslVars["Сообщить"] = msgFunc
-		dslVars["Message"] = msgFunc
 		interpreter.InjectMaket(dslVars, proc.Layout)
 
 		err := s.interp.Run(procDecl, paramsThis, dslVars)
