@@ -634,6 +634,12 @@ func (w *docWriter) writeInContext(ctx context.Context) error {
 		return err
 	}
 	w.autoNumber(ctx)
+	// Псевдо-реквизит «Ссылка» самого документа — до запуска OnWrite, как это уже
+	// делается на пути проведения (ensureSelfRef перед OnPost) и в entityservice.Save.
+	// Без него this.Ссылка в ПриЗаписи был бы пуст на DSL-пути записи, из-за чего
+	// запись ссылки на себя (Дв.X = this.Ссылка) или чтение пре-образа по своей
+	// ссылке в хуке не работали. autoNumber уже проставил Номер → displayName корректен.
+	w.ensureSelfRef()
 	mc := runtime.NewMovementsCollector(w.entity.Name, w.obj.ID)
 	setPeriodFromFields(mc, w.entity, w.obj.Fields)
 	if errMsg, _ := w.s.runOnWriteCtx(ctx, w.obj, mc); errMsg != "" {
