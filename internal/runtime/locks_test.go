@@ -225,10 +225,36 @@ func TestLockObject_AdvisoryCalledOnLock(t *testing.T) {
 	}
 }
 
-// Паника advisory-функции (RaiseUserError при таймауте блокировки) не должна
-// навсегда оставлять внутрипроцессные мьютексы: их отпускает
-// LockCollector.ReleaseAll — defer в Save/postDocument.
-func TestLockObject_AdvisoryPanicReleasedByCollector(t *testing.T) {
+// Паника advisory-функции должна сама отпускать внутрипроцессные мьютексы.
+// В произвольной DSL-транзакции LockCollector может отсутствовать, поэтому
+// полагаться только на внешний defer нельзя: следующий запрос к ключу зависнет.
+func TestLockObject_AdvisoryPanicReleasesWithoutCollector(t *testing.T) {
+	mgr := NewLockManager()
+	lo := NewLockObject(mgr).WithAdvisory(func([]string) {
+		panic("лок-таймаут")
+	})
+	lo.CallMethod("добавить", []any{"X"})
+	func() {
+		defer func() { _ = recover() }()
+		lo.CallMethod("заблокировать", nil)
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		mgr.Acquire([]string{"X|"})
+		mgr.Release([]string{"X|"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("мьютекс не освобождён после паники advisory без LockCollector")
+	}
+}
+
+// Внешний LockCollector после аварийной самоочистки объекта остаётся безопасно
+// вызывать из defer Save/postDocument: повторный ReleaseAll идемпотентен.
+func TestLockObject_CollectorCleanupAfterAdvisoryPanic(t *testing.T) {
 	mgr := NewLockManager()
 	collector := NewLockCollector()
 	lo := NewLockObjectWithCollector(mgr, collector).WithAdvisory(func([]string) {
@@ -244,16 +270,11 @@ func TestLockObject_AdvisoryPanicReleasedByCollector(t *testing.T) {
 		t.Fatal("ожидалась паника advisory-функции")
 	}
 	collector.ReleaseAll()
-	done := make(chan struct{})
-	go func() {
-		mgr.Acquire([]string{"X|"})
-		mgr.Release([]string{"X|"})
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("мьютекс не освобождён после паники advisory + ReleaseAll")
+	mgr.mu.Lock()
+	n := len(mgr.locks)
+	mgr.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("после повторной очистки осталось %d блокировок", n)
 	}
 }
 

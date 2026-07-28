@@ -201,8 +201,8 @@ func NewLockObjectWithCollector(mgr *LockManager, collector *LockCollector) *Loc
 // pg_advisory_xact_lock ещё ДО чтения остатков DSL-кодом — иначе между
 // «прочитал остатки» и «взял блокировку после хука» остаётся окно гонки
 // (двойное списание партий, issue #458). Функция вправе паниковать
-// RaiseUserError — мьютексы освободит LockCollector.ReleaseAll на выходе
-// из проведения.
+// RaiseUserError — Заблокировать освободит уже взятые внутрипроцессные
+// мьютексы перед пробросом паники.
 func (lo *LockObject) WithAdvisory(fn func(keys []string)) *LockObject {
 	lo.advisory = fn
 	return lo
@@ -234,7 +234,15 @@ func (lo *LockObject) CallMethod(method string, args []any) any {
 			lo.collector.Add(lo.held)
 		}
 		if lo.advisory != nil {
-			lo.advisory(lo.held)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						lo.ReleaseAll()
+						panic(r)
+					}
+				}()
+				lo.advisory(lo.held)
+			}()
 		}
 		return nil
 	case "разблокировать", "unlock":
