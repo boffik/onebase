@@ -64,6 +64,13 @@ func TestCompile_Between(t *testing.T) {
 		"ДатаНачала":    time.Date(2026, 7, 26, 0, 0, 0, 0, time.UTC),
 		"ДатаОкончания": time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC),
 	}
+	entity := &metadata.Entity{
+		Name: "ЗаЧас",
+		Kind: metadata.KindDocument,
+		Fields: []metadata.Field{
+			{Name: "Дата", Type: metadata.FieldTypeDate},
+		},
+	}
 
 	tests := []struct {
 		name    string
@@ -76,7 +83,11 @@ func TestCompile_Between(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := query.Compile(src, query.CompileOpts{Params: params, Dialect: tt.dialect})
+			r, err := query.Compile(src, query.CompileOpts{
+				Params:   params,
+				Entities: []*metadata.Entity{entity},
+				Dialect:  tt.dialect,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -85,6 +96,11 @@ func TestCompile_Between(t *testing.T) {
 			}
 			if len(r.Args) != 2 {
 				t.Fatalf("expected 2 args, got %d: %v", len(r.Args), r.Args)
+			}
+			if tt.name == "sqlite" {
+				if r.Args[0] != "2026-07-26T00:00:00Z" || r.Args[1] != "2026-07-27T00:00:00Z" {
+					t.Fatalf("SQLite date args must use RFC3339 UTC, got %v", r.Args)
+				}
 			}
 		})
 	}
