@@ -107,6 +107,57 @@ func TestRepost_WritesMovementsAndPosts(t *testing.T) {
 	}
 }
 
+// Хук перепроведения должен исполняться ВНУТРИ транзакции записи (issue #458):
+// только так БлокировкаДанных из ОбработкаПроведения может взять
+// pg_advisory_xact_lock до чтения остатков, а побочные записи хука
+// откатываются вместе с движениями.
+func TestRepost_HookRunsInsideTx(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "rtx.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	doc := &metadata.Entity{
+		Name: "Поступление", Kind: metadata.KindDocument, Posting: true,
+		Fields: []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+	}
+	if err := db.Migrate(ctx, []*metadata.Entity{doc}); err != nil {
+		t.Fatal(err)
+	}
+
+	onPost := mustParseProgramT(t, `Процедура OnPost()
+КонецПроцедуры`)
+	registry := runtime.NewRegistry()
+	registry.Load(runtime.LoadOptions{
+		Entities: []*metadata.Entity{doc},
+		Programs: map[string]*ast.Program{doc.Name: onPost},
+	})
+	interp := interpreter.New()
+	interp.LookupProc = registry.GetModuleProc
+
+	hookSawTx := false
+	svc := &Service{
+		Store: db, Reg: registry, Interp: interp,
+		BuildVars: func(c context.Context, mc *runtime.MovementsCollector, _ *[]string) map[string]any {
+			hookSawTx = storage.HasTx(c)
+			return dslvars.Common{Ctx: c, Reg: registry, Store: db, Movements: mc}.Build()
+		},
+	}
+
+	id := uuid.New()
+	if err := db.Upsert(ctx, doc.Name, id, map[string]any{"Количество": float64(1)}, doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Repost(ctx, "Поступление", id); err != nil {
+		t.Fatalf("Repost: %v", err)
+	}
+	if !hookSawTx {
+		t.Error("BuildVars получил контекст без транзакции — хук Repost работает вне транзакции записи")
+	}
+}
+
 func mustParseProgramT(t *testing.T, src string) *ast.Program {
 	t.Helper()
 	prog, err := parser.New(lexer.New(src, "test.os")).ParseProgram()

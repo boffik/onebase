@@ -1301,22 +1301,38 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if errMsg, _ := s.runOnPostCtx(r.Context(), obj, mc); errMsg != "" {
-		http.Redirect(w, r, docURL+"?posting_error="+url.QueryEscape(errMsg), http.StatusSeeOther)
-		return
-	}
-
-	if err := s.store.WithTx(r.Context(), func(ctx context.Context) error {
+	// Хук выполняется в ОДНОЙ транзакции с записью движений и признака
+	// проведения (issue #458): БлокировкаДанных внутри ОбработкаПроведения
+	// берёт pg_advisory_xact_lock до чтения остатков — раньше хук работал вне
+	// транзакции и блокировки вырождались в no-op. Коллектор освобождает
+	// внутрипроцессные мьютексы после коммита/отката.
+	lockCollector := runtime.NewLockCollector()
+	defer lockCollector.ReleaseAll()
+	var hookErrMsg string
+	if err := s.store.WithTxScope(r.Context(), func(ctx context.Context) error {
+		ctx = runtime.ContextWithLockCollector(ctx, lockCollector)
+		if errMsg, _ := s.runOnPostCtx(ctx, obj, mc); errMsg != "" {
+			hookErrMsg = errMsg
+			return errPostingHookFailed
+		}
 		if err := s.saveMovements(ctx, entity.Name, id, mc); err != nil {
 			return err
 		}
 		return s.store.SetPosted(ctx, entity.Name, id, true)
 	}); err != nil {
+		if hookErrMsg != "" {
+			http.Redirect(w, r, docURL+"?posting_error="+url.QueryEscape(hookErrMsg), http.StatusSeeOther)
+			return
+		}
 		http.Error(w, s.errText(r, err), 500)
 		return
 	}
 	http.Redirect(w, r, docURL, http.StatusSeeOther)
 }
+
+// errPostingHookFailed — сигнальная ошибка для отката транзакции проведения
+// при ошибке ОбработкаПроведения; наружу уходит текст хука, не она сама.
+var errPostingHookFailed = errors.New("posting hook failed")
 
 // clearMovements removes all register movements (accumulation, info, account)
 // recorded by the given document, across every register. Passing nil rows to the

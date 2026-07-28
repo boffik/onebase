@@ -745,7 +745,6 @@ func (s *Service) Repost(ctx context.Context, entityName string, id uuid.UUID) e
 		}
 	}
 	lockCollector := runtime.NewLockCollector()
-	hookCtx := runtime.ContextWithLockCollector(ctx, lockCollector)
 	defer lockCollector.ReleaseAll()
 
 	obj := &runtime.Object{Type: ent.Name, Kind: ent.Kind, ID: id, Fields: fields, TablePartRows: tps}
@@ -766,30 +765,33 @@ func (s *Service) Repost(ctx context.Context, entityName string, id uuid.UUID) e
 		}
 	}
 
+	// Хук выполняется ВНУТРИ транзакции записи (issue #458): раньше OnPost
+	// работал вне её — БлокировкаДанных из хука не могла взять advisory lock,
+	// а между чтением остатков и записью движений оставалось окно гонки.
 	proc := s.Reg.GetProcedure(ent.Name, "OnPost")
-	if proc != nil {
-		var msgs []string
-		var vars map[string]any
-		if s.BuildVars != nil {
-			vars = s.BuildVars(hookCtx, mc, &msgs)
+	return s.Store.WithTx(ctx, func(txCtx context.Context) error {
+		if proc != nil {
+			hookCtx := runtime.ContextWithLockCollector(txCtx, lockCollector)
+			var msgs []string
+			var vars map[string]any
+			if s.BuildVars != nil {
+				vars = s.BuildVars(hookCtx, mc, &msgs)
+			}
+			var thisVal interpreter.This = obj
+			if s.MakeThis != nil {
+				thisVal = s.MakeThis(hookCtx, obj, ent)
+			}
+			if err := s.Interp.Run(proc, thisVal, vars); err != nil {
+				return fmt.Errorf("перепроведение %s: ОбработкаПроведения: %w", ent.Name, err)
+			}
 		}
-		var thisVal interpreter.This = obj
-		if s.MakeThis != nil {
-			thisVal = s.MakeThis(hookCtx, obj, ent)
-		}
-		if err := s.Interp.Run(proc, thisVal, vars); err != nil {
-			return fmt.Errorf("перепроведение %s: ОбработкаПроведения: %w", ent.Name, err)
-		}
-	}
-
-	return s.Store.WithTx(ctx, func(ctx context.Context) error {
-		if err := s.Store.AdvisoryXactLock(ctx, lockCollector.Keys()); err != nil {
+		if err := s.Store.AdvisoryXactLock(txCtx, lockCollector.Keys()); err != nil {
 			return err
 		}
-		if err := s.writeMovements(ctx, ent.Name, id, mc); err != nil {
+		if err := s.writeMovements(txCtx, ent.Name, id, mc); err != nil {
 			return err
 		}
-		return s.Store.SetPosted(ctx, ent.Name, id, true)
+		return s.Store.SetPosted(txCtx, ent.Name, id, true)
 	})
 }
 
