@@ -2173,6 +2173,88 @@ func (tr *translator) needsNumberCast(lower string) bool {
 	return false
 }
 
+// sqliteDateParamComparedToField распознаёт time.Time-параметр в прямом
+// сравнении с полем date. Такие параметры сериализуются тем же UTC RFC3339,
+// что и значения полей сущностей: иначе SQLite сравнивает разные TEXT-форматы
+// лексикографически по разделителю ('T' против пробела) и ошибается (#462).
+func (tr *translator) sqliteDateParamComparedToField(idx int) bool {
+	if dialectOrDefault(tr.opts.Dialect).Name() != "sqlite" || !tr.timeParamAt(idx) {
+		return false
+	}
+	if tr.dateFieldAt(idx-2) && tr.comparisonOpAt(idx-1) {
+		return true
+	}
+	if tr.comparisonOpAt(idx+1) && tr.dateFieldAt(idx+2) {
+		return true
+	}
+	// Первый или второй параметр правой части BETWEEN.
+	if tr.dateFieldAt(idx-2) && tr.keywordAt(idx-1, "МЕЖДУ", "BETWEEN") {
+		return true
+	}
+	return tr.dateFieldAt(idx-4) &&
+		tr.keywordAt(idx-3, "МЕЖДУ", "BETWEEN") &&
+		tr.timeParamAt(idx-2) &&
+		tr.keywordAt(idx-1, "И", "AND")
+}
+
+func (tr *translator) addSQLiteDateParam(name string) string {
+	var value any
+	switch v := tr.paramValues[name].(type) {
+	case time.Time:
+		value = v.UTC().Format(time.RFC3339)
+	case *time.Time:
+		if v != nil {
+			value = v.UTC().Format(time.RFC3339)
+		}
+	}
+	tr.args = append(tr.args, value)
+	return dialectOrDefault(tr.opts.Dialect).Placeholder(len(tr.args))
+}
+
+func (tr *translator) dateFieldAt(idx int) bool {
+	if idx < 0 || idx >= len(tr.tokens) || tr.tokens[idx].kind != tIdent {
+		return false
+	}
+	return tr.colTypes[strings.ToLower(tr.tokens[idx].val)] == metadata.FieldTypeDate
+}
+
+func (tr *translator) timeParamAt(idx int) bool {
+	if idx < 0 || idx >= len(tr.tokens) || tr.tokens[idx].kind != tParam {
+		return false
+	}
+	switch tr.paramValues[tr.tokens[idx].val].(type) {
+	case time.Time, *time.Time:
+		return true
+	default:
+		return false
+	}
+}
+
+func (tr *translator) comparisonOpAt(idx int) bool {
+	if idx < 0 || idx >= len(tr.tokens) || tr.tokens[idx].kind != tOp {
+		return false
+	}
+	switch tr.tokens[idx].val {
+	case "=", "<>", "!=", "<", "<=", ">", ">=":
+		return true
+	default:
+		return false
+	}
+}
+
+func (tr *translator) keywordAt(idx int, names ...string) bool {
+	if idx < 0 || idx >= len(tr.tokens) || tr.tokens[idx].kind != tIdent {
+		return false
+	}
+	got := strings.ToUpper(tr.tokens[idx].val)
+	for _, name := range names {
+		if got == name {
+			return true
+		}
+	}
+	return false
+}
+
 // qualifyOwn префиксует собственную колонку основной таблицы её именем/алиасом,
 // когда активны авто-JOIN'ы (п.48) — иначе одноимённая колонка присоединённого
 // каталога вызывает ambiguous column. Неизвестные идентификаторы не трогаем.
@@ -3182,8 +3264,13 @@ func translate(tokens []tok, opts CompileOpts) (Result, error) {
 		// Parameter: &Name → $N or NULL
 		if t.kind == tParam {
 			tr.prevWasDot = false
+			normalizeDate := tr.sqliteDateParamComparedToField(tr.pos)
 			tr.advance()
-			tr.emit(tr.addParam(t.val))
+			if normalizeDate {
+				tr.emit(tr.addSQLiteDateParam(t.val))
+			} else {
+				tr.emit(tr.addParam(t.val))
+			}
 			continue
 		}
 
