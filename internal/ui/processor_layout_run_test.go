@@ -120,3 +120,70 @@ func TestProcessorWithoutLayoutStillRuns(t *testing.T) {
 		t.Fatalf("ожидалось сообщение ok, получено %v", messages)
 	}
 }
+
+func TestRunProcessorOffline_ReturnsDocumentHookMessages(t *testing.T) {
+	procOS := `Процедура Выполнить()
+  Док = Документы.СообщениеХука.Создать();
+  Док.Номер = "1";
+  Ссылка = Док.Записать();
+  ЗагруженныйДокумент = Ссылка.ПолучитьОбъект();
+  ЗагруженныйДокумент.Провести();
+КонецПроцедуры
+`
+	dir := writeProcLayoutProject(t, procOS, false)
+	docDir := filepath.Join(dir, "documents")
+	if err := os.MkdirAll(docDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	docYAML := "name: СообщениеХука\nposting: true\nfields:\n  - name: Номер\n    type: string\n"
+	if err := os.WriteFile(filepath.Join(docDir, "сообщениехука.yaml"), []byte(docYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	onWriteOS := `Процедура ПриЗаписи()
+  Сообщить("из ПриЗаписи");
+КонецПроцедуры
+`
+	if err := os.WriteFile(filepath.Join(dir, "src", "сообщениехука.os"), []byte(onWriteOS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	onPostOS := `Процедура ОбработкаПроведения()
+  Сообщить("из ОбработкиПроведения");
+КонецПроцедуры
+`
+	if err := os.WriteFile(filepath.Join(dir, "src", "сообщениехука.posting.os"), []byte(onPostOS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	proj, err := project.Load(dir)
+	if err != nil {
+		t.Fatalf("project.Load: %v", err)
+	}
+	defer proj.Close()
+
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx, proj.Entities); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	messages, runErr, err := RunProcessorOffline(ctx, proj, db, "ЗагрузкаКурсов", nil, nil)
+	if err != nil {
+		t.Fatalf("RunProcessorOffline: %v", err)
+	}
+	if runErr != nil {
+		t.Fatalf("ошибка выполнения обработки: %v", runErr)
+	}
+	wantMessages := []string{"из ПриЗаписи", "из ПриЗаписи", "из ОбработкиПроведения"}
+	if len(messages) != len(wantMessages) {
+		t.Fatalf("сообщения обработки = %v, ожидались %v", messages, wantMessages)
+	}
+	for i, want := range wantMessages {
+		if messages[i] != want {
+			t.Fatalf("сообщения обработки = %v, ожидались %v", messages, wantMessages)
+		}
+	}
+}

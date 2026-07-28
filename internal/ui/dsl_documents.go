@@ -21,6 +21,20 @@ type docsCtxSource interface {
 	Ctx() context.Context
 }
 
+type dslMessageCollectorContextKey struct{}
+
+func withDSLMessageCollector(ctx context.Context, messages *[]string) context.Context {
+	if messages == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, dslMessageCollectorContextKey{}, messages)
+}
+
+func dslMessageCollectorFromContext(ctx context.Context) *[]string {
+	messages, _ := ctx.Value(dslMessageCollectorContextKey{}).(*[]string)
+	return messages
+}
+
 // refManagerFor строит менеджера для ссылки на сущность по её метаданным:
 // CatalogProxy для справочников, docProxy для документов. Используется в
 // enrichHeaderRefs/enrichTPRowsWithRefs и dsl_object_attr, чтобы ссылки,
@@ -38,7 +52,12 @@ func (s *Server) refManagerFor(entity *metadata.Entity, ctx context.Context) int
 			WithExchangeRegistrar(s.exchangeRegistrar()).
 			WithObjectFactory(s.catObjectFactory(ctxSrc))
 	case metadata.KindDocument:
-		return &docProxy{s: s, ctxSrc: ctxSrc, entity: entity}
+		return &docProxy{
+			s:        s,
+			ctxSrc:   ctxSrc,
+			entity:   entity,
+			messages: dslMessageCollectorFromContext(ctx),
+		}
 	}
 	return nil
 }
@@ -47,12 +66,23 @@ func (s *Server) refManagerFor(entity *metadata.Entity, ctx context.Context) int
 // Документы.X.Создать() → пишущий объект документа с табличными частями
 // и методами Записать()/Провести().
 type docsRoot struct {
-	s      *Server
-	ctxSrc docsCtxSource
+	s        *Server
+	ctxSrc   docsCtxSource
+	messages *[]string
 }
 
 func newDocsRoot(s *Server, ctxSrc docsCtxSource) *docsRoot {
-	return &docsRoot{s: s, ctxSrc: ctxSrc}
+	root := &docsRoot{s: s, ctxSrc: ctxSrc}
+	if ctxSrc != nil {
+		root.messages = dslMessageCollectorFromContext(ctxSrc.Ctx())
+	}
+	return root
+}
+
+// SetDSLMessageCollector connects document-hook messages to the collector of
+// the processor or scheduled job that owns this Documents root.
+func (d *docsRoot) SetDSLMessageCollector(messages *[]string) {
+	d.messages = messages
 }
 
 func (d *docsRoot) Get(name string) any {
@@ -60,16 +90,17 @@ func (d *docsRoot) Get(name string) any {
 	if entity == nil || entity.Kind != metadata.KindDocument {
 		return nil
 	}
-	return &docProxy{s: d.s, ctxSrc: d.ctxSrc, entity: entity}
+	return &docProxy{s: d.s, ctxSrc: d.ctxSrc, entity: entity, messages: d.messages}
 }
 
 func (d *docsRoot) Set(_ string, _ any) {}
 
 // docProxy — Документы.ПоступлениеТоваров.
 type docProxy struct {
-	s      *Server
-	ctxSrc docsCtxSource
-	entity *metadata.Entity
+	s        *Server
+	ctxSrc   docsCtxSource
+	entity   *metadata.Entity
+	messages *[]string
 }
 
 func (p *docProxy) Get(_ string) any    { return nil }
@@ -86,9 +117,10 @@ func (p *docProxy) CallMethod(method string, args []any) any {
 	switch strings.ToLower(method) {
 	case "создать", "create":
 		return &docWriter{
-			s:      p.s,
-			ctxSrc: p.ctxSrc,
-			entity: p.entity,
+			s:        p.s,
+			ctxSrc:   p.ctxSrc,
+			entity:   p.entity,
+			messages: p.messages,
 			obj: &runtime.Object{
 				ID:            uuid.New(),
 				Type:          p.entity.Name,
@@ -388,6 +420,7 @@ func (p *docProxy) LoadObject(uuidStr string) (any, error) {
 		ctxSrc:          p.ctxSrc,
 		entity:          p.entity,
 		obj:             obj,
+		messages:        p.messages,
 		loaded:          true,
 		expectedVersion: &version,
 	}, nil
@@ -402,10 +435,11 @@ func (p *docProxy) LoadObject(uuidStr string) (any, error) {
 //	Док.Записать();
 //	Док.Провести();
 type docWriter struct {
-	s      *Server
-	ctxSrc docsCtxSource
-	entity *metadata.Entity
-	obj    *runtime.Object
+	s        *Server
+	ctxSrc   docsCtxSource
+	entity   *metadata.Entity
+	obj      *runtime.Object
+	messages *[]string
 	// loaded — объект получен из БД (Ссылка.ПолучитьОбъект), а не создан.
 	// saved — объект уже записан в этой сессии. Оба используются ЭтоНовый().
 	loaded          bool
@@ -642,7 +676,9 @@ func (w *docWriter) writeInContext(ctx context.Context) error {
 	w.ensureSelfRef()
 	mc := runtime.NewMovementsCollector(w.entity.Name, w.obj.ID)
 	setPeriodFromFields(mc, w.entity, w.obj.Fields)
-	if errMsg, _ := w.s.runOnWriteCtx(ctx, w.obj, mc); errMsg != "" {
+	errMsg, hookMessages := w.s.runOnWriteCtx(ctx, w.obj, mc)
+	w.appendHookMessages(hookMessages)
+	if errMsg != "" {
 		return fmt.Errorf("%s", errMsg)
 	}
 	if w.expectedVersion == nil {
@@ -728,7 +764,9 @@ func (w *docWriter) postInContext(ctx context.Context) error {
 			return storage.PostingFrozenError(lock)
 		}
 	}
-	if errMsg, _ := w.s.runOnPostCtx(ctx, w.obj, mc); errMsg != "" {
+	errMsg, hookMessages := w.s.runOnPostCtx(ctx, w.obj, mc)
+	w.appendHookMessages(hookMessages)
+	if errMsg != "" {
 		return fmt.Errorf("%s", errMsg)
 	}
 	// OnPost мог изменить реквизиты шапки (расчётные поля) — персистим их upsert'ом
@@ -752,6 +790,12 @@ func (w *docWriter) postInContext(ctx context.Context) error {
 	return nil
 }
 
+func (w *docWriter) appendHookMessages(messages []string) {
+	if w.messages != nil && len(messages) > 0 {
+		*w.messages = append(*w.messages, messages...)
+	}
+}
+
 // ensureSelfRef устанавливает псевдо-реквизит «Ссылка» самого документа, чтобы
 // this.Ссылка в OnPost/OnWrite указывал на сам документ (нужно для записи
 // DocumentRef на себя в регистр сведений: Дв.Спецификация = this.Ссылка).
@@ -771,7 +815,7 @@ func (w *docWriter) ref() *interpreter.Ref {
 		UUID:    w.obj.ID.String(),
 		Name:    w.displayName(),
 		Type:    w.entity.Name,
-		Manager: &docProxy{s: w.s, ctxSrc: w.ctxSrc, entity: w.entity},
+		Manager: &docProxy{s: w.s, ctxSrc: w.ctxSrc, entity: w.entity, messages: w.messages},
 	}
 }
 

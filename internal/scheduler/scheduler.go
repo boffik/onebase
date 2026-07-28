@@ -787,6 +787,9 @@ func (s *Scheduler) runProcessor(ctx context.Context, job *metadata.ScheduledJob
 	if dslVars == nil {
 		dslVars = make(map[string]any)
 	}
+	if documents, ok := dslVars["Документы"].(interface{ SetDSLMessageCollector(*[]string) }); ok {
+		documents.SetDSLMessageCollector(&messages)
+	}
 	dslVars["Параметры"] = paramsThis
 	dslVars["Сообщить"] = msgFunc
 	dslVars["Message"] = msgFunc

@@ -87,19 +87,10 @@ func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage
 		paramValues[p.Name] = parseParamValue(strParams[p.Name], p.Type)
 	}
 
-	msgFunc := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {
-		if len(args) > 0 {
-			messages = append(messages, fmt.Sprintf("%v", args[0]))
-		}
-		return nil, nil
-	})
-
 	paramsThis := &interpreter.MapThis{M: paramValues}
 	mc := runtime.NewMovementsCollector("processor", uuid.Nil)
-	dslVars := s.buildDSLVars(ctx, mc)
+	dslVars := s.buildDSLVarsWithMessages(ctx, mc, &messages)
 	dslVars["Параметры"] = paramsThis
-	dslVars["Сообщить"] = msgFunc
-	dslVars["Message"] = msgFunc
 	interpreter.InjectMaket(dslVars, proc.Layout)
 
 	runErr = s.interp.Run(procDecl, paramsThis, dslVars)

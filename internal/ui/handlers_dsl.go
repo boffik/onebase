@@ -291,6 +291,7 @@ func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollecto
 }
 
 func (s *Server) buildDSLVarsWithMessages(ctx context.Context, mc *runtime.MovementsCollector, msgs *[]string) map[string]any {
+	ctx = withDSLMessageCollector(ctx, msgs)
 	vars := s.buildDSLVars(ctx, mc)
 	userKey := userKeyFromCtx(ctx)
 	msgFunc := interpreter.BuiltinFunc(func(args []any, file string, line int) (any, error) {
