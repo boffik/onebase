@@ -12,6 +12,7 @@ import (
 	querylang "github.com/ivantit66/onebase/internal/query"
 	"github.com/ivantit66/onebase/internal/report"
 	"github.com/ivantit66/onebase/internal/scheduler"
+	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/widget"
 	"github.com/spf13/cobra"
 )
@@ -106,27 +107,37 @@ func runWidgetExplain(cmd *cobra.Command, args []string) error {
 	if len(params) > 0 {
 		out.Params = params
 	}
+	// Открываем БД заранее, если запрошен --sample: её диалект нужен и для
+	// исполнения виджета, и чтобы показанный SQL совпадал с фактическим (иначе
+	// на SQLite генерятся Postgres-плейсхолдеры $N::text). См. issue #473.
+	sample, _ := cmd.Flags().GetInt("sample")
+	var db *storage.DB
+	if sample > 0 {
+		db, err = bc.OpenDB(context.Background())
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+	}
 	if strings.TrimSpace(w.Query) != "" {
-		compiled, err := querylang.Compile(w.Query, querylang.CompileOpts{
+		opts := querylang.CompileOpts{
 			Params:      params,
 			Entities:    proj.Entities,
 			Registers:   proj.Registers,
 			InfoRegs:    proj.InfoRegisters,
 			AccountRegs: proj.AccountRegisters,
-		})
+		}
+		if db != nil {
+			opts.Dialect = db.Dialect()
+		}
+		compiled, err := querylang.Compile(w.Query, opts)
 		if err != nil {
 			out.Error = "compile: " + err.Error()
 		} else {
 			out.SQL, out.Args, out.Sources = compiled.SQL, compiled.Args, toQuerySourceOutput(compiled.Sources)
 		}
 	}
-	sample, _ := cmd.Flags().GetInt("sample")
 	if sample > 0 {
-		db, err := bc.OpenDB(context.Background())
-		if err != nil {
-			return err
-		}
-		defer db.Close()
 		reg := buildRuntimeRegistry(proj)
 		res := widget.New(reg, db).Run(context.Background(), w)
 		if res.Error != "" {
@@ -179,24 +190,34 @@ func runReportExplain(cmd *cobra.Command, args []string) error {
 		out.Variants = append(out.Variants, v.Name)
 	}
 	if strings.TrimSpace(rep.Query) != "" {
-		compiled, err := querylang.Compile(rep.Query, querylang.CompileOpts{
+		// При --sample открываем БД до компиляции: без её диалекта компилятор
+		// генерит Postgres-плейсхолдеры $N::text, и исполнение на SQLite падает
+		// с «missing named argument». См. issue #473.
+		sample, _ := cmd.Flags().GetInt("sample")
+		var db *storage.DB
+		if sample > 0 {
+			db, err = bc.OpenDB(context.Background())
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+		}
+		opts := querylang.CompileOpts{
 			Params:      params,
 			Entities:    proj.Entities,
 			Registers:   proj.Registers,
 			InfoRegs:    proj.InfoRegisters,
 			AccountRegs: proj.AccountRegisters,
-		})
+		}
+		if db != nil {
+			opts.Dialect = db.Dialect()
+		}
+		compiled, err := querylang.Compile(rep.Query, opts)
 		if err != nil {
 			out.Error = "compile: " + err.Error()
 		} else {
 			out.SQL, out.Args, out.Sources = compiled.SQL, compiled.Args, toQuerySourceOutput(compiled.Sources)
-			sample, _ := cmd.Flags().GetInt("sample")
 			if sample > 0 {
-				db, err := bc.OpenDB(context.Background())
-				if err != nil {
-					return err
-				}
-				defer db.Close()
 				rows, cols, err := db.RunQuery(context.Background(), "SELECT * FROM ("+compiled.SQL+") _onebase_r LIMIT "+fmt.Sprint(sample), compiled.Args)
 				if err != nil {
 					out.Error = "execute: " + err.Error()
