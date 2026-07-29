@@ -99,7 +99,7 @@ func (db *DB) UpsertVersioned(ctx context.Context, entityName string, id uuid.UU
 		table, strings.Join(sets, ", "), idPH, versionPH)
 	tag, err := db.Exec(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("upsert versioned %s: %w", entityName, err)
+		return fmt.Errorf("upsert versioned %s: %w", entityName, classifyConstraintErr(err))
 	}
 	if tag.RowsAffected != 1 {
 		return ErrVersionConflict
