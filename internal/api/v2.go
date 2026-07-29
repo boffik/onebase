@@ -559,11 +559,7 @@ func ensureDocumentNumber(ctx context.Context, store *storage.DB, entity *metada
 
 func writeSaveResultV2(w http.ResponseWriter, result entityservice.SaveResult, err error, id uuid.UUID, posted bool) {
 	if err != nil {
-		if errors.Is(err, storage.ErrVersionConflict) {
-			writeError(w, http.StatusConflict, "version conflict: object was modified by another client", "", 0)
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
+		writeSaveError(w, err)
 		return
 	}
 	if result.DSLError != "" {

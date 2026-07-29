@@ -153,7 +153,7 @@ func (db *DB) upsert(ctx context.Context, entityName string, id uuid.UUID, field
 			table, strings.Join(cols, ", "), strings.Join(placeholders, ", "), strings.Join(updates, ", "))
 	}
 	if err := db.exec(ctx, sql, args...); err != nil {
-		return fmt.Errorf("upsert %s: %w", entityName, err)
+		return fmt.Errorf("upsert %s: %w", entityName, classifyConstraintErr(err))
 	}
 
 	// Audit (best-effort, non-blocking)

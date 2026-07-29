@@ -289,7 +289,7 @@ func (h *handler) createObject(kind metadata.Kind) http.HandlerFunc {
 			Action:        body.Action,
 		})
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
+			writeSaveError(w, err)
 			return
 		}
 		if result.DSLError != "" {
@@ -431,11 +431,7 @@ func (h *handler) updateObject(kind metadata.Kind) http.HandlerFunc {
 			ExpectedVersion: expectedVersion,
 		})
 		if err != nil {
-			if errors.Is(err, storage.ErrVersionConflict) {
-				writeError(w, http.StatusConflict, "version conflict: object was modified by another client", "", 0)
-				return
-			}
-			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
+			writeSaveError(w, err)
 			return
 		}
 		if result.DSLError != "" {
@@ -574,7 +570,7 @@ func (h *handler) postDocument() http.HandlerFunc {
 			Action:        "post",
 		})
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
+			writeSaveError(w, err)
 			return
 		}
 		if result.DSLError != "" {
@@ -758,6 +754,22 @@ func writeError(w http.ResponseWriter, code int, msg, file string, line int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(errorResponse{Error: msg, File: file, Line: line})
+}
+
+// writeSaveError отдаёт структурированную HTTP-ошибку для неуспешного
+// entitySvc.Save, маппя известные ошибки storage в точные коды статуса:
+// конфликт версий → 409, нарушение внешнего ключа (ссылка на несуществующий
+// объект) → 422. Прочее — 500 с текстом ошибки, как прежде. Общий для v1 и v2
+// REST, чтобы сырой текст драйвера БД не утекал в ответ по create/update/post.
+func writeSaveError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, storage.ErrVersionConflict):
+		writeError(w, http.StatusConflict, "version conflict: object was modified by another client", "", 0)
+	case errors.Is(err, storage.ErrForeignKeyViolation):
+		writeError(w, http.StatusUnprocessableEntity, "ссылка на несуществующий объект", "", 0)
+	default:
+		writeError(w, http.StatusInternalServerError, err.Error(), "", 0)
+	}
 }
 
 func capitalize(s string) string {
