@@ -100,6 +100,39 @@ func TestAttachmentRoundtrip_S3(t *testing.T) {
 	}
 }
 
+func TestAttachment_S3Streaming(t *testing.T) {
+	ctx := context.Background()
+	db, _ := newS3AttachDB(t)
+	db.SetBlobStreaming(true)
+	owner := uuid.New()
+	payload := []byte("streamed attachment, длинновато чтобы подвигать seek туда-сюда")
+
+	att, err := db.UploadAttachment(ctx, "document", "order", owner, "s.txt", "text/plain", "ivan", bytes.NewReader(payload), 1<<20)
+	if err != nil {
+		t.Fatalf("UploadAttachment: %v", err)
+	}
+	rsc, _, err := db.OpenAttachment(ctx, att.ID)
+	if err != nil {
+		t.Fatalf("OpenAttachment(stream): %v", err)
+	}
+	defer rsc.Close()
+	// Seekable (ServeContent так делает): в конец за размером, потом в начало.
+	if sz, err := rsc.Seek(0, io.SeekEnd); err != nil || sz != int64(len(payload)) {
+		t.Fatalf("Seek end = %d, %v; want %d", sz, err, len(payload))
+	}
+	if _, err := rsc.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(rsc)
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("streamed content mismatch: %q", got)
+	}
+	// В streaming-режиме временная копия не создаётся.
+	if _, err := os.Stat(filepath.Join(db.filesDir, "_attach_tmp")); !os.IsNotExist(err) {
+		t.Errorf("streaming не должен создавать _attach_tmp: %v", err)
+	}
+}
+
 func TestAttachment_S3ModeSwitchKeepsDisk(t *testing.T) {
 	ctx := context.Background()
 	db, _ := newS3AttachDB(t)

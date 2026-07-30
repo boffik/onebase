@@ -47,6 +47,15 @@ func (m *memBlobStore) DeleteObject(_ context.Context, key string) error {
 	return nil
 }
 
+func (m *memBlobStore) OpenReadSeeker(_ context.Context, key string, _ int64) io.ReadSeekCloser {
+	return nopSeekCloser{bytes.NewReader(m.objs[key])}
+}
+
+// nopSeekCloser adds a no-op Close to a *bytes.Reader (which is a ReadSeeker).
+type nopSeekCloser struct{ *bytes.Reader }
+
+func (nopSeekCloser) Close() error { return nil }
+
 func blobLoc(t *testing.T, db *DB, id uuid.UUID) (loc string, dataLen int) {
 	t.Helper()
 	var data []byte

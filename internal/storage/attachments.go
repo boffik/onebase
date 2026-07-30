@@ -296,6 +296,15 @@ func (db *DB) OpenAttachment(ctx context.Context, id uuid.UUID) (io.ReadSeekClos
 		return nil, nil, err
 	}
 	if a.Loc == FileStorageS3 {
+		if db.blobStore == nil {
+			return nil, nil, fmt.Errorf("attachments: вложение %s в S3, но клиент S3 не сконфигурирован (file_storage.s3)", a.ID)
+		}
+		// Потоковая раздача (file_storage.s3.stream): ленивый Range-ридер прямо из
+		// S3, без временной копии. Размер известен из метаданных, поэтому
+		// http.ServeContent измеряет длину и обрабатывает Range без лишних запросов.
+		if db.blobStream {
+			return db.blobStore.OpenReadSeeker(ctx, db.attachmentObjectKey(a.OwnerName, a.ID), a.SizeBytes), a, nil
+		}
 		dir, err := db.downloadAttachmentTemp(ctx, a)
 		if err != nil {
 			return nil, nil, err

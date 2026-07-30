@@ -22,6 +22,7 @@ file_storage:
     secret_key: ${env:FS_SECRET}
     use_ssl: false
     path_style: true
+    stream: true
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config", "app.yaml"), raw, 0o644); err != nil {
 		t.Fatal(err)
@@ -48,5 +49,8 @@ file_storage:
 	}
 	if s3.PathStyle == nil || *s3.PathStyle != true {
 		t.Errorf("path_style want true, got %v", s3.PathStyle)
+	}
+	if s3.Stream == nil || *s3.Stream != true {
+		t.Errorf("stream want true, got %v", s3.Stream)
 	}
 }

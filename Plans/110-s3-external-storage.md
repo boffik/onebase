@@ -1,10 +1,11 @@
 # План 110 — Внешнее (S3-совместимое) хранилище: бэкап и бинарники
 
 **Статус:** ✅ Этап 1 (S3-выгрузка автобэкапа, PR #486). ✅ Этап 2a (S3-бэкенд
-image-блобов, PR #487). ✅ Этап 2b (S3-бэкенд вложений, ветка
-`feature/110-s3-attachments`). План 110 закрыт.
-**Ветки:** `feature/110-s3-external-storage` (этап 1), `feature/110-s3-blob-backend`
-(этап 2a), `feature/110-s3-attachments` (этап 2b).
+image-блобов, PR #487). ✅ Этап 2b (S3-бэкенд вложений, PR #488). ✅ Этап 2c
+(опциональный S3-Range-стриминг раздачи вложений, ветка
+`feature/110-s3-stream-attachments`). План 110 закрыт.
+**Ветки:** `feature/110-s3-external-storage` (1), `feature/110-s3-blob-backend`
+(2a), `feature/110-s3-attachments` (2b), `feature/110-s3-stream-attachments` (2c).
 **Дата проектирования:** 2026-07-30.
 
 ## Контекст и мотив
@@ -139,9 +140,9 @@ backup:
 ('' = легаси disk). Как решены файловые допущения:
 
 - **Раздача через `http.ServeContent`** (нужен seekable): выбрана **материализация
-  во временный файл** — `OpenAttachment` теперь возвращает `io.ReadSeekCloser`; для
-  s3 объект скачивается в temp-файл (seekable, Range работает), `Close` удаляет его.
-  Ленивый S3-Range-ридер — возможная будущая оптимизация (без temp на раздаче).
+  во временный файл** (по умолчанию) — `OpenAttachment` возвращает
+  `io.ReadSeekCloser`; для s3 объект скачивается в temp-файл (seekable, Range
+  работает), `Close` удаляет его. Опциональный стриминг — этап 2c ниже.
 - **DSL `ПутьКВложению`** (нужен путь на диске): новый метод `MaterializeAttachment`
   — disk отдаёт реальный путь (cleanup=nil), s3 скачивает в temp-каталог с
   basename=ИД (чтобы demo-песочница восстановила id) и возвращает `cleanup`.
@@ -152,6 +153,26 @@ backup:
   компенсация при откате DSL-транзакции удаляет объект (паритет с диском).
 - **Раздатчики не изменились**: `attachmentDownload`/v2 используют `f` как
   `io.ReadSeeker`+`Close` — новый тип подошёл без правок.
+
+## Этап 2c — опциональный S3-Range-стриминг раздачи вложений (реализовано)
+
+Флаг `file_storage.s3.stream: true` (по умолчанию false) переключает раздачу
+S3-вложений с temp-файла на **ленивый Range-ридер** прямо из S3 — без локальной
+копии. Оставлен опцией, т.к. у temp-файла есть своя польза (развязывает скорость
+S3 от медленного клиента; полнота фич ServeContent).
+
+- `objstore.OpenReadSeeker(ctx, key, size) io.ReadSeekCloser` + `rangeReader`:
+  `Seek` только двигает оффсет (сети нет — `Seek(0,End)` отдаёт известный размер),
+  `Read` открывает `GET Range: bytes=<pos>-`. Тело закрывается/переоткрывается при
+  прыжке. `getFrom` принимает 200 и 206.
+- Интеграция без правок раздатчиков: `BlobObjectStore` += `OpenReadSeeker`;
+  `DB.blobStream` + `SetBlobStreaming`; `OpenAttachment` при `stream` отдаёт ридер
+  вместо temp — `http.ServeContent` работает как раньше (Range → 206).
+- Не влияет на картинки (уже стримятся через `io.Copy`) и на `ПутьКВложению`
+  (всегда нужен реальный путь → temp).
+- Тесты: `objstore` (full/range через Seek; **e2e через `ServeContent` с реальным
+  206 Range-ответом**); `storage` (streaming `OpenAttachment`, temp не создаётся);
+  парсинг `stream`.
 
 ## Definition of done
 
@@ -164,3 +185,6 @@ backup:
   `MaterializeAttachment` (temp + `context.AfterFunc`) для DSL `ПутьКВложению` и
   email-резолвера; `OpenAttachment → io.ReadSeekCloser`; тесты (роутинг,
   mode-switch, not-configured, real-client e2e); `docs/features.md`; зелёные.
+- **Этап 2c:** ✅ `objstore.OpenReadSeeker`/`rangeReader`; `file_storage.s3.stream`
+  + `SetBlobStreaming`; стриминг в `OpenAttachment`; тесты (ServeContent+206 e2e,
+  streaming open, config); `docs/features.md`; зелёные.

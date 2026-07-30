@@ -147,6 +147,106 @@ func (c *Client) GetObject(ctx context.Context, key string) (io.ReadCloser, int6
 	return resp.Body, resp.ContentLength, nil
 }
 
+// getFrom issues a GET for key starting at offset (Range: bytes=offset-) and
+// returns the body; the caller closes it. offset 0 sends no Range (full object).
+func (c *Client) getFrom(ctx context.Context, key string, offset int64) (io.ReadCloser, error) {
+	host, canonicalURI := c.hostAndPath(key)
+	req, err := c.newRequest(ctx, http.MethodGet, host, canonicalURI, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
+	c.sign(req, emptyPayloadHash, time.Now().UTC())
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+		return nil, s3Error(resp.StatusCode, body)
+	}
+	return resp.Body, nil
+}
+
+// OpenReadSeeker returns a lazy, Range-backed io.ReadSeekCloser over key. size
+// must be the object's size (the caller knows it from stored metadata) so Seek
+// to the end needs no request. No I/O happens until the first Read; Read fetches
+// only from the current offset. This lets http.ServeContent stream an object
+// (honoring Range requests) without a local temp copy.
+func (c *Client) OpenReadSeeker(ctx context.Context, key string, size int64) io.ReadSeekCloser {
+	return &rangeReader{
+		ctx:  ctx,
+		size: size,
+		get: func(ctx context.Context, offset int64) (io.ReadCloser, error) {
+			return c.getFrom(ctx, key, offset)
+		},
+	}
+}
+
+// rangeReader is a lazy io.ReadSeekCloser over an object: Seek only moves an
+// offset (no I/O); Read opens a ranged GET at the current offset. The body is
+// closed and reopened when a Seek jumps the offset.
+type rangeReader struct {
+	ctx  context.Context
+	get  func(ctx context.Context, offset int64) (io.ReadCloser, error)
+	size int64
+	pos  int64
+	body io.ReadCloser
+}
+
+func (r *rangeReader) Read(p []byte) (int, error) {
+	if r.pos >= r.size {
+		return 0, io.EOF
+	}
+	if r.body == nil {
+		b, err := r.get(r.ctx, r.pos)
+		if err != nil {
+			return 0, err
+		}
+		r.body = b
+	}
+	n, err := r.body.Read(p)
+	r.pos += int64(n)
+	return n, err
+}
+
+func (r *rangeReader) Seek(offset int64, whence int) (int64, error) {
+	var abs int64
+	switch whence {
+	case io.SeekStart:
+		abs = offset
+	case io.SeekCurrent:
+		abs = r.pos + offset
+	case io.SeekEnd:
+		abs = r.size + offset
+	default:
+		return 0, fmt.Errorf("objstore: invalid whence %d", whence)
+	}
+	if abs < 0 {
+		return 0, fmt.Errorf("objstore: negative seek position %d", abs)
+	}
+	if abs != r.pos {
+		r.closeBody()
+		r.pos = abs
+	}
+	return abs, nil
+}
+
+func (r *rangeReader) closeBody() {
+	if r.body != nil {
+		r.body.Close()
+		r.body = nil
+	}
+}
+
+func (r *rangeReader) Close() error {
+	r.closeBody()
+	return nil
+}
+
 // DeleteObject removes key. A missing key is not treated as an error by S3.
 func (c *Client) DeleteObject(ctx context.Context, key string) error {
 	host, canonicalURI := c.hostAndPath(key)
