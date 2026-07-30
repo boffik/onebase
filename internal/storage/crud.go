@@ -279,10 +279,33 @@ func normalizeNumber(v any) any {
 }
 
 // normalizeFieldValue нормализует значение с учётом типа поля. Числовые поля
-// всегда возвращаются как decimal.Decimal — единая точность на PG и SQLite.
+// всегда возвращаются как decimal.Decimal, поля-даты — как time.Time — единая
+// типизация на PG и SQLite.
 func normalizeFieldValue(f metadata.Field, v any) any {
 	if f.Type == metadata.FieldTypeNumber {
 		return normalizeNumber(v)
+	}
+	if f.Type == metadata.FieldTypeDate {
+		return normalizeDate(v)
+	}
+	return normalizeValue(v)
+}
+
+// normalizeDate приводит значение поля-даты к time.Time. На PostgreSQL драйвер
+// уже отдаёт time.Time; на SQLite дата хранится строкой (RFC3339), и без
+// приведения загруженный объект (Ссылка.ПолучитьОбъект) нёс бы Дату строкой —
+// в отличие от свежесозданного (Создать), у которого это time.Time. Из-за
+// этого арифметика дат (КонецДня, Дата + Число) и сравнения в проведении
+// перезаписанного документа молча ломались. Нераспознанную строку и nil
+// оставляем как есть (безопасный откат к прежнему поведению).
+func normalizeDate(v any) any {
+	switch t := v.(type) {
+	case time.Time:
+		return t
+	case string:
+		if parsed, ok := ParseRegPeriod(t); ok {
+			return parsed
+		}
 	}
 	return normalizeValue(v)
 }
