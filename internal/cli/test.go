@@ -39,6 +39,8 @@ var testCmd = &cobra.Command{
 func init() {
 	addBaseFlags(testCmd)
 	testCmd.Flags().String("run", "", "маска по имени теста (регистронезависимая подстрока)")
+	testCmd.Flags().String("isolation", "transaction",
+		"изоляция данных между тестами: transaction (откат после каждого) | none")
 	rootCmd.AddCommand(testCmd)
 }
 
@@ -73,7 +75,13 @@ func runTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	filter, _ := cmd.Flags().GetString("run")
-	res, err := ui.RunTests(ctx, proj, db, filter)
+	isolation, _ := cmd.Flags().GetString("isolation")
+	switch isolation {
+	case "", ui.IsolationTransaction, ui.IsolationNone:
+	default:
+		return fmt.Errorf("неизвестный режим --isolation %q (доступны transaction, none)", isolation)
+	}
+	res, err := ui.RunTests(ctx, proj, db, ui.TestRunOptions{Filter: filter, Isolation: isolation})
 	if err != nil {
 		return err
 	}

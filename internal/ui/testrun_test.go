@@ -84,7 +84,7 @@ func caseByName(res TestRunResult, name string) *TestCaseResult {
 
 func TestRunTests_DiscoversOnlyKindTest(t *testing.T) {
 	proj, db := loadTestRunnerProject(t)
-	res, err := RunTests(context.Background(), proj, db, "")
+	res, err := RunTests(context.Background(), proj, db, TestRunOptions{})
 	if err != nil {
 		t.Fatalf("RunTests: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestRunTests_DiscoversOnlyKindTest(t *testing.T) {
 
 func TestRunTests_PassFailErrorEmpty(t *testing.T) {
 	proj, db := loadTestRunnerProject(t)
-	res, err := RunTests(context.Background(), proj, db, "")
+	res, err := RunTests(context.Background(), proj, db, TestRunOptions{})
 	if err != nil {
 		t.Fatalf("RunTests: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestRunTests_PassFailErrorEmpty(t *testing.T) {
 
 func TestRunTests_FilterByName(t *testing.T) {
 	proj, db := loadTestRunnerProject(t)
-	res, err := RunTests(context.Background(), proj, db, "pass")
+	res, err := RunTests(context.Background(), proj, db, TestRunOptions{Filter: "pass"})
 	if err != nil {
 		t.Fatalf("RunTests: %v", err)
 	}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -9,7 +10,23 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+)
+
+// Режимы изоляции данных между тестами.
+const (
+	// IsolationTransaction — каждый тест в своей транзакции, откат после
+	// (значение по умолчанию). Пишущие тесты не видят записей друг друга и не
+	// оставляют следов. Работает на SQLite и PostgreSQL: пути записи DSL
+	// (Записать/Провести) присоединяются к открытой транзакции через savepoint.
+	IsolationTransaction = "transaction"
+	// IsolationNone — без изоляции: записи персистятся и видны следующим тестам.
+	// Для чистых юнит-тестов без записи или когда тест сам чистит за собой.
+	IsolationNone = "none"
+	// IsolationSchema — эфемерная схема на прогон (PostgreSQL). Обрабатывается
+	// на уровне подключения до RunTests (см. cli.test), сюда приходит как none.
+	IsolationSchema = "schema"
 )
 
 // Раннер тестов уровня конфигурации (план 108). Находит тест-обработки
@@ -69,47 +86,87 @@ func (t *testRecorder) RecordAssert(o interpreter.AssertOutcome) {
 	t.outcomes = append(t.outcomes, o)
 }
 
-// RunTests находит тест-обработки, гоняет каждую и собирает итоги. filter —
-// необязательная маска по имени (регистронезависимая подстрока); пусто — все.
-// Ошибка возвращается только при сбое окружения (сборка сервера, отсутствие
-// обработки); провалы самих тестов — в TestRunResult.
-func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, filter string) (TestRunResult, error) {
+// TestRunOptions управляет прогоном тестов.
+type TestRunOptions struct {
+	Filter    string // маска по имени (регистронезависимая подстрока); пусто — все
+	Isolation string // IsolationTransaction (по умолчанию) | IsolationNone
+}
+
+// RunTests находит тест-обработки, гоняет каждую и собирает итоги. Ошибка
+// возвращается только при сбое окружения (сборка сервера, старт транзакции,
+// отсутствие обработки); провалы самих тестов — в TestRunResult.
+func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts TestRunOptions) (TestRunResult, error) {
 	s, reg, err := NewOfflineServer(proj, db)
 	if err != nil {
 		return TestRunResult{}, err
 	}
+	isolation := opts.Isolation
+	if isolation == "" {
+		isolation = IsolationTransaction
+	}
 
 	var res TestRunResult
-	for _, proc := range selectTests(proj, filter) {
-		rec := &testRecorder{}
-		assert := interpreter.NewAssertRoot(rec)
-		extra := map[string]any{"Утверждать": assert, "Assert": assert}
-
-		start := time.Now()
-		msgs, runErr, envErr := s.RunProcessor(ctx, reg, proc.Name, nil, nil, extra)
-		dur := time.Since(start)
+	for _, proc := range selectTests(proj, opts.Filter) {
+		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation)
 		if envErr != nil {
 			return res, envErr
-		}
-
-		c := TestCaseResult{
-			Name:     proc.Name,
-			Title:    proc.DisplayName(""),
-			Asserts:  rec.outcomes,
-			Err:      runErr,
-			Messages: msgs,
-			Duration: dur,
-		}
-		for _, o := range rec.outcomes {
-			if o.Passed {
-				c.Passed++
-			} else {
-				c.Failed++
-			}
 		}
 		res.Cases = append(res.Cases, c)
 	}
 	return res, nil
+}
+
+// runOneTest гоняет один тест-процессор, при необходимости оборачивая его в
+// транзакцию с откатом (изоляция данных). Возвращает ошибку только при сбое
+// окружения; провал/ошибку самого теста несёт TestCaseResult.
+func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string) (TestCaseResult, error) {
+	rec := &testRecorder{}
+	assert := interpreter.NewAssertRoot(rec)
+	extra := map[string]any{"Утверждать": assert, "Assert": assert}
+
+	runCtx := ctx
+	var tx storage.Tx
+	if isolation == IsolationTransaction {
+		var (
+			txCtx context.Context
+			err   error
+		)
+		tx, txCtx, err = db.BeginTx(ctx)
+		if err != nil {
+			return TestCaseResult{}, fmt.Errorf("тест %s: старт транзакции: %w", proc.Name, err)
+		}
+		runCtx = txCtx
+	}
+
+	start := time.Now()
+	msgs, runErr, envErr := s.RunProcessor(runCtx, reg, proc.Name, nil, nil, extra)
+	dur := time.Since(start)
+
+	// Всегда откатываем: тесты не должны оставлять данных, даже успешные.
+	// Откат по txCtx, а не ctx — иначе SQLite не найдёт транзакцию.
+	if tx != nil {
+		_ = tx.Rollback(runCtx)
+	}
+	if envErr != nil {
+		return TestCaseResult{}, envErr
+	}
+
+	c := TestCaseResult{
+		Name:     proc.Name,
+		Title:    proc.DisplayName(""),
+		Asserts:  rec.outcomes,
+		Err:      runErr,
+		Messages: msgs,
+		Duration: dur,
+	}
+	for _, o := range rec.outcomes {
+		if o.Passed {
+			c.Passed++
+		} else {
+			c.Failed++
+		}
+	}
+	return c, nil
 }
 
 // selectTests возвращает тест-обработки, отсортированные по имени (для
