@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ivantit66/onebase/internal/project"
+	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/ivantit66/onebase/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +42,7 @@ func init() {
 	addBaseFlags(testCmd)
 	testCmd.Flags().String("run", "", "маска по имени теста (регистронезависимая подстрока)")
 	testCmd.Flags().String("isolation", "transaction",
-		"изоляция данных между тестами: transaction (откат после каждого) | none")
+		"изоляция данных: transaction (откат после теста) | none | schema (эфемерная схема PostgreSQL)")
 	testCmd.Flags().String("format", "pretty", "формат отчёта: pretty | tap | junit")
 	testCmd.Flags().String("out", "", "файл для отчёта (по умолчанию stdout)")
 	rootCmd.AddCommand(testCmd)
@@ -50,9 +51,9 @@ func init() {
 func runTest(cmd *cobra.Command, _ []string) error {
 	isolation, _ := cmd.Flags().GetString("isolation")
 	switch isolation {
-	case "", ui.IsolationTransaction, ui.IsolationNone:
+	case "", ui.IsolationTransaction, ui.IsolationNone, ui.IsolationSchema:
 	default:
-		return fmt.Errorf("неизвестный режим --isolation %q (доступны transaction, none)", isolation)
+		return fmt.Errorf("неизвестный режим --isolation %q (доступны transaction, none, schema)", isolation)
 	}
 	format, _ := cmd.Flags().GetString("format")
 	switch format {
@@ -68,11 +69,18 @@ func runTest(cmd *cobra.Command, _ []string) error {
 	defer bc.Cleanup()
 
 	ctx := context.Background()
-	db, err := bc.OpenDB(ctx)
+
+	// schema-изоляция: весь прогон во временной схеме PostgreSQL, удаляемой
+	// CASCADE в конце. Внутри тесты идут без пер-тестовой транзакции (none) —
+	// режим для тестов, которые сами управляют транзакциями. Только PostgreSQL.
+	db, runIsolation, cleanupSchema, err := openDBForIsolation(ctx, bc, isolation)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	if cleanupSchema != nil {
+		defer cleanupSchema()
+	}
 
 	proj, err := project.Load(bc.Dir)
 	if err != nil {
@@ -91,7 +99,7 @@ func runTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	filter, _ := cmd.Flags().GetString("run")
-	res, err := ui.RunTests(ctx, proj, db, ui.TestRunOptions{Filter: filter, Isolation: isolation})
+	res, err := ui.RunTests(ctx, proj, db, ui.TestRunOptions{Filter: filter, Isolation: runIsolation})
 	if err != nil {
 		return err
 	}
@@ -108,11 +116,44 @@ func runTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	if !res.OK() {
-		bc.Cleanup() // defer не выполнится при os.Exit
+		if cleanupSchema != nil {
+			cleanupSchema() // defer не выполнится при os.Exit — чистим схему явно
+		}
 		db.Close()
+		bc.Cleanup()
 		os.Exit(1)
 	}
 	return nil
+}
+
+// openDBForIsolation открывает БД для прогона. Для schema-изоляции создаёт
+// эфемерную схему PostgreSQL и возвращает cleanup для её удаления; внутренняя
+// (пер-тестовая) изоляция при этом — none. Для transaction/none открывает базу
+// обычным способом.
+func openDBForIsolation(ctx context.Context, bc *baseConfig, isolation string) (db *storage.DB, runIsolation string, cleanupSchema func(), err error) {
+	if isolation != ui.IsolationSchema {
+		db, err = bc.OpenDB(ctx)
+		return db, isolation, nil, err
+	}
+	if bc.DBType == "sqlite" {
+		return nil, "", nil, fmt.Errorf("--isolation schema доступна только на PostgreSQL (для SQLite используйте transaction или :memory:)")
+	}
+	schema := storage.NewEphemeralSchemaName()
+	db, err = storage.ConnectWithSchema(ctx, bc.DSN, schema)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if err = db.CreateSchema(ctx, schema); err != nil {
+		db.Close()
+		return nil, "", nil, fmt.Errorf("создать временную схему %s: %w", schema, err)
+	}
+	cleanup := func() {
+		if derr := db.DropSchemaCascade(context.Background(), schema); derr != nil {
+			fmt.Fprintf(os.Stderr, "предупреждение: не удалось удалить временную схему %s: %v\n", schema, derr)
+		}
+	}
+	// Внутри эфемерной схемы тесты идут без пер-тестового отката.
+	return db, ui.IsolationNone, cleanup, nil
 }
 
 // emitReport пишет отчёт в файл (--out) или в stdout. При записи в файл в
