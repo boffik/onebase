@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/storage"
 )
@@ -113,6 +114,70 @@ func TestApplyFileStorageS3_EndToEnd(t *testing.T) {
 	mu.Unlock()
 	if stillThere {
 		t.Fatal("object should be deleted from S3 after DeleteBlob")
+	}
+}
+
+// TestApplyFileStorageS3_AttachmentEndToEnd drives the real objstore client
+// through the attachment API: upload → open (seekable) → delete round-trips
+// through the stand-in S3 server.
+func TestApplyFileStorageS3_AttachmentEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	objects := map[string][]byte{}
+	var mu sync.Mutex
+	srv := fakeS3Server(objects, &mu)
+	defer srv.Close()
+
+	db, err := storage.ConnectSQLite(ctx, filepath.Join(t.TempDir(), "att-e2e.db"))
+	if err != nil {
+		t.Fatalf("ConnectSQLite: %v", err)
+	}
+	defer db.Close()
+	if err := db.EnsureAttachmentTable(ctx); err != nil {
+		t.Fatalf("EnsureAttachmentTable: %v", err)
+	}
+	appCfg := &project.AppConfig{FileStorage: &project.FileStorageConfig{S3: &project.S3Config{
+		Endpoint: strings.TrimPrefix(srv.URL, "http://"), Bucket: "bucket", Prefix: "px/",
+		AccessKey: "AKIA_TEST", SecretKey: "secret", UseSSL: boolPtr(false), PathStyle: boolPtr(true),
+	}}}
+	if err := applyFileStorageS3(db, appCfg); err != nil {
+		t.Fatalf("applyFileStorageS3: %v", err)
+	}
+	if err := db.SaveFileStorageMode(ctx, storage.FileStorageS3); err != nil {
+		t.Fatalf("SaveFileStorageMode: %v", err)
+	}
+
+	owner := uuid.New()
+	payload := []byte("real end-to-end attachment bytes")
+	att, err := db.UploadAttachment(ctx, "document", "order", owner, "f.txt", "text/plain", "ivan", bytes.NewReader(payload), 1<<20)
+	if err != nil {
+		t.Fatalf("UploadAttachment: %v", err)
+	}
+	wantPath := "/bucket/px/attachments/order/" + att.ID.String()
+	mu.Lock()
+	stored, ok := objects[wantPath]
+	mu.Unlock()
+	if !ok || !bytes.Equal(stored, payload) {
+		t.Fatalf("attachment not stored at %s (ok=%v len=%d)", wantPath, ok, len(stored))
+	}
+
+	rsc, _, err := db.OpenAttachment(ctx, att.ID)
+	if err != nil {
+		t.Fatalf("OpenAttachment: %v", err)
+	}
+	got, _ := io.ReadAll(rsc)
+	rsc.Close()
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("OpenAttachment content mismatch: %q", got)
+	}
+
+	if err := db.DeleteAttachment(ctx, att.ID); err != nil {
+		t.Fatalf("DeleteAttachment: %v", err)
+	}
+	mu.Lock()
+	_, stillThere := objects[wantPath]
+	mu.Unlock()
+	if stillThere {
+		t.Fatal("attachment object should be deleted from S3")
 	}
 }
 
