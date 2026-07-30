@@ -3,11 +3,13 @@ package backup
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/ivantit66/onebase/internal/objstore"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/scheduler"
 )
@@ -49,10 +51,10 @@ func RegisterAutoBackup(cfg *project.BackupConfig, target AutoTarget, sched *sch
 // CreateAutoBackup creates one backup file and rotates older files according to
 // cfg.KeepLast. It returns the created backup path.
 func CreateAutoBackup(ctx context.Context, cfg *project.BackupConfig, target AutoTarget) (string, error) {
-	return createAutoBackup(ctx, cfg, target, dumpAutoTarget)
+	return createAutoBackup(ctx, cfg, target, dumpAutoTarget, newObjectStore)
 }
 
-func createAutoBackup(ctx context.Context, cfg *project.BackupConfig, target AutoTarget, dumper autoDumper) (string, error) {
+func createAutoBackup(ctx context.Context, cfg *project.BackupConfig, target AutoTarget, dumper autoDumper, mkStore storeFactory) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("auto backup: config is nil")
 	}
@@ -68,7 +70,107 @@ func createAutoBackup(ctx context.Context, cfg *project.BackupConfig, target Aut
 	if err := RotateBackups(dir, keepLast); err != nil {
 		return path, err
 	}
+	// Опциональная off-site выгрузка. Локальная копия уже создана — ошибка S3
+	// возвращается наверх (планировщик её залогирует), но path остаётся валидным.
+	if cfg.S3 != nil {
+		if err := uploadToS3(ctx, cfg.S3, path, mkStore); err != nil {
+			return path, err
+		}
+	}
 	return path, nil
+}
+
+// ObjectStore is the minimal S3 surface auto-backup needs; injected for tests.
+type ObjectStore interface {
+	PutObject(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
+	ListKeys(ctx context.Context, prefix string) ([]string, error)
+	DeleteObject(ctx context.Context, key string) error
+}
+
+// storeFactory builds an ObjectStore from S3 config; overridable in tests.
+type storeFactory func(*project.S3Config) (ObjectStore, error)
+
+func newObjectStore(c *project.S3Config) (ObjectStore, error) {
+	return objstore.New(objstore.Config{
+		Endpoint:  c.Endpoint,
+		Region:    c.Region,
+		Bucket:    c.Bucket,
+		AccessKey: c.AccessKey,
+		SecretKey: c.SecretKey,
+		UseSSL:    c.UseSSL,
+		PathStyle: c.PathStyle,
+	})
+}
+
+// uploadToS3 pushes the freshly created backup file to the configured bucket
+// and, when cfg.KeepLast > 0, rotates older objects under the same prefix.
+func uploadToS3(ctx context.Context, cfg *project.S3Config, localPath string, mkStore storeFactory) error {
+	store, err := mkStore(cfg)
+	if err != nil {
+		return fmt.Errorf("auto backup: s3 init: %w", err)
+	}
+	f, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("auto backup: s3 open %s: %w", localPath, err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("auto backup: s3 stat: %w", err)
+	}
+	name := filepath.Base(localPath)
+	if err := store.PutObject(ctx, s3Key(cfg.Prefix, name), f, info.Size(), contentTypeFor(name)); err != nil {
+		return fmt.Errorf("auto backup: s3 upload: %w", err)
+	}
+	if cfg.KeepLast > 0 {
+		if err := rotateS3(ctx, store, cfg.Prefix, cfg.KeepLast); err != nil {
+			return fmt.Errorf("auto backup: s3 rotate: %w", err)
+		}
+	}
+	return nil
+}
+
+// s3Key joins a key prefix and file name with a single "/".
+func s3Key(prefix, name string) string {
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
+		return name
+	}
+	return prefix + "/" + name
+}
+
+func contentTypeFor(name string) string {
+	if strings.HasSuffix(strings.ToLower(name), ".gz") {
+		return "application/gzip"
+	}
+	return "application/octet-stream"
+}
+
+// rotateS3 keeps the newest keepLast backup objects under prefix and deletes
+// older ones. Backup file names embed a sortable timestamp, so lexical
+// descending order is newest-first.
+func rotateS3(ctx context.Context, store ObjectStore, prefix string, keepLast int) error {
+	listPrefix := strings.TrimSuffix(prefix, "/")
+	if listPrefix != "" {
+		listPrefix += "/"
+	}
+	keys, err := store.ListKeys(ctx, listPrefix)
+	if err != nil {
+		return err
+	}
+	backups := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if isBackupFile(k) {
+			backups = append(backups, k)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(backups)))
+	for _, k := range backups[min(keepLast, len(backups)):] {
+		if err := store.DeleteObject(ctx, k); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AutoBackupDir returns the effective backup directory.

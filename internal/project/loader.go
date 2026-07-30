@@ -106,10 +106,26 @@ type DemoConfig struct {
 
 // BackupConfig holds automatic backup settings from app.yaml section "backup".
 type BackupConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Schedule  string `yaml:"schedule"`  // cron, по умолчанию "0 2 * * *"
-	KeepLast  int    `yaml:"keep_last"` // по умолчанию 7
-	Directory string `yaml:"directory"` // пусто = <project>/backups
+	Enabled   bool      `yaml:"enabled"`
+	Schedule  string    `yaml:"schedule"`     // cron, по умолчанию "0 2 * * *"
+	KeepLast  int       `yaml:"keep_last"`    // по умолчанию 7
+	Directory string    `yaml:"directory"`    // пусто = <project>/backups
+	S3        *S3Config `yaml:"s3,omitempty"` // опциональная off-site выгрузка в S3
+}
+
+// S3Config describes an optional S3-compatible off-site target for backups
+// (AWS S3, MinIO, Ceph RGW, …). Секреты задавайте через ${env:VAR}, чтобы ключи
+// жили в окружении, а не в app.yaml / git / дампе конфигурации.
+type S3Config struct {
+	Endpoint  string `yaml:"endpoint"`             // host[:port], напр. s3.amazonaws.com или minio.local:9000
+	Region    string `yaml:"region"`               // напр. us-east-1 (по умолчанию us-east-1)
+	Bucket    string `yaml:"bucket"`               //
+	Prefix    string `yaml:"prefix"`               // ключ-префикс в бакете, напр. "prod/"
+	AccessKey string `yaml:"access_key"`           // или ${env:VAR}
+	SecretKey string `yaml:"secret_key"`           // или ${env:VAR}
+	UseSSL    *bool  `yaml:"use_ssl,omitempty"`    // nil = true (https)
+	PathStyle *bool  `yaml:"path_style,omitempty"` // nil = true (scheme://endpoint/bucket/key)
+	KeepLast  int    `yaml:"keep_last"`            // ротация объектов в бакете; 0 = не ротировать
 }
 
 // AIConfig holds non-secret AI assistant settings from app.yaml section "ai".
@@ -208,7 +224,21 @@ func LoadConfig(dir string) (*AppConfig, error) {
 		expandLLMEnv(cfg.LLM)
 	}
 	expandWebhookEnv(cfg.Webhooks)
+	if cfg.Backup != nil {
+		expandBackupEnv(cfg.Backup)
+	}
 	return &cfg, nil
+}
+
+// expandBackupEnv подставляет ${env:VAR} в секрет-носители off-site бэкапа
+// (эндпойнт и ключи доступа S3), чтобы креды жили в окружении, а не в YAML.
+func expandBackupEnv(b *BackupConfig) {
+	if b.S3 == nil {
+		return
+	}
+	b.S3.Endpoint = expandEnvRefs(b.S3.Endpoint)
+	b.S3.AccessKey = expandEnvRefs(b.S3.AccessKey)
+	b.S3.SecretKey = expandEnvRefs(b.S3.SecretKey)
 }
 
 // expandWebhookEnv подставляет ${env:VAR} в секрет-носители веб-хуков
