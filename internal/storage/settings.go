@@ -353,6 +353,10 @@ const (
 	FileStorageDisk = "disk"
 	// FileStorageDB — содержимое лежит в BLOB-колонке таблицы _blobs (в БД).
 	FileStorageDB = "db"
+	// FileStorageS3 — содержимое лежит в S3-совместимом объектном хранилище; в
+	// _blobs только метаданные (loc='s3'). Клиент S3 инжектируется в DB из
+	// конфига (file_storage.s3), креды — вне БД. См. SetBlobStore, план 110.
+	FileStorageS3 = "s3"
 )
 
 // GetFileStorageMode читает режим хранения бинарников из _settings
@@ -367,19 +371,26 @@ func (db *DB) GetFileStorageMode(ctx context.Context) string {
 	if err != nil {
 		return FileStorageDisk
 	}
-	if strings.TrimSpace(v) == FileStorageDB {
+	switch strings.TrimSpace(v) {
+	case FileStorageDB:
 		return FileStorageDB
+	case FileStorageS3:
+		return FileStorageS3
+	default:
+		return FileStorageDisk
 	}
-	return FileStorageDisk
 }
 
 // SaveFileStorageMode сохраняет режим хранения бинарников в _settings.
-// Любое значение кроме FileStorageDB трактуется как FileStorageDisk.
+// Допустимы FileStorageDB и FileStorageS3; любое иное значение → FileStorageDisk.
 func (db *DB) SaveFileStorageMode(ctx context.Context, mode string) error {
 	if err := db.EnsureSettingsSchema(ctx); err != nil {
 		return err
 	}
-	if mode != FileStorageDB {
+	switch mode {
+	case FileStorageDB, FileStorageS3:
+		// допустимые режимы — сохраняем как есть
+	default:
 		mode = FileStorageDisk
 	}
 	d := db.dialect

@@ -89,6 +89,14 @@ func (db *DB) EnsureBlobTable(ctx context.Context) error {
 	if err := db.AddColumnIfMissing(ctx, "_blobs", "dsl_managed", "BIGINT NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("blobs: dsl_managed: %w", err)
 	}
+	// Где лежит содержимое блоба: 'disk' | 'db' | 's3'. Пусто = легаси-строка,
+	// созданная до появления колонки: тогда источник определяется по наличию
+	// данных в колонке data (непусто → db-байты, иначе → файл на диске). Новые
+	// строки всегда пишут loc явно, поэтому смена режима хранения не осиротит
+	// уже записанные блобы (каждый знает своё место). План 110, этап 2.
+	if err := db.AddColumnIfMissing(ctx, "_blobs", "loc", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("blobs: loc: %w", err)
+	}
 	return nil
 }
 
@@ -108,52 +116,87 @@ func (db *DB) PutBlob(ctx context.Context, mime string, r io.Reader, maxSizeByte
 		dslManaged = 1
 	}
 	limited := io.LimitReader(r, maxSizeBytes+1)
+	tooLarge := func() error {
+		return fmt.Errorf("%w: %s", ErrBlobTooLarge,
+			i18nerr.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024)))
+	}
+	// insertMeta пишет строку _blobs без содержимого (disk/s3): байты лежат вне БД.
+	insertMeta := func(size int64, loc string) error {
+		q := fmt.Sprintf(`INSERT INTO _blobs (id, mime, size, owner_kind, owner_entity, created_at, dsl_managed, loc) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8))
+		_, err := db.Exec(ctx, q, id.String(), mime, size, owner.Kind, owner.Entity, createdAt, dslManaged, loc)
+		return err
+	}
+	result := func(size int64) Blob {
+		return Blob{ID: id, Mime: mime, Size: size, OwnerKind: owner.Kind, OwnerEntity: owner.Entity}
+	}
 
-	if db.GetFileStorageMode(ctx) == FileStorageDB {
+	switch db.GetFileStorageMode(ctx) {
+	case FileStorageDB:
 		data, err := io.ReadAll(limited)
 		if err != nil {
 			return Blob{}, err
 		}
 		if int64(len(data)) > maxSizeBytes {
-			return Blob{}, fmt.Errorf("%w: %s", ErrBlobTooLarge,
-				i18nerr.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024)))
+			return Blob{}, tooLarge()
 		}
-		q := fmt.Sprintf(`INSERT INTO _blobs (id, mime, size, data, owner_kind, owner_entity, created_at, dsl_managed) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)`,
-			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8))
-		if _, err := db.Exec(ctx, q, id.String(), mime, int64(len(data)), data, owner.Kind, owner.Entity, createdAt, dslManaged); err != nil {
+		q := fmt.Sprintf(`INSERT INTO _blobs (id, mime, size, data, owner_kind, owner_entity, created_at, dsl_managed, loc) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)`,
+			d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8), d.Placeholder(9))
+		if _, err := db.Exec(ctx, q, id.String(), mime, int64(len(data)), data, owner.Kind, owner.Entity, createdAt, dslManaged, FileStorageDB); err != nil {
 			return Blob{}, err
 		}
-		return Blob{ID: id, Mime: mime, Size: int64(len(data)), OwnerKind: owner.Kind, OwnerEntity: owner.Entity}, nil
-	}
+		return result(int64(len(data))), nil
 
-	// Дисковый режим: файл на диске, в _blobs только метаданные.
-	dir := filepath.Join(db.filesDir, blobsDirName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Blob{}, err
+	case FileStorageS3:
+		if db.blobStore == nil {
+			return Blob{}, fmt.Errorf("blobs: file_storage=s3, но клиент S3 не сконфигурирован (file_storage.s3)")
+		}
+		// Как и в db-режиме, буферизуем в память (ограничено maxSizeBytes) —
+		// нужен размер для Content-Length одиночного PUT.
+		data, err := io.ReadAll(limited)
+		if err != nil {
+			return Blob{}, err
+		}
+		if int64(len(data)) > maxSizeBytes {
+			return Blob{}, tooLarge()
+		}
+		key := db.blobObjectKey(id)
+		if err := db.blobStore.PutObject(ctx, key, bytes.NewReader(data), int64(len(data)), mime); err != nil {
+			return Blob{}, fmt.Errorf("blobs: s3 put: %w", err)
+		}
+		if err := insertMeta(int64(len(data)), FileStorageS3); err != nil {
+			// Компенсируем: объект уже залит, а строки нет — убираем объект.
+			_ = db.blobStore.DeleteObject(ctx, key)
+			return Blob{}, err
+		}
+		return result(int64(len(data))), nil
+
+	default: // FileStorageDisk — файл на диске, в _blobs только метаданные.
+		dir := filepath.Join(db.filesDir, blobsDirName)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return Blob{}, err
+		}
+		fp := filepath.Join(dir, id.String())
+		f, err := os.Create(fp)
+		if err != nil {
+			return Blob{}, err
+		}
+		n, err := io.Copy(f, limited)
+		f.Close()
+		if err != nil {
+			os.Remove(fp)
+			return Blob{}, err
+		}
+		if n > maxSizeBytes {
+			os.Remove(fp)
+			return Blob{}, tooLarge()
+		}
+		if err := insertMeta(n, FileStorageDisk); err != nil {
+			os.Remove(fp)
+			return Blob{}, err
+		}
+		return result(n), nil
 	}
-	fp := filepath.Join(dir, id.String())
-	f, err := os.Create(fp)
-	if err != nil {
-		return Blob{}, err
-	}
-	n, err := io.Copy(f, limited)
-	f.Close()
-	if err != nil {
-		os.Remove(fp)
-		return Blob{}, err
-	}
-	if n > maxSizeBytes {
-		os.Remove(fp)
-		return Blob{}, fmt.Errorf("%w: %s", ErrBlobTooLarge,
-			i18nerr.Errorf("файл превышает максимальный размер %d МБ", maxSizeBytes/(1024*1024)))
-	}
-	q := fmt.Sprintf(`INSERT INTO _blobs (id, mime, size, owner_kind, owner_entity, created_at, dsl_managed) VALUES (%s,%s,%s,%s,%s,%s,%s)`,
-		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4), d.Placeholder(5), d.Placeholder(6), d.Placeholder(7))
-	if _, err := db.Exec(ctx, q, id.String(), mime, n, owner.Kind, owner.Entity, createdAt, dslManaged); err != nil {
-		os.Remove(fp)
-		return Blob{}, err
-	}
-	return Blob{ID: id, Mime: mime, Size: n, OwnerKind: owner.Kind, OwnerEntity: owner.Entity}, nil
 }
 
 // OpenBlob возвращает метаданные и читателя содержимого бинарника. Вызывающий
@@ -163,17 +206,29 @@ func (db *DB) OpenBlob(ctx context.Context, id uuid.UUID) (Blob, io.ReadCloser, 
 	var mime string
 	var size int64
 	var data []byte
-	var ownerKind, ownerEntity string
+	var ownerKind, ownerEntity, loc string
 	err := db.QueryRow(ctx,
-		fmt.Sprintf(`SELECT mime, size, data, owner_kind, owner_entity FROM _blobs WHERE id=%s`, d.Placeholder(1)),
-		id.String()).Scan(&mime, &size, &data, &ownerKind, &ownerEntity)
+		fmt.Sprintf(`SELECT mime, size, data, owner_kind, owner_entity, loc FROM _blobs WHERE id=%s`, d.Placeholder(1)),
+		id.String()).Scan(&mime, &size, &data, &ownerKind, &ownerEntity, &loc)
 	if err != nil {
 		return Blob{}, nil, err
 	}
 	b := Blob{ID: id, Mime: mime, Size: size, OwnerKind: ownerKind, OwnerEntity: ownerEntity}
+	if loc == FileStorageS3 {
+		if db.blobStore == nil {
+			return Blob{}, nil, fmt.Errorf("blobs: блоб %s в S3, но клиент S3 не сконфигурирован", id)
+		}
+		rc, _, err := db.blobStore.GetObject(ctx, db.blobObjectKey(id))
+		if err != nil {
+			return Blob{}, nil, err
+		}
+		return b, rc, nil
+	}
+	// db-режим или легаси-строка с содержимым в колонке data.
 	if len(data) > 0 {
 		return b, io.NopCloser(bytes.NewReader(data)), nil
 	}
+	// disk-режим или легаси-строка без данных → файл на диске.
 	f, err := os.Open(filepath.Join(db.filesDir, blobsDirName, id.String()))
 	if err != nil {
 		return Blob{}, nil, err
@@ -181,10 +236,26 @@ func (db *DB) OpenBlob(ctx context.Context, id uuid.UUID) (Blob, io.ReadCloser, 
 	return b, f, nil
 }
 
-// DeleteBlob удаляет бинарник (файл на диске, если есть) и строку метаданных.
+// DeleteBlob удаляет содержимое бинарника (файл на диске / объект в S3, если
+// есть) и строку метаданных. Отсутствующий блоб — не ошибка (идемпотентно, важно
+// для сборки мусора). Для s3-блоба сначала удаляем объект; если это не удалось —
+// строку НЕ трогаем (БД остаётся источником правды, удаление можно повторить).
 func (db *DB) DeleteBlob(ctx context.Context, id uuid.UUID) error {
-	os.Remove(filepath.Join(db.filesDir, blobsDirName, id.String()))
 	d := db.dialect
+	var loc string
+	_ = db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT loc FROM _blobs WHERE id=%s`, d.Placeholder(1)), id.String()).Scan(&loc)
+	if loc == FileStorageS3 {
+		if db.blobStore == nil {
+			return fmt.Errorf("blobs: блоб %s в S3, но клиент S3 не сконфигурирован — удаление невозможно", id)
+		}
+		if err := db.blobStore.DeleteObject(ctx, db.blobObjectKey(id)); err != nil {
+			return fmt.Errorf("blobs: s3 delete: %w", err)
+		}
+	} else {
+		// disk / db / легаси: файла на диске может не быть (db-режим) — это не ошибка.
+		os.Remove(filepath.Join(db.filesDir, blobsDirName, id.String()))
+	}
 	_, err := db.Exec(ctx,
 		fmt.Sprintf(`DELETE FROM _blobs WHERE id=%s`, d.Placeholder(1)), id.String())
 	return err

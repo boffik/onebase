@@ -58,6 +58,14 @@ func runProcrun(cmd *cobra.Command, _ []string) error {
 	}
 	defer proj.Close()
 
+	// file_storage.s3: обработка может сохранять картинки (СохранитьКартинку),
+	// поэтому S3-бэкенд нужен и в headless-режиме.
+	if appCfg, cfgErr := project.LoadConfig(bc.Dir); cfgErr == nil {
+		if err := applyFileStorageS3(db, appCfg); err != nil {
+			return err
+		}
+	}
+
 	// Offline processors use the same catalog/document writers as the server.
 	// Those writers may emit mandatory audit events (for example governed
 	// publish/rollback decisions), so procrun must initialize the platform

@@ -234,6 +234,11 @@ func runDev(cmd *cobra.Command, _ []string) error {
 	}
 	interp.StrictLexicalScope = appDSLStrictLexicalScope(appCfg)
 
+	// file_storage.s3 (план 110, этап 2): S3-бэкенд image-блобов для dev-сервера.
+	if err := applyFileStorageS3(db, appCfg); err != nil {
+		return err
+	}
+
 	uiCfg := ui.Config{
 		DSN:              dsn,
 		DatabaseType:     "postgres",

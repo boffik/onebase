@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,10 +18,38 @@ import (
 // pgxpool.Pool or a SQLite *sql.DB, plus the matching Dialect. All Exec/Query
 // methods route to the right backend transparently.
 type DB struct {
-	pool     *pgxpool.Pool // non-nil for PG
-	sqlDB    *sql.DB       // non-nil for SQLite
-	filesDir string
-	dialect  Dialect
+	pool       *pgxpool.Pool // non-nil for PG
+	sqlDB      *sql.DB       // non-nil for SQLite
+	filesDir   string
+	dialect    Dialect
+	blobStore  BlobObjectStore // non-nil when file_storage=s3 configured
+	blobPrefix string          // key prefix for blob objects in the bucket
+}
+
+// BlobObjectStore is the S3-compatible backend used when file_storage=s3
+// (план 110, этап 2). objstore.Client satisfies it structurally, so storage
+// does not import objstore — the client is injected via SetBlobStore from the
+// CLI, where app.yaml (file_storage.s3) is available.
+type BlobObjectStore interface {
+	PutObject(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
+	GetObject(ctx context.Context, key string) (io.ReadCloser, int64, error)
+	DeleteObject(ctx context.Context, key string) error
+}
+
+// SetBlobStore attaches an S3-compatible object store for blob content and the
+// key prefix under which blobs live. Passing nil disables S3 (falls back to the
+// configured disk/db mode).
+func (db *DB) SetBlobStore(store BlobObjectStore, prefix string) {
+	db.blobStore = store
+	db.blobPrefix = strings.Trim(prefix, "/")
+}
+
+// blobObjectKey builds the bucket key for a blob id: [<prefix>/]blobs/<id>.
+func (db *DB) blobObjectKey(id uuid.UUID) string {
+	if db.blobPrefix == "" {
+		return "blobs/" + id.String()
+	}
+	return db.blobPrefix + "/blobs/" + id.String()
 }
 
 func pgQuoteIdent(s string) string {

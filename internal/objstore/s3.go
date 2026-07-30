@@ -126,6 +126,27 @@ func (c *Client) PutObject(ctx context.Context, key string, r io.Reader, size in
 	return c.do(req, http.StatusOK)
 }
 
+// GetObject fetches key and returns a reader over its body plus the object
+// size (from Content-Length, -1 if unknown). The caller must close the reader.
+func (c *Client) GetObject(ctx context.Context, key string) (io.ReadCloser, int64, error) {
+	host, canonicalURI := c.hostAndPath(key)
+	req, err := c.newRequest(ctx, http.MethodGet, host, canonicalURI, "", nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	c.sign(req, emptyPayloadHash, time.Now().UTC())
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+		return nil, 0, s3Error(resp.StatusCode, body)
+	}
+	return resp.Body, resp.ContentLength, nil
+}
+
 // DeleteObject removes key. A missing key is not treated as an error by S3.
 func (c *Client) DeleteObject(ctx context.Context, key string) error {
 	host, canonicalURI := c.hostAndPath(key)
