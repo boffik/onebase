@@ -265,6 +265,25 @@ func TestSetExternalReports_MergeAndPriority(t *testing.T) {
 	}
 }
 
+// Тест-обработки (kind: test) не попадают в пользовательский список
+// Processors(), но остаются доступными по имени через GetProcessor (нужно
+// раннеру onebase test).
+func TestProcessorsExcludesTests(t *testing.T) {
+	r := NewRegistry()
+	r.mu.Lock()
+	r.processors["Обычная"] = &processor.Processor{Name: "Обычная"}
+	r.processors["ТестХ"] = &processor.Processor{Name: "ТестХ", Kind: "test"}
+	r.mu.Unlock()
+
+	list := r.Processors()
+	if len(list) != 1 || list[0].Name != "Обычная" {
+		t.Fatalf("Processors() должен вернуть только «Обычная», got %+v", list)
+	}
+	if p := r.GetProcessor("ТестХ"); p == nil || !p.IsTest() {
+		t.Fatalf("тест-обработка должна быть доступна по имени, got %+v", p)
+	}
+}
+
 // Внешняя обработка регистрируется вместе с кодом; GetProcessor/GetProcedure
 // её находят, External выставляется, при коллизии имени приоритет у конфигурации.
 func TestSetExternalProcessors(t *testing.T) {

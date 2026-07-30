@@ -2,12 +2,62 @@ package storage
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/metadata"
 )
+
+func TestIsInMemorySQLite(t *testing.T) {
+	cases := map[string]bool{
+		":memory:":                       true,
+		"file::memory:":                  true,
+		"file::memory:?cache=shared":     true,
+		"file:test?mode=memory":          true,
+		"file:/tmp/x.db?mode=memory":     true,
+		"prodbase.db":                    false,
+		"/var/data/base.db":              false,
+		"file:/tmp/real.db?cache=shared": false,
+	}
+	for path, want := range cases {
+		if got := isInMemorySQLite(path); got != want {
+			t.Errorf("isInMemorySQLite(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+// In-memory база подключается без создания файла на диске и работает как
+// обычная (миграция + запись/чтение). Раннер тестов полагается на это для
+// `onebase test --sqlite :memory:`.
+func TestSQLiteInMemory(t *testing.T) {
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, ":memory:")
+	if err != nil {
+		t.Fatalf("ConnectSQLite(:memory:): %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.sqlDB.ExecContext(ctx, "CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)"); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := db.sqlDB.ExecContext(ctx, "INSERT INTO t(v) VALUES('x')"); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	var n int
+	if err := db.sqlDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM t").Scan(&n); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("count = %d, want 1", n)
+	}
+	// Файл с именем «:memory:» не должен появиться в рабочей папке.
+	if _, err := os.Stat(":memory:"); err == nil {
+		os.Remove(":memory:")
+		t.Fatal("in-memory подключение создало файл «:memory:» на диске")
+	}
+}
 
 func TestSQLiteSmoke(t *testing.T) {
 	ctx := context.Background()

@@ -20,12 +20,16 @@ type Param struct {
 }
 
 type Processor struct {
-	Name       string                    `yaml:"name"`
-	Title      string                    `yaml:"title"`
-	Titles     map[string]string         `yaml:"titles"`
-	Params     []Param                   `yaml:"params"`
-	TableParts []metadata.TablePart      `yaml:"table_parts"`
-	Forms      []*metadata.FormModule    `yaml:"-"`
+	Name   string            `yaml:"name"`
+	Title  string            `yaml:"title"`
+	Titles map[string]string `yaml:"titles"`
+	// Kind помечает роль обработки. Пусто — обычная обработка. "test" — тест
+	// уровня конфигурации: попадает в дискавери `onebase test` (план 108) и
+	// прячется из общего списка обработок пользователя.
+	Kind       string                 `yaml:"kind"`
+	Params     []Param                `yaml:"params"`
+	TableParts []metadata.TablePart   `yaml:"table_parts"`
+	Forms      []*metadata.FormModule `yaml:"-"`
 
 	// External помечает обработку из внешнего контура (таблица
 	// _ext_processors), а не из конфигурации проекта. Trusted — признак того,
@@ -40,6 +44,11 @@ type Processor struct {
 	// (см. project.loadProcessorLayouts) и инжектируется в DSL как переменная
 	// «Макет» во всех путях запуска обработки. В YAML не сериализуется.
 	Layout *printform.LayoutTemplate `yaml:"-"`
+}
+
+// IsTest сообщает, что обработка — тест уровня конфигурации (kind: test).
+func (p *Processor) IsTest() bool {
+	return strings.EqualFold(p.Kind, "test")
 }
 
 // DisplayLabel возвращает подпись параметра с учётом языка.

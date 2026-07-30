@@ -48,32 +48,52 @@ func ConnectSQLite(ctx context.Context, dbPath string) (*DB, error) {
 		return nil, i18nerr.New("storage: sqlite: пустой путь к файлу базы данных")
 	}
 
-	// Ensure absolute path — relative paths fail on Windows when the working
-	// directory is restricted (e.g. Program Files).
-	absPath, err := filepath.Abs(dbPath)
-	if err != nil {
-		return nil, i18nerr.Wrapf(err, "storage: sqlite: не удалось получить абсолютный путь %q", dbPath)
-	}
-	dbPath = absPath
+	// In-memory база (:memory: / file::memory:) — чистая БД на процесс, без
+	// файла на диске. Нужна раннеру тестов (onebase test --sqlite :memory:) и
+	// песочнице eval: каждый запуск стартует с пустой схемы, ничего не оседает
+	// в рабочей папке. Пропускаем работу с ФС (Abs/MkdirAll/probe создали бы
+	// мусорный файл с именем «:memory:»); вложения/файлы — во временную папку.
+	// Один коннект в пуле (см. ниже) держит БД живой на всё время работы.
+	inMemory := isInMemorySQLite(dbPath)
 
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, i18nerr.Wrapf(err, "storage: sqlite: не удалось создать папку %q", dir)
-	}
-
-	// Quick write-permission check before handing path to SQLite.
-	probe := filepath.Join(dir, ".onebase_probe")
-	if f, ferr := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY, 0o600); ferr != nil {
-		return nil, i18nerr.Wrapf(ferr, "storage: sqlite: нет прав на запись в папку %q", dir)
+	var dsnPath, filesDir string
+	if inMemory {
+		tmp, terr := os.MkdirTemp("", "onebase-mem-files-")
+		if terr != nil {
+			return nil, i18nerr.Wrapf(terr, "storage: sqlite: не удалось создать временную папку файлов")
+		}
+		dsnPath = dbPath
+		filesDir = tmp
 	} else {
-		f.Close()
-		os.Remove(probe)
+		// Ensure absolute path — relative paths fail on Windows when the working
+		// directory is restricted (e.g. Program Files).
+		absPath, err := filepath.Abs(dbPath)
+		if err != nil {
+			return nil, i18nerr.Wrapf(err, "storage: sqlite: не удалось получить абсолютный путь %q", dbPath)
+		}
+		dbPath = absPath
+
+		dir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, i18nerr.Wrapf(err, "storage: sqlite: не удалось создать папку %q", dir)
+		}
+
+		// Quick write-permission check before handing path to SQLite.
+		probe := filepath.Join(dir, ".onebase_probe")
+		if f, ferr := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY, 0o600); ferr != nil {
+			return nil, i18nerr.Wrapf(ferr, "storage: sqlite: нет прав на запись в папку %q", dir)
+		} else {
+			f.Close()
+			os.Remove(probe)
+		}
+
+		// modernc.org/sqlite uses "sqlite" driver name (not "sqlite3").
+		// On Windows use forward slashes — the transpiled SQLite C code handles
+		// them better than backslashes in some path formats.
+		dsnPath = filepath.ToSlash(dbPath)
+		filesDir = defaultFilesDirForSQLite(dbPath)
 	}
 
-	// modernc.org/sqlite uses "sqlite" driver name (not "sqlite3").
-	// On Windows use forward slashes — the transpiled SQLite C code handles
-	// them better than backslashes in some path formats.
-	dsnPath := filepath.ToSlash(dbPath)
 	conn, err := sql.Open("sqlite", dsnPath)
 	if err != nil {
 		return nil, fmt.Errorf("storage: sqlite: open %q: %w", dbPath, err)
@@ -107,12 +127,25 @@ func ConnectSQLite(ctx context.Context, dbPath string) (*DB, error) {
 		}
 	}
 
-	filesDir := defaultFilesDirForSQLite(dbPath)
 	return &DB{
 		sqlDB:    conn,
 		filesDir: filesDir,
 		dialect:  SQLiteDialect{},
 	}, nil
+}
+
+// isInMemorySQLite распознаёт in-memory формы пути SQLite: канонический
+// «:memory:» и DSN-формы, где имя файла пустое, а память задана параметром
+// (file::memory:… / …mode=memory…).
+func isInMemorySQLite(dbPath string) bool {
+	if dbPath == ":memory:" {
+		return true
+	}
+	low := strings.ToLower(dbPath)
+	if strings.HasPrefix(low, "file::memory:") {
+		return true
+	}
+	return strings.HasPrefix(low, "file:") && strings.Contains(low, "mode=memory")
 }
 
 // ValidateQuery компилирует (PREPARE) SQL без исполнения — для статической

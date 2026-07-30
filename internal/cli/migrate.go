@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/ivantit66/onebase/internal/configdb"
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/spf13/cobra"
 )
 
 var migrateCmd = &cobra.Command{
@@ -59,6 +59,19 @@ func runMigrate(cmd *cobra.Command, _ []string) error {
 	}
 	defer proj.Close()
 
+	if err := applyAllMigrations(ctx, db, proj); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, "migration complete")
+	return nil
+}
+
+// applyAllMigrations приводит схему БД в соответствие метаданным проекта:
+// справочники/документы, регистры, константы, план счетов и регистры
+// бухгалтерии, таблицы вложений/blob'ов. Идемпотентно. Используется командой
+// migrate и раннером тестов (onebase test), которому нужна готовая схема на
+// свежей (в т.ч. :memory:) базе.
+func applyAllMigrations(ctx context.Context, db *storage.DB, proj *project.Project) error {
 	if err := db.Migrate(ctx, proj.Entities); err != nil {
 		return err
 	}
@@ -89,7 +102,6 @@ func runMigrate(cmd *cobra.Command, _ []string) error {
 	if err := db.EnsureBlobTable(ctx); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stdout, "migration complete")
 	return nil
 }
 

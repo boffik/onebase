@@ -17,6 +17,19 @@ import (
 // (UTF-8 с откатом на Windows-1251), как при загрузке через браузер.
 // Возвращает сообщения (Сообщить) и ошибку выполнения скрипта, если она была.
 func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage.DB, procName string, strParams, fileParams map[string]string) (messages []string, runErr error, err error) {
+	s, reg, err := NewOfflineServer(proj, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.RunProcessor(ctx, reg, procName, strParams, fileParams, nil)
+}
+
+// NewOfflineServer собирает Server и Registry для офлайн-прогона обработок вне
+// HTTP-сервера (procrun, раннер тестов). Регистрирует справочники/документы/
+// регистры/модули/обработки так же, как полный сервер, чтобы запись данных,
+// проведение и запросы работали идентично. Один и тот же сервер можно
+// переиспользовать для нескольких обработок (например, набора тестов).
+func NewOfflineServer(proj *project.Project, db *storage.DB) (*Server, *runtime.Registry, error) {
 	reg := runtime.NewRegistry()
 	reg.Load(runtime.LoadOptions{
 		Entities:        proj.Entities,
@@ -59,7 +72,14 @@ func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage
 	// Запись справочников/документов из обработки (catWriter/docWriter →
 	// entityservice.Save) должна работать и в offline-режиме.
 	s.entitySvc = s.newEntityService(nil)
+	return s, reg, nil
+}
 
+// RunProcessor выполняет процедуру Выполнить() обработки procName на уже
+// собранном офлайн-сервере. extraVars инжектируются в окружение DSL поверх
+// стандартных переменных (например, объект «Утверждать» для тестов). Возвращает
+// сообщения (Сообщить) и ошибку выполнения скрипта, если она была.
+func (s *Server) RunProcessor(ctx context.Context, reg *runtime.Registry, procName string, strParams, fileParams map[string]string, extraVars map[string]any) (messages []string, runErr error, err error) {
 	proc := reg.GetProcessor(procName)
 	if proc == nil {
 		return nil, nil, fmt.Errorf("обработка %q не найдена", procName)
@@ -92,6 +112,9 @@ func RunProcessorOffline(ctx context.Context, proj *project.Project, db *storage
 	dslVars := s.buildDSLVarsWithMessages(ctx, mc, &messages)
 	dslVars["Параметры"] = paramsThis
 	interpreter.InjectMaket(dslVars, proc.Layout)
+	for k, v := range extraVars {
+		dslVars[k] = v
+	}
 
 	runErr = s.interp.Run(procDecl, paramsThis, dslVars)
 	return messages, runErr, nil
