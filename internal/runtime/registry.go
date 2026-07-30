@@ -910,11 +910,18 @@ func (r *Registry) GetSiblingProc(currentFile, name string) *ast.ProcedureDecl {
 	return nil
 }
 
+// Processors возвращает список обработок для показа пользователю (меню,
+// страница функций, AI-инструменты). Тест-обработки (kind: test, план 108)
+// сюда не попадают — они не пользовательские, их гоняет только `onebase test`;
+// по имени они по-прежнему доступны через GetProcessor (нужно раннеру).
 func (r *Registry) Processors() []*processor.Processor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]*processor.Processor, 0, len(r.processors)+len(r.extProcessors))
 	for _, p := range r.processors {
+		if p.IsTest() {
+			continue
+		}
 		out = append(out, p)
 	}
 	// внешние обработки, чьё имя не занято конфигурацией

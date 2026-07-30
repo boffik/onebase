@@ -402,7 +402,7 @@ func roleYAMLSchema() *yamlLintSchema {
 
 func processorYAMLSchema() *yamlLintSchema {
 	param := with(obj("name", "type", "label", "default", "options"), map[string]*yamlLintSchema{"labels": freeMap()})
-	return with(obj("name", "title"), map[string]*yamlLintSchema{
+	return with(obj("name", "title", "kind"), map[string]*yamlLintSchema{
 		"titles":      freeMap(),
 		"params":      seq(param),
 		"table_parts": seq(tablePartYAMLSchema()),
@@ -1352,6 +1352,11 @@ func CheckLintRoles(dir string, proj *project.Project, roles []*auth.Role) []Iss
 	}
 	if !processorsOpen {
 		for _, proc := range proj.Processors {
+			// Тест-обработки (kind: test) не показываются пользователю и не
+			// требуют прав в ролях — их гоняет только раннер `onebase test`.
+			if proc.IsTest() {
+				continue
+			}
 			if !coveredProcessors[strings.ToLower(proc.Name)] {
 				add("processors/"+proc.Name+".yaml", proc.Name, "Обработка")
 			}
