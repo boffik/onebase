@@ -125,7 +125,10 @@ type S3Config struct {
 	SecretKey string `yaml:"secret_key"`           // или ${env:VAR}
 	UseSSL    *bool  `yaml:"use_ssl,omitempty"`    // nil = true (https)
 	PathStyle *bool  `yaml:"path_style,omitempty"` // nil = true (scheme://endpoint/bucket/key)
-	KeepLast  int    `yaml:"keep_last"`            // ротация объектов в бакете; 0 = не ротировать
+	KeepLast  int    `yaml:"keep_last"`            // ротация объектов в бакете; 0 = не ротировать (только backup)
+	// Stream (только file_storage): раздавать S3-вложения потоком через Range
+	// вместо временной копии на диске. nil/false = временный файл (по умолчанию).
+	Stream *bool `yaml:"stream,omitempty"`
 }
 
 // FileStorageConfig holds the optional S3-compatible backend for живые файлы

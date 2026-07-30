@@ -34,6 +34,9 @@ func applyFileStorageS3(db *storage.DB, appCfg *project.AppConfig) error {
 		return fmt.Errorf("file_storage.s3: %w", err)
 	}
 	db.SetBlobStore(client, s3.Prefix)
+	if s3.Stream != nil && *s3.Stream {
+		db.SetBlobStreaming(true)
+	}
 	// Подчищаем возможные протёкшие temp-материализации S3-вложений от прошлых
 	// запусков (backstop к per-request context.AfterFunc, план 110, этап 2b).
 	db.SweepAttachmentTemp()

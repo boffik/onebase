@@ -190,6 +190,98 @@ func TestGetObjectRoundTrip(t *testing.T) {
 	}
 }
 
+func makePayload(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(i % 251)
+	}
+	return b
+}
+
+func TestOpenReadSeeker_FullAndRange(t *testing.T) {
+	payload := makePayload(1000)
+	// Upstream S3 stand-in that honors Range (http.ServeContent does the parsing).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "x", time.Time{}, bytes.NewReader(payload))
+	}))
+	defer srv.Close()
+	c := testClient(t, srv)
+
+	// Seek to end returns the known size (no network needed).
+	rs := c.OpenReadSeeker(context.Background(), "blobs/x", int64(len(payload)))
+	if sz, err := rs.Seek(0, io.SeekEnd); err != nil || sz != int64(len(payload)) {
+		t.Fatalf("Seek end = %d, %v; want %d", sz, err, len(payload))
+	}
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	full, _ := io.ReadAll(rs)
+	rs.Close()
+	if !bytes.Equal(full, payload) {
+		t.Fatalf("full read mismatch (%d bytes)", len(full))
+	}
+
+	// Seek then read a middle window.
+	rs2 := c.OpenReadSeeker(context.Background(), "blobs/x", int64(len(payload)))
+	defer rs2.Close()
+	if _, err := rs2.Seek(400, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	win := make([]byte, 100)
+	if _, err := io.ReadFull(rs2, win); err != nil {
+		t.Fatalf("ReadFull: %v", err)
+	}
+	if !bytes.Equal(win, payload[400:500]) {
+		t.Fatalf("range window mismatch")
+	}
+}
+
+// TestOpenReadSeeker_ServeContent proves the real flow: an attachment download
+// handler using http.ServeContent over the streaming seeker serves both a full
+// download and a client Range request correctly.
+func TestOpenReadSeeker_ServeContent(t *testing.T) {
+	payload := makePayload(2000)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "x", time.Time{}, bytes.NewReader(payload))
+	}))
+	defer upstream.Close()
+	c := testClient(t, upstream)
+
+	dl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rs := c.OpenReadSeeker(r.Context(), "blobs/x", int64(len(payload)))
+		defer rs.Close()
+		http.ServeContent(w, r, "file.bin", time.Time{}, rs)
+	}))
+	defer dl.Close()
+
+	// Full download.
+	resp, err := http.Get(dl.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !bytes.Equal(body, payload) {
+		t.Fatalf("full: status=%d len=%d", resp.StatusCode, len(body))
+	}
+
+	// Range request bytes=500-799.
+	req, _ := http.NewRequest("GET", dl.URL, nil)
+	req.Header.Set("Range", "bytes=500-799")
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	part, _ := io.ReadAll(resp2.Body)
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusPartialContent {
+		t.Fatalf("range status = %d, want 206", resp2.StatusCode)
+	}
+	if !bytes.Equal(part, payload[500:800]) {
+		t.Fatalf("range body mismatch (%d bytes)", len(part))
+	}
+}
+
 func TestGetObjectNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

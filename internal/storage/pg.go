@@ -24,6 +24,7 @@ type DB struct {
 	dialect    Dialect
 	blobStore  BlobObjectStore // non-nil when file_storage=s3 configured
 	blobPrefix string          // key prefix for blob objects in the bucket
+	blobStream bool            // s3 attachments: stream via Range instead of temp file
 }
 
 // BlobObjectStore is the S3-compatible backend used when file_storage=s3
@@ -34,6 +35,10 @@ type BlobObjectStore interface {
 	PutObject(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	GetObject(ctx context.Context, key string) (io.ReadCloser, int64, error)
 	DeleteObject(ctx context.Context, key string) error
+	// OpenReadSeeker returns a lazy, Range-backed seekable reader over key (size
+	// is the known object size). Used to stream S3 attachments via
+	// http.ServeContent without a temp copy, when streaming is enabled.
+	OpenReadSeeker(ctx context.Context, key string, size int64) io.ReadSeekCloser
 }
 
 // SetBlobStore attaches an S3-compatible object store for blob content and the
@@ -43,6 +48,13 @@ func (db *DB) SetBlobStore(store BlobObjectStore, prefix string) {
 	db.blobStore = store
 	db.blobPrefix = strings.Trim(prefix, "/")
 }
+
+// SetBlobStreaming toggles streaming S3 attachment downloads via Range requests
+// (file_storage.s3.stream) instead of materializing a temp file for serving.
+// Off by default: the temp-file path is simpler and decouples S3 fetch speed
+// from a slow client. Does not affect image blobs (already streamed) or DSL
+// ПутьКВложению (always materialized to a real path).
+func (db *DB) SetBlobStreaming(on bool) { db.blobStream = on }
 
 // blobObjectKey builds the bucket key for a blob id: [<prefix>/]blobs/<id>.
 func (db *DB) blobObjectKey(id uuid.UUID) string {
