@@ -84,12 +84,20 @@ func (s *Server) emailAttachmentPathResolver(ctxFn func() context.Context) inter
 			if accessErr := s.checkDSLRowAccess(ctx, entity, "read", att.OwnerID, nil); accessErr != nil {
 				return "", accessErr
 			}
-			f, _, openErr := s.store.OpenAttachment(ctx, id)
-			if openErr != nil {
-				return "", openErr
+			storedPath, cleanup, matAtt, matErr := s.store.MaterializeAttachment(ctx, id)
+			if matErr != nil {
+				return "", matErr
 			}
-			storedPath := f.Name()
-			_ = f.Close()
+			if cleanup != nil {
+				context.AfterFunc(ctx, cleanup)
+			}
+			// S3-вложение: локального «настоящего» пути нет, каждая материализация
+			// даёт новый temp-путь. Доступ уже авторизован RLS-проверкой выше —
+			// отдаём свежую материализацию (её basename = ИД вложения).
+			if matAtt.Loc == storage.FileStorageS3 {
+				return storedPath, nil
+			}
+			// disk: путь должен совпадать с запрошенным (та же защита, что была).
 			want, absErr := filepath.Abs(filepath.Clean(path))
 			if absErr != nil {
 				return "", sandboxErr
@@ -209,13 +217,15 @@ func (s *Server) registerAttachmentBuiltins(vars map[string]any, ctxFn func() co
 		if err := s.checkDSLRowAccess(ctx, entity, "read", att.OwnerID, nil); err != nil {
 			return nil, fmt.Errorf("ПутьКВложению: %w", err)
 		}
-		f, _, err := s.store.OpenAttachment(ctx, id)
+		p, cleanup, _, err := s.store.MaterializeAttachment(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("ПутьКВложению: %w", err)
 		}
-		path := f.Name()
-		f.Close()
-		return path, nil
+		// Для S3 путь — временный файл; чистим его по завершении запроса/прогона.
+		if cleanup != nil {
+			context.AfterFunc(ctx, cleanup)
+		}
+		return p, nil
 	})
 
 	delFn := interpreter.BuiltinFunc(func(args []any, _ string, _ int) (any, error) {

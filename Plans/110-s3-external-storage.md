@@ -1,9 +1,10 @@
 # План 110 — Внешнее (S3-совместимое) хранилище: бэкап и бинарники
 
-**Статус:** ✅ Этап 1 (S3-выгрузка автобэкапа, PR #486, влит). ✅ Этап 2a
-(S3-бэкенд image-блобов, ветка `feature/110-s3-blob-backend`). ⬜ Этап 2b
-(S3-бэкенд вложений) — проект.
-**Ветки:** `feature/110-s3-external-storage` (этап 1), `feature/110-s3-blob-backend` (этап 2a).
+**Статус:** ✅ Этап 1 (S3-выгрузка автобэкапа, PR #486). ✅ Этап 2a (S3-бэкенд
+image-блобов, PR #487). ✅ Этап 2b (S3-бэкенд вложений, ветка
+`feature/110-s3-attachments`). План 110 закрыт.
+**Ветки:** `feature/110-s3-external-storage` (этап 1), `feature/110-s3-blob-backend`
+(этап 2a), `feature/110-s3-attachments` (этап 2b).
 **Дата проектирования:** 2026-07-30.
 
 ## Контекст и мотив
@@ -131,16 +132,26 @@ backup:
   при сбое INSERT после PUT объект удаляется. Известный зазор (паритет с диском):
   откат внешней DSL-транзакции осиротит объект в бакете (нет строки → GC не видит).
 
-## Этап 2b — S3-бэкенд вложений (проект, отдельный PR)
+## Этап 2b — S3-бэкенд вложений (реализовано)
 
-Сложнее блобов из-за файловых допущений:
-- раздача через `http.ServeContent` (нужен seekable/Range) — S3-объект не seekable
-  → ленивый `ReadSeeker` поверх S3 Range **или** материализация во временный файл;
-- DSL `ПутьКВложению` возвращает `f.Name()` (путь на диске) — для S3 только
-  материализация во временный файл (продумать жизненный цикл temp).
+Тот же режим `ui.file_storage=s3` и тот же инжектируемый `BlobObjectStore`, что и
+у блобов; ключи `[<prefix>/]attachments/<owner>/<id>`; колонка `_attachments.loc`
+('' = легаси disk). Как решены файловые допущения:
 
-Отдельный `loc` на `_attachments`, ключи `attachments/<owner>/<id>`, режим — тот же
-`ui.file_storage`.
+- **Раздача через `http.ServeContent`** (нужен seekable): выбрана **материализация
+  во временный файл** — `OpenAttachment` теперь возвращает `io.ReadSeekCloser`; для
+  s3 объект скачивается в temp-файл (seekable, Range работает), `Close` удаляет его.
+  Ленивый S3-Range-ридер — возможная будущая оптимизация (без temp на раздаче).
+- **DSL `ПутьКВложению`** (нужен путь на диске): новый метод `MaterializeAttachment`
+  — disk отдаёт реальный путь (cleanup=nil), s3 скачивает в temp-каталог с
+  basename=ИД (чтобы demo-песочница восстановила id) и возвращает `cleanup`.
+  Жизненный цикл — `context.AfterFunc(ctx, cleanup)`: temp живёт до конца
+  запроса/прогона. `emailAttachmentPathResolver` для s3 авторизует по RLS и отдаёт
+  свежую материализацию (path-match — только для disk).
+- **Загрузка** — стейджинг во временный файл (ограничение памяти), потом PUT;
+  компенсация при откате DSL-транзакции удаляет объект (паритет с диском).
+- **Раздатчики не изменились**: `attachmentDownload`/v2 используют `f` как
+  `io.ReadSeeker`+`Close` — новый тип подошёл без правок.
 
 ## Definition of done
 
@@ -149,4 +160,7 @@ backup:
 - **Этап 2a:** ✅ `objstore.GetObject`; `BlobObjectStore`+`loc` в `storage`;
   `file_storage.s3` + инжекция; тесты (роутинг, mode-switch, not-configured,
   put-error, real-client e2e через httptest); `docs/features.md`; зелёные.
-- **Этап 2b:** отдельный PR по разделу выше.
+- **Этап 2b:** ✅ `_attachments.loc` + маршрутизация Upload/Open/Delete;
+  `MaterializeAttachment` (temp + `context.AfterFunc`) для DSL `ПутьКВложению` и
+  email-резолвера; `OpenAttachment → io.ReadSeekCloser`; тесты (роутинг,
+  mode-switch, not-configured, real-client e2e); `docs/features.md`; зелёные.
