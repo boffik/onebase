@@ -128,6 +128,14 @@ type S3Config struct {
 	KeepLast  int    `yaml:"keep_last"`            // ротация объектов в бакете; 0 = не ротировать
 }
 
+// FileStorageConfig holds the optional S3-compatible backend for живые файлы
+// (image-блобы; вложения — следующим этапом). Активируется, когда режим хранения
+// (_settings ui.file_storage) = "s3"; креды берутся отсюда, а не из БД, чтобы не
+// уехать в дамп конфигурации. keep_last здесь не применяется. План 110, этап 2.
+type FileStorageConfig struct {
+	S3 *S3Config `yaml:"s3,omitempty"`
+}
+
 // AIConfig holds non-secret AI assistant settings from app.yaml section "ai".
 // Secrets and provider routes stay in "llm"; this block is for deploy-time
 // policy knobs that also live in _settings.
@@ -175,12 +183,13 @@ type AppConfig struct {
 	// DeprecatedRussianPost preserves the permissive v0.9.3 behavior for
 	// downstream project-owned integration settings. OneBase does not consume
 	// this block; `onebase check` asks projects to move it out of app.yaml.
-	DeprecatedRussianPost map[string]any `yaml:"russian_post,omitempty"`
-	Demo                  *DemoConfig    `yaml:"demo,omitempty"`
-	Backup                *BackupConfig  `yaml:"backup,omitempty"`
-	AI                    *AIConfig      `yaml:"ai,omitempty"`
-	Limits                *LimitsConfig  `yaml:"limits,omitempty"`
-	DSL                   *DSLConfig     `yaml:"dsl,omitempty"`
+	DeprecatedRussianPost map[string]any     `yaml:"russian_post,omitempty"`
+	Demo                  *DemoConfig        `yaml:"demo,omitempty"`
+	Backup                *BackupConfig      `yaml:"backup,omitempty"`
+	FileStorage           *FileStorageConfig `yaml:"file_storage,omitempty"`
+	AI                    *AIConfig          `yaml:"ai,omitempty"`
+	Limits                *LimitsConfig      `yaml:"limits,omitempty"`
+	DSL                   *DSLConfig         `yaml:"dsl,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в
@@ -227,18 +236,26 @@ func LoadConfig(dir string) (*AppConfig, error) {
 	if cfg.Backup != nil {
 		expandBackupEnv(cfg.Backup)
 	}
+	if cfg.FileStorage != nil && cfg.FileStorage.S3 != nil {
+		expandS3Env(cfg.FileStorage.S3)
+	}
 	return &cfg, nil
 }
 
-// expandBackupEnv подставляет ${env:VAR} в секрет-носители off-site бэкапа
-// (эндпойнт и ключи доступа S3), чтобы креды жили в окружении, а не в YAML.
+// expandBackupEnv подставляет ${env:VAR} в секрет-носители off-site бэкапа.
 func expandBackupEnv(b *BackupConfig) {
-	if b.S3 == nil {
-		return
+	if b.S3 != nil {
+		expandS3Env(b.S3)
 	}
-	b.S3.Endpoint = expandEnvRefs(b.S3.Endpoint)
-	b.S3.AccessKey = expandEnvRefs(b.S3.AccessKey)
-	b.S3.SecretKey = expandEnvRefs(b.S3.SecretKey)
+}
+
+// expandS3Env подставляет ${env:VAR} в секрет-носители S3-конфига (эндпойнт и
+// ключи доступа) — общий для off-site бэкапа и file_storage.s3. Креды живут в
+// окружении, а не в YAML/git/дампе.
+func expandS3Env(s *S3Config) {
+	s.Endpoint = expandEnvRefs(s.Endpoint)
+	s.AccessKey = expandEnvRefs(s.AccessKey)
+	s.SecretKey = expandEnvRefs(s.SecretKey)
 }
 
 // expandWebhookEnv подставляет ${env:VAR} в секрет-носители веб-хуков

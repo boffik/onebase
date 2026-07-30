@@ -230,6 +230,11 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	for _, err := range applyAppAISettings(ctx, db, appCfg) {
 		runLog.Warn("apply app ai setting failed", "err", err)
 	}
+	// file_storage.s3 (план 110, этап 2): подключаем S3-бэкенд image-блобов.
+	// Ошибка конфигурации фатальна — иначе картинки молча перестанут работать.
+	if err := applyFileStorageS3(db, appCfg); err != nil {
+		return err
+	}
 	uiCfg := ui.Config{
 		DSN:              dsn,
 		DatabaseType:     runtimeDatabaseType(dbType),

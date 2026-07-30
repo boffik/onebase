@@ -157,6 +157,53 @@ func TestListKeysPagination(t *testing.T) {
 	}
 }
 
+func TestGetObjectRoundTrip(t *testing.T) {
+	payload := []byte("image-bytes-\xff\x00\x10")
+	var gotPath, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(payload)
+	}))
+	defer srv.Close()
+
+	c := testClient(t, srv)
+	rc, size, err := c.GetObject(context.Background(), "blobs/abc")
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	defer rc.Close()
+	if gotPath != "/mybucket/blobs/abc" {
+		t.Errorf("path = %s", gotPath)
+	}
+	if !strings.HasPrefix(gotAuth, "AWS4-HMAC-SHA256 Credential=AKIA_TEST/") {
+		t.Errorf("authorization = %q", gotAuth)
+	}
+	if size != int64(len(payload)) {
+		t.Errorf("size = %d, want %d", size, len(payload))
+	}
+	body, _ := io.ReadAll(rc)
+	if !bytes.Equal(body, payload) {
+		t.Errorf("body mismatch: %q", body)
+	}
+}
+
+func TestGetObjectNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, `<Error><Code>NoSuchKey</Code><Message>missing</Message></Error>`)
+	}))
+	defer srv.Close()
+
+	c := testClient(t, srv)
+	_, _, err := c.GetObject(context.Background(), "blobs/missing")
+	if err == nil || !strings.Contains(err.Error(), "NoSuchKey") {
+		t.Fatalf("expected NoSuchKey error, got %v", err)
+	}
+}
+
 func TestDeleteObject(t *testing.T) {
 	var method, path string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

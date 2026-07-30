@@ -75,6 +75,15 @@ func runGcBlobs(cmd *cobra.Command, _ []string) error {
 	}
 	defer proj.Close()
 
+	// file_storage.s3: чтобы GC мог удалять объекты s3-блобов, нужен клиент S3.
+	// Креды берём из app.yaml проекта (для config-source=file); при отсутствии —
+	// удаление s3-блоба вернёт понятную ошибку вместо тихого осиротения объекта.
+	if appCfg, cfgErr := project.LoadConfig(dir); cfgErr == nil {
+		if err := applyFileStorageS3(db, appCfg); err != nil {
+			return err
+		}
+	}
+
 	if err := db.EnsureBlobTable(ctx); err != nil {
 		return err
 	}
