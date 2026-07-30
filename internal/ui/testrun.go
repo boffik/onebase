@@ -105,9 +105,13 @@ func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts T
 		isolation = IsolationTransaction
 	}
 
+	// Один тест-профиль (часы + моки) на прогон; сбрасывается перед каждым
+	// тестом, чтобы Мок.* и замороженное время не протекали между тестами.
+	profile := interpreter.NewTestProfile()
+
 	var res TestRunResult
 	for _, proc := range selectTests(proj, opts.Filter) {
-		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation)
+		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation, profile)
 		if envErr != nil {
 			return res, envErr
 		}
@@ -119,10 +123,16 @@ func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts T
 // runOneTest гоняет один тест-процессор, при необходимости оборачивая его в
 // транзакцию с откатом (изоляция данных). Возвращает ошибку только при сбое
 // окружения; провал/ошибку самого теста несёт TestCaseResult.
-func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string) (TestCaseResult, error) {
+func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string, profile *interpreter.TestProfile) (TestCaseResult, error) {
 	rec := &testRecorder{}
 	assert := interpreter.NewAssertRoot(rec)
 	extra := map[string]any{"Утверждать": assert, "Assert": assert}
+	// Тест-профиль: часы + моки. Reset — чтобы записи/время предыдущего теста
+	// не протекали. Инжектируем последними, поверх стандартных переменных.
+	profile.Reset()
+	for k, v := range profile.Vars() {
+		extra[k] = v
+	}
 
 	runCtx := ctx
 	var tx storage.Tx
