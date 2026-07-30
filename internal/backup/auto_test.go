@@ -54,7 +54,7 @@ func TestCreateAutoBackup_RotatesWithDefaults(t *testing.T) {
 			return "", err
 		}
 		return path, nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("createAutoBackup: %v", err)
 	}
