@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/ivantit66/onebase/internal/project"
 	"github.com/ivantit66/onebase/internal/ui"
@@ -20,17 +19,19 @@ var testCmd = &cobra.Command{
 любой проверки или ошибке выполнения завершается с ненулевым кодом — пригодно
 для pre-commit/CI.
 
-Внутри теста доступен объект Утверждать:
-  Утверждать.Равно(Факт, Ожидание, "описание");
-  Утверждать.НеРавно(Факт, Ожидание, "описание");
-  Утверждать.Истина(Условие, "описание");
-  Утверждать.Ложь(Условие, "описание");
-  Утверждать.Заполнено(Значение, "описание");
-  Утверждать.Провалить("описание");
+Внутри теста доступны:
+  Утверждать.Равно/НеРавно/Истина/Ложь/Заполнено/Провалить(…, "описание");
+  Часы.Установить(Дата)/Сбросить()   — заморозка ТекущаяДата()/ТекущаяДатаВремя();
+  Мок.Email/Http/ОС/ИИ               — рекордеры внешних эффектов (почта/сеть/
+                                        команды/ИИ не уходят наружу).
+
+По умолчанию каждый тест идёт в своей транзакции с откатом (--isolation) — тесты
+не оставляют данных. Формат вывода --format pretty|tap|junit (tap/junit — для CI).
 
 Примеры:
   onebase test --project . --sqlite prodbase.db
-  onebase test --project . --run Телефон`,
+  onebase test --project . --run Телефон
+  onebase test --project . --sqlite :memory: --format junit --out report.xml`,
 	RunE:          runTest,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -41,10 +42,25 @@ func init() {
 	testCmd.Flags().String("run", "", "маска по имени теста (регистронезависимая подстрока)")
 	testCmd.Flags().String("isolation", "transaction",
 		"изоляция данных между тестами: transaction (откат после каждого) | none")
+	testCmd.Flags().String("format", "pretty", "формат отчёта: pretty | tap | junit")
+	testCmd.Flags().String("out", "", "файл для отчёта (по умолчанию stdout)")
 	rootCmd.AddCommand(testCmd)
 }
 
 func runTest(cmd *cobra.Command, _ []string) error {
+	isolation, _ := cmd.Flags().GetString("isolation")
+	switch isolation {
+	case "", ui.IsolationTransaction, ui.IsolationNone:
+	default:
+		return fmt.Errorf("неизвестный режим --isolation %q (доступны transaction, none)", isolation)
+	}
+	format, _ := cmd.Flags().GetString("format")
+	switch format {
+	case "", ui.FormatPretty, ui.FormatTAP, ui.FormatJUnit:
+	default:
+		return fmt.Errorf("неизвестный формат --format %q (доступны pretty, tap, junit)", format)
+	}
+
 	bc, err := resolveBase(cmd)
 	if err != nil {
 		return err
@@ -75,23 +91,19 @@ func runTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	filter, _ := cmd.Flags().GetString("run")
-	isolation, _ := cmd.Flags().GetString("isolation")
-	switch isolation {
-	case "", ui.IsolationTransaction, ui.IsolationNone:
-	default:
-		return fmt.Errorf("неизвестный режим --isolation %q (доступны transaction, none)", isolation)
-	}
 	res, err := ui.RunTests(ctx, proj, db, ui.TestRunOptions{Filter: filter, Isolation: isolation})
 	if err != nil {
 		return err
 	}
 
-	printTestResults(res)
+	if err := emitReport(cmd, res, format); err != nil {
+		return err
+	}
 
 	if len(res.Cases) == 0 {
 		// Нет тестов — не провал (конфигурация может их ещё не завести), но
 		// сообщаем явно, чтобы «зелёный» прогон не вводил в заблуждение.
-		fmt.Fprintln(os.Stdout, "Тесты не найдены (обработки с kind: test).")
+		fmt.Fprintln(os.Stderr, "Тесты не найдены (обработки с kind: test).")
 		return nil
 	}
 
@@ -103,48 +115,23 @@ func runTest(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func printTestResults(res ui.TestRunResult) {
-	for _, c := range res.Cases {
-		fmt.Fprintf(os.Stdout, "▶ %s\n", c.Name)
-		for _, o := range c.Asserts {
-			if o.Passed {
-				fmt.Fprintf(os.Stdout, "  ok    — %s\n", o.Desc)
-			} else if o.Detail != "" {
-				fmt.Fprintf(os.Stdout, "  ПРОВАЛ — %s (%s)\n", o.Desc, o.Detail)
-			} else {
-				fmt.Fprintf(os.Stdout, "  ПРОВАЛ — %s\n", o.Desc)
-			}
-		}
-		if c.Err != nil {
-			fmt.Fprintf(os.Stdout, "  ОШИБКА — %s\n", c.Err.Error())
-		}
-		if len(c.Asserts) == 0 && c.Err == nil {
-			fmt.Fprintln(os.Stdout, "  (без единой проверки — тест считается неуспешным)")
-		}
-		fmt.Fprintf(os.Stdout, "  %s  (%s)\n", caseSummary(c), fmtDuration(c.Duration))
+// emitReport пишет отчёт в файл (--out) или в stdout. При записи в файл в
+// stderr печатается краткая сводка, чтобы прогон не выглядел «немым».
+func emitReport(cmd *cobra.Command, res ui.TestRunResult, format string) error {
+	outPath, _ := cmd.Flags().GetString("out")
+	if outPath == "" {
+		return ui.WriteReport(os.Stdout, res, format)
 	}
-
-	tests, passedTests, asserts, failedAsserts := res.Totals()
-	fmt.Fprintln(os.Stdout, "── Итог ──")
-	fmt.Fprintf(os.Stdout, "Тестов: %d, успешно: %d, провалено: %d\n",
-		tests, passedTests, tests-passedTests)
-	fmt.Fprintf(os.Stdout, "Проверок: %d, провалено: %d\n", asserts, failedAsserts)
-}
-
-func caseSummary(c ui.TestCaseResult) string {
-	total := c.Passed + c.Failed
-	if c.OK() {
-		return fmt.Sprintf("OK: %d проверок", total)
+	f, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("создать файл отчёта %q: %w", outPath, err)
 	}
-	if c.Err != nil {
-		return fmt.Sprintf("ОШИБКА: %d/%d проверок прошло", c.Passed, total)
+	defer f.Close()
+	if err := ui.WriteReport(f, res, format); err != nil {
+		return err
 	}
-	return fmt.Sprintf("ПРОВАЛ: %d из %d проверок", c.Failed, total)
-}
-
-func fmtDuration(d time.Duration) string {
-	if d < time.Millisecond {
-		return fmt.Sprintf("%dµs", d.Microseconds())
-	}
-	return fmt.Sprintf("%dms", d.Milliseconds())
+	tests, passed, _, _ := res.Totals()
+	fmt.Fprintf(os.Stderr, "Отчёт (%s) записан в %s — тестов: %d, успешно: %d\n",
+		format, outPath, tests, passed)
+	return nil
 }
