@@ -867,6 +867,7 @@
   "migrate account register %s субконто index": "migrate account register %s subconto index",
   "storage: sqlite: не удалось получить абсолютный путь %q": "storage: sqlite: failed to resolve absolute path %q",
   "storage: sqlite: не удалось создать папку %q": "storage: sqlite: failed to create folder %q",
+  "storage: sqlite: не удалось создать временную папку файлов": "storage: sqlite: failed to create temporary files folder",
   "storage: sqlite: нет прав на запись в папку %q": "storage: sqlite: no write permission for folder %q",
   "storage: sqlite: пустой путь к файлу базы данных": "storage: sqlite: empty path to the database file",
   "unsupported form schema %q (ожидается onebase.form/v1)": "unsupported form schema %q (expected onebase.form/v1)",

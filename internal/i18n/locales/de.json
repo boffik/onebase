@@ -765,6 +765,7 @@
   "migrate account register %s субконто index": "Buchungsregister %s migrieren, Subkonto-Index",
   "storage: sqlite: не удалось получить абсолютный путь %q": "storage: sqlite: absoluter Pfad %q konnte nicht ermittelt werden",
   "storage: sqlite: не удалось создать папку %q": "storage: sqlite: Ordner %q konnte nicht erstellt werden",
+  "storage: sqlite: не удалось создать временную папку файлов": "storage: sqlite: temporärer Dateiordner konnte nicht erstellt werden",
   "storage: sqlite: нет прав на запись в папку %q": "storage: sqlite: keine Schreibrechte für Ordner %q",
   "storage: sqlite: пустой путь к файлу базы данных": "storage: sqlite: leerer Pfad zur Datenbankdatei",
   "unsupported form schema %q (ожидается onebase.form/v1)": "nicht unterstütztes Formularschema %q (erwartet: onebase.form/v1)",
