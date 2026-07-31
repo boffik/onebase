@@ -1117,6 +1117,17 @@ func (tr *translator) genAccountBalances(ar *metadata.AccountRegister, args [][]
 	table := metadata.AccountRegTableName(ar.Name)
 	alias := "остатки_" + strings.ToLower(ar.Name)
 
+	// План 80: быстрый путь через предрасчитанные помесячные итоги вместо SUM по
+	// всей истории проводок. Включается, когда заведомо эквивалентен on-the-fly:
+	// итоги применимы, нет отбора по счёту (args[1]) и нет активной строковой
+	// политики. Пока — только текущие остатки; Остатки(&Момент) через итоги —
+	// следующий срез, до него момент падает на обычный расчёт ниже.
+	if ar.TotalsUsable() && !accountHasFilterArg(args) && tr.sourceRowFilter("register", ar.Name) == nil {
+		if !anyArgTokens(args) {
+			return tr.genAccountBalancesFromTotals(ar), alias, nil
+		}
+	}
+
 	var resCols []string
 	for _, r := range ar.Resources {
 		col := strings.ToLower(r.Name)
@@ -1176,6 +1187,46 @@ func (tr *translator) genAccountBalances(ar *metadata.AccountRegister, args [][]
 	}
 
 	return sb.String(), alias, nil
+}
+
+// accountHasFilterArg сообщает, передан ли виртуальной таблице бухрегистра отбор
+// по счёту (args[1]). При отборе быстрый путь итогов не используется.
+func accountHasFilterArg(args [][]tok) bool {
+	return len(args) >= 2 && len(args[1]) > 0
+}
+
+// genAccountBalancesFromTotals — текущие остатки бухрегистра из предрасчитанных
+// итогов (план 80): сальдо счёта = Σ(Дт − Кт) по всем месяцам. LEFT JOIN на
+// _accounts и набор колонок совпадают с genAccountBalances, чтобы внешний запрос
+// не различал источник (счета без проводок дают строку с нулевым сальдо).
+func (tr *translator) genAccountBalancesFromTotals(ar *metadata.AccountRegister) string {
+	totals := metadata.AccountRegTotalsTableName(ar.Name)
+	var resCols []string
+	for _, r := range ar.Resources {
+		col := metadata.ColumnName(r)
+		dc, cc := col+"_дт", col+"_кт"
+		resCols = append(resCols,
+			"COALESCE(SUM(t."+dc+"),0) AS "+dc,
+			"COALESCE(SUM(t."+cc+"),0) AS "+cc,
+			"COALESCE(SUM(t."+dc+" - t."+cc+"),0) AS "+col+"остаток",
+		)
+	}
+	selectList := "a.code AS счёт, a.name AS наименование"
+	var subGroup []string
+	for i := range ar.Subconto {
+		col := metadata.SubcontoColumn(i + 1)
+		selectList += ", t." + col + " AS " + col
+		subGroup = append(subGroup, "t."+col)
+	}
+	if len(resCols) > 0 {
+		selectList += ", " + strings.Join(resCols, ", ")
+	}
+	sql := "SELECT " + selectList + " FROM _accounts a LEFT JOIN " + totals +
+		" t ON t.счёт = a.code GROUP BY a.code, a.name"
+	if len(subGroup) > 0 {
+		sql += ", " + strings.Join(subGroup, ", ")
+	}
+	return sql
 }
 
 func (tr *translator) genAccountTurnovers(ar *metadata.AccountRegister, args [][]tok) (string, string, error) {
