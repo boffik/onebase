@@ -91,7 +91,7 @@ func TestApplyFieldEdits_HierarchicalToggle(t *testing.T) {
 		Fields:        []saveField{{Name: "Наименование", Type: "string"}},
 	}
 	off := false
-	applyFieldEdits(ent, ent.Fields, nil, nil, &off, nil, nil)
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, &off, nil, nil)
 	if ent.Hierarchical {
 		t.Errorf("после off-toggle Hierarchical=true, ожидалось false")
 	}
@@ -100,7 +100,7 @@ func TestApplyFieldEdits_HierarchicalToggle(t *testing.T) {
 	}
 
 	on := true
-	applyFieldEdits(ent, ent.Fields, nil, nil, &on, nil, nil)
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, &on, nil, nil)
 	if !ent.Hierarchical {
 		t.Errorf("после on-toggle Hierarchical=false, ожидалось true")
 	}
@@ -115,7 +115,7 @@ func TestApplyFieldEdits_NilPtrPreserves(t *testing.T) {
 		Posting:      false,
 		Fields:       []saveField{{Name: "X", Type: "string"}},
 	}
-	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil)
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil, nil, nil)
 	if !ent.Hierarchical {
 		t.Errorf("nil hierarchical-ptr перетёр поле в false")
 	}
@@ -136,21 +136,21 @@ func TestApplyFieldEdits_BasedOn(t *testing.T) {
 	}
 
 	// nil basedOn-ptr → сохраняется как было.
-	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil)
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil, nil, nil)
 	if len(ent.BasedOn) != 2 {
 		t.Errorf("nil basedOn-ptr изменил поле, ожидалось 2 элемента, получено %v", ent.BasedOn)
 	}
 
 	// Явный пустой slice → очистка based_on.
 	empty := []string{}
-	applyFieldEdits(ent, ent.Fields, nil, nil, nil, &empty, nil)
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil, &empty, nil)
 	if len(ent.BasedOn) != 0 {
 		t.Errorf("пустой slice не очистил BasedOn: %v", ent.BasedOn)
 	}
 
 	// Новый список перетирает старый.
 	newList := []string{"ОдинТолько"}
-	applyFieldEdits(ent, ent.Fields, nil, nil, nil, &newList, nil)
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil, &newList, nil)
 	if len(ent.BasedOn) != 1 || ent.BasedOn[0] != "ОдинТолько" {
 		t.Errorf("BasedOn не обновился: %v", ent.BasedOn)
 	}
@@ -180,5 +180,62 @@ fields:
 		if !strings.Contains(got, must) {
 			t.Errorf("после roundtrip потерян фрагмент %q\nполучилось:\n%s", must, got)
 		}
+	}
+}
+
+// Issue #497: post_caption и post_and_close_hidden должны переживать roundtrip
+// Unmarshal→Marshal — иначе правка реквизитов документа в конфигураторе молча
+// стёрла бы кастомную подпись кнопки проведения (та же ловушка, что и с ТЧ).
+func TestSaveEntity_Roundtrip_PreservesPostCaption(t *testing.T) {
+	input := `name: Начисление
+posting: true
+post_caption: Создать начисление
+post_and_close_hidden: true
+fields:
+  - name: Сумма
+    type: number
+`
+	var ent saveEntity
+	if err := yaml.Unmarshal([]byte(input), &ent); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	out, err := yaml.Marshal(&ent)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(out)
+	for _, must := range []string{"post_caption: Создать начисление", "post_and_close_hidden: true"} {
+		if !strings.Contains(got, must) {
+			t.Errorf("после roundtrip потерян фрагмент %q\nполучилось:\n%s", must, got)
+		}
+	}
+}
+
+// applyFieldEdits: подпись задаётся, очищается пустой строкой (omitempty → ключ
+// исчезает), а nil-указатель не трогает поле.
+func TestApplyFieldEdits_PostCaption(t *testing.T) {
+	ent := &saveEntity{Name: "Начисление", Posting: true, Fields: []saveField{{Name: "X", Type: "string"}}}
+
+	caption := "Создать начисление"
+	hide := true
+	applyFieldEdits(ent, ent.Fields, nil, nil, &caption, &hide, nil, nil, nil)
+	if ent.PostCaption != "Создать начисление" {
+		t.Errorf("PostCaption=%q, ожидалось «Создать начисление»", ent.PostCaption)
+	}
+	if !ent.PostAndCloseHidden {
+		t.Errorf("PostAndCloseHidden не выставился")
+	}
+
+	// nil-указатели не трогают поля.
+	applyFieldEdits(ent, ent.Fields, nil, nil, nil, nil, nil, nil, nil)
+	if ent.PostCaption != "Создать начисление" || !ent.PostAndCloseHidden {
+		t.Errorf("nil-указатели перетёрли post_caption/hidden: %q / %v", ent.PostCaption, ent.PostAndCloseHidden)
+	}
+
+	// Пустая подпись очищает поле.
+	empty := ""
+	applyFieldEdits(ent, ent.Fields, nil, nil, &empty, nil, nil, nil, nil)
+	if ent.PostCaption != "" {
+		t.Errorf("пустая подпись не очистила PostCaption: %q", ent.PostCaption)
 	}
 }

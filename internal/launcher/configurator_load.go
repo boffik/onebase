@@ -128,14 +128,16 @@ func (h *handler) loadCfgData(ctx context.Context, b *Base, tab string, lang ...
 
 	for _, e := range proj.Entities {
 		ev := cfgEntity{
-			Name:          e.Name,
-			Posting:       e.Posting,
-			Hierarchical:  e.Hierarchical,
-			BasedOn:       append([]string(nil), e.BasedOn...),
-			Source:        sources[strings.ToLower(e.Name)],
-			PostingSource: postingSources[strings.ToLower(e.Name)],
-			ManagerSource: managerSources[strings.ToLower(e.Name)],
-			Titles:        e.Titles,
+			Name:               e.Name,
+			Posting:            e.Posting,
+			PostCaption:        e.PostCaption,
+			PostAndCloseHidden: e.PostAndCloseHidden,
+			Hierarchical:       e.Hierarchical,
+			BasedOn:            append([]string(nil), e.BasedOn...),
+			Source:             sources[strings.ToLower(e.Name)],
+			PostingSource:      postingSources[strings.ToLower(e.Name)],
+			ManagerSource:      managerSources[strings.ToLower(e.Name)],
+			Titles:             e.Titles,
 		}
 		if e.Kind == metadata.KindCatalog {
 			ev.Kind = "Справочник"

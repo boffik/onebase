@@ -50,26 +50,28 @@ type rawIndex struct {
 }
 
 type rawEntity struct {
-	Name          string            `yaml:"name"`
-	Title         string            `yaml:"title"`
-	Description   string            `yaml:"description"`
-	Titles        map[string]string `yaml:"titles"`
-	Fields        []rawField        `yaml:"fields"`
-	TableParts    []rawTablePart    `yaml:"tableparts"`
-	Indexes       []rawIndex        `yaml:"indexes"`
-	Posting       bool              `yaml:"posting"`
-	Numerator     *rawNumerator     `yaml:"numerator"`
-	Predefined    []rawPredefined   `yaml:"predefined"`
-	Hierarchical  bool              `yaml:"hierarchical"`
-	HierarchyKind string            `yaml:"hierarchy_kind"`
-	ListForm      []string          `yaml:"list_form"`
-	ItemForm      []string          `yaml:"item_form"`
-	BasedOn       []string          `yaml:"based_on"`
-	Activity      *rawActivity      `yaml:"activity"`
-	ListMode      string            `yaml:"list_mode"`
-	ListRefreshOn []string          `yaml:"list_refresh_on"`
-	NotifyChanges bool              `yaml:"notify_changes"`
-	TileView      *rawTileView      `yaml:"tile_view"`
+	Name               string            `yaml:"name"`
+	Title              string            `yaml:"title"`
+	Description        string            `yaml:"description"`
+	Titles             map[string]string `yaml:"titles"`
+	Fields             []rawField        `yaml:"fields"`
+	TableParts         []rawTablePart    `yaml:"tableparts"`
+	Indexes            []rawIndex        `yaml:"indexes"`
+	Posting            bool              `yaml:"posting"`
+	PostCaption        string            `yaml:"post_caption"`
+	PostAndCloseHidden bool              `yaml:"post_and_close_hidden"`
+	Numerator          *rawNumerator     `yaml:"numerator"`
+	Predefined         []rawPredefined   `yaml:"predefined"`
+	Hierarchical       bool              `yaml:"hierarchical"`
+	HierarchyKind      string            `yaml:"hierarchy_kind"`
+	ListForm           []string          `yaml:"list_form"`
+	ItemForm           []string          `yaml:"item_form"`
+	BasedOn            []string          `yaml:"based_on"`
+	Activity           *rawActivity      `yaml:"activity"`
+	ListMode           string            `yaml:"list_mode"`
+	ListRefreshOn      []string          `yaml:"list_refresh_on"`
+	NotifyChanges      bool              `yaml:"notify_changes"`
+	TileView           *rawTileView      `yaml:"tile_view"`
 }
 
 type rawTileView struct {
@@ -91,7 +93,7 @@ func LoadFile(path string, kind Kind) (*Entity, error) {
 	if raw.Name == "" {
 		return nil, fmt.Errorf("%s: missing name", path)
 	}
-	e := &Entity{Name: raw.Name, Title: raw.Title, Description: raw.Description, Titles: raw.Titles, Kind: kind, Posting: raw.Posting, Hierarchical: raw.Hierarchical}
+	e := &Entity{Name: raw.Name, Title: raw.Title, Description: raw.Description, Titles: raw.Titles, Kind: kind, Posting: raw.Posting, PostCaption: raw.PostCaption, PostAndCloseHidden: raw.PostAndCloseHidden, Hierarchical: raw.Hierarchical}
 	if raw.Hierarchical {
 		e.HierarchyKind = raw.HierarchyKind
 		if e.HierarchyKind == "" {

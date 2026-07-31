@@ -126,7 +126,7 @@ func findEntityFilePath(dir, entityName string) (string, error) {
 	return "", fmt.Errorf("entity %q not found", entityName)
 }
 
-func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string, activity **saveActivity) {
+func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]saveField, posting *bool, postCaption *string, postAndCloseHidden *bool, hierarchical *bool, basedOn *[]string, activity **saveActivity) {
 	ent.Fields = fields
 	existingTP := make(map[string]bool, len(ent.TableParts))
 	for i, tp := range ent.TableParts {
@@ -153,6 +153,14 @@ func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]
 	if posting != nil {
 		ent.Posting = *posting
 	}
+	// post_caption / post_and_close_hidden — скалярные свойства документа
+	// (issue #497). nil = «поле не пришло с формы, не трогать YAML».
+	if postCaption != nil {
+		ent.PostCaption = *postCaption
+	}
+	if postAndCloseHidden != nil {
+		ent.PostAndCloseHidden = *postAndCloseHidden
+	}
 	if hierarchical != nil {
 		ent.Hierarchical = *hierarchical
 		// При сбросе иерархии — стираем и hierarchy_kind, чтобы в YAML
@@ -175,7 +183,7 @@ func applyFieldEdits(ent *saveEntity, fields []saveField, tpFields map[string][]
 	}
 }
 
-func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string, activity **saveActivity, objTitles *map[string]string) error {
+func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, postCaption *string, postAndCloseHidden *bool, hierarchical *bool, basedOn *[]string, activity **saveActivity, objTitles *map[string]string) error {
 	filePath, err := findEntityFilePath(dir, entityName)
 	if err != nil {
 		return err
@@ -188,7 +196,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	if err := yaml.Unmarshal(raw, &ent); err != nil {
 		return err
 	}
-	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn, activity)
+	applyFieldEdits(&ent, fields, tpFields, posting, postCaption, postAndCloseHidden, hierarchical, basedOn, activity)
 	if objTitles != nil {
 		ent.Titles = *objTitles
 	}
@@ -199,7 +207,7 @@ func saveEntityFieldsToFile(dir, entityName string, fields []saveField, tpFields
 	return os.WriteFile(filePath, out, 0o644)
 }
 
-func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, hierarchical *bool, basedOn *[]string, activity **saveActivity, objTitles *map[string]string) error {
+func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName string, fields []saveField, tpFields map[string][]saveField, posting *bool, postCaption *string, postAndCloseHidden *bool, hierarchical *bool, basedOn *[]string, activity **saveActivity, objTitles *map[string]string) error {
 	db, err := OpenDB(ctx, b)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -236,7 +244,7 @@ func (h *handler) saveEntityFieldsToDB(ctx context.Context, b *Base, entityName 
 		return fmt.Errorf("entity %q not found in DB config", entityName)
 	}
 
-	applyFieldEdits(&ent, fields, tpFields, posting, hierarchical, basedOn, activity)
+	applyFieldEdits(&ent, fields, tpFields, posting, postCaption, postAndCloseHidden, hierarchical, basedOn, activity)
 	if objTitles != nil {
 		ent.Titles = *objTitles
 	}
@@ -558,6 +566,15 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 		v := r.FormValue("posting") == "true"
 		posting = &v
 	}
+	// Подпись кнопки проведения и скрытие «… и закрыть» — только документ (issue #497).
+	var postCaption *string
+	var postAndCloseHidden *bool
+	if entityKind == "Документ" {
+		pc := strings.TrimSpace(r.FormValue("post_caption"))
+		postCaption = &pc
+		hide := r.FormValue("post_and_close_hidden") == "true"
+		postAndCloseHidden = &hide
+	}
 	// «Иерархический» имеет смысл только для справочников. Передаём
 	// указатель — nil означает «не трогать поле в YAML», иначе
 	// applyFieldEdits перепишет ent.Hierarchical явным значением.
@@ -770,9 +787,9 @@ func (h *handler) configuratorSaveFields(w http.ResponseWriter, r *http.Request)
 
 	var saveErr error
 	if b.ConfigSource == "database" {
-		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting, hierarchical, basedOn, activity, objTitles)
+		saveErr = h.saveEntityFieldsToDB(r.Context(), b, entityName, fields, tpFields, posting, postCaption, postAndCloseHidden, hierarchical, basedOn, activity, objTitles)
 	} else {
-		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting, hierarchical, basedOn, activity, objTitles)
+		saveErr = saveEntityFieldsToFile(b.Path, entityName, fields, tpFields, posting, postCaption, postAndCloseHidden, hierarchical, basedOn, activity, objTitles)
 	}
 
 	data := h.loadCfgData(r.Context(), b, "tree")

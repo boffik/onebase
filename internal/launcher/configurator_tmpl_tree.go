@@ -1450,6 +1450,16 @@ const cfgTabTree = `{{define "tab-tree"}}
     <input type="checkbox" name="posting" value="true" {{if $e.Posting}}checked{{end}}>
     <span>{{t $.Lang "Проводится — поддержка кнопки «Провести» и обработки проведения"}}</span>
   </label>
+  <div style="margin-left:24px;margin-top:8px;display:grid;grid-template-columns:minmax(120px,170px) minmax(180px,320px);gap:8px 12px;align-items:center">
+    <label style="color:#475569;font-size:12px" for="post_caption">{{t $.Lang "Подпись кнопки проведения"}}</label>
+    <input id="post_caption" type="text" name="post_caption" value="{{$e.PostCaption}}" placeholder="{{t $.Lang "Провести"}}"
+           style="padding:5px 6px;border:1px solid #ccd0d8;border-radius:3px;font-size:12px">
+  </div>
+  <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-left:24px;margin-top:6px">
+    <input type="checkbox" name="post_and_close_hidden" value="true" {{if $e.PostAndCloseHidden}}checked{{end}}>
+    <span>{{t $.Lang "Скрыть кнопку «Провести и закрыть»"}}</span>
+  </label>
+  <div style="color:#94a3b8;font-size:11px;margin-left:24px;margin-top:2px">{{t $.Lang "Действуют, если включено проведение. Пустая подпись — стандартная «Провести»."}}</div>
 </div>
 {{end}}
 
