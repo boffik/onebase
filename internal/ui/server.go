@@ -266,8 +266,19 @@ func (s *Server) tr(lang, key string) string {
 	return key
 }
 
-func (s *Server) Mount(r chi.Router) {
+// MountStatic serves embedded vendor assets (Monaco/ECharts/SlickGrid/Quill) and
+// the app JS bundles. They are non-secret and identical for every user, so they
+// mount OUTSIDE the auth middleware (план 111, P1-2). Previously each request to
+// /vendor/* or /static/*.js traversed the auth stack (a session lookup per
+// request), and the no-cache app JS revalidated on every navigation — all of it
+// hitting auth. Vendor assets already carry immutable long-cache headers
+// (webassets), so browsers refetch them rarely; the app JS keeps ETag
+// revalidation but no longer pays for auth on each 304.
+func (s *Server) MountStatic(r chi.Router) {
 	mountStatic(r)
+}
+
+func (s *Server) Mount(r chi.Router) {
 	r.Get("/ui", s.index)
 	r.Get("/ui/", s.index)
 	r.Get("/ui/app", s.appShell)           // оболочка вкладок (issue #129/#130, фаза 1)

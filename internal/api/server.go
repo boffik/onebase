@@ -112,6 +112,14 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 	// session-middleware: базы аутентифицируются общим Bearer-токеном плана.
 	uiSrv.MountExchange(r)
 
+	// Встроенная статика — вендор-ассеты (Monaco/ECharts/SlickGrid/Quill) и
+	// app-JS. Несекретны и одинаковы для всех, поэтому монтируются ВНЕ
+	// auth-мидлвары (план 111, P1-2): иначе каждый чанк Monaco и каждая
+	// ревалидация app-JS (no-cache → 304) проходили через сессионную
+	// авторизацию. Вендор уже отдаётся с immutable-кэшем; app-JS сохраняет
+	// ETag-ревалидацию, но больше не платит за auth на каждый 304.
+	uiSrv.MountStatic(r)
+
 	// REST API v2 accepts either an integration Bearer token or the existing
 	// browser session cookie. Keep it outside the UI/session-only group so
 	// headless clients do not need a cookie.
