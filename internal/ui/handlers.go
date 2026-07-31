@@ -406,46 +406,53 @@ type refCol struct {
 // Если labelSuffix != "" — наименование записывается в row[key+labelSuffix],
 // а оригинальное значение (UUID) остаётся нетронутым.
 func (s *Server) resolveRefColumns(ctx context.Context, rows []map[string]any, cols []refCol, labelSuffix string) {
-	// Build lookup: RefEntity → set of UUIDs to resolve
-	entityUUIDs := make(map[string]map[string]string) // entityName → {uuid: label}
+	// Group unique referenced UUIDs by declared RefEntity ("" = unknown type,
+	// legacy string columns that store a UUID). Keys are canonical id strings.
+	entityUUIDs := make(map[string]map[string]uuid.UUID) // entityName → {idStr: id}
 	for _, row := range rows {
 		for _, c := range cols {
 			v := asString(row[c.Key])
 			if v == "" {
 				continue
 			}
-			if _, err := uuid.Parse(v); err != nil {
+			id, err := uuid.Parse(v)
+			if err != nil {
 				continue
 			}
 			if entityUUIDs[c.RefEntity] == nil {
-				entityUUIDs[c.RefEntity] = make(map[string]string)
+				entityUUIDs[c.RefEntity] = make(map[string]uuid.UUID)
 			}
-			entityUUIDs[c.RefEntity][v] = ""
+			entityUUIDs[c.RefEntity][id.String()] = id
 		}
 	}
 
-	// Resolve UUIDs: for known RefEntity — targeted lookup; for unknown — scan all.
+	// Resolve to labels. Known RefEntity → one batched query. Unknown type →
+	// probe each entity once with the whole remaining set (one query per entity,
+	// stopping as soon as every id is resolved) instead of GetByID per
+	// (uuid × entity). First match wins, preserved by pruning resolved ids.
+	// План 111 (P1-1).
 	uuidToLabel := make(map[string]string)
-	for entName, uuids := range entityUUIDs {
-		var entities []*metadata.Entity
+	for entName, idset := range entityUUIDs {
 		if entName != "" {
 			if e := s.reg.GetEntity(entName); e != nil {
-				entities = []*metadata.Entity{e}
-			}
-		}
-		if len(entities) == 0 {
-			entities = s.reg.Entities()
-		}
-		for idStr := range uuids {
-			if _, done := uuidToLabel[idStr]; done {
+				s.batchLabels(ctx, e, idset, uuidToLabel)
 				continue
 			}
-			id, _ := uuid.Parse(idStr)
-			for _, entity := range entities {
-				refRow, err := s.store.GetByID(ctx, entity.Name, id, entity)
-				if err == nil {
-					uuidToLabel[idStr] = s.maskedRecordLabel(ctx, entity, refRow)
-					break
+		}
+		remaining := make(map[string]uuid.UUID, len(idset))
+		for k, id := range idset {
+			if _, done := uuidToLabel[k]; !done {
+				remaining[k] = id
+			}
+		}
+		for _, e := range s.reg.Entities() {
+			if len(remaining) == 0 {
+				break
+			}
+			s.batchLabels(ctx, e, remaining, uuidToLabel)
+			for k := range remaining {
+				if _, done := uuidToLabel[k]; done {
+					delete(remaining, k)
 				}
 			}
 		}
@@ -457,7 +464,11 @@ func (s *Server) resolveRefColumns(ctx context.Context, rows []map[string]any, c
 			if v == "" {
 				continue
 			}
-			if label, found := uuidToLabel[v]; found && label != "" {
+			id, err := uuid.Parse(v)
+			if err != nil {
+				continue
+			}
+			if label, found := uuidToLabel[id.String()]; found && label != "" {
 				if labelSuffix == "" {
 					row[c.Key] = label
 				} else {
@@ -853,6 +864,10 @@ func formValues(r *http.Request, entity *metadata.Entity) map[string]string {
 
 // resolveRefs replaces UUID values of reference fields with the display name
 // of the referenced entity (first string field). Modifies rows in place.
+//
+// Each reference field is resolved with a single batched query (via batchLabels
+// → GetFieldsByIDs) instead of one GetByID per unique id — this is a hot path
+// (entity/document lists and export). План 111 (P1-1).
 func (s *Server) resolveRefs(ctx context.Context, entity *metadata.Entity, rows []map[string]any) {
 	for _, f := range entity.Fields {
 		if f.RefEntity == "" {
@@ -862,33 +877,58 @@ func (s *Server) resolveRefs(ctx context.Context, entity *metadata.Entity, rows 
 		if refEntity == nil {
 			continue
 		}
-		// collect unique IDs referenced in this field
-		seen := map[string]bool{}
+		// collect unique referenced ids in this field (canonical string keys)
+		idset := map[string]uuid.UUID{}
 		for _, row := range rows {
-			if v := row[f.Name]; v != nil {
-				seen[fmt.Sprintf("%v", v)] = true
+			if idStr, id, ok := uuidFromValue(row[f.Name]); ok {
+				idset[idStr] = id
 			}
 		}
-		// resolve each unique ID to a display label
-		labels := make(map[string]string, len(seen))
-		for idStr := range seen {
-			id, err := uuid.Parse(idStr)
-			if err != nil {
-				continue
-			}
-			refRow, err := s.store.GetByID(ctx, refEntity.Name, id, refEntity)
-			if err != nil {
-				continue
-			}
-			labels[idStr] = s.maskedRecordLabel(ctx, refEntity, refRow)
+		if len(idset) == 0 {
+			continue
 		}
+		labels := make(map[string]string, len(idset))
+		s.batchLabels(ctx, refEntity, idset, labels)
 		// replace UUIDs with labels in all rows
 		for _, row := range rows {
-			if v := row[f.Name]; v != nil {
-				if label, ok := labels[fmt.Sprintf("%v", v)]; ok {
+			if idStr, _, ok := uuidFromValue(row[f.Name]); ok {
+				if label, ok := labels[idStr]; ok {
 					row[f.Name] = label
 				}
 			}
+		}
+	}
+}
+
+// refLabelBatchSize bounds how many ids go into one GetFieldsByIDs IN(...) query.
+// Keeps parameter counts under SQLite's 999-parameter cap on wide exports while
+// still collapsing an N+1 into O(ids/batch) queries. План 111 (P1-1).
+const refLabelBatchSize = 500
+
+// batchLabels resolves a set of unique ids (canonical string → id) against one
+// entity, writing display labels into out keyed by canonical id string. Ids not
+// present in the entity are simply absent from out. Runs one query per batch of
+// refLabelBatchSize ids. Shared by resolveRefs and resolveRefColumns.
+func (s *Server) batchLabels(ctx context.Context, e *metadata.Entity, idset map[string]uuid.UUID, out map[string]string) {
+	if e == nil || len(idset) == 0 {
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(idset))
+	for _, id := range idset {
+		ids = append(ids, id)
+	}
+	fields := displayField(e)
+	for start := 0; start < len(ids); start += refLabelBatchSize {
+		end := start + refLabelBatchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		refRows, err := s.store.GetFieldsByIDs(ctx, e, ids[start:end], fields)
+		if err != nil {
+			return
+		}
+		for idStr, refRow := range refRows {
+			out[idStr] = s.maskedRecordLabel(ctx, e, refRow)
 		}
 	}
 }
