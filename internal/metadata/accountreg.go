@@ -20,6 +20,10 @@ type AccountRegister struct {
 	// объявления задаёт нумерацию Субконто1, Субконто2, … для краткой записи в DSL
 	// и стабильные имена колонок субконто<N> в таблице регистра.
 	Subconto []Field `yaml:"-"`
+	// Totals — предрасчёт итогов бухрегистра (план 80): таблица итоги_акк_<name>
+	// с помесячными оборотами Дт/Кт по (счёт, субконто…), поддерживаемая в той же
+	// транзакции, что и проводки. Enabled включает её и быстрый путь остатков.
+	Totals RegisterTotals `yaml:"-"`
 }
 
 // DisplayName возвращает заголовок регистра бухгалтерии с учётом языка.
@@ -52,6 +56,7 @@ type rawAccountReg struct {
 		Titles map[string]string `yaml:"titles"`
 		Type   string            `yaml:"type"`
 	} `yaml:"subconto"`
+	Totals rawTotals `yaml:"totals"`
 }
 
 func LoadAccountRegisterFile(path string) (*AccountRegister, error) {
@@ -68,6 +73,7 @@ func LoadAccountRegisterFile(path string) (*AccountRegister, error) {
 		Title:    raw.Title,
 		Titles:   raw.Titles,
 		Accounts: raw.Accounts,
+		Totals:   RegisterTotals{Enabled: raw.Totals.Enabled},
 	}
 	if ar.Title == "" {
 		ar.Title = ar.Name
@@ -124,3 +130,17 @@ func AccountRegTableName(name string) string {
 func SubcontoColumn(idx int) string {
 	return fmt.Sprintf("субконто%d", idx)
 }
+
+// AccountRegTotalsTableName — таблица предрасчитанных итогов бухрегистра (план 80):
+// помесячные обороты Дт/Кт по (счёт, субконто…). Отдельная от итоги_<рег>
+// накопления, чтобы имена бухрегистра и регистра накопления не сталкивались.
+func AccountRegTotalsTableName(name string) string {
+	return "итоги_акк_" + strings.ToLower(name)
+}
+
+// TotalsEnabled сообщает, что пользователь включил итоги бухрегистра (план 80).
+func (ar *AccountRegister) TotalsEnabled() bool { return ar.Totals.Enabled }
+
+// TotalsUsable — применимы ли итоги к бухрегистру. Ограничений уровня атрибутов,
+// как у регистра накопления, здесь нет, поэтому — просто включённость.
+func (ar *AccountRegister) TotalsUsable() bool { return ar.Totals.Enabled }

@@ -140,6 +140,9 @@ func (db *DB) migrateAccountReg(ctx context.Context, ar *metadata.AccountRegiste
 			}
 		}
 	}
+	if err := db.syncAccountRegisterTotals(ctx, ar); err != nil {
+		return fmt.Errorf("migrate account register %s totals: %w", ar.Name, err)
+	}
 	return nil
 }
 
