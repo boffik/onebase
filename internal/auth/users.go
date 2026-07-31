@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,7 +35,34 @@ type User struct {
 type Repo struct {
 	db             *storage.DB
 	passwordPolicy PasswordPolicy
+
+	// usersExist latches true once the auth middleware observes that the base
+	// has at least one user. HasUsers can never go true→false — deleting the
+	// last user is refused (ErrLastUser) — so the latch is authoritative for the
+	// process lifetime and lets protected requests skip SELECT count(*) FROM
+	// _users. Only the middleware hot path reads it (hasUsersCached); HasUsers
+	// itself stays an uncached ground-truth query for every other caller.
+	// План 111 (P0-2).
+	usersExist atomic.Bool
+
+	// rolesCache memoizes GetRolesForUser per user for rolesCacheTTL on the auth
+	// hot path, cutting a roles JOIN off every protected request. Invalidated
+	// eagerly on role assignment/definition changes; the TTL is only a backstop.
+	// План 111 (P0-2).
+	rolesMu    sync.RWMutex
+	rolesCache map[string]cachedRoles
 }
+
+// cachedRoles is one memoized GetRolesForUser result. The slice is shared across
+// requests until invalidated or expired — treat it as read-only.
+type cachedRoles struct {
+	roles   []*Role
+	expires time.Time
+}
+
+// rolesCacheTTL bounds how long stale roles can survive a change the eager
+// invalidation somehow missed. The review suggests 30–60s (Plans/111 §3.2).
+const rolesCacheTTL = 60 * time.Second
 
 var (
 	ErrFirstUserMustBeAdmin = errors.New("первый пользователь должен быть администратором")
@@ -45,7 +73,11 @@ var (
 // NewRepo wires the auth repository to the storage layer. Internally Exec/
 // Query/QueryRow are routed to PostgreSQL or SQLite via the DB abstraction.
 func NewRepo(db *storage.DB) *Repo {
-	return &Repo{db: db, passwordPolicy: passwordPolicyFromEnv()}
+	return &Repo{
+		db:             db,
+		passwordPolicy: passwordPolicyFromEnv(),
+		rolesCache:     make(map[string]cachedRoles),
+	}
 }
 
 func (r *Repo) EnsureSchema(ctx context.Context) error {
