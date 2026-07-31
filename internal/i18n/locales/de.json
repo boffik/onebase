@@ -1,4 +1,7 @@
 {
+  "Подпись кнопки проведения": "Beschriftung der Buchen-Schaltfläche",
+  "Скрыть кнопку «Провести и закрыть»": "Schaltfläche «Buchen und schließen» ausblenden",
+  "Действуют, если включено проведение. Пустая подпись — стандартная «Провести».": "Gilt bei aktivierter Buchung. Leere Beschriftung — Standard «Buchen».",
   "Файлы конфигурации": "Konfigurationsdateien",
   "Открыть в редакторе": "Im Editor öffnen",
   "Выберите файл слева для просмотра": "Wählen Sie links eine Datei zur Vorschau aus",

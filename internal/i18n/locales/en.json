@@ -1,4 +1,7 @@
 {
+  "Подпись кнопки проведения": "Post button caption",
+  "Скрыть кнопку «Провести и закрыть»": "Hide the «Post and close» button",
+  "Действуют, если включено проведение. Пустая подпись — стандартная «Провести».": "Applies when posting is enabled. Empty caption — default «Post».",
   "Профиль и интерфейс": "Profile and interface",
   "Администрирование": "Administration",
   "Интеграции и задания": "Integrations and jobs",

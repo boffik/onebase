@@ -1,4 +1,7 @@
 {
+  "Подпись кнопки проведения": "Libellé du bouton de validation",
+  "Скрыть кнопку «Провести и закрыть»": "Masquer le bouton «Valider et fermer»",
+  "Действуют, если включено проведение. Пустая подпись — стандартная «Провести».": "S'applique si la validation est activée. Libellé vide — «Valider» par défaut.",
   "Файлы конфигурации": "Fichiers de configuration",
   "Открыть в редакторе": "Ouvrir dans l'éditeur",
   "Выберите файл слева для просмотра": "Sélectionnez un fichier à gauche pour l'aperçu",

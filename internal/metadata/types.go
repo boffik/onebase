@@ -195,14 +195,21 @@ type Entity struct {
 	Indexes    []IndexSpec
 	// Posting enables 1C-style posting semantics: movements are written only
 	// when the document is explicitly posted, not on every save.
-	Posting       bool
-	Numerator     *Numerator        // nil if auto-numbering is disabled
-	Predefined    []*PredefinedItem // nil for most entities; populated from YAML
-	Hierarchical  bool              // catalog with parent_id / is_folder tree support
-	HierarchyKind string            // "folders_and_items" (default) | "items_only"
-	ListForm      []string          // visible fields in list form (nil = all)
-	ItemForm      []string          // visible fields in item form (nil = all)
-	Forms         []*FormModule     // form modules (object form, list form, custom forms)
+	Posting bool
+	// PostCaption переопределяет подпись кнопки проведения («Провести») в
+	// формах документа. Пусто → стандартная локализуемая «Провести». Вторая
+	// кнопка получает подпись «<PostCaption> и закрыть». Issue #497.
+	PostCaption string
+	// PostAndCloseHidden скрывает кнопку «Провести и закрыть». По умолчанию
+	// (false) обе кнопки видны, как прежде.
+	PostAndCloseHidden bool
+	Numerator          *Numerator        // nil if auto-numbering is disabled
+	Predefined         []*PredefinedItem // nil for most entities; populated from YAML
+	Hierarchical       bool              // catalog with parent_id / is_folder tree support
+	HierarchyKind      string            // "folders_and_items" (default) | "items_only"
+	ListForm           []string          // visible fields in list form (nil = all)
+	ItemForm           []string          // visible fields in item form (nil = all)
+	Forms              []*FormModule     // form modules (object form, list form, custom forms)
 	// BasedOn — типы источников, на основании которых разрешено вводить эту
 	// сущность (аналог «Вводится на основании» в 1С). Имена сущностей —
 	// catalog или document. Проверяются Validate. Пустой/nil — ввод на

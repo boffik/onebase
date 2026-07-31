@@ -67,20 +67,22 @@ type saveActivity struct {
 // Список/Дерево, Группа» после добавления поля «Поставщик» в Номенклатуру
 // (2026-05-25). Теперь поля сохраняются полностью.
 type saveEntity struct {
-	Name          string            `yaml:"name"`
-	Title         string            `yaml:"title,omitempty"`
-	Titles        map[string]string `yaml:"titles,omitempty"`
-	Hierarchical  bool              `yaml:"hierarchical,omitempty"`
-	HierarchyKind string            `yaml:"hierarchy_kind,omitempty"`
-	Posting       bool              `yaml:"posting,omitempty"`
-	BasedOn       []string          `yaml:"based_on,omitempty"`
-	Numerator     *saveNumerator    `yaml:"numerator,omitempty"`
-	Predefined    []savePredefined  `yaml:"predefined,omitempty"`
-	ListForm      []string          `yaml:"list_form,omitempty"`
-	ItemForm      []string          `yaml:"item_form,omitempty"`
-	Activity      *saveActivity     `yaml:"activity,omitempty"`
-	Fields        []saveField       `yaml:"fields"`
-	TableParts    []saveTP          `yaml:"tableparts,omitempty"`
+	Name               string            `yaml:"name"`
+	Title              string            `yaml:"title,omitempty"`
+	Titles             map[string]string `yaml:"titles,omitempty"`
+	Hierarchical       bool              `yaml:"hierarchical,omitempty"`
+	HierarchyKind      string            `yaml:"hierarchy_kind,omitempty"`
+	Posting            bool              `yaml:"posting,omitempty"`
+	PostCaption        string            `yaml:"post_caption,omitempty"`
+	PostAndCloseHidden bool              `yaml:"post_and_close_hidden,omitempty"`
+	BasedOn            []string          `yaml:"based_on,omitempty"`
+	Numerator          *saveNumerator    `yaml:"numerator,omitempty"`
+	Predefined         []savePredefined  `yaml:"predefined,omitempty"`
+	ListForm           []string          `yaml:"list_form,omitempty"`
+	ItemForm           []string          `yaml:"item_form,omitempty"`
+	Activity           *saveActivity     `yaml:"activity,omitempty"`
+	Fields             []saveField       `yaml:"fields"`
+	TableParts         []saveTP          `yaml:"tableparts,omitempty"`
 }
 
 type saveRegister struct {
@@ -265,18 +267,20 @@ type cfgActivity struct {
 }
 
 type cfgEntity struct {
-	Name             string
-	Kind             string // "Справочник" / "Документ"
-	Posting          bool
-	Hierarchical     bool
-	BasedOn          []string // источники для ввода на основании (Plan 38)
-	Receivers        []string // обратный список: куда вводится на основании текущего объекта
-	Fields           []cfgField
-	TableParts       []cfgTablePart
-	Source           string // raw .os content (object module)
-	PostingSource    string // raw .posting.os content (ОбработкаПроведения)
-	ManagerSource    string // raw .manager.os content (модуль менеджера)
-	LinkedPrintForms []cfgPrintForm
+	Name               string
+	Kind               string // "Справочник" / "Документ"
+	Posting            bool
+	PostCaption        string // подпись кнопки проведения (пусто → «Провести»), issue #497
+	PostAndCloseHidden bool   // скрыть кнопку «Провести и закрыть»
+	Hierarchical       bool
+	BasedOn            []string // источники для ввода на основании (Plan 38)
+	Receivers          []string // обратный список: куда вводится на основании текущего объекта
+	Fields             []cfgField
+	TableParts         []cfgTablePart
+	Source             string // raw .os content (object module)
+	PostingSource      string // raw .posting.os content (ОбработкаПроведения)
+	ManagerSource      string // raw .manager.os content (модуль менеджера)
+	LinkedPrintForms   []cfgPrintForm
 	// LinkedDSLForms — DSL-формы (.os) и декларативные макеты (LayoutOnly)
 	// этой сущности: вкладка «Печатные формы» показывает все варианты, а не
 	// только legacy YAML.
