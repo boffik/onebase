@@ -3,10 +3,12 @@ package ui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/processor"
 	"github.com/ivantit66/onebase/internal/project"
@@ -86,6 +88,31 @@ func (t *testRecorder) RecordAssert(o interpreter.AssertOutcome) {
 	t.outcomes = append(t.outcomes, o)
 }
 
+// roleChecker реализует interpreter.RoleChecker поверх roles/*.yaml проекта, так
+// что Утверждать.РольМожет гоняет тот же auth.PermissionHas, что и рантайм, — без
+// запущенного сервера и без заведённых пользователей (план 112).
+type roleChecker struct{ byName map[string]*auth.Role }
+
+func newRoleChecker(proj *project.Project) (*roleChecker, error) {
+	defs, err := auth.LoadRolesYAML(filepath.Join(proj.Dir, "roles"))
+	if err != nil {
+		return nil, fmt.Errorf("загрузка ролей для тестов: %w", err)
+	}
+	byName := make(map[string]*auth.Role, len(defs))
+	for _, r := range defs {
+		byName[strings.ToLower(strings.TrimSpace(r.Name))] = r
+	}
+	return &roleChecker{byName: byName}, nil
+}
+
+func (rc *roleChecker) RoleAllows(name, kind, entity, op string) (bool, error) {
+	r, ok := rc.byName[strings.ToLower(strings.TrimSpace(name))]
+	if !ok {
+		return false, fmt.Errorf("роль «%s» не найдена в roles/*.yaml", name)
+	}
+	return r.Allows(kind, entity, op)
+}
+
 // TestRunOptions управляет прогоном тестов.
 type TestRunOptions struct {
 	Filter    string // маска по имени (регистронезависимая подстрока); пусто — все
@@ -109,9 +136,16 @@ func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts T
 	// тестом, чтобы Мок.* и замороженное время не протекали между тестами.
 	profile := interpreter.NewTestProfile()
 
+	// Резолвер прав ролей для Утверждать.РольМожет — грузим roles/*.yaml один раз
+	// на прогон (роли между тестами не меняются).
+	roles, err := newRoleChecker(proj)
+	if err != nil {
+		return TestRunResult{}, err
+	}
+
 	var res TestRunResult
 	for _, proc := range selectTests(proj, opts.Filter) {
-		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation, profile)
+		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation, profile, roles)
 		if envErr != nil {
 			return res, envErr
 		}
@@ -123,9 +157,10 @@ func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts T
 // runOneTest гоняет один тест-процессор, при необходимости оборачивая его в
 // транзакцию с откатом (изоляция данных). Возвращает ошибку только при сбое
 // окружения; провал/ошибку самого теста несёт TestCaseResult.
-func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string, profile *interpreter.TestProfile) (TestCaseResult, error) {
+func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string, profile *interpreter.TestProfile, roles interpreter.RoleChecker) (TestCaseResult, error) {
 	rec := &testRecorder{}
 	assert := interpreter.NewAssertRoot(rec)
+	assert.SetRoleChecker(roles)
 	extra := map[string]any{"Утверждать": assert, "Assert": assert}
 	// Тест-профиль: часы + моки. Reset — чтобы записи/время предыдущего теста
 	// не протекали. Инжектируем последними, поверх стандартных переменных.
