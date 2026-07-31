@@ -169,6 +169,16 @@ type DSLConfig struct {
 	StrictLexicalScope bool `yaml:"strict_lexical_scope,omitempty"`
 }
 
+// DBConfig holds optional PostgreSQL connection-pool sizing (план 111, P0-1).
+// Applies only to PostgreSQL; SQLite always uses a single connection. Zero means
+// "use the OneBase default" (see storage.PoolConfig). An explicit pool_max_conns
+// in the DSN still wins if this is left unset. Honored by `onebase run` with
+// file-based config; under --config-source=database size the pool via the DSN.
+type DBConfig struct {
+	PoolMaxConns int32 `yaml:"pool_max_conns,omitempty"` // максимум соединений пула (0 = дефолт 20)
+	PoolMinConns int32 `yaml:"pool_min_conns,omitempty"` // тёплый минимум пула (0 = дефолт 2)
+}
+
 // AppConfig holds the optional config/app.yaml metadata.
 type AppConfig struct {
 	Name    string `yaml:"name"`
@@ -193,6 +203,7 @@ type AppConfig struct {
 	AI                    *AIConfig          `yaml:"ai,omitempty"`
 	Limits                *LimitsConfig      `yaml:"limits,omitempty"`
 	DSL                   *DSLConfig         `yaml:"dsl,omitempty"`
+	DB                    *DBConfig          `yaml:"db,omitempty"`
 	// LLM — необязательный конфиг ИИ-помощника прямо в конфигурации. Когда задан,
 	// применяется к базе при старте (см. run.go) и имеет приоритет над _settings.
 	// Ключи задавайте через ${env:VAR}, чтобы секрет жил в окружении, а не в

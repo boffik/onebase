@@ -68,12 +68,44 @@ func pgQuoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
+// PoolConfig carries optional PostgreSQL connection-pool sizing. Zero-valued
+// fields fall back to OneBase defaults (see applyPoolDefaults), which in turn
+// yield to explicit pool_* parameters already present in the DSN. Applies to
+// PostgreSQL only — SQLite uses a single connection. План 111 (P0-1).
+type PoolConfig struct {
+	MaxConns int32 // 0 = default (defaultPoolMaxConns), unless set in the DSN
+	MinConns int32 // 0 = default (defaultPoolMinConns), unless set in the DSN
+}
+
+// Sane pool defaults for one onebase process serving many users. pgx's own
+// default is max(4, NumCPU) ≈ 4–8, which starves the hot path under concurrency
+// (auth round-trips per request, document posting holding a connection for the
+// whole transaction). See Plans/111-scalability-review.md §3.1.
+const (
+	defaultPoolMaxConns = 20
+	defaultPoolMinConns = 2
+)
+
+// Connect opens a PostgreSQL pool with OneBase's default pool sizing. Use it for
+// short-lived CLI commands; the server uses ConnectWithPool to honor app.yaml.
 func Connect(ctx context.Context, dsn string) (*DB, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	return ConnectWithPool(ctx, dsn, PoolConfig{})
+}
+
+// ConnectWithPool opens a PostgreSQL pool, sizing it from pc with precedence
+// app.yaml (pc) > explicit pool_* in the DSN > OneBase defaults.
+func ConnectWithPool(ctx context.Context, dsn string, pc PoolConfig) (*DB, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("storage: parse dsn: %w", err)
+	}
+	applyPoolDefaults(cfg, dsn, pc)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("storage: connect: %w", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("storage: ping: %w", err)
 	}
 	// Create implicit uuid→text cast so that SQL queries written for SQLite
@@ -85,6 +117,35 @@ func Connect(ctx context.Context, dsn string) (*DB, error) {
 
 	filesDir := defaultFilesDir(dsn)
 	return &DB{pool: pool, filesDir: filesDir, dialect: PgDialect{}}, nil
+}
+
+// applyPoolDefaults sets pool sizing on cfg. ParseConfig has already applied
+// pgx's own auto-default to cfg.MaxConns/MinConns, so we override only when
+// neither app.yaml (pc) nor the DSN spoke, preserving an operator's explicit
+// pool_max_conns/pool_min_conns in the DSN.
+func applyPoolDefaults(cfg *pgxpool.Config, dsn string, pc PoolConfig) {
+	switch {
+	case pc.MaxConns > 0:
+		cfg.MaxConns = pc.MaxConns
+	case !dsnHasPoolParam(dsn, "pool_max_conns"):
+		cfg.MaxConns = defaultPoolMaxConns
+	}
+	switch {
+	case pc.MinConns > 0:
+		cfg.MinConns = pc.MinConns
+	case !dsnHasPoolParam(dsn, "pool_min_conns"):
+		cfg.MinConns = defaultPoolMinConns
+	}
+	// MinConns must not exceed MaxConns, or pgxpool.NewWithConfig rejects it.
+	if cfg.MinConns > cfg.MaxConns {
+		cfg.MinConns = cfg.MaxConns
+	}
+}
+
+// dsnHasPoolParam reports whether the DSN explicitly sets the given pgxpool
+// parameter (URL query or keyword/value form both contain "<param>=").
+func dsnHasPoolParam(dsn, param string) bool {
+	return strings.Contains(dsn, param+"=")
 }
 
 // Dialect returns the SQL dialect for this connection. Use it to build SQL

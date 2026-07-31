@@ -104,12 +104,24 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		}
 		db, err = storage.ConnectSQLite(ctx, sqlitePath)
 	} else {
-		db, err = storage.Connect(ctx, dsn)
+		var poolCfg storage.PoolConfig
+		if configSource != "database" {
+			// app.yaml lives on disk in file mode → read pool sizing before we
+			// open the pool. Under --config-source=database it lives in the DB
+			// (which needs this very connection), so size the pool via the DSN.
+			if ac, e := project.LoadConfig(dir); e == nil && ac.DB != nil {
+				poolCfg = storage.PoolConfig{MaxConns: ac.DB.PoolMaxConns, MinConns: ac.DB.PoolMinConns}
+			}
+		}
+		db, err = storage.ConnectWithPool(ctx, dsn, poolCfg)
 	}
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	if ps := db.PoolStats(); ps != nil {
+		runLog.Info("postgresql pool configured", "max_conns", ps.MaxConns)
+	}
 
 	authRepo := auth.NewRepo(db)
 	if err := authRepo.EnsureSchema(ctx); err != nil {
