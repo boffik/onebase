@@ -33,11 +33,26 @@ type AssertRecorder interface {
 	RecordAssert(o AssertOutcome)
 }
 
+// RoleChecker резолвит, разрешает ли именованная роль операцию над (вид, объект).
+// Инжектится раннером тестов (слой ui), чтобы ядро интерпретатора не зависело от
+// пакета auth. Вид/операция — пользовательские слова, реализация их нормализует.
+// Ошибка (неизвестная роль/вид) — чтобы ассерт провалился громко, а не молча
+// отчитался «не разрешено».
+type RoleChecker interface {
+	RoleAllows(roleName, kind, entity, op string) (allowed bool, err error)
+}
+
 // AssertRoot — корневой DSL-объект Утверждать.
-type AssertRoot struct{ rec AssertRecorder }
+type AssertRoot struct {
+	rec   AssertRecorder
+	roles RoleChecker // nil вне `onebase test` — ассерты ролей тогда проваливаются с пояснением
+}
 
 // NewAssertRoot создаёт объект для инжекции как DSL-переменную «Утверждать».
 func NewAssertRoot(rec AssertRecorder) *AssertRoot { return &AssertRoot{rec: rec} }
+
+// SetRoleChecker включает ассерты РольМожет/РольНеМожет, подставляя резолвер прав.
+func (a *AssertRoot) SetRoleChecker(rc RoleChecker) { a.roles = rc }
 
 // This: у объекта нет доступных членов, только методы. Get/Set — безопасные no-op.
 func (a *AssertRoot) Get(string) any  { return nil }
@@ -57,9 +72,13 @@ func (a *AssertRoot) CallMethod(method string, args []any) any {
 		return a.filledAssert(args)
 	case "провалить", "fail":
 		return a.failAssert(args)
+	case "рольможет", "rolecan":
+		return a.roleAssert(args, true)
+	case "рольнеможет", "rolecannot":
+		return a.roleAssert(args, false)
 	}
 	panic(userError{Msg: "Утверждать: неизвестный метод «" + method +
-		"» (доступны Равно, НеРавно, Истина, Ложь, Заполнено, Провалить)"})
+		"» (доступны Равно, НеРавно, Истина, Ложь, Заполнено, Провалить, РольМожет, РольНеМожет)"})
 }
 
 // Равно(Факт, Ожидание, Описание) / НеРавно(Факт, Ожидание, Описание).
@@ -106,6 +125,36 @@ func (a *AssertRoot) filledAssert(args []any) any {
 // Провалить(Описание) — безусловный провал (для недостижимых веток).
 func (a *AssertRoot) failAssert(args []any) any {
 	return a.record(false, descAt(args, 0), "явный Провалить")
+}
+
+// РольМожет(Роль, Вид, Объект, Операция, Описание) /
+// РольНеМожет(...) — проверка матрицы прав роли поверх настоящего движка
+// (auth.PermissionHas). Вид: справочник|документ|регистр|регистрсведений|отчёт|
+// обработка; Операция: read/write/post/unpost/delete/run и русские синонимы
+// (провести, изменять, …). Источник ролей — roles/*.yaml проекта.
+func (a *AssertRoot) roleAssert(args []any, want bool) any {
+	role := assertStr(argAt(args, 0))
+	kind := assertStr(argAt(args, 1))
+	entity := assertStr(argAt(args, 2))
+	op := assertStr(argAt(args, 3))
+	desc := descAt(args, 4)
+	if a.roles == nil {
+		return a.record(false, desc, "проверка ролей доступна только в onebase test")
+	}
+	allowed, err := a.roles.RoleAllows(role, kind, entity, op)
+	if err != nil {
+		return a.record(false, desc, err.Error())
+	}
+	passed := allowed == want
+	detail := ""
+	if !passed {
+		verb := "должна разрешать"
+		if !want {
+			verb = "не должна разрешать"
+		}
+		detail = fmt.Sprintf("роль «%s» %s %s «%s» операцию «%s»", role, verb, kind, entity, op)
+	}
+	return a.record(passed, desc, detail)
 }
 
 func (a *AssertRoot) record(passed bool, desc, detail string) any {
