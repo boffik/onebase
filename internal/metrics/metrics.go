@@ -5,15 +5,27 @@
 // лёгкий, а нам нужно ровно три вещи — счётчик запросов, гистограмма латентности
 // и несколько gauge для пула БД. Всё это умещается в пару сотен строк и не тянет
 // десяток транзитивных зависимостей.
+//
+// Конкурентность (план 111, P2-2): раньше все карты метрик защищал один
+// глобальный sync.Mutex, который брался эксклюзивно на КАЖДОМ HTTP-запросе —
+// единая точка сериализации на горячем пути. Теперь каждая серия — отдельный
+// объект с атомарными счётчиками (в духе prometheus/client_golang): горячий путь
+// берёт лишь разделяемый RLock, чтобы найти серию в карте, а сам инкремент
+// атомарный. Маршруты/операции низкой кардинальности, поэтому после прогрева
+// новые серии не создаются и запись становится безлоковой. Эксклюзивный Lock
+// нужен только на создание новой серии (double-check) и на регистрацию
+// func-метрик при старте.
 package metrics
 
 import (
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -34,25 +46,47 @@ type funcMetric struct {
 	value      func() float64
 }
 
+// histogram — потокобезопасная гистограмма с атомарными корзинами. Число
+// наблюдений (count) НЕ хранится отдельно, а выводится как сумма корзин: так
+// инвариант «корзина +Inf == count» держится без общего лока, даже когда
+// наблюдения приходят конкурентно со скрейпом.
 type histogram struct {
 	// counts[i] — число наблюдений в корзине i (значение <= buckets[i]).
 	// Последний элемент (индекс len(buckets)) — корзина +Inf.
-	counts []uint64
-	sum    float64
-	count  uint64
+	counts  []atomic.Uint64
+	sumBits atomic.Uint64 // биты float64 суммы; обновляются CAS-петлёй
 }
+
+func newHistogram(nBuckets int) *histogram {
+	return &histogram{counts: make([]atomic.Uint64, nBuckets+1)}
+}
+
+// observe атомарно учитывает наблюдение sec (в секундах). buckets неизменяемы
+// после New, поэтому читаются без лока.
+func (h *histogram) observe(buckets []float64, sec float64) {
+	idx := sort.SearchFloat64s(buckets, sec) // первый bucket >= sec
+	h.counts[idx].Add(1)
+	for {
+		old := h.sumBits.Load()
+		if h.sumBits.CompareAndSwap(old, math.Float64bits(math.Float64frombits(old)+sec)) {
+			return
+		}
+	}
+}
+
+func (h *histogram) sum() float64 { return math.Float64frombits(h.sumBits.Load()) }
 
 // Registry хранит HTTP-метрики процесса. Потокобезопасен.
 type Registry struct {
-	mu                 sync.Mutex
-	buckets            []float64
-	requests           map[reqKey]uint64
+	mu                 sync.RWMutex // защищает структуру карт и funcMetrics, НЕ значения счётчиков
+	buckets            []float64    // неизменяем после New — читается без лока
+	requests           map[reqKey]*atomic.Uint64
 	durations          map[routeKey]*histogram
-	operations         map[opKey]uint64
+	operations         map[opKey]*atomic.Uint64
 	operationDurations map[string]*histogram
-	activeOperations   map[string]int64
-	slowOperations     map[string]uint64
-	limitedOperations  map[limitedOpKey]uint64
+	activeOperations   map[string]*atomic.Int64
+	slowOperations     map[string]*atomic.Uint64
+	limitedOperations  map[limitedOpKey]*atomic.Uint64
 	funcMetrics        []funcMetric
 }
 
@@ -60,15 +94,38 @@ type Registry struct {
 func New() *Registry {
 	return &Registry{
 		buckets:            DefaultBuckets,
-		requests:           make(map[reqKey]uint64),
+		requests:           make(map[reqKey]*atomic.Uint64),
 		durations:          make(map[routeKey]*histogram),
-		operations:         make(map[opKey]uint64),
+		operations:         make(map[opKey]*atomic.Uint64),
 		operationDurations: make(map[string]*histogram),
-		activeOperations:   make(map[string]int64),
-		slowOperations:     make(map[string]uint64),
-		limitedOperations:  make(map[limitedOpKey]uint64),
+		activeOperations:   make(map[string]*atomic.Int64),
+		slowOperations:     make(map[string]*atomic.Uint64),
+		limitedOperations:  make(map[limitedOpKey]*atomic.Uint64),
 	}
 }
+
+// getOrCreate возвращает указатель на серию по ключу, создавая её через mk при
+// отсутствии. Быстрый путь — разделяемый RLock (несколько горутин параллельно) +
+// атомарный инкремент вызывающим кодом. Медленный путь (создание) — эксклюзивный
+// Lock с повторной проверкой, чтобы две горутины не завели дубликат.
+func getOrCreate[K comparable, V any](reg *Registry, m map[K]*V, key K, mk func() *V) *V {
+	reg.mu.RLock()
+	p := m[key]
+	reg.mu.RUnlock()
+	if p != nil {
+		return p
+	}
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if p = m[key]; p == nil {
+		p = mk()
+		m[key] = p
+	}
+	return p
+}
+
+func newCounter() *atomic.Uint64 { return new(atomic.Uint64) }
+func newGauge() *atomic.Int64    { return new(atomic.Int64) }
 
 // RegisterGaugeFunc registers a gauge whose value is sampled on scrape.
 // Callbacks must not mutate this Registry and should use low-latency reads.
@@ -97,23 +154,11 @@ func (reg *Registry) registerFuncMetric(name, help, metricType string, value fun
 }
 
 func (reg *Registry) observe(method, route string, status int, d time.Duration) {
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-
-	reg.requests[reqKey{method, route, strconv.Itoa(status)}]++
-
-	rk := routeKey{method, route}
-	h := reg.durations[rk]
-	if h == nil {
-		h = &histogram{counts: make([]uint64, len(reg.buckets)+1)}
-		reg.durations[rk] = h
-	}
-	sec := d.Seconds()
-	h.sum += sec
-	h.count++
-	idx := sort.SearchFloat64s(reg.buckets, sec) // первый bucket >= sec
-	h.counts[idx]++
+	getOrCreate(reg, reg.requests, reqKey{method, route, strconv.Itoa(status)}, newCounter).Add(1)
+	getOrCreate(reg, reg.durations, routeKey{method, route}, reg.newHist).observe(reg.buckets, d.Seconds())
 }
+
+func (reg *Registry) newHist() *histogram { return newHistogram(len(reg.buckets)) }
 
 // OperationStart increments active operation gauge for kind. kind must be a
 // low-cardinality value such as "report.run" or "http_service.run".
@@ -121,9 +166,7 @@ func (reg *Registry) OperationStart(kind string) {
 	if reg == nil || kind == "" {
 		return
 	}
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-	reg.activeOperations[kind]++
+	getOrCreate(reg, reg.activeOperations, kind, newGauge).Add(1)
 }
 
 // OperationFinish records duration/status and decrements the active operation
@@ -135,24 +178,18 @@ func (reg *Registry) OperationFinish(kind, status string, d time.Duration, slow 
 	if status == "" {
 		status = "unknown"
 	}
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-	if reg.activeOperations[kind] > 0 {
-		reg.activeOperations[kind]--
+	// Уменьшаем счётчик активных, не уходя ниже нуля (защита от непарного Finish).
+	g := getOrCreate(reg, reg.activeOperations, kind, newGauge)
+	for {
+		v := g.Load()
+		if v <= 0 || g.CompareAndSwap(v, v-1) {
+			break
+		}
 	}
-	reg.operations[opKey{kind, status}]++
-	h := reg.operationDurations[kind]
-	if h == nil {
-		h = &histogram{counts: make([]uint64, len(reg.buckets)+1)}
-		reg.operationDurations[kind] = h
-	}
-	sec := d.Seconds()
-	h.sum += sec
-	h.count++
-	idx := sort.SearchFloat64s(reg.buckets, sec)
-	h.counts[idx]++
+	getOrCreate(reg, reg.operations, opKey{kind, status}, newCounter).Add(1)
+	getOrCreate(reg, reg.operationDurations, kind, reg.newHist).observe(reg.buckets, d.Seconds())
 	if slow {
-		reg.slowOperations[kind]++
+		getOrCreate(reg, reg.slowOperations, kind, newCounter).Add(1)
 	}
 }
 
@@ -164,9 +201,7 @@ func (reg *Registry) OperationLimited(kind, reason string) {
 	if reason == "" {
 		reason = "unknown"
 	}
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-	reg.limitedOperations[limitedOpKey{kind, reason}]++
+	getOrCreate(reg, reg.limitedOperations, limitedOpKey{kind, reason}, newCounter).Add(1)
 }
 
 // statusRecorder перехватывает HTTP-код ответа для метрик. Своя обёртка, чтобы
@@ -229,20 +264,42 @@ func (reg *Registry) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+// kv — снимок одной серии карты: ключ + указатель на её (атомарное) значение.
+// Указатели стабильны (серии не удаляются), поэтому значение можно безопасно
+// прочитать уже после освобождения лока.
+type kv[K comparable, V any] struct {
+	key K
+	val *V
+}
+
+func snapshotMap[K comparable, V any](m map[K]*V) []kv[K, V] {
+	out := make([]kv[K, V], 0, len(m))
+	for k, v := range m {
+		out = append(out, kv[K, V]{k, v})
+	}
+	return out
+}
+
 // WritePrometheus печатает накопленные метрики в формате Prometheus exposition.
+// Под коротким RLock снимает снимок указателей на серии, затем пишет уже без
+// лока (значения читаются атомарно) — скрейп не блокирует горячий путь.
 func (reg *Registry) WritePrometheus(w io.Writer) {
-	reg.mu.Lock()
+	reg.mu.RLock()
 	funcMetrics := append([]funcMetric(nil), reg.funcMetrics...)
+	reqs := snapshotMap(reg.requests)
+	durs := snapshotMap(reg.durations)
+	ops := snapshotMap(reg.operations)
+	opDurs := snapshotMap(reg.operationDurations)
+	active := snapshotMap(reg.activeOperations)
+	slow := snapshotMap(reg.slowOperations)
+	limited := snapshotMap(reg.limitedOperations)
+	reg.mu.RUnlock()
 
 	// ── counter: onebase_http_requests_total ──────────────────────────────
 	fmt.Fprintln(w, "# HELP onebase_http_requests_total Общее число обработанных HTTP-запросов.")
 	fmt.Fprintln(w, "# TYPE onebase_http_requests_total counter")
-	reqKeys := make([]reqKey, 0, len(reg.requests))
-	for k := range reg.requests {
-		reqKeys = append(reqKeys, k)
-	}
-	sort.Slice(reqKeys, func(i, j int) bool {
-		a, b := reqKeys[i], reqKeys[j]
+	sort.Slice(reqs, func(i, j int) bool {
+		a, b := reqs[i].key, reqs[j].key
 		if a.route != b.route {
 			return a.route < b.route
 		}
@@ -251,123 +308,102 @@ func (reg *Registry) WritePrometheus(w io.Writer) {
 		}
 		return a.status < b.status
 	})
-	for _, k := range reqKeys {
+	for _, e := range reqs {
 		fmt.Fprintf(w, "onebase_http_requests_total{method=%q,route=%q,status=%q} %d\n",
-			k.method, k.route, k.status, reg.requests[k])
+			e.key.method, e.key.route, e.key.status, e.val.Load())
 	}
 
 	// ── histogram: onebase_http_request_duration_seconds ──────────────────
 	fmt.Fprintln(w, "# HELP onebase_http_request_duration_seconds Латентность HTTP-запросов в секундах.")
 	fmt.Fprintln(w, "# TYPE onebase_http_request_duration_seconds histogram")
-	durKeys := make([]routeKey, 0, len(reg.durations))
-	for k := range reg.durations {
-		durKeys = append(durKeys, k)
-	}
-	sort.Slice(durKeys, func(i, j int) bool {
-		a, b := durKeys[i], durKeys[j]
+	sort.Slice(durs, func(i, j int) bool {
+		a, b := durs[i].key, durs[j].key
 		if a.route != b.route {
 			return a.route < b.route
 		}
 		return a.method < b.method
 	})
-	for _, k := range durKeys {
-		h := reg.durations[k]
-		var cum uint64
-		for i, ub := range reg.buckets {
-			cum += h.counts[i]
+	for _, e := range durs {
+		cum := writeHistogramBuckets(w, reg.buckets, e.val, func(le string, c uint64) {
 			fmt.Fprintf(w, "onebase_http_request_duration_seconds_bucket{method=%q,route=%q,le=%q} %d\n",
-				k.method, k.route, strconv.FormatFloat(ub, 'g', -1, 64), cum)
-		}
-		cum += h.counts[len(reg.buckets)] // +Inf
-		fmt.Fprintf(w, "onebase_http_request_duration_seconds_bucket{method=%q,route=%q,le=\"+Inf\"} %d\n",
-			k.method, k.route, cum)
+				e.key.method, e.key.route, le, c)
+		})
 		fmt.Fprintf(w, "onebase_http_request_duration_seconds_sum{method=%q,route=%q} %s\n",
-			k.method, k.route, strconv.FormatFloat(h.sum, 'g', -1, 64))
+			e.key.method, e.key.route, strconv.FormatFloat(e.val.sum(), 'g', -1, 64))
 		fmt.Fprintf(w, "onebase_http_request_duration_seconds_count{method=%q,route=%q} %d\n",
-			k.method, k.route, h.count)
+			e.key.method, e.key.route, cum)
 	}
 
 	// ── operation counters/gauges: reports/export/processors/http services ──
 	fmt.Fprintln(w, "# HELP onebase_operation_total Общее число тяжёлых runtime-операций.")
 	fmt.Fprintln(w, "# TYPE onebase_operation_total counter")
-	opKeys := make([]opKey, 0, len(reg.operations))
-	for k := range reg.operations {
-		opKeys = append(opKeys, k)
-	}
-	sort.Slice(opKeys, func(i, j int) bool {
-		a, b := opKeys[i], opKeys[j]
+	sort.Slice(ops, func(i, j int) bool {
+		a, b := ops[i].key, ops[j].key
 		if a.kind != b.kind {
 			return a.kind < b.kind
 		}
 		return a.status < b.status
 	})
-	for _, k := range opKeys {
-		fmt.Fprintf(w, "onebase_operation_total{kind=%q,status=%q} %d\n", k.kind, k.status, reg.operations[k])
+	for _, e := range ops {
+		fmt.Fprintf(w, "onebase_operation_total{kind=%q,status=%q} %d\n", e.key.kind, e.key.status, e.val.Load())
 	}
 
 	fmt.Fprintln(w, "# HELP onebase_active_operations Активные тяжёлые runtime-операции.")
 	fmt.Fprintln(w, "# TYPE onebase_active_operations gauge")
-	activeKeys := make([]string, 0, len(reg.activeOperations))
-	for k := range reg.activeOperations {
-		activeKeys = append(activeKeys, k)
-	}
-	sort.Strings(activeKeys)
-	for _, k := range activeKeys {
-		fmt.Fprintf(w, "onebase_active_operations{kind=%q} %d\n", k, reg.activeOperations[k])
+	sort.Slice(active, func(i, j int) bool { return active[i].key < active[j].key })
+	for _, e := range active {
+		fmt.Fprintf(w, "onebase_active_operations{kind=%q} %d\n", e.key, e.val.Load())
 	}
 
 	fmt.Fprintln(w, "# HELP onebase_operation_duration_seconds Длительность тяжёлых runtime-операций в секундах.")
 	fmt.Fprintln(w, "# TYPE onebase_operation_duration_seconds histogram")
-	opDurKeys := make([]string, 0, len(reg.operationDurations))
-	for k := range reg.operationDurations {
-		opDurKeys = append(opDurKeys, k)
-	}
-	sort.Strings(opDurKeys)
-	for _, kind := range opDurKeys {
-		h := reg.operationDurations[kind]
-		var cum uint64
-		for i, ub := range reg.buckets {
-			cum += h.counts[i]
-			fmt.Fprintf(w, "onebase_operation_duration_seconds_bucket{kind=%q,le=%q} %d\n",
-				kind, strconv.FormatFloat(ub, 'g', -1, 64), cum)
-		}
-		cum += h.counts[len(reg.buckets)]
-		fmt.Fprintf(w, "onebase_operation_duration_seconds_bucket{kind=%q,le=\"+Inf\"} %d\n", kind, cum)
+	sort.Slice(opDurs, func(i, j int) bool { return opDurs[i].key < opDurs[j].key })
+	for _, e := range opDurs {
+		cum := writeHistogramBuckets(w, reg.buckets, e.val, func(le string, c uint64) {
+			fmt.Fprintf(w, "onebase_operation_duration_seconds_bucket{kind=%q,le=%q} %d\n", e.key, le, c)
+		})
 		fmt.Fprintf(w, "onebase_operation_duration_seconds_sum{kind=%q} %s\n",
-			kind, strconv.FormatFloat(h.sum, 'g', -1, 64))
-		fmt.Fprintf(w, "onebase_operation_duration_seconds_count{kind=%q} %d\n", kind, h.count)
+			e.key, strconv.FormatFloat(e.val.sum(), 'g', -1, 64))
+		fmt.Fprintf(w, "onebase_operation_duration_seconds_count{kind=%q} %d\n", e.key, cum)
 	}
 
 	fmt.Fprintln(w, "# HELP onebase_slow_operation_total Тяжёлые операции дольше slow_operation_ms.")
 	fmt.Fprintln(w, "# TYPE onebase_slow_operation_total counter")
-	slowKeys := make([]string, 0, len(reg.slowOperations))
-	for k := range reg.slowOperations {
-		slowKeys = append(slowKeys, k)
-	}
-	sort.Strings(slowKeys)
-	for _, k := range slowKeys {
-		fmt.Fprintf(w, "onebase_slow_operation_total{kind=%q} %d\n", k, reg.slowOperations[k])
+	sort.Slice(slow, func(i, j int) bool { return slow[i].key < slow[j].key })
+	for _, e := range slow {
+		fmt.Fprintf(w, "onebase_slow_operation_total{kind=%q} %d\n", e.key, e.val.Load())
 	}
 
 	fmt.Fprintln(w, "# HELP onebase_limited_operation_total Операции, отклонённые лимитами/backpressure.")
 	fmt.Fprintln(w, "# TYPE onebase_limited_operation_total counter")
-	limKeys := make([]limitedOpKey, 0, len(reg.limitedOperations))
-	for k := range reg.limitedOperations {
-		limKeys = append(limKeys, k)
-	}
-	sort.Slice(limKeys, func(i, j int) bool {
-		a, b := limKeys[i], limKeys[j]
+	sort.Slice(limited, func(i, j int) bool {
+		a, b := limited[i].key, limited[j].key
 		if a.kind != b.kind {
 			return a.kind < b.kind
 		}
 		return a.reason < b.reason
 	})
-	for _, k := range limKeys {
+	for _, e := range limited {
 		fmt.Fprintf(w, "onebase_limited_operation_total{kind=%q,reason=%q} %d\n",
-			k.kind, k.reason, reg.limitedOperations[k])
+			e.key.kind, e.key.reason, e.val.Load())
 	}
-	reg.mu.Unlock()
+
 	writeFuncMetrics(w, funcMetrics)
+}
+
+// writeHistogramBuckets печатает кумулятивные корзины гистограммы (включая +Inf)
+// через emit(le, cumulative) и возвращает итоговое число наблюдений (== корзина
+// +Inf). Значение count берётся отсюда же, поэтому «+Inf == count» соблюдается
+// по построению даже при конкурентных наблюдениях.
+func writeHistogramBuckets(w io.Writer, buckets []float64, h *histogram, emit func(le string, cum uint64)) uint64 {
+	var cum uint64
+	for i, ub := range buckets {
+		cum += h.counts[i].Load()
+		emit(strconv.FormatFloat(ub, 'g', -1, 64), cum)
+	}
+	cum += h.counts[len(buckets)].Load() // +Inf
+	emit("+Inf", cum)
+	return cum
 }
 
 func writeFuncMetrics(w io.Writer, metrics []funcMetric) {

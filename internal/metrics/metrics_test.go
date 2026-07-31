@@ -1,9 +1,12 @@
 package metrics
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,6 +125,68 @@ func TestRegistry_MiddlewarePreservesFlusher(t *testing.T) {
 	}
 	if !rec.Flushed {
 		t.Error("Flush() не проброшен до нижележащего ResponseWriter")
+	}
+}
+
+// Горячий путь безлоковый и точный под гонкой: много горутин пишут метрики,
+// параллельно идёт скрейп; после — ни одного потерянного инкремента и инвариант
+// гистограммы «+Inf == count» соблюдён (план 111, P2-2). Запускать с -race.
+func TestRegistry_ConcurrentObserveIsRaceFreeAndExact(t *testing.T) {
+	reg := New()
+	const goroutines = 16
+	const perG = 500
+	const total = goroutines * perG
+
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < perG; i++ {
+				reg.observe("GET", "/documents/{entity}", 200, time.Millisecond)
+				reg.OperationStart("report.run")
+				reg.OperationFinish("report.run", "ok", time.Millisecond, false)
+				reg.OperationLimited("export.run", "concurrency")
+			}
+		}()
+	}
+
+	// Конкурентный скрейп во время записи — ловим гонки чтения/записи.
+	stop := make(chan struct{})
+	var reader sync.WaitGroup
+	reader.Add(1)
+	go func() {
+		defer reader.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				reg.WritePrometheus(io.Discard)
+			}
+		}
+	}()
+
+	wg.Wait()
+	close(stop)
+	reader.Wait()
+
+	var sb strings.Builder
+	reg.WritePrometheus(&sb)
+	out := sb.String()
+
+	// Точные счётчики — ни один инкремент не потерян под гонкой.
+	for _, want := range []string{
+		fmt.Sprintf(`onebase_http_requests_total{method="GET",route="/documents/{entity}",status="200"} %d`, total),
+		fmt.Sprintf(`onebase_http_request_duration_seconds_count{method="GET",route="/documents/{entity}"} %d`, total),
+		fmt.Sprintf(`onebase_http_request_duration_seconds_bucket{method="GET",route="/documents/{entity}",le="+Inf"} %d`, total),
+		fmt.Sprintf(`onebase_operation_total{kind="report.run",status="ok"} %d`, total),
+		fmt.Sprintf(`onebase_limited_operation_total{kind="export.run",reason="concurrency"} %d`, total),
+		`onebase_active_operations{kind="report.run"} 0`, // Start/Finish парны → вернулись к нулю
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ожидали %q в выводе:\n%s", want, out)
+		}
 	}
 }
 
