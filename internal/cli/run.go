@@ -525,6 +525,9 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}()
 
 	fmt.Fprintf(os.Stdout, "onebase running on %s:%d\n", host, port)
+	if srv.H2CEnabled() {
+		fmt.Fprintln(os.Stdout, "  HTTP/2 без TLS (h2c) включён для апстрима (ONEBASE_H2C) — см. docs/reverse-proxy.md")
+	}
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(quit)

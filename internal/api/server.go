@@ -29,6 +29,7 @@ type Server struct {
 	handler http.Handler
 	uiSrv   *ui.Server
 	hooks   *webhook.Dispatcher
+	h2c     bool // cleartext HTTP/2 к апстриму включён (ONEBASE_H2C), план 111 P2-1
 }
 
 // New строит HTTP-сервер базы. host «» = 127.0.0.1 (см. addr.go): наружу
@@ -164,7 +165,11 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		mountMetrics(r, debugToken, metricsReg, store)
 	}
 
-	return &Server{handler: r, uiSrv: uiSrv, hooks: uiCfg.Webhooks, srv: &http.Server{
+	// h2c включается на самом сервере (Protocols), а не оборачиванием handler:
+	// s.handler остаётся голым роутером для in-process монтирования
+	// (Handler()/httptest). Опционально и по умолчанию выключено (ONEBASE_H2C).
+	enableH2C := h2cEnabled()
+	httpSrv := &http.Server{
 		Addr:    listenAddr(host, port),
 		Handler: r,
 		// Slowloris-защита: обрываем клиента, который медленно шлёт заголовки,
@@ -174,7 +179,9 @@ func New(reg *runtime.Registry, store *storage.DB, interp *interpreter.Interpret
 		// бэкапов. Тело запроса ограничивается отдельными MaxBytesReader.
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       120 * time.Second,
-	}}
+	}
+	configureH2C(httpSrv, enableH2C)
+	return &Server{handler: r, uiSrv: uiSrv, hooks: uiCfg.Webhooks, h2c: enableH2C, srv: httpSrv}
 }
 
 func envBool(name string) bool {
@@ -237,6 +244,10 @@ func hasBearerAuthorization(r *http.Request) bool {
 }
 
 func (s *Server) Handler() http.Handler { return s.handler }
+
+// H2CEnabled сообщает, обслуживает ли сетевой listener cleartext HTTP/2 (h2c).
+// Используется CLI для строки о режиме в баннере старта (план 111, P2-1).
+func (s *Server) H2CEnabled() bool { return s != nil && s.h2c }
 
 func (s *Server) ListenAndServe() error {
 	return s.srv.ListenAndServe()

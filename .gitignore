@@ -64,6 +64,7 @@ docs/*
 !docs/users-load-limits.md
 !docs/release-template.md
 !docs/DEPLOYMENT.md
+!docs/reverse-proxy.md
 
 # Локальные демо-артефакты (выгрузки, скриншоты печати)
 demo/
