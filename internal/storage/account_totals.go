@@ -209,3 +209,108 @@ func (db *DB) recalcAccountTotalsInTx(ctx context.Context, ar *metadata.AccountR
 	}
 	return nil
 }
+
+// distinctAccountTuples возвращает уникальные кортежи (счёт, субконто…),
+// затронутые проводками регистратора. Счёт берётся и из счётдт, и из счёткт —
+// проводка бьёт по обоим счетам. Значения берутся из самой таблицы акк_ (уже
+// нормализованы), что совпадает с ключом итогов.
+func (db *DB) distinctAccountTuples(ctx context.Context, ar *metadata.AccountRegister, recorderID any) ([][]any, error) {
+	d := db.dialect
+	table := metadata.AccountRegTableName(ar.Name)
+	var subSel strings.Builder
+	for _, c := range accountSubcontoCols(ar) {
+		subSel.WriteString(", ")
+		subSel.WriteString(c)
+	}
+	sql := "SELECT DISTINCT счётдт" + subSel.String() + " FROM " + table + " WHERE регистратор = " + d.Placeholder(1) +
+		" UNION SELECT DISTINCT счёткт" + subSel.String() + " FROM " + table + " WHERE регистратор = " + d.Placeholder(2)
+	rows, err := db.Query(ctx, sql, recorderID, recorderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	n := 1 + len(ar.Subconto)
+	var tuples [][]any
+	for rows.Next() {
+		dest := make([]any, n)
+		ptrs := make([]any, n)
+		for i := range dest {
+			ptrs[i] = &dest[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		tuples = append(tuples, dest)
+	}
+	return tuples, rows.Err()
+}
+
+// accountTupleWhere строит условие отбора кортежа (счёт=?, субконто…) для заданной
+// колонки счёта (счёт в итогах; счётдт/счёткт в движениях), начиная с плейсхолдера
+// startPh. NULL-субконто сравнивается через IS NULL (без аргумента).
+func accountTupleWhere(d Dialect, ar *metadata.AccountRegister, acctCol string, tuple []any, startPh int) (string, []any) {
+	var conds []string
+	var args []any
+	ph := startPh
+	if len(tuple) == 0 || tuple[0] == nil {
+		conds = append(conds, acctCol+" IS NULL")
+	} else {
+		conds = append(conds, acctCol+" = "+d.Placeholder(ph))
+		args = append(args, tuple[0])
+		ph++
+	}
+	for i := range ar.Subconto {
+		col := metadata.SubcontoColumn(i + 1)
+		var v any
+		if i+1 < len(tuple) {
+			v = tuple[i+1]
+		}
+		if v == nil {
+			conds = append(conds, col+" IS NULL")
+			continue
+		}
+		conds = append(conds, col+" = "+d.Placeholder(ph))
+		args = append(args, v)
+		ph++
+	}
+	return strings.Join(conds, " AND "), args
+}
+
+// recomputeAccountTupleTotals пересчитывает помесячные строки итогов одного кортежа
+// (счёт, субконто): удаляет их и заново считает из проводок обеих половин разворота.
+// Если проводок для кортежа не осталось — строки просто исчезают.
+func (db *DB) recomputeAccountTupleTotals(ctx context.Context, ar *metadata.AccountRegister, tuple []any) error {
+	totals := metadata.AccountRegTotalsTableName(ar.Name)
+	delWhere, delArgs := accountTupleWhere(db.dialect, ar, "счёт", tuple, 1)
+	delSQL := "DELETE FROM " + totals
+	if delWhere != "" {
+		delSQL += " WHERE " + delWhere
+	}
+	if err := db.exec(ctx, delSQL, delArgs...); err != nil {
+		return fmt.Errorf("account totals %s: delete tuple: %w", ar.Name, err)
+	}
+	// Плейсхолдеры кредитовой половины идут после дебетовой (порядок половин в SQL).
+	whereDt, argsDt := accountTupleWhere(db.dialect, ar, "счётдт", tuple, 1)
+	whereKt, argsKt := accountTupleWhere(db.dialect, ar, "счёткт", tuple, 1+len(argsDt))
+	ins := insertAccountTotalsSelectSQL(db.dialect, ar, whereDt, whereKt)
+	if err := db.exec(ctx, ins, append(argsDt, argsKt...)...); err != nil {
+		return fmt.Errorf("account totals %s: recompute tuple: %w", ar.Name, err)
+	}
+	return nil
+}
+
+// updateAccountTotalsForRecorder поддерживает итоги после замены проводок
+// регистратора: пересчитывает кортежи (счёт, субконто), затронутые старыми
+// (снятыми до удаления) и новыми проводками. Вызывается в транзакции записи.
+func (db *DB) updateAccountTotalsForRecorder(ctx context.Context, ar *metadata.AccountRegister, recorderID any, oldTuples [][]any) error {
+	newTuples, err := db.distinctAccountTuples(ctx, ar, recorderID)
+	if err != nil {
+		return fmt.Errorf("account totals %s: new tuples: %w", ar.Name, err)
+	}
+	for _, t := range dedupTuples(append(oldTuples, newTuples...)) {
+		if err := db.recomputeAccountTupleTotals(ctx, ar, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}

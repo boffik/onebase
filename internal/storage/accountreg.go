@@ -147,18 +147,41 @@ func (db *DB) migrateAccountReg(ctx context.Context, ar *metadata.AccountRegiste
 }
 
 // WriteAccountMovements inserts account register movements for a document.
-// It first clears existing movements for this recorder.
+// It first clears existing movements for this recorder. При включённых итогах
+// (totals.enabled) правит итоги_акк_<name> в той же транзакции: снимает кортежи
+// (счёт, субконто) старых проводок до удаления и пересчитывает их вместе с новыми
+// (updateAccountTotalsForRecorder), поэтому итоги согласованы с проводками — в т.ч.
+// при отмене проведения (rows=nil) и проведении задним числом.
 func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string, docID uuid.UUID, rows []map[string]any, ar *metadata.AccountRegister, period *time.Time) error {
+	return db.WithTxIfNeeded(ctx, func(ctx context.Context) error {
+		if ar.TotalsUsable() {
+			if err := db.AdvisoryXactLock(ctx, []string{"account-totals|" + strings.ToLower(ar.Name)}); err != nil {
+				return err
+			}
+		}
+		return db.writeAccountMovementsInTx(ctx, regName, docType, docID, rows, ar, period)
+	})
+}
+
+func (db *DB) writeAccountMovementsInTx(ctx context.Context, regName, docType string, docID uuid.UUID, rows []map[string]any, ar *metadata.AccountRegister, period *time.Time) error {
 	d := db.dialect
 	table := metadata.AccountRegTableName(regName)
+
+	// План 80: до удаления снимаем кортежи (счёт, субконто) регистратора —
+	// после записи их итоги пересчитываются в этой же транзакции.
+	var oldTuples [][]any
+	if ar.TotalsUsable() {
+		var err error
+		if oldTuples, err = db.distinctAccountTuples(ctx, ar, idArg(d, docID)); err != nil {
+			return fmt.Errorf("account totals %s: capture old tuples: %w", regName, err)
+		}
+	}
+
 	if _, err := db.Exec(ctx,
 		fmt.Sprintf("DELETE FROM %s WHERE регистратор=%s", table, d.Placeholder(1)),
 		idArg(d, docID),
 	); err != nil {
 		return fmt.Errorf("clear account movements %s: %w", regName, err)
-	}
-	if len(rows) == 0 {
-		return nil
 	}
 
 	for _, row := range rows {
@@ -210,6 +233,12 @@ func (db *DB) WriteAccountMovements(ctx context.Context, regName, docType string
 		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, colList, strings.Join(phs, ", "))
 		if _, err := db.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("insert account movement %s: %w", regName, err)
+		}
+	}
+
+	if ar.TotalsUsable() {
+		if err := db.updateAccountTotalsForRecorder(ctx, ar, idArg(d, docID), oldTuples); err != nil {
+			return fmt.Errorf("update account totals %s: %w", regName, err)
 		}
 	}
 	return nil

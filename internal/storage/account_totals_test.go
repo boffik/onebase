@@ -137,6 +137,86 @@ func TestAccountTotals_RecalcMatchesOnTheFly(t *testing.T) {
 	}
 }
 
+func snapshotAcctTotals(t *testing.T, db *DB, ctx context.Context, table string) map[string]acctDtKt {
+	t.Helper()
+	rows, err := db.Query(ctx, "SELECT счёт, COALESCE(субконто1,'∅'), месяц, сумма_дт, сумма_кт FROM "+table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]acctDtKt{}
+	for rows.Next() {
+		var acc, sub, month string
+		var dt, kt float64
+		if err := rows.Scan(&acc, &sub, &month, &dt, &kt); err != nil {
+			t.Fatal(err)
+		}
+		out[acc+"|"+sub+"|"+month] = acctDtKt{dt, kt}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// Инкрементальная поддержка итогов в write-path согласована с полным пересчётом:
+// после проведения, перепроведения задним числом и отмены итоги, поддержанные
+// WriteAccountMovements в транзакции, совпадают с RecalcAccountRegisterTotals с нуля.
+func TestAccountTotals_IncrementalMatchesRecalc(t *testing.T) {
+	ar := totalsAccountReg()
+	ctx := context.Background()
+	db, err := ConnectSQLite(ctx, filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.MigrateAccountRegisters(ctx, []*metadata.AccountRegister{ar}); err != nil {
+		t.Fatal(err)
+	}
+	const table = "итоги_акк_бухитоги"
+
+	doc1, doc2 := uuid.New(), uuid.New()
+	may := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
+	june := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+	july := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
+	post := func(doc uuid.UUID, p time.Time, rows []map[string]any) {
+		if err := db.WriteAccountMovements(ctx, ar.Name, "Док", doc, rows, ar, &p); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+
+	post(doc1, june, []map[string]any{
+		{"счётдт": "41", "счёткт": "60", "сумма": float64(1000), "субконто1": "Товар-X"},
+		{"счётдт": "41", "счёткт": "60", "сумма": float64(500), "субконто1": "Товар-Y"},
+	})
+	post(doc2, july, []map[string]any{
+		{"счётдт": "51", "счёткт": "62", "сумма": float64(700)},
+		{"счётдт": "41", "счёткт": "60", "сумма": float64(300), "субконто1": "Товар-X"},
+	})
+	// перепроведение doc1 задним числом (май), другие суммы и субконто
+	post(doc1, may, []map[string]any{
+		{"счётдт": "41", "счёткт": "60", "сумма": float64(200), "субконто1": "Товар-Z"},
+	})
+	// отмена проведения doc2 (rows=nil) — его вклад в итоги должен исчезнуть
+	post(doc2, july, nil)
+
+	incremental := snapshotAcctTotals(t, db, ctx, table)
+	if err := db.RecalcAccountRegisterTotals(ctx, ar); err != nil {
+		t.Fatalf("recalc: %v", err)
+	}
+	full := snapshotAcctTotals(t, db, ctx, table)
+
+	if len(incremental) != len(full) {
+		t.Fatalf("число строк итогов: инкремент=%d, пересчёт=%d\ninc=%v\nfull=%v",
+			len(incremental), len(full), incremental, full)
+	}
+	for k, v := range full {
+		if incremental[k] != v {
+			t.Errorf("ключ %s: инкремент=%v, пересчёт=%v", k, incremental[k], v)
+		}
+	}
+}
+
 // При выключённых итогах таблица итогов не создаётся (не платим за поддержку).
 func TestAccountTotals_DisabledNoTable(t *testing.T) {
 	ar := totalsAccountReg()
