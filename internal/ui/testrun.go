@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivantit66/onebase/internal/access"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/processor"
@@ -88,12 +89,16 @@ func (t *testRecorder) RecordAssert(o interpreter.AssertOutcome) {
 	t.outcomes = append(t.outcomes, o)
 }
 
-// roleChecker реализует interpreter.RoleChecker поверх roles/*.yaml проекта, так
-// что Утверждать.РольМожет гоняет тот же auth.PermissionHas, что и рантайм, — без
-// запущенного сервера и без заведённых пользователей (план 112).
-type roleChecker struct{ byName map[string]*auth.Role }
+// accessChecker реализует interpreter.AccessChecker поверх roles/*.yaml проекта и
+// метаданных реестра, так что ассерты доступа гоняют те же auth.PermissionHas /
+// access.FieldDecisions / access.Decide, что и рантайм, — без запущенного сервера
+// и без заведённых пользователей (планы 112, 113).
+type accessChecker struct {
+	byName map[string]*auth.Role
+	reg    *runtime.Registry
+}
 
-func newRoleChecker(proj *project.Project) (*roleChecker, error) {
+func newAccessChecker(proj *project.Project, reg *runtime.Registry) (*accessChecker, error) {
 	defs, err := auth.LoadRolesYAML(filepath.Join(proj.Dir, "roles"))
 	if err != nil {
 		return nil, fmt.Errorf("загрузка ролей для тестов: %w", err)
@@ -102,15 +107,81 @@ func newRoleChecker(proj *project.Project) (*roleChecker, error) {
 	for _, r := range defs {
 		byName[strings.ToLower(strings.TrimSpace(r.Name))] = r
 	}
-	return &roleChecker{byName: byName}, nil
+	return &accessChecker{byName: byName, reg: reg}, nil
 }
 
-func (rc *roleChecker) RoleAllows(name, kind, entity, op string) (bool, error) {
+func (rc *accessChecker) role(name string) (*auth.Role, error) {
 	r, ok := rc.byName[strings.ToLower(strings.TrimSpace(name))]
 	if !ok {
-		return false, fmt.Errorf("роль «%s» не найдена в roles/*.yaml", name)
+		return nil, fmt.Errorf("роль «%s» не найдена в roles/*.yaml", name)
+	}
+	return r, nil
+}
+
+func (rc *accessChecker) RoleAllows(name, kind, entity, op string) (bool, error) {
+	r, err := rc.role(name)
+	if err != nil {
+		return false, err
 	}
 	return r.Allows(kind, entity, op)
+}
+
+// FieldMask применяет полевое маскирование роли к value (план 88, поверх
+// access.FieldDecisions). hasPolicy=true, если поле маскируется/скрывается.
+// Требует read на объекте — иначе маскирование неприменимо (loud error).
+func (rc *accessChecker) FieldMask(name, kind, entity, field string, value any) (any, bool, error) {
+	r, err := rc.role(name)
+	if err != nil {
+		return nil, false, err
+	}
+	k := auth.KindFromWord(kind)
+	if k == "" {
+		return nil, false, fmt.Errorf("неизвестный вид объекта %q", kind)
+	}
+	meta := rc.reg.GetEntity(entity)
+	if meta == nil {
+		return nil, false, fmt.Errorf("объект «%s» не найден", entity)
+	}
+	if !auth.PermissionHas(r.Permissions, k, entity, "read") {
+		return nil, false, fmt.Errorf("роль «%s» не имеет права чтения «%s» — маскирование неприменимо", name, entity)
+	}
+	user := &auth.User{Login: "_test_user", Roles: []*auth.Role{r}}
+	for f, d := range access.FieldDecisions(user, k, entity, meta) {
+		if strings.EqualFold(f, field) {
+			return access.MaskValue(d.Strategy, d.Keep, value), true, nil
+		}
+	}
+	return value, false, nil
+}
+
+// RowRestriction сообщает, применяется ли строковый RLS-фильтр (план 79, поверх
+// access.DecideWithLookup): "denied" | "unrestricted" | "restricted".
+func (rc *accessChecker) RowRestriction(name, kind, entity, op string) (string, error) {
+	r, err := rc.role(name)
+	if err != nil {
+		return "", err
+	}
+	k := auth.KindFromWord(kind)
+	if k == "" {
+		return "", fmt.Errorf("неизвестный вид объекта %q", kind)
+	}
+	meta := rc.reg.GetEntity(entity)
+	if meta == nil {
+		return "", fmt.Errorf("объект «%s» не найден", entity)
+	}
+	user := &auth.User{ID: "_test_user_id", Login: "_test_user", Roles: []*auth.Role{r}}
+	dec, err := access.DecideWithLookup(user, k, entity, auth.NormalizeOp(op), meta, rc.reg)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case !dec.Allowed:
+		return "denied", nil
+	case dec.Unrestricted:
+		return "unrestricted", nil
+	default:
+		return "restricted", nil
+	}
 }
 
 // TestRunOptions управляет прогоном тестов.
@@ -136,16 +207,16 @@ func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts T
 	// тестом, чтобы Мок.* и замороженное время не протекали между тестами.
 	profile := interpreter.NewTestProfile()
 
-	// Резолвер прав ролей для Утверждать.РольМожет — грузим roles/*.yaml один раз
-	// на прогон (роли между тестами не меняются).
-	roles, err := newRoleChecker(proj)
+	// Резолвер прав для ассертов доступа — грузим roles/*.yaml один раз на прогон
+	// (роли между тестами не меняются); метаданные берём из реестра.
+	checker, err := newAccessChecker(proj, reg)
 	if err != nil {
 		return TestRunResult{}, err
 	}
 
 	var res TestRunResult
 	for _, proc := range selectTests(proj, opts.Filter) {
-		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation, profile, roles)
+		c, envErr := runOneTest(ctx, s, reg, db, proc, isolation, profile, checker)
 		if envErr != nil {
 			return res, envErr
 		}
@@ -157,10 +228,10 @@ func RunTests(ctx context.Context, proj *project.Project, db *storage.DB, opts T
 // runOneTest гоняет один тест-процессор, при необходимости оборачивая его в
 // транзакцию с откатом (изоляция данных). Возвращает ошибку только при сбое
 // окружения; провал/ошибку самого теста несёт TestCaseResult.
-func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string, profile *interpreter.TestProfile, roles interpreter.RoleChecker) (TestCaseResult, error) {
+func runOneTest(ctx context.Context, s *Server, reg *runtime.Registry, db *storage.DB, proc *processor.Processor, isolation string, profile *interpreter.TestProfile, checker interpreter.AccessChecker) (TestCaseResult, error) {
 	rec := &testRecorder{}
 	assert := interpreter.NewAssertRoot(rec)
-	assert.SetRoleChecker(roles)
+	assert.SetAccessChecker(checker)
 	extra := map[string]any{"Утверждать": assert, "Assert": assert}
 	// Тест-профиль: часы + моки. Reset — чтобы записи/время предыдущего теста
 	// не протекали. Инжектируем последними, поверх стандартных переменных.

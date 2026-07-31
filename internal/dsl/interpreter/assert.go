@@ -33,26 +33,34 @@ type AssertRecorder interface {
 	RecordAssert(o AssertOutcome)
 }
 
-// RoleChecker резолвит, разрешает ли именованная роль операцию над (вид, объект).
-// Инжектится раннером тестов (слой ui), чтобы ядро интерпретатора не зависело от
-// пакета auth. Вид/операция — пользовательские слова, реализация их нормализует.
-// Ошибка (неизвестная роль/вид) — чтобы ассерт провалился громко, а не молча
-// отчитался «не разрешено».
-type RoleChecker interface {
+// AccessChecker резолвит права роли для ассертов доступа. Инжектится раннером
+// тестов (слой ui), чтобы ядро интерпретатора не зависело от пакетов auth/access.
+// Вид/операция — пользовательские слова, реализация их нормализует. Ошибки
+// (неизвестная роль/вид/объект) — чтобы ассерт провалился громко, а не молча.
+type AccessChecker interface {
+	// RoleAllows — матрица операций (план 112): разрешает ли роль op над (вид,объект).
 	RoleAllows(roleName, kind, entity, op string) (allowed bool, err error)
+	// FieldMask — полевой доступ (план 88): применяет маскирование поля при чтении.
+	// hasPolicy=true, если поле маскируется/скрывается; masked — результат маски
+	// на value (для точной проверки МаскаПоля).
+	FieldMask(roleName, kind, entity, field string, value any) (masked any, hasPolicy bool, err error)
+	// RowRestriction — строковый доступ (план 79): "denied" | "unrestricted" |
+	// "restricted" для чтения/записи роли над объектом.
+	RowRestriction(roleName, kind, entity, op string) (state string, err error)
 }
 
 // AssertRoot — корневой DSL-объект Утверждать.
 type AssertRoot struct {
-	rec   AssertRecorder
-	roles RoleChecker // nil вне `onebase test` — ассерты ролей тогда проваливаются с пояснением
+	rec    AssertRecorder
+	access AccessChecker // nil вне `onebase test` — ассерты доступа тогда проваливаются с пояснением
 }
 
 // NewAssertRoot создаёт объект для инжекции как DSL-переменную «Утверждать».
 func NewAssertRoot(rec AssertRecorder) *AssertRoot { return &AssertRoot{rec: rec} }
 
-// SetRoleChecker включает ассерты РольМожет/РольНеМожет, подставляя резолвер прав.
-func (a *AssertRoot) SetRoleChecker(rc RoleChecker) { a.roles = rc }
+// SetAccessChecker включает ассерты доступа (РольМожет/ПолеМаскируется/
+// СтрокиОграничены и т.п.), подставляя резолвер прав.
+func (a *AssertRoot) SetAccessChecker(rc AccessChecker) { a.access = rc }
 
 // This: у объекта нет доступных членов, только методы. Get/Set — безопасные no-op.
 func (a *AssertRoot) Get(string) any  { return nil }
@@ -76,9 +84,20 @@ func (a *AssertRoot) CallMethod(method string, args []any) any {
 		return a.roleAssert(args, true)
 	case "рольнеможет", "rolecannot":
 		return a.roleAssert(args, false)
+	case "полемаскируется", "fieldmasked":
+		return a.fieldMaskedAssert(args, true)
+	case "полевидно", "fieldvisible":
+		return a.fieldMaskedAssert(args, false)
+	case "маскаполя", "fieldmask":
+		return a.maskValueAssert(args)
+	case "строкиограничены", "rowsrestricted":
+		return a.rowsAssert(args, true)
+	case "строкинеограничены", "rowsunrestricted":
+		return a.rowsAssert(args, false)
 	}
 	panic(userError{Msg: "Утверждать: неизвестный метод «" + method +
-		"» (доступны Равно, НеРавно, Истина, Ложь, Заполнено, Провалить, РольМожет, РольНеМожет)"})
+		"» (доступны Равно, НеРавно, Истина, Ложь, Заполнено, Провалить, РольМожет, РольНеМожет, " +
+		"ПолеМаскируется, ПолеВидно, МаскаПоля, СтрокиОграничены, СтрокиНеОграничены)"})
 }
 
 // Равно(Факт, Ожидание, Описание) / НеРавно(Факт, Ожидание, Описание).
@@ -138,10 +157,10 @@ func (a *AssertRoot) roleAssert(args []any, want bool) any {
 	entity := assertStr(argAt(args, 2))
 	op := assertStr(argAt(args, 3))
 	desc := descAt(args, 4)
-	if a.roles == nil {
+	if a.access == nil {
 		return a.record(false, desc, "проверка ролей доступна только в onebase test")
 	}
-	allowed, err := a.roles.RoleAllows(role, kind, entity, op)
+	allowed, err := a.access.RoleAllows(role, kind, entity, op)
 	if err != nil {
 		return a.record(false, desc, err.Error())
 	}
@@ -153,6 +172,92 @@ func (a *AssertRoot) roleAssert(args []any, want bool) any {
 			verb = "не должна разрешать"
 		}
 		detail = fmt.Sprintf("роль «%s» %s %s «%s» операцию «%s»", role, verb, kind, entity, op)
+	}
+	return a.record(passed, desc, detail)
+}
+
+// ПолеМаскируется(Роль, Вид, Объект, Поле, Описание) / ПолеВидно(...) — маскируется
+// ли поле при чтении ролью (полевой доступ, план 88, поверх access.FieldDecisions).
+func (a *AssertRoot) fieldMaskedAssert(args []any, wantMasked bool) any {
+	role := assertStr(argAt(args, 0))
+	kind := assertStr(argAt(args, 1))
+	entity := assertStr(argAt(args, 2))
+	field := assertStr(argAt(args, 3))
+	desc := descAt(args, 4)
+	if a.access == nil {
+		return a.record(false, desc, "проверка доступа доступна только в onebase test")
+	}
+	_, hasPolicy, err := a.access.FieldMask(role, kind, entity, field, nil)
+	if err != nil {
+		return a.record(false, desc, err.Error())
+	}
+	passed := hasPolicy == wantMasked
+	detail := ""
+	if !passed {
+		if wantMasked {
+			detail = fmt.Sprintf("поле «%s.%s» для роли «%s» видно полностью, ожидалась маска", entity, field, role)
+		} else {
+			detail = fmt.Sprintf("поле «%s.%s» для роли «%s» маскируется, ожидалось полное значение", entity, field, role)
+		}
+	}
+	return a.record(passed, desc, detail)
+}
+
+// МаскаПоля(Роль, Вид, Объект, Поле, Значение, Ожидание, Описание) — точный
+// результат маскирования значения (проверяет сам алгоритм маски).
+func (a *AssertRoot) maskValueAssert(args []any) any {
+	role := assertStr(argAt(args, 0))
+	kind := assertStr(argAt(args, 1))
+	entity := assertStr(argAt(args, 2))
+	field := assertStr(argAt(args, 3))
+	value := argAt(args, 4)
+	expect := argAt(args, 5)
+	desc := descAt(args, 6)
+	if a.access == nil {
+		return a.record(false, desc, "проверка доступа доступна только в onebase test")
+	}
+	masked, _, err := a.access.FieldMask(role, kind, entity, field, value)
+	if err != nil {
+		return a.record(false, desc, err.Error())
+	}
+	passed := equal(masked, expect)
+	detail := ""
+	if !passed {
+		detail = fmt.Sprintf("ожидалась маска «%s», получено «%s»", assertStr(expect), assertStr(masked))
+	}
+	return a.record(passed, desc, detail)
+}
+
+// СтрокиОграничены(Роль, Вид, Объект, Операция, Описание) / СтрокиНеОграничены(...)
+// — применяется ли строковый фильтр RLS (план 79, поверх access.DecideWithLookup).
+func (a *AssertRoot) rowsAssert(args []any, wantRestricted bool) any {
+	role := assertStr(argAt(args, 0))
+	kind := assertStr(argAt(args, 1))
+	entity := assertStr(argAt(args, 2))
+	op := assertStr(argAt(args, 3))
+	desc := descAt(args, 4)
+	if a.access == nil {
+		return a.record(false, desc, "проверка доступа доступна только в onebase test")
+	}
+	state, err := a.access.RowRestriction(role, kind, entity, op)
+	if err != nil {
+		return a.record(false, desc, err.Error())
+	}
+	if state == "denied" {
+		return a.record(false, desc, fmt.Sprintf("роль «%s» не имеет операции «%s» на «%s» — сначала РольМожет", role, op, entity))
+	}
+	want := "unrestricted"
+	if wantRestricted {
+		want = "restricted"
+	}
+	passed := state == want
+	detail := ""
+	if !passed {
+		if wantRestricted {
+			detail = fmt.Sprintf("роль «%s» видит все строки «%s», ожидался строковый фильтр", role, entity)
+		} else {
+			detail = fmt.Sprintf("строки «%s» для роли «%s» ограничены фильтром, ожидались все", entity, role)
+		}
 	}
 	return a.record(passed, desc, detail)
 }
