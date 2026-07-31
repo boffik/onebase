@@ -1120,12 +1120,18 @@ func (tr *translator) genAccountBalances(ar *metadata.AccountRegister, args [][]
 	// План 80: быстрый путь через предрасчитанные помесячные итоги вместо SUM по
 	// всей истории проводок. Включается, когда заведомо эквивалентен on-the-fly:
 	// итоги применимы, нет отбора по счёту (args[1]) и нет активной строковой
-	// политики. Пока — только текущие остатки; Остатки(&Момент) через итоги —
-	// следующий срез, до него момент падает на обычный расчёт ниже.
+	// политики. Текущие остатки — SUM по всем месяцам; Остатки(&Момент) — месяцы
+	// до момента (из итогов) + хвост проводок месяца момента (из акк_).
 	if ar.TotalsUsable() && !accountHasFilterArg(args) && tr.sourceRowFilter("register", ar.Name) == nil {
 		if !anyArgTokens(args) {
 			return tr.genAccountBalancesFromTotals(ar), alias, nil
 		}
+		if sql, ok, err := tr.genAccountBalancesFromTotalsAtMoment(ar, args[0]); err != nil {
+			return "", "", err
+		} else if ok {
+			return sql, alias, nil
+		}
+		// момент/дата не распознаны как значение — обычный путь ниже
 	}
 
 	var resCols []string
@@ -1227,6 +1233,96 @@ func (tr *translator) genAccountBalancesFromTotals(ar *metadata.AccountRegister)
 		sql += ", " + strings.Join(subGroup, ", ")
 	}
 	return sql
+}
+
+// genAccountBalancesFromTotalsAtMoment — остатки бухрегистра НА МОМЕНТ из итогов:
+// обороты Дт/Кт месяцев СТРОГО ДО месяца момента (из итоги_акк_*) + хвост проводок
+// внутри месяца момента до самого момента (из акк_*), развёрнутый на дебет/кредит.
+// Границу месяца вычисляем в Go, поэтому в SQL нет диалектных функций дат. Колонки
+// (счёт, наименование, субконто…, <res>_дт/_кт/остаток) и LEFT JOIN на _accounts
+// совпадают с genAccountBalances. ok=false — момент/дата не распознаны как значение
+// (вызывающий падает на обычный расчёт).
+//
+// SQLite-плейсхолдеры анонимные ('?'), поэтому аргументы добавляются в tr.args
+// СТРОГО в порядке появления плейсхолдеров в тексте: prior (ключ месяца), затем
+// каждая tail-половина (начало месяца + условие момента со своими аргументами).
+func (tr *translator) genAccountBalancesFromTotalsAtMoment(ar *metadata.AccountRegister, arg0 []tok) (string, bool, error) {
+	d := dialectOrDefault(tr.opts.Dialect)
+
+	var period time.Time
+	var buildCond func() string
+	if mt := tr.firstArgMoment(arg0); mt != nil {
+		period, _ = mt.PointInTime()
+		buildCond = func() string { return tr.accountMomentCondition(mt) }
+	} else if dt, ok := tr.firstArgDate(arg0); ok {
+		period = dt
+		buildCond = func() string {
+			tr.args = append(tr.args, dt)
+			return "r.period <= " + d.Placeholder(len(tr.args))
+		}
+	} else {
+		return "", false, nil
+	}
+	period = period.UTC()
+	var subCols []string
+	for i := range ar.Subconto {
+		subCols = append(subCols, metadata.SubcontoColumn(i+1))
+	}
+
+	// prior: обороты Дт/Кт месяцев строго до месяца момента из итогов.
+	tr.args = append(tr.args, period.Format("2006-01"))
+	mkPH := d.Placeholder(len(tr.args))
+	priorSel := append([]string{"счёт"}, subCols...)
+	for _, res := range ar.Resources {
+		col := metadata.ColumnName(res)
+		priorSel = append(priorSel, col+"_дт", col+"_кт")
+	}
+	prior := "SELECT " + strings.Join(priorSel, ", ") + " FROM " + metadata.AccountRegTotalsTableName(ar.Name) +
+		" WHERE " + metadata.RegisterTotalsMonthCol + " < " + mkPH
+
+	// tail-половина: проводки [начало месяца момента; момент], развёрнутые на счёт.
+	tailHalf := func(acctCol string, debit bool) string {
+		tr.args = append(tr.args, monthStartOf(period))
+		msPH := d.Placeholder(len(tr.args))
+		cond := buildCond()
+		sel := []string{"r." + acctCol + " AS счёт"}
+		for _, c := range subCols {
+			sel = append(sel, "r."+c+" AS "+c)
+		}
+		for _, res := range ar.Resources {
+			col := metadata.ColumnName(res)
+			if debit {
+				sel = append(sel, "r."+col+" AS "+col+"_дт", "0 AS "+col+"_кт")
+			} else {
+				sel = append(sel, "0 AS "+col+"_дт", "r."+col+" AS "+col+"_кт")
+			}
+		}
+		return "SELECT " + strings.Join(sel, ", ") + " FROM " + metadata.AccountRegTableName(ar.Name) +
+			" r WHERE r.period >= " + msPH + " AND " + cond
+	}
+	tailDt := tailHalf("счётдт", true)
+	tailKt := tailHalf("счёткт", false)
+	inner := prior + " UNION ALL " + tailDt + " UNION ALL " + tailKt
+
+	// Внешний агрегат: LEFT JOIN _accounts (все счета) + сальдо = Σ(Дт − Кт).
+	outer := "a.code AS счёт, a.name AS наименование"
+	var groupSub []string
+	for _, c := range subCols {
+		outer += ", u." + c + " AS " + c
+		groupSub = append(groupSub, "u."+c)
+	}
+	for _, res := range ar.Resources {
+		col := metadata.ColumnName(res)
+		dc, cc := col+"_дт", col+"_кт"
+		outer += ", COALESCE(SUM(u." + dc + "),0) AS " + dc +
+			", COALESCE(SUM(u." + cc + "),0) AS " + cc +
+			", COALESCE(SUM(u." + dc + " - u." + cc + "),0) AS " + col + "остаток"
+	}
+	sql := "SELECT " + outer + " FROM _accounts a LEFT JOIN (" + inner + ") u ON u.счёт = a.code GROUP BY a.code, a.name"
+	if len(groupSub) > 0 {
+		sql += ", " + strings.Join(groupSub, ", ")
+	}
+	return sql, true, nil
 }
 
 func (tr *translator) genAccountTurnovers(ar *metadata.AccountRegister, args [][]tok) (string, string, error) {
