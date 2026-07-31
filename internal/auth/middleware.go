@@ -20,7 +20,7 @@ func (r *Repo) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 
-		hasUsers, err := r.HasUsers(ctx)
+		hasUsers, err := r.hasUsersCached(ctx)
 		if err != nil {
 			writeAuthUnavailable(w, false)
 			return
@@ -70,7 +70,7 @@ func (r *Repo) serveWithSession(next http.Handler, w http.ResponseWriter, req *h
 func (r *Repo) APITokenOrSessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
-		hasUsers, err := r.HasUsers(ctx)
+		hasUsers, err := r.hasUsersCached(ctx)
 		if err != nil {
 			writeAuthUnavailable(w, true)
 			return
@@ -115,7 +115,8 @@ func bearerToken(req *http.Request) (string, bool) {
 
 func (r *Repo) contextWithUser(ctx context.Context, user *User) context.Context {
 	// Load roles for this user (best-effort — don't fail if table missing yet).
-	if roles, err := r.GetRolesForUser(ctx, user.ID); err == nil {
+	// Cached on the hot path; invalidated on role changes (see cache.go).
+	if roles, err := r.rolesForUserCached(ctx, user.ID); err == nil {
 		user.Roles = roles
 	}
 	ctx = context.WithValue(ctx, userKey, user)

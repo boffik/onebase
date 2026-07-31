@@ -348,6 +348,8 @@ func (r *Repo) SyncRoles(ctx context.Context, roles []*Role) error {
 		}
 		role.ID = id
 	}
+	// Role definitions/permissions changed for potentially every user.
+	r.invalidateAllRoles()
 	return nil
 }
 
@@ -426,6 +428,9 @@ func (r *Repo) AssignRole(ctx context.Context, userID, roleID string) error {
 		`INSERT INTO _user_roles (user_id, role_id) VALUES (%s, %s) ON CONFLICT DO NOTHING`,
 		d.Placeholder(1), d.Placeholder(2))
 	_, err := r.db.Exec(ctx, q, userID, roleID)
+	if err == nil {
+		r.invalidateUserRoles(userID)
+	}
 	return err
 }
 
@@ -435,6 +440,9 @@ func (r *Repo) UnassignRole(ctx context.Context, userID, roleID string) error {
 	q := fmt.Sprintf(`DELETE FROM _user_roles WHERE user_id = %s AND role_id = %s`,
 		d.Placeholder(1), d.Placeholder(2))
 	_, err := r.db.Exec(ctx, q, userID, roleID)
+	if err == nil {
+		r.invalidateUserRoles(userID)
+	}
 	return err
 }
 
@@ -443,6 +451,9 @@ func (r *Repo) DeleteRoleByName(ctx context.Context, name string) error {
 	d := r.db.Dialect()
 	q := fmt.Sprintf(`DELETE FROM _roles WHERE name = %s`, d.Placeholder(1))
 	_, err := r.db.Exec(ctx, q, name)
+	if err == nil {
+		r.invalidateAllRoles()
+	}
 	return err
 }
 
