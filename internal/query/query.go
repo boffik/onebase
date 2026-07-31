@@ -1325,9 +1325,141 @@ func (tr *translator) genAccountBalancesFromTotalsAtMoment(ar *metadata.AccountR
 	return sql, true, nil
 }
 
+// accountTurnoversHasFilterArg — передан ли оборотам отбор по счёту (args[2]).
+func accountTurnoversHasFilterArg(args [][]tok) bool {
+	return len(args) >= 3 && len(args[2]) > 0
+}
+
+// turnoverTotalsSel — колонки итогов для оборотов: счёт, субконто…, <res>_дт/_кт.
+func turnoverTotalsSel(ar *metadata.AccountRegister, subCols []string) []string {
+	sel := append([]string{"счёт"}, subCols...)
+	for _, res := range ar.Resources {
+		col := metadata.ColumnName(res)
+		sel = append(sel, col+"_дт", col+"_кт")
+	}
+	return sel
+}
+
+// genAccountTurnoversFromTotals — обороты бухрегистра из помесячных итогов (план 80).
+// Полный период (без границ) — сумма всех итогов. Диапазон [from, to] дат: полные
+// месяцы строго между месяцами from и to берутся из итогов, частичные месяцы на
+// концах — из проводок акк_ (развёрнутых на Дт/Кт). Один месяц — целиком из проводок.
+// Момент/одна граница/не-дата → ok=false (обычный расчёт). Аргументы добавляются в
+// порядке плейсхолдеров (анонимные '?' SQLite).
+func (tr *translator) genAccountTurnoversFromTotals(ar *metadata.AccountRegister, args [][]tok) (string, bool, error) {
+	d := dialectOrDefault(tr.opts.Dialect)
+	var subCols []string
+	for i := range ar.Subconto {
+		subCols = append(subCols, metadata.SubcontoColumn(i+1))
+	}
+	totals := metadata.AccountRegTotalsTableName(ar.Name)
+
+	hasFrom := len(args) > 0 && len(args[0]) > 0
+	hasTo := len(args) > 1 && len(args[1]) > 0
+
+	// Полный период: сумма всех помесячных итогов по счёту.
+	if !hasFrom && !hasTo {
+		inner := "SELECT " + strings.Join(turnoverTotalsSel(ar, subCols), ", ") + " FROM " + totals
+		return tr.accountTurnoversOuter(ar, subCols, inner), true, nil
+	}
+	if !hasFrom || !hasTo {
+		return "", false, nil // односторонний диапазон — на лету
+	}
+	fromT, ok1 := tr.firstArgDate(args[0])
+	toT, ok2 := tr.firstArgDate(args[1])
+	if !ok1 || !ok2 {
+		return "", false, nil // моменты/не-даты — на лету
+	}
+	fromT, toT = fromT.UTC(), toT.UTC()
+
+	// tail-половина: проводки периода [lo, hi)/[lo, hi], развёрнутые на счёт.
+	tailHalf := func(acctCol string, debit bool, lo, hi time.Time, hiIncl bool) string {
+		tr.args = append(tr.args, lo)
+		loPH := d.Placeholder(len(tr.args))
+		tr.args = append(tr.args, hi)
+		hiPH := d.Placeholder(len(tr.args))
+		hiOp := " < "
+		if hiIncl {
+			hiOp = " <= "
+		}
+		sel := []string{"r." + acctCol + " AS счёт"}
+		for _, c := range subCols {
+			sel = append(sel, "r."+c+" AS "+c)
+		}
+		for _, res := range ar.Resources {
+			col := metadata.ColumnName(res)
+			if debit {
+				sel = append(sel, "r."+col+" AS "+col+"_дт", "0 AS "+col+"_кт")
+			} else {
+				sel = append(sel, "0 AS "+col+"_дт", "r."+col+" AS "+col+"_кт")
+			}
+		}
+		return "SELECT " + strings.Join(sel, ", ") + " FROM " + metadata.AccountRegTableName(ar.Name) +
+			" r WHERE r.period >= " + loPH + " AND r.period" + hiOp + hiPH
+	}
+
+	var halves []string
+	if fromT.Format("2006-01") == toT.Format("2006-01") {
+		// один месяц — весь диапазон из проводок.
+		halves = append(halves,
+			tailHalf("счётдт", true, fromT, toT, true),
+			tailHalf("счёткт", false, fromT, toT, true))
+	} else {
+		// полные месяцы строго между from и to — из итогов.
+		tr.args = append(tr.args, fromT.Format("2006-01"))
+		mkFromPH := d.Placeholder(len(tr.args))
+		tr.args = append(tr.args, toT.Format("2006-01"))
+		mkToPH := d.Placeholder(len(tr.args))
+		prior := "SELECT " + strings.Join(turnoverTotalsSel(ar, subCols), ", ") + " FROM " + totals +
+			" WHERE " + metadata.RegisterTotalsMonthCol + " > " + mkFromPH +
+			" AND " + metadata.RegisterTotalsMonthCol + " < " + mkToPH
+		fromNext := monthStartOf(fromT).AddDate(0, 1, 0)
+		toStart := monthStartOf(toT)
+		halves = append(halves, prior,
+			tailHalf("счётдт", true, fromT, fromNext, false),
+			tailHalf("счёткт", false, fromT, fromNext, false),
+			tailHalf("счётдт", true, toStart, toT, true),
+			tailHalf("счёткт", false, toStart, toT, true))
+	}
+	return tr.accountTurnoversOuter(ar, subCols, strings.Join(halves, " UNION ALL ")), true, nil
+}
+
+// accountTurnoversOuter агрегирует внутренний источник (итоги/разворот) в обороты
+// Дт/Кт по счёту, присоединяя наименование из _accounts. Только счета с движениями
+// (их и содержит источник) — как HAVING в genAccountTurnovers.
+func (tr *translator) accountTurnoversOuter(ar *metadata.AccountRegister, subCols []string, inner string) string {
+	out := "u.счёт AS счёт, a.name AS наименование"
+	var groupSub []string
+	for _, c := range subCols {
+		out += ", u." + c + " AS " + c
+		groupSub = append(groupSub, "u."+c)
+	}
+	for _, res := range ar.Resources {
+		col := metadata.ColumnName(res)
+		out += ", COALESCE(SUM(u." + col + "_дт),0) AS " + col + "_дт" +
+			", COALESCE(SUM(u." + col + "_кт),0) AS " + col + "_кт"
+	}
+	sql := "SELECT " + out + " FROM (" + inner + ") u JOIN _accounts a ON a.code = u.счёт GROUP BY u.счёт, a.name"
+	if len(groupSub) > 0 {
+		sql += ", " + strings.Join(groupSub, ", ")
+	}
+	return sql
+}
+
 func (tr *translator) genAccountTurnovers(ar *metadata.AccountRegister, args [][]tok) (string, string, error) {
 	table := metadata.AccountRegTableName(ar.Name)
 	alias := "обороты_" + strings.ToLower(ar.Name)
+
+	// План 80: быстрый путь оборотов через помесячные итоги. Применим без отбора по
+	// счёту (args[2]) и без строковой политики. Полный период или обе границы-даты —
+	// из итогов (+ хвосты частичных месяцев); момент/односторонний диапазон — на лету.
+	if ar.TotalsUsable() && !accountTurnoversHasFilterArg(args) && tr.sourceRowFilter("register", ar.Name) == nil {
+		if sql, ok, err := tr.genAccountTurnoversFromTotals(ar, args); err != nil {
+			return "", "", err
+		} else if ok {
+			return sql, alias, nil
+		}
+	}
 
 	var resCols []string
 	for _, r := range ar.Resources {
