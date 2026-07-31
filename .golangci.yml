@@ -3,7 +3,8 @@
 # Стратегия — прогрессивное ужесточение: включено то, что проходит на текущем
 # коде (CI остаётся зелёным), остальное включается по мере чистки baseline.
 # Staticcheck включён после закрытия baseline в 2026-07.
-# Оставшаяся очередь: errcheck, unused, gosec, bodyclose.
+# bodyclose включён по плану 109 (этап A): baseline был 0 находок.
+# Оставшаяся очередь (план 109): unused, errcheck, gosec.
 # После чистки соответствующего линтера — переносить его в enable.
 version: "2"
 
@@ -13,6 +14,7 @@ linters:
     - govet
     - ineffassign
     - staticcheck
+    - bodyclose
 
 run:
   timeout: 10m
