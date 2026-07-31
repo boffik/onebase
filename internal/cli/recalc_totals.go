@@ -17,7 +17,7 @@ import (
 // массовой правки данных в обход движка или для первичного наполнения.
 var recalcTotalsCmd = &cobra.Command{
 	Use:   "recalc-totals",
-	Short: "Пересчитать итоги регистров накопления из движений",
+	Short: "Пересчитать итоги регистров (накопления и бухгалтерии) из движений",
 	RunE:  runRecalcTotals,
 }
 
@@ -69,6 +69,9 @@ func runRecalcTotals(cmd *cobra.Command, _ []string) error {
 	if err := db.MigrateRegisters(ctx, proj.Registers); err != nil {
 		return fmt.Errorf("migrate registers: %w", err)
 	}
+	if err := db.MigrateAccountRegisters(ctx, proj.AccountRegisters); err != nil {
+		return fmt.Errorf("migrate account registers: %w", err)
+	}
 
 	var done, skipped int
 	for _, reg := range proj.Registers {
@@ -83,6 +86,20 @@ func runRecalcTotals(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("recalc totals %s: %w", reg.Name, err)
 		}
 		fmt.Fprintf(os.Stdout, "итоги пересчитаны: %s (%s)\n", reg.Name, metadata.RegisterTotalsTableName(reg.Name))
+		done++
+	}
+	for _, ar := range proj.AccountRegisters {
+		if only != "" && ar.Name != only {
+			continue
+		}
+		if !ar.TotalsUsable() {
+			skipped++
+			continue
+		}
+		if err := db.RecalcAccountRegisterTotals(ctx, ar); err != nil {
+			return fmt.Errorf("recalc account totals %s: %w", ar.Name, err)
+		}
+		fmt.Fprintf(os.Stdout, "итоги пересчитаны: %s (%s)\n", ar.Name, metadata.AccountRegTotalsTableName(ar.Name))
 		done++
 	}
 	fmt.Fprintf(os.Stdout, "готово: пересчитано %d, пропущено без итогов %d\n", done, skipped)
