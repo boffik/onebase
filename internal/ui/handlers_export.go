@@ -49,14 +49,17 @@ func (s *Server) listExcel(w http.ResponseWriter, r *http.Request) {
 		xlsRows[i] = cells
 	}
 
-	data, err := excel.ExportList(cols, xlsRows)
-	if err != nil {
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", contentDisposition(entity.Name+".xlsx"))
+	// Stream the workbook straight to the client instead of buffering the whole
+	// file in memory (план 111, P2-3). StreamWriter errors surface before any
+	// bytes reach w, so a failure here still yields a clean 500 rather than a
+	// truncated download.
+	if err := excel.WriteList(w, cols, xlsRows); err != nil {
+		w.Header().Del("Content-Disposition")
 		http.Error(w, "Excel error: "+s.errText(r, err), 500)
 		return
 	}
-	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", contentDisposition(entity.Name+".xlsx"))
-	w.Write(data)
 }
 
 // contentDisposition собирает заголовок Content-Disposition по RFC 6266:
