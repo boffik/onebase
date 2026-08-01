@@ -50,13 +50,13 @@ func makeProfileBusy(t *testing.T, dir string) func() {
 		if err != nil {
 			t.Fatalf("open lockfile: %v", err)
 		}
-		return func() { f.Close() }
+		return func() { _ = f.Close() }
 	}
 	lock := filepath.Join(dir, "SingletonLock")
 	if err := os.Symlink(fmt.Sprintf("host-%d", os.Getpid()), lock); err != nil {
 		t.Skipf("symlink недоступен: %v", err)
 	}
-	return func() { os.Remove(lock) }
+	return func() { _ = os.Remove(lock) }
 }
 
 func TestPickProfileDir_ReusesFreeSkipsBusy(t *testing.T) {

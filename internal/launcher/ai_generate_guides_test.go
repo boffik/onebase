@@ -62,15 +62,15 @@ func TestShowObject_AllDirs(t *testing.T) {
 // самых промахоопасных типов и false для неизвестного.
 func TestExampleForType(t *testing.T) {
 	cases := map[string]string{
-		"форма":      "form:\n  name: ФормаОбъекта",              // обёртка form:, не верхний уровень
-		"проведение": "Движения.ОстаткиТоваров.Добавить()",        // верный API движений
-		"отчёт":      "query: |",                                  // отчёт = params + query
-		"виджет":     "type: kpi",                                 // виджет с обязательным type
-		"план счетов": "kind: active",                             // счета
-		"журнал":     "documents: [РеализацияТоваров",             // journals
-		"обработка":  ".proc.os",                                  // код отдельным модулем
-		"константы":  "constants:",                                // список, не по-объектно
-		"печатная форма": "binding:",                              // areas + binding/repeat
+		"форма":          "form:\n  name: ФормаОбъекта",        // обёртка form:, не верхний уровень
+		"проведение":     "Движения.ОстаткиТоваров.Добавить()", // верный API движений
+		"отчёт":          "query: |",                           // отчёт = params + query
+		"виджет":         "type: kpi",                          // виджет с обязательным type
+		"план счетов":    "kind: active",                       // счета
+		"журнал":         "documents: [РеализацияТоваров",      // journals
+		"обработка":      ".proc.os",                           // код отдельным модулем
+		"константы":      "constants:",                         // список, не по-объектно
+		"печатная форма": "binding:",                           // areas + binding/repeat
 	}
 	for kind, needle := range cases {
 		ex, ok := exampleForType(kind)

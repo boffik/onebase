@@ -71,8 +71,8 @@ func TestReportBuilderAppearance(t *testing.T) {
 	for _, want := range []string{
 		"Оформление вывода",
 		`name="comp.appearance.lines"`,
-		`value="both" selected`,                  // линии both выбраны
-		`name="comp.appearance.zebra" checked`,   // зебра включена
+		`value="both" selected`,                // линии both выбраны
+		`name="comp.appearance.zebra" checked`, // зебра включена
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("нет %q", want)

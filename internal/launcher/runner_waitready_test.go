@@ -44,7 +44,7 @@ func waitReadyFreePort(t *testing.T) int {
 		t.Fatalf("free port: %v", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
+	_ = ln.Close()
 	return port
 }
 
@@ -59,7 +59,9 @@ func TestTailFile(t *testing.T) {
 	}
 
 	p := filepath.Join(dir, "base.log")
-	os.WriteFile(p, []byte("строка1\r\nстрока2\r\nстрока3\r\nстрока4\r\n"), 0o644)
+	if err := os.WriteFile(p, []byte("строка1\r\nстрока2\r\nстрока3\r\nстрока4\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	got := tailFile(p, 2)
 	if got != "строка3\nстрока4" {
 		t.Errorf("последние 2 строки: получено %q", got)
@@ -70,7 +72,9 @@ func TestTailFile(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		fmt.Fprintf(&b, "line %04d\n", i)
 	}
-	os.WriteFile(p, []byte(b.String()), 0o644)
+	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	got = tailFile(p, 3)
 	if got != "line 1997\nline 1998\nline 1999" {
 		t.Errorf("хвост большого файла: получено %q", got)
@@ -85,7 +89,9 @@ func TestWaitReady_ProcessDiedShowsLogTail(t *testing.T) {
 
 	base := &Base{ID: "died", Name: "died", Port: waitReadyFreePort(t)}
 	logText := "запуск...\nload project: нет каталога documents\n"
-	os.WriteFile(filepath.Join(logsDirOverride, base.ID+".log"), []byte(logText), 0o644)
+	if err := os.WriteFile(filepath.Join(logsDirOverride, base.ID+".log"), []byte(logText), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	r := NewRunner()
 	r.exits[base.ID] = true // процесс успел упасть ещё до входа в WaitReady

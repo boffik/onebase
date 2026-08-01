@@ -45,8 +45,12 @@ form:
 elements: []
 `
 	osBody := "// модуль формы"
-	os.WriteFile(filepath.Join(dir, "forms", "контрагент", "объекта.form.yaml"), []byte(yamlBody), 0o644)
-	os.WriteFile(filepath.Join(dir, "forms", "контрагент", "объекта.form.os"), []byte(osBody), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "forms", "контрагент", "объекта.form.yaml"), []byte(yamlBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "forms", "контрагент", "объекта.form.os"), []byte(osBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	listYAML := `schema: onebase.form/v1
 form:
@@ -54,7 +58,9 @@ form:
   kind: list
   entity: Контрагент
 `
-	os.WriteFile(filepath.Join(dir, "forms", "контрагент", "списка.form.yaml"), []byte(listYAML), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "forms", "контрагент", "списка.form.yaml"), []byte(listYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	b := &Base{Path: dir, ConfigSource: "file"}
 	forms, err := listManagedFormsFromFS(b)

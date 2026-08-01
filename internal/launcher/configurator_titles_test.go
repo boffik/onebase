@@ -18,9 +18,9 @@ func TestParseMapForm(t *testing.T) {
 	r := formReq(url.Values{
 		"titles.en":         {"Counterparty"},
 		"titles.de":         {"  Geschäftspartner  "}, // trimmed
-		"titles.fr":         {"   "},                   // empty after trim → skip
-		"titles.ru":         {"Контрагент"},            // base lang → skip
-		"field.0.titles.en": {"Name"},                  // другой префикс → не попадает
+		"titles.fr":         {"   "},                  // empty after trim → skip
+		"titles.ru":         {"Контрагент"},           // base lang → skip
+		"field.0.titles.en": {"Name"},                 // другой префикс → не попадает
 	})
 
 	got := parseMapForm(r, "titles")

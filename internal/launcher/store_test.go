@@ -54,7 +54,9 @@ func TestStore_AddAndList(t *testing.T) {
 func TestStore_Get(t *testing.T) {
 	s := newTestStore(t)
 	b := &Base{Name: "ERP", DB: "postgres://localhost/erp"}
-	s.Add(b)
+	if err := s.Add(b); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := s.Get(b.ID)
 	if err != nil {
@@ -73,7 +75,9 @@ func TestStore_Get(t *testing.T) {
 func TestStore_Update(t *testing.T) {
 	s := newTestStore(t)
 	b := &Base{Name: "Old", DB: "postgres://localhost/old"}
-	s.Add(b)
+	if err := s.Add(b); err != nil {
+		t.Fatal(err)
+	}
 
 	b.Name = "New"
 	b.Port = 9090
@@ -94,8 +98,12 @@ func TestStore_Remove(t *testing.T) {
 	s := newTestStore(t)
 	b1 := &Base{Name: "A", DB: "postgres://localhost/a"}
 	b2 := &Base{Name: "B", DB: "postgres://localhost/b"}
-	s.Add(b1)
-	s.Add(b2)
+	if err := s.Add(b1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(b2); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := s.Remove(b1.ID); err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -115,9 +123,15 @@ func TestStore_Move(t *testing.T) {
 	a := &Base{Name: "A", DB: "postgres://localhost/a"}
 	b := &Base{Name: "B", DB: "postgres://localhost/b"}
 	c := &Base{Name: "C", DB: "postgres://localhost/c"}
-	s.Add(a)
-	s.Add(b)
-	s.Add(c)
+	if err := s.Add(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(c); err != nil {
+		t.Fatal(err)
+	}
 
 	order := func() []string {
 		bases, _ := s.List()
@@ -137,8 +151,12 @@ func TestStore_Move(t *testing.T) {
 	}
 
 	// Move B down twice: A,C,B
-	s.Move(b.ID, 1)
-	s.Move(b.ID, 1)
+	if err := s.Move(b.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Move(b.ID, 1); err != nil {
+		t.Fatal(err)
+	}
 	if got := order(); got[0] != "A" || got[1] != "C" || got[2] != "B" {
 		t.Fatalf("after move down want A,C,B got %v", got)
 	}
@@ -180,10 +198,12 @@ func TestStore_MultipleOps_Persistence(t *testing.T) {
 	s := newTestStore(t)
 
 	for i := range 3 {
-		s.Add(&Base{
+		if err := s.Add(&Base{
 			Name: []string{"Alpha", "Beta", "Gamma"}[i],
 			DB:   "postgres://localhost/db",
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	bases, _ := s.List()
