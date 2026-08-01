@@ -52,7 +52,9 @@ func TestSave_PostingBlockedWhenMarked(t *testing.T) {
 		t.Fatal("ожидался res.DSLError != \"\" (проведение помеченного запрещено)")
 	}
 	var posted bool
-	db.QueryRow(ctx, "SELECT posted FROM расходник LIMIT 1").Scan(&posted)
+	if err := db.QueryRow(ctx, "SELECT posted FROM расходник LIMIT 1").Scan(&posted); err != nil {
+		t.Fatal(err)
+	}
 	if posted {
 		t.Error("документ не должен быть проведён")
 	}

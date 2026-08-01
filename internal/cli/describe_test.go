@@ -55,10 +55,10 @@ func TestRunDescribe_V2Contract(t *testing.T) {
 		done <- err
 	}()
 	if err := runDescribe(cmd, nil); err != nil {
-		w.Close()
+		_ = w.Close()
 		t.Fatalf("runDescribe: %v", err)
 	}
-	w.Close()
+	_ = w.Close()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}

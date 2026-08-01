@@ -1320,7 +1320,9 @@ func TestAPI_Create_WithTableParts(t *testing.T) {
 	var resp struct {
 		ID string `json:"id"`
 	}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	docID, _ := uuid.Parse(resp.ID)
 
 	tpRows, err := h.store.GetTablePartRows(ctx, "Поступление", "Товары", docID, doc.TableParts[0])

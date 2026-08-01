@@ -36,11 +36,11 @@ func (f *fakeSMTP) serve() {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	w := bufio.NewWriter(conn)
 	r := bufio.NewReader(conn)
-	send := func(s string) { w.WriteString(s + "\r\n"); w.Flush() }
+	send := func(s string) { _, _ = w.WriteString(s + "\r\n"); _ = w.Flush() }
 	recv := func() string { line, _ := r.ReadString('\n'); return strings.TrimSpace(line) }
 
 	send("220 fakesmtp ESMTP")
@@ -78,7 +78,7 @@ func (f *fakeSMTP) Payload() string {
 
 func TestSend_PlainText(t *testing.T) {
 	srv := startFakeSMTP(t)
-	defer srv.ln.Close()
+	defer func() { _ = srv.ln.Close() }()
 
 	host, portStr, _ := net.SplitHostPort(srv.Addr())
 	port := 0
@@ -109,7 +109,7 @@ func TestSend_PlainText(t *testing.T) {
 
 func TestSend_HTML(t *testing.T) {
 	srv := startFakeSMTP(t)
-	defer srv.ln.Close()
+	defer func() { _ = srv.ln.Close() }()
 
 	_, portStr, _ := net.SplitHostPort(srv.Addr())
 	var p int
