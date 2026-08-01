@@ -181,7 +181,7 @@ func (s *Server) blobReferencedWithPolicy(ctx context.Context, entity *metadata.
 		if rowFilter != nil {
 			filter = &storage.Predicate{All: []storage.Predicate{imageFilter, *rowFilter}}
 		}
-		rows, err := s.store.List(ctx, entity.Name, entity, storage.ListParams{Limit: 1, RowFilter: filter})
+		rows, err := s.store.List(ctx, entity.Name, entity, storage.ListParams{Limit: 1, RowFilter: filter, RowFilterEvaluated: true})
 		if err == nil && len(rows) > 0 {
 			return true
 		}

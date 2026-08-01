@@ -17,6 +17,11 @@ import (
 type ListParams struct {
 	Filters           map[string]FilterValue
 	RowFilter         *Predicate            // additional SQL-side row-level access predicate
+	// RowFilterEvaluated — строковый доступ был вычислен для этого списка (план
+	// 79F): хендлер прошёл через applyRowFilter/rowFilterFor (даже если политика
+	// неограничивающая — RowFilter при этом nil). Используется strict-RLS
+	// чокпоинтом в List как признак «фильтр не забыли», иначе fail-closed.
+	RowFilterEvaluated bool
 	JournalRowFilters map[string]*Predicate // per document name row-level predicates for journal UNIONs
 	Sort              string                // field Name (empty = default sort by id)
 	Dir               string                // "asc" or "desc"
@@ -366,6 +371,13 @@ func folderScopeWhere(d Dialect, entity *metadata.Entity, onlyFolders, excludeFo
 }
 
 func (db *DB) List(ctx context.Context, entityName string, entity *metadata.Entity, params ListParams) ([]map[string]any, error) {
+	// План 79F (defense-in-depth, по умолчанию выключен): если у сущности есть
+	// строковая политика, но список запрошен без вычисления строкового доступа
+	// (хендлер не прошёл applyRowFilter/rowFilterFor), отклоняем fail-closed —
+	// чтобы обход RLS новым list-хендлером всплывал сразу, а не тихо.
+	if db.rlsGuard != nil && !params.RowFilterEvaluated && db.rlsGuard(strings.ToLower(entityName)) {
+		return nil, fmt.Errorf("strict RLS: список %q запрошен без вычисления строкового доступа (fail-closed, план 79F)", entityName)
+	}
 	d := db.dialect
 	table := metadata.TableName(entityName)
 	cols := []string{"id"}

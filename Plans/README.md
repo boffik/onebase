@@ -61,9 +61,9 @@
 2. ~~**План 80** — итоги регистров~~ ✅ **Закрыт** (накопления + бухгалтерии):
    предрасчёт, инкремент в транзакции проводки, быстрый путь остатков/на-момент/
    оборотов, CLI `recalc-totals`, бенч ~150×. Опц. остаток — `totals.period`/свёртка.
-3. **План 79F** — RLS defense-in-depth: перенос enforcement строковых политик в
-   storage-чокпоинт вместо соглашения в хендлерах (2–3 дня). Закрывает арку
-   доступа после 112/113.
+3. ~~**План 79F**~~ 🟡 storage-чокпоинт для `store.List` реализован (fail-closed
+   рантайм-гейт под env `ONEBASE_STRICT_RLS`, по умолчанию выкл.; хелперы доступа
+   ставят `RowFilterEvaluated`). Опц. остаток — сканер `GetByID` и регистры.
 4. Стратегические направления, каждое — отдельный проект: **81** (безопасная
    реструктуризация схемы), **82** (полнотекстовый поиск), **83** (секреты —
    начато), **84** (enterprise-auth: 2FA/SSO/LDAP), **85** (бизнес-процессы —
@@ -196,7 +196,7 @@
 | 62 | [62-network-safety-switch.md](62-network-safety-switch.md) | Предохранитель сети: галочка `net.enabled` лочит хуки/HTTP/сервисы/email; сброс при restore | 0.5 дня | ✅ Реализовано |
 | 67 | [67-exec-command.md](67-exec-command.md) | Выполнение команд ОС из DSL (`ВыполнитьКоманду`) за флагом `AllowExec` (выкл. по умолчанию, без shell, таймаут, аудит) | 1–1.5 дня | ✅ Реализовано |
 | 76 | [76-multi-user-scale-readiness.md](76-multi-user-scale-readiness.md) | Готовность к 100+ активным пользователям: REST RBAC, лимиты, индексы, reference picker, атомарная запись, observability и путь к горизонтальному масштабированию | 2–4 недели по этапам | ⬜ Запланировано |
-| 79 | [79-row-level-access.md](79-row-level-access.md) | Строковые политики доступа поверх RBAC: декларативные row filters в ролях, SQL-side фильтрация UI/REST/picker и безопасный контур отчетов/AI | 1–2 недели по этапам | ✅ Core влит (query compiler fail-closed `assertRowFiltersApplied`); остаётся этап **79F** (storage-чокпоинт) |
+| 79 | [79-row-level-access.md](79-row-level-access.md) | Строковые политики доступа поверх RBAC: декларативные row filters в ролях, SQL-side фильтрация UI/REST/picker и безопасный контур отчетов/AI | 1–2 недели по этапам | ✅ Core влит (query compiler fail-closed `assertRowFiltersApplied`); **79F** storage-чокпоинт для `store.List` реализован (рантайм-гейт, по умолчанию выкл.) |
 
 ### Направление Г — Интеграции и экосистема (продолжение)
 
@@ -235,7 +235,7 @@
 | 84 | [84-enterprise-auth.md](84-enterprise-auth.md) | Enterprise-аутентификация: TOTP-2FA, SSO (OIDC), опц. LDAP — всё opt-in | 7–10 дней | ⬜ Проект |
 | 85 | [85-business-processes-tasks.md](85-business-processes-tasks.md) | Бизнес-процессы и задачи: карта маршрута, «Мои задачи», согласование документов | 2–3 недели | 🟡 Фаза 1: маршрут согласования заявок (задачи и состояния) |
 | 86 | [86-data-exchange.md](86-data-exchange.md) | Обмен данными между базами: планы обмена, регистрация изменений, пакеты, конфликты | 3–4 недели | 🟡 Фаза 1 (файловый обмен) сделана |
-| 79F | [79-row-level-access.md](79-row-level-access.md) | RLS defense-in-depth: storage-чокпоинт вместо enforcement по соглашению в хендлерах | 2–3 дня | ⬜ Проект (этап плана 79) |
+| 79F | [79-row-level-access.md](79-row-level-access.md) | RLS defense-in-depth: storage-чокпоинт вместо enforcement по соглашению в хендлерах | 2–3 дня | 🟡 Рантайм-гейт `store.List` реализован (env `ONEBASE_STRICT_RLS`, по умолчанию выкл.); осталось опц. — сканер `GetByID`, регистры |
 
 > SOAP-веб-сервисы сознательно **не** вносятся: их роль закрывают HTTP-сервисы
 > (план 61) и REST API v2 (план 26).

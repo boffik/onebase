@@ -31,6 +31,7 @@ func (h *handler) applyRowFilter(ctx context.Context, entity *metadata.Entity, o
 	if !dec.Unrestricted {
 		params.RowFilter = dec.Predicate
 	}
+	params.RowFilterEvaluated = true // план 79F: строковый доступ вычислен
 	return params, nil
 }
 

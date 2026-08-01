@@ -94,10 +94,11 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	var treeRows []map[string]any
 	if treeView {
 		allRows, _ := s.store.List(r.Context(), entity.Name, entity, storage.ListParams{
-			ActivityScope: metadata.ActivityScopeAll,
-			ParentStr:     "root",
-			RowFilter:     params.RowFilter,
-			Limit:         storage.MaxListPageSize,
+			ActivityScope:      metadata.ActivityScopeAll,
+			ParentStr:          "root",
+			RowFilter:          params.RowFilter,
+			RowFilterEvaluated: params.RowFilterEvaluated,
+			Limit:              storage.MaxListPageSize,
 		})
 		s.maskRecords(r.Context(), entity, allRows)
 		s.resolveRefs(r.Context(), entity, allRows)

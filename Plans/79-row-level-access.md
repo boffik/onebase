@@ -73,6 +73,19 @@
 
 Эстимейт: 2–3 дня (сканер путей + строгий флаг storage + тесты).
 
+**Реализация (вариант B — рантайм-гейт, по умолчанию выключен):**
+- `storage.DB.SetStrictRLSGuard(guard)` + поле `rlsGuard` (`pg.go`): nil = выключено.
+- `ListParams.RowFilterEvaluated` (`crud.go`): признак «строковый доступ вычислен»,
+  ставится всеми хелперами доступа (`ui.applyRowFilter`/`rowFilterFor`,
+  `api.applyRowFilter`) и явными gated-вызовами `store.List`.
+- `storage.List` fail-closed отклоняет список guarded-сущности без `RowFilterEvaluated`.
+- `access.GuardedEntitiesFromRoles(roles)` — множество сущностей с политиками
+  (catalogs/documents) из всех ролей.
+- Активация: env `ONEBASE_STRICT_RLS` в `onebase run` (`cli/run.go`). Тест —
+  `storage/strict_rls_test.go`.
+- ⬜ Осталось (опц.): вариант A (статический сканер путей `store.GetByID`),
+  распространение на регистры и на `run --id`/launcher/dev.
+
 ## Контекст
 
 В onebase уже есть объектный RBAC:

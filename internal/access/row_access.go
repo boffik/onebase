@@ -73,6 +73,26 @@ func HasRestrictedPolicy(u *auth.User, kind, entity, op string) bool {
 	return restricted
 }
 
+// GuardedEntitiesFromRoles возвращает множество имён сущностей (lower-case), для
+// которых хотя бы одна роль объявляет строковую политику (catalogs/documents).
+// Используется strict-RLS чокпоинтом (план 79F) как guard для storage.List:
+// список такой сущности без вычисленного строкового доступа — обход RLS.
+func GuardedEntitiesFromRoles(roles []*auth.Role) map[string]bool {
+	guarded := map[string]bool{}
+	for _, role := range roles {
+		if role == nil {
+			continue
+		}
+		for name := range role.Permissions.RowAccess.Catalogs {
+			guarded[strings.ToLower(name)] = true
+		}
+		for name := range role.Permissions.RowAccess.Documents {
+			guarded[strings.ToLower(name)] = true
+		}
+	}
+	return guarded
+}
+
 // ValidatePolicy checks a row policy with the same compiler path used at
 // runtime. It is intended for diagnostics/lint: callers pass already resolved
 // same_as policies.
