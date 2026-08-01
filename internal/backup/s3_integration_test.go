@@ -38,7 +38,9 @@ func TestCreateAutoBackup_S3EndToEnd(t *testing.T) {
 	got := make(chan captured, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		buf := new(bytes.Buffer)
-		buf.ReadFrom(r.Body)
+		if _, err := buf.ReadFrom(r.Body); err != nil {
+			t.Errorf("read body: %v", err)
+		}
 		got <- captured{
 			method: r.Method,
 			path:   r.URL.Path,
