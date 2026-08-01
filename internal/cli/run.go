@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ivantit66/onebase/internal/access"
 	"github.com/ivantit66/onebase/internal/api"
 	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/ivantit66/onebase/internal/backup"
@@ -191,6 +192,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		if err := authRepo.SyncRoles(ctx, roles); err != nil {
 			return fmt.Errorf("sync roles: %w", err)
 		}
+	}
+
+	// План 79F: strict-RLS чокпоинт (defense-in-depth). Под флагом
+	// ONEBASE_STRICT_RLS storage.List fail-closed отклоняет список сущности со
+	// строковой политикой, запрошенный без вычисленного доступа — чтобы обход
+	// RLS новым list-хендлером всплывал сразу. По умолчанию выключено.
+	if os.Getenv("ONEBASE_STRICT_RLS") != "" {
+		guarded := access.GuardedEntitiesFromRoles(roles)
+		db.SetStrictRLSGuard(func(name string) bool { return guarded[name] })
 	}
 
 	if err := db.EnsureAccountsTable(ctx); err != nil {

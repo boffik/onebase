@@ -34,6 +34,7 @@ func (s *Server) applyRowFilter(w http.ResponseWriter, r *http.Request, entity *
 	if !dec.Unrestricted {
 		params.RowFilter = dec.Predicate
 	}
+	params.RowFilterEvaluated = true // план 79F: строковый доступ вычислен
 	return params, true
 }
 
@@ -177,6 +178,7 @@ func (s *Server) rowFilterFor(ctx context.Context, entity *metadata.Entity, op s
 	if !dec.Unrestricted {
 		params.RowFilter = dec.Predicate
 	}
+	params.RowFilterEvaluated = true // план 79F: строковый доступ вычислен
 	return params, nil
 }
 

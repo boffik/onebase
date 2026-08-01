@@ -25,6 +25,20 @@ type DB struct {
 	blobStore  BlobObjectStore // non-nil when file_storage=s3 configured
 	blobPrefix string          // key prefix for blob objects in the bucket
 	blobStream bool            // s3 attachments: stream via Range instead of temp file
+	// rlsGuard — strict-RLS чокпоинт (план 79F). nil = выключен (по умолчанию).
+	// Когда задан, List для сущности, у которой guard возвращает true (есть
+	// строковая политика), но без вычисленного строкового доступа
+	// (ListParams.RowFilterEvaluated=false), отклоняется fail-closed. Инжектится
+	// из лаунчера/сервера в строгом режиме (ONEBASE_STRICT_RLS).
+	rlsGuard func(entityName string) bool
+}
+
+// SetStrictRLSGuard включает strict-RLS чокпоинт (план 79F, defense-in-depth).
+// guard(entityName) == true означает «у сущности есть строковая политика».
+// Передача nil выключает режим. Возвращает db для чейнинга при инициализации.
+func (db *DB) SetStrictRLSGuard(guard func(entityName string) bool) *DB {
+	db.rlsGuard = guard
+	return db
 }
 
 // BlobObjectStore is the S3-compatible backend used when file_storage=s3
