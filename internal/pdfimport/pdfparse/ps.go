@@ -5,7 +5,6 @@
 package pdfparse
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -124,18 +123,4 @@ Reading:
 		}
 		stk.Push(Value{nil, objptr{}, obj})
 	}
-}
-
-type seqReader struct {
-	rd     io.Reader
-	offset int64
-}
-
-func (r *seqReader) ReadAt(buf []byte, offset int64) (int, error) {
-	if offset != r.offset {
-		return 0, fmt.Errorf("non-sequential read of stream")
-	}
-	n, err := io.ReadFull(r.rd, buf)
-	r.offset += int64(n)
-	return n, err
 }

@@ -78,7 +78,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			}
 			return strings.Join(e.ListRefreshOn, " ")
 		},
-		"treeColumn":  isTreeListColumn,
+		"treeColumn": isTreeListColumn,
 		"hasValue": func(v any) bool {
 			if v == nil {
 				return false
@@ -452,7 +452,6 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			return template.URL("&" + strings.Join(parts, "&"))
 		},
 		"reportParamQuery": func(params any, values map[string]any) string {
-			type param interface{ GetName() string }
 			// Use reflection-free approach: just iterate over values map
 			parts := []string{}
 			for k, v := range values {

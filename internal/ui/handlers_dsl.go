@@ -55,11 +55,6 @@ func langFromCtx(ctx context.Context) string {
 	return ""
 }
 
-func (s *Server) runOnWrite(obj *runtime.Object, mc *runtime.MovementsCollector) string {
-	errMsg, _ := s.runOnWriteCtx(context.Background(), obj, mc)
-	return errMsg
-}
-
 func (s *Server) buildDSLVars(ctx context.Context, mc *runtime.MovementsCollector) map[string]any {
 	// TxState is created before the common variable set so path resolvers and
 	// all write-capable DSL objects observe the same live transaction context.

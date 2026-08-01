@@ -107,14 +107,6 @@ func (h *Handlers) IssueOneTimeCode(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"code": code})
 }
 
-func (h *Handlers) loginPageData() map[string]any {
-	return map[string]any{"Error": "", "Users": h.listUsers()}
-}
-
-func (h *Handlers) listUsers() []*User {
-	return nil // populated in LoginPage via request context
-}
-
 func (h *Handlers) LoginPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var users []*User

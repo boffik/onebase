@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -208,10 +207,6 @@ func (s *Server) loadRefOptions(ctx context.Context, entity *metadata.Entity) (m
 	return s.loadRefOptionsWithMode(ctx, entity, refOptionsChoice)
 }
 
-func (s *Server) loadRefFilterOptions(ctx context.Context, entity *metadata.Entity) (map[string][]map[string]any, error) {
-	return s.loadRefOptionsWithMode(ctx, entity, refOptionsFilter)
-}
-
 func (s *Server) loadRefOptionsWithMode(ctx context.Context, entity *metadata.Entity, mode refOptionsMode) (map[string][]map[string]any, error) {
 	opts := make(map[string][]map[string]any)
 	for _, f := range entity.Fields {
@@ -276,34 +271,6 @@ func (s *Server) loadInitialRefFilterOptions(ctx context.Context, entity *metada
 		opts[f.Name] = rows
 	}
 	return opts, nil
-}
-
-// loadTPRefOptions returns select options for reference fields in all table parts.
-// Result: tpName → fieldName → [{id, _label, ...}]
-func (s *Server) loadTPRefOptions(ctx context.Context, entity *metadata.Entity) (map[string]map[string][]map[string]any, error) {
-	result := make(map[string]map[string][]map[string]any)
-	for _, tp := range entity.TableParts {
-		tpOpts := make(map[string][]map[string]any)
-		for _, f := range tp.Fields {
-			if f.RefEntity == "" {
-				continue
-			}
-			// Always mark the field as a reference (even if catalog empty or missing)
-			tpOpts[f.Name] = []map[string]any{}
-			refEntity := s.reg.GetEntity(f.RefEntity)
-			if refEntity == nil {
-				continue
-			}
-			rows, err := s.initialReferenceOptions(ctx, refEntity, refOptionsChoice, nil)
-			if err != nil {
-				continue
-			}
-			tpOpts[f.Name] = rows
-		}
-		// Always add TP entry so JS knows which fields are references
-		result[tp.Name] = tpOpts
-	}
-	return result, nil
 }
 
 func (s *Server) loadInitialTPRefOptions(ctx context.Context, entity *metadata.Entity, tpRows map[string][]map[string]any) (map[string]map[string][]map[string]any, error) {
@@ -1160,16 +1127,6 @@ func capitalize(s string) string {
 	runes := []rune(s)
 	runes[0] = []rune(strings.ToUpper(string(runes[0])))[0]
 	return string(runes)
-}
-
-// sortKeys returns map keys in sorted order (for deterministic template output).
-func sortKeys(m map[string]storage.FilterValue) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 // filterValue returns the FilterValue for a field from ListParams, or empty.

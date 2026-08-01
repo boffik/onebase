@@ -324,11 +324,6 @@ func normalizeBool(v any) bool {
 	return false
 }
 
-// normalizeUUID is a convenience alias for UUID normalization only.
-func normalizeUUID(v any) any {
-	return normalizeValue(v)
-}
-
 // List returns rows for an entity with optional filtering and sorting.
 // For documents, also returns "posted" bool.
 // dateUpperBound возвращает верхнюю границу фильтра по дате и оператор. Для
@@ -813,12 +808,6 @@ func (db *DB) SetPosted(ctx context.Context, entityName string, id uuid.UUID, po
 		}
 	}
 	return err
-}
-
-// fieldValue extracts the value for a field from the fields map, handling reference UUID strings.
-// Deprecated: use fieldValueDialect to get values typed for the active backend.
-func fieldValue(f metadata.Field, fields map[string]any) any {
-	return fieldValueDialect(PgDialect{}, f, fields)
 }
 
 // uuidProvider is implemented by *interpreter.Ref to expose its UUID without

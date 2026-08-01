@@ -4,7 +4,7 @@
 
 // Package pdf implements reading of PDF files.
 //
-// Overview
+// # Overview
 //
 // PDF is Adobe's Portable Document Format, ubiquitous on the internet.
 // A PDF document is a complex data format built on a fairly simple structure.
@@ -43,7 +43,6 @@
 // they are implemented only in terms of the Value API and could be moved outside
 // the package. Equally important, traversal of other PDF data structures can be implemented
 // in other packages as needed.
-//
 package pdfparse
 
 // BUG(rsc): The package is incomplete, although it has been used successfully on some
@@ -91,10 +90,6 @@ type xref struct {
 	inStream bool
 	stream   objptr
 	offset   int64
-}
-
-func (r *Reader) errorf(format string, args ...interface{}) {
-	panic(fmt.Errorf(format, args...))
 }
 
 // Open opens a file for reading.
@@ -621,7 +616,7 @@ func (v Value) RawString() string {
 	return x
 }
 
-// Text returns v's string value interpreted as a ``text string'' (defined in the PDF spec)
+// Text returns v's string value interpreted as a “text string” (defined in the PDF spec)
 // and converted to UTF-8.
 // If v.Kind() != String, Text returns the empty string.
 func (v Value) Text() string {
@@ -725,13 +720,13 @@ func (v Value) Len() int {
 	}
 	return len(x)
 }
-//
+
 // resolve xrefs
+//
 //	in: the parent and the key or reference to resolve
 //	out: the reference
 //
-//	bugfix: in case the object-ref is within a stream than nothing was returned 
-//
+//	bugfix: in case the object-ref is within a stream than nothing was returned
 func (r *Reader) resolve(parent objptr, x interface{}) Value {
 
 	if ptr, ok := x.(objptr); ok {
@@ -745,7 +740,7 @@ func (r *Reader) resolve(parent objptr, x interface{}) Value {
 		// var obj object
 		if xref.inStream {
 			strm := r.resolve(parent, xref.stream)
-			
+
 		Search:
 			for {
 				if strm.Kind() != Stream {
@@ -826,7 +821,7 @@ func (e *errorReadCloser) Close() error {
 
 // Reader returns the data contained in the stream v.
 // If v.Kind() != Stream, Reader returns a ReadCloser that
-// responds to all reads with a ``stream not present'' error.
+// responds to all reads with a “stream not present” error.
 func (v Value) Reader() io.ReadCloser {
 	x, ok := v.data.(stream)
 	if !ok {

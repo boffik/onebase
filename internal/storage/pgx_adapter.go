@@ -12,10 +12,10 @@ type pgxRows struct {
 	r pgx.Rows
 }
 
-func (p *pgxRows) Next() bool          { return p.r.Next() }
+func (p *pgxRows) Next() bool            { return p.r.Next() }
 func (p *pgxRows) Scan(dst ...any) error { return p.r.Scan(dst...) }
-func (p *pgxRows) Err() error          { return p.r.Err() }
-func (p *pgxRows) Close()              { p.r.Close() }
+func (p *pgxRows) Err() error            { return p.r.Err() }
+func (p *pgxRows) Close()                { p.r.Close() }
 func (p *pgxRows) FieldNames() []string {
 	fds := p.r.FieldDescriptions()
 	out := make([]string, len(fds))
@@ -63,14 +63,4 @@ func (t *pgxTx) Commit(ctx context.Context) error {
 
 func (t *pgxTx) Rollback(ctx context.Context) error {
 	return t.tx.Rollback(ctx)
-}
-
-// unwrapPgxTx extracts the underlying pgx.Tx from a storage.Tx. Used inside
-// the storage package while we still rely on pgx directly. Will go away when
-// the SQLite driver lands.
-func unwrapPgxTx(t Tx) (pgx.Tx, bool) {
-	if pt, ok := t.(*pgxTx); ok {
-		return pt.tx, true
-	}
-	return nil, false
 }

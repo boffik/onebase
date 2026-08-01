@@ -13,9 +13,7 @@ import (
 )
 
 // FormLoader loads form modules from .os files
-type FormLoader struct {
-	parser *parser.Parser
-}
+type FormLoader struct{}
 
 // NewFormLoader creates form loader
 func NewFormLoader() *FormLoader {

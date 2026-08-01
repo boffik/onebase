@@ -468,27 +468,6 @@ func (s *Server) buildReportParams(ctx context.Context, lang string, params []re
 	return out
 }
 
-// loadReportRefOpts returns bounded select options for report params with type "reference:EntityName".
-func (s *Server) loadReportRefOpts(ctx context.Context, params []reportpkg.Param) map[string][]map[string]any {
-	opts := make(map[string][]map[string]any)
-	for _, p := range params {
-		if !strings.HasPrefix(p.Type, "reference:") {
-			continue
-		}
-		entityName := strings.TrimPrefix(p.Type, "reference:")
-		entity := s.reg.GetEntity(entityName)
-		if entity == nil {
-			continue
-		}
-		rows, err := s.initialReferenceOptions(ctx, entity, refOptionsChoice, nil)
-		if err != nil {
-			continue
-		}
-		opts[p.Name] = rows
-	}
-	return opts
-}
-
 type reportExportError struct {
 	status int
 	prefix string

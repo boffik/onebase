@@ -2222,10 +2222,6 @@ func buildVTRefDimInfos(dims []metadata.Field, entities []*metadata.Entity) []re
 	return result
 }
 
-func buildRefDimInfos(dims []metadata.Field) []refDimInfo {
-	return buildRefDimInfosWithEntities(dims, nil)
-}
-
 func buildRefDimInfosWithEntities(dims []metadata.Field, entities []*metadata.Entity) []refDimInfo {
 	var result []refDimInfo
 	for _, d := range dims {

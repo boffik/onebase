@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -140,17 +139,6 @@ func TestFill_OnFillHook_CopiesFieldsAndTablePart(t *testing.T) {
 	if _, has := rows[0]["номенклатура"]; has {
 		t.Errorf("дублирующий lowercase-ключ остался в ТЧ: %v", rows[0])
 	}
-}
-
-// mapValue — регистронезависимое чтение ключа из row (DSL пишет в lower-case,
-// читать удобнее в PascalCase для совпадения с YAML-метаданными).
-func mapValue(row map[string]any, key string) any {
-	for k, v := range row {
-		if strings.EqualFold(k, key) {
-			return v
-		}
-	}
-	return nil
 }
 
 // Fill отклоняет источник, который не разрешён в based_on приёмника.
