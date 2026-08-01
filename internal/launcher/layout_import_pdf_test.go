@@ -86,9 +86,13 @@ func postImportPDF(t *testing.T, h *handler, b *Base, name, doc, page string, pd
 		if err != nil {
 			t.Fatal(err)
 		}
-		fw.Write(pdfBytes)
+		if _, err := fw.Write(pdfBytes); err != nil {
+			t.Fatal(err)
+		}
 	}
-	mw.Close()
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", b.ID)

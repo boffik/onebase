@@ -137,7 +137,9 @@ func newLayoutTestBase(t *testing.T) (*handler, *Base, string) {
 	s := newTestStore(t)
 	dir := t.TempDir()
 	// минимальный проект: документ с табличной частью.
-	os.MkdirAll(filepath.Join(dir, "documents"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "documents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	doc := "name: Реализация\nfields:\n  - name: Номер\n    type: string\n  - name: Дата\n    type: date\ntableparts:\n  - name: Товары\n    fields:\n      - name: Номенклатура\n        type: string\n      - name: Сумма\n        type: number\n"
 	if err := os.WriteFile(filepath.Join(dir, "documents", "реализация.yaml"), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
@@ -194,9 +196,13 @@ func TestNewLayout_EntityHappyPath(t *testing.T) {
 // Отказ на дубликат.
 func TestNewLayout_DuplicateRejected(t *testing.T) {
 	h, b, dir := newLayoutTestBase(t)
-	os.MkdirAll(filepath.Join(dir, "printforms"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "printforms"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	existing := filepath.Join(dir, "printforms", "Дубль.layout.yaml")
-	os.WriteFile(existing, []byte("areas: []\n"), 0o644)
+	if err := os.WriteFile(existing, []byte("areas: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	orig, _ := os.ReadFile(existing)
 
 	rec := postNewLayout(t, h, b, url.Values{
@@ -244,7 +250,9 @@ func newLayoutTestBaseDB(t *testing.T) (*handler, *Base) {
 	dbPath := filepath.Join(t.TempDir(), "cfg.db")
 
 	// исходный каталог конфигурации для импорта в БД.
-	os.MkdirAll(filepath.Join(dir, "documents"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "documents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	doc := "name: Реализация\nfields:\n  - name: Номер\n    type: string\ntableparts:\n  - name: Товары\n    fields:\n      - name: Номенклатура\n        type: string\n      - name: Сумма\n        type: number\n"
 	if err := os.WriteFile(filepath.Join(dir, "documents", "реализация.yaml"), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
@@ -345,8 +353,12 @@ func TestNewLayout_DBDuplicateRejected(t *testing.T) {
 // .os-форма: создаётся пустой парный макет 3×3.
 func TestNewLayout_OSForm(t *testing.T) {
 	h, b, dir := newLayoutTestBase(t)
-	os.MkdirAll(filepath.Join(dir, "printforms"), 0o755)
-	os.WriteFile(filepath.Join(dir, "printforms", "ПечатьЧека.os"), []byte("// форма\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(dir, "printforms"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "printforms", "ПечатьЧека.os"), []byte("// форма\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	rec := postNewLayout(t, h, b, url.Values{"osform": {"ПечатьЧека"}})
 	if rec.Code != http.StatusOK {

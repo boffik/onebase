@@ -98,8 +98,12 @@ func TestReadJournalSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := "name: РасписаниеДокладов\ntitle: Расписание\ndocuments: [Доклад]\n"
-	os.WriteFile(filepath.Join(jDir, "РасписаниеДокладов.yaml"), []byte(body), 0o644)
-	os.WriteFile(filepath.Join(jDir, "readme.txt"), []byte("не yaml"), 0o644)
+	if err := os.WriteFile(filepath.Join(jDir, "РасписаниеДокладов.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jDir, "readme.txt"), []byte("не yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := readJournalSources(dir)
 	if len(got) != 1 {
@@ -256,7 +260,9 @@ func TestConfiguratorSubsystem_PersistsJournalsKeepsPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	subFile := filepath.Join(subDir, nameToFilename("Конференция")+".yaml")
-	os.WriteFile(subFile, []byte("name: Конференция\ntitle: Конференция\ncontents:\n  pages: [ПанельОрганизатора]\n"), 0o644)
+	if err := os.WriteFile(subFile, []byte("name: Конференция\ntitle: Конференция\ncontents:\n  pages: [ПанельОрганизатора]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", b.ID)

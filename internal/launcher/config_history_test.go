@@ -164,7 +164,7 @@ func TestCfgAdminConfigHistoryExportZip(t *testing.T) {
 			t.Fatalf("open zip file %s: %v", f.Name, err)
 		}
 		data, _ := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		got[f.Name] = string(data)
 	}
 	if got["config/app.yaml"] != "name: zip\n" || !strings.Contains(got["src/main.os"], "Процедура X") {
@@ -193,7 +193,7 @@ func TestCfgAdminConfigHistoryExportZip(t *testing.T) {
 			t.Fatalf("open obz file %s: %v", f.Name, err)
 		}
 		data, _ := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		got[f.Name] = string(data)
 	}
 	if got["config/config/app.yaml"] != "name: zip\n" || !strings.Contains(got["config/src/main.os"], "Процедура X") {

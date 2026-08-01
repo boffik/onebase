@@ -118,10 +118,16 @@ func TestReadPageSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := "Процедура ПриФормировании(Страница, Параметры) Экспорт\nКонецПроцедуры\n"
-	os.WriteFile(filepath.Join(srcDir, "Панель.page.os"), []byte(body), 0o644)
+	if err := os.WriteFile(filepath.Join(srcDir, "Панель.page.os"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// Постороннее: модуль и обработка не должны попасть в карту страниц.
-	os.WriteFile(filepath.Join(srcDir, "общий.module.os"), []byte("// модуль"), 0o644)
-	os.WriteFile(filepath.Join(srcDir, "отчёт.proc.os"), []byte("// обработка"), 0o644)
+	if err := os.WriteFile(filepath.Join(srcDir, "общий.module.os"), []byte("// модуль"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "отчёт.proc.os"), []byte("// обработка"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := readPageSources(dir)
 	if len(got) != 1 {
