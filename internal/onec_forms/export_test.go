@@ -8,9 +8,10 @@ import (
 )
 
 // TestExport_FullRoundTrip — полный конвейер:
-//   Form.xml (фикстура) → IR → нормализация-импорт → YAML на диск →
-//   YAML → IR → нормализация-экспорт → Form.xml' → IR' → диффы по
-//   ключевым семантическим полям.
+//
+//	Form.xml (фикстура) → IR → нормализация-импорт → YAML на диск →
+//	YAML → IR → нормализация-экспорт → Form.xml' → IR' → диффы по
+//	ключевым семантическим полям.
 //
 // Этот тест ловит регрессии в любой из 4 точек конвертера (reader_xml /
 // writer_yaml / reader_yaml / writer_xml). Он не делает побайтового
@@ -249,11 +250,13 @@ func TestExportToOneC_Smoke(t *testing.T) {
 	// Импортируем фикстуру, чтобы получить валидный YAML/OS.
 	xmlPath := writeFixture(t, "Form.xml", minForm)
 	bslPath := filepath.Join(t.TempDir(), "Module.bsl")
-	os.WriteFile(bslPath, []byte(`// @directive=&НаСервере
+	if err := os.WriteFile(bslPath, []byte(`// @directive=&НаСервере
 Процедура ПриСозданииНаСервере(Отмена, СтандартнаяОбработка)
 	ЭтаФорма.Заголовок = "test";
 КонецПроцедуры
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := ImportFromOneC(ImportOptions{
 		XMLPath:     xmlPath,

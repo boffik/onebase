@@ -73,7 +73,7 @@ func TestH2CUpstreamEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("h2c GET /health: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.ProtoMajor != 2 {
 		t.Fatalf("proto = %q, ожидали HTTP/2", resp.Proto)
 	}
@@ -90,7 +90,7 @@ func TestH2CUpstreamDisabledByDefault(t *testing.T) {
 
 	resp, err := h2cClient().Get("http://" + addr + "/health")
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.ProtoMajor == 2 {
 			t.Fatal("сервер отдал HTTP/2, хотя h2c выключен")
 		}

@@ -40,7 +40,7 @@ fields:
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer func() { db.Close(); os.Remove(dbPath) }()
+	defer func() { db.Close(); _ = os.Remove(dbPath) }()
 	if err := db.Migrate(ctx, proj.Entities); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

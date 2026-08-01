@@ -38,7 +38,7 @@ func fakeS3Server(objects map[string][]byte, mu *sync.Mutex) *httptest.Server {
 			}
 			w.Header().Set("Content-Length", strconv.Itoa(len(b)))
 			w.WriteHeader(http.StatusOK)
-			w.Write(b)
+			_, _ = w.Write(b)
 		case http.MethodDelete:
 			delete(objects, r.URL.Path)
 			w.WriteHeader(http.StatusNoContent)
@@ -101,7 +101,7 @@ func TestApplyFileStorageS3_EndToEnd(t *testing.T) {
 		t.Fatalf("OpenBlob: %v", err)
 	}
 	got, _ := io.ReadAll(rc)
-	rc.Close()
+	_ = rc.Close()
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("OpenBlob content mismatch: %q", got)
 	}
@@ -165,7 +165,7 @@ func TestApplyFileStorageS3_AttachmentEndToEnd(t *testing.T) {
 		t.Fatalf("OpenAttachment: %v", err)
 	}
 	got, _ := io.ReadAll(rsc)
-	rsc.Close()
+	_ = rsc.Close()
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("OpenAttachment content mismatch: %q", got)
 	}

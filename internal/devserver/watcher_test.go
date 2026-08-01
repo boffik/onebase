@@ -141,7 +141,9 @@ func TestWatchContext_Debounces(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	// Несколько правок подряд должны схлопнуться в один onChange.
 	for i := 0; i < 5; i++ {
-		os.WriteFile(file, []byte("// edited"+string(rune('A'+i))), 0o644)
+		if err := os.WriteFile(file, []byte("// edited"+string(rune('A'+i))), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	// Ждём debounce + запас.

@@ -33,7 +33,7 @@ func newDebugTestServer(t *testing.T) *Server {
 // Без ONEBASE_DEBUG_TOKEN debug-маршруты не регистрируются вовсе —
 // опубликованная база (`onebase run`) не имеет debug-поверхности.
 func TestDebugAPI_AbsentWithoutToken(t *testing.T) {
-	os.Unsetenv("ONEBASE_DEBUG_TOKEN")
+	_ = os.Unsetenv("ONEBASE_DEBUG_TOKEN")
 	srv := newDebugTestServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/debug/global/enable", nil)
 	rec := httptest.NewRecorder()
@@ -45,8 +45,8 @@ func TestDebugAPI_AbsentWithoutToken(t *testing.T) {
 
 // С заданным токеном debug-эндпоинт требует совпадающий X-OneBase-Debug-Token.
 func TestDebugAPI_TokenEnforced(t *testing.T) {
-	os.Setenv("ONEBASE_DEBUG_TOKEN", "s3cr3t")
-	t.Cleanup(func() { os.Unsetenv("ONEBASE_DEBUG_TOKEN") })
+	_ = os.Setenv("ONEBASE_DEBUG_TOKEN", "s3cr3t")
+	t.Cleanup(func() { _ = os.Unsetenv("ONEBASE_DEBUG_TOKEN") })
 	srv := newDebugTestServer(t)
 
 	cases := []struct {

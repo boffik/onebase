@@ -86,7 +86,9 @@ columns:
   - field: Дата
 `
 	path := filepath.Join(dir, "тест.yaml")
-	os.WriteFile(path, []byte(yaml), 0644)
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
 	j, err := LoadJournalFile(path)
 	if err != nil {
 		t.Fatal(err)

@@ -740,7 +740,9 @@ func TestSyncRolesUpsert(t *testing.T) {
 func TestListForSelectionFiltersByShowInList(t *testing.T) {
 	repo, ctx := newTestRepo(t)
 	visible, _ := repo.Create(ctx, "visible", "password", "", false)
-	repo.Create(ctx, "hidden", "password", "", false)
+	if _, err := repo.Create(ctx, "hidden", "password", "", false); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := repo.SetShowInList(ctx, visible.ID, true); err != nil {
 		t.Fatalf("SetShowInList: %v", err)
