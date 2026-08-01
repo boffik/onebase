@@ -113,13 +113,17 @@ func TestCatWriter_CreateWithTableParts(t *testing.T) {
 	}
 
 	var tpCount int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM клиенты_контакты").Scan(&tpCount)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM клиенты_контакты").Scan(&tpCount); err != nil {
+		t.Fatal(err)
+	}
 	if tpCount != 2 {
 		t.Fatalf("строк ТЧ в БД = %d, ожидалось 2", tpCount)
 	}
 	// Хук ПриЗаписи собрал Сводку из строк ТЧ.
 	var summary string
-	db.QueryRow(ctx, "SELECT сводка FROM клиенты").Scan(&summary)
+	if err := db.QueryRow(ctx, "SELECT сводка FROM клиенты").Scan(&summary); err != nil {
+		t.Fatal(err)
+	}
 	if summary != "a@b.ru;79001112233;" {
 		t.Fatalf("хук ПриЗаписи не отработал: Сводка = %q", summary)
 	}
@@ -146,12 +150,16 @@ func TestCatWriter_CreateWithTableParts(t *testing.T) {
 	if res := w2.CallMethod("записать", nil); res == nil {
 		t.Fatal("повторная запись вернула nil")
 	}
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM клиенты_контакты").Scan(&tpCount)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM клиенты_контакты").Scan(&tpCount); err != nil {
+		t.Fatal(err)
+	}
 	if tpCount != 1 {
 		t.Fatalf("после обновления строк ТЧ = %d, ожидалась 1", tpCount)
 	}
 	var cnt int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM клиенты").Scan(&cnt)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM клиенты").Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
 	if cnt != 1 {
 		t.Fatalf("записей справочника = %d, ожидалась 1 (обновление, не дубль)", cnt)
 	}

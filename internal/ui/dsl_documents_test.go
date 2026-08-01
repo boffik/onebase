@@ -141,25 +141,33 @@ func TestDocsRoot_CreateWritePost(t *testing.T) {
 
 	// Проверки: документ записан
 	var docCount int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров").Scan(&docCount)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров").Scan(&docCount); err != nil {
+		t.Fatal(err)
+	}
 	if docCount != 1 {
 		t.Errorf("ожидался 1 документ, получили %d", docCount)
 	}
 	// ТЧ записана
 	var tpCount int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров_товары").Scan(&tpCount)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров_товары").Scan(&tpCount); err != nil {
+		t.Fatal(err)
+	}
 	if tpCount != 2 {
 		t.Errorf("ожидалось 2 строки ТЧ, получили %d", tpCount)
 	}
 	// движения регистра записаны
 	var movCount int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&movCount)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&movCount); err != nil {
+		t.Fatal(err)
+	}
 	if movCount != 2 {
 		t.Errorf("ожидалось 2 движения, получили %d", movCount)
 	}
 	// posted = true
 	var posted bool
-	db.QueryRow(ctx, "SELECT posted FROM поступлениетоваров LIMIT 1").Scan(&posted)
+	if err := db.QueryRow(ctx, "SELECT posted FROM поступлениетоваров LIMIT 1").Scan(&posted); err != nil {
+		t.Fatal(err)
+	}
 	if !posted {
 		t.Error("документ не помечен проведённым")
 	}
@@ -410,7 +418,9 @@ func TestDocsRoot_DeleteClearsMovements(t *testing.T) {
 	w.CallMethod("провести", nil)
 
 	var mov int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov); err != nil {
+		t.Fatal(err)
+	}
 	if mov != 1 {
 		t.Fatalf("до удаления ожидалось 1 движение, получили %d", mov)
 	}
@@ -419,12 +429,16 @@ func TestDocsRoot_DeleteClearsMovements(t *testing.T) {
 	ref := dp.CallMethod("найтипономеру", []any{"ПОС-001"}).(*interpreter.Ref)
 	dp.CallMethod("удалить", []any{ref})
 
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov); err != nil {
+		t.Fatal(err)
+	}
 	if mov != 0 {
 		t.Errorf("после удаления документа движений должно быть 0, получили %d (осиротевшие)", mov)
 	}
 	var docCnt int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров").Scan(&docCnt)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM поступлениетоваров").Scan(&docCnt); err != nil {
+		t.Fatal(err)
+	}
 	if docCnt != 0 {
 		t.Errorf("документ не удалён: осталось %d", docCnt)
 	}
@@ -482,7 +496,9 @@ func TestDocsRoot_FindByNumberAndDelete(t *testing.T) {
 	// Ссылка.Удалить() — удаление через привязанный менеджер.
 	ref.CallMethod("удалить", nil)
 	var cnt int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM заказпокупателя").Scan(&cnt)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM заказпокупателя").Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
 	if cnt != 1 {
 		t.Errorf("после Ссылка.Удалить() ожидался 1 документ, получили %d", cnt)
 	}
@@ -490,7 +506,9 @@ func TestDocsRoot_FindByNumberAndDelete(t *testing.T) {
 	// Менеджерный вариант: Документы.X.Удалить(Ссылка).
 	ref2 := dp.CallMethod("найтипономеру", []any{"ЗП-002"}).(*interpreter.Ref)
 	dp.CallMethod("удалить", []any{ref2})
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM заказпокупателя").Scan(&cnt)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM заказпокупателя").Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
 	if cnt != 0 {
 		t.Errorf("после Документы.X.Удалить() ожидалось 0 документов, получили %d", cnt)
 	}
@@ -675,7 +693,9 @@ func TestDocsRoot_GetObject_UpdateExisting(t *testing.T) {
 
 	// Запись не плодит дублей — это UPDATE, не INSERT.
 	var cnt int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM входящееписьмо").Scan(&cnt)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM входящееписьмо").Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
 	if cnt != 1 {
 		t.Errorf("после Записать() через ПолучитьОбъект — записей %d, want 1", cnt)
 	}
@@ -838,7 +858,9 @@ func TestDocsRoot_OnWriteRunsOnSave(t *testing.T) {
 	w.CallMethod("записать", nil)
 
 	var total float64
-	db.QueryRow(ctx, "SELECT суммадокумента FROM счёт LIMIT 1").Scan(&total)
+	if err := db.QueryRow(ctx, "SELECT суммадокумента FROM счёт LIMIT 1").Scan(&total); err != nil {
+		t.Fatal(err)
+	}
 	if total != 400 {
 		t.Errorf("СуммаДокумента = %v, ожидалось 400 (ПриЗаписи не отработала)", total)
 	}

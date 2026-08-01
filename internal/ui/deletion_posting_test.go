@@ -124,12 +124,16 @@ func TestDocWriterPost_BlockedWhenMarked(t *testing.T) {
 
 	// Ранний guard сработал ДО хука/saveMovements ⇒ движений нет и posted=false.
 	var mov int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov); err != nil {
+		t.Fatal(err)
+	}
 	if mov != 0 {
 		t.Fatalf("guard должен сработать до saveMovements: движений %d, ожидалось 0", mov)
 	}
 	var posted bool
-	db.QueryRow(ctx, "SELECT posted FROM поступлениетоваров LIMIT 1").Scan(&posted)
+	if err := db.QueryRow(ctx, "SELECT posted FROM поступлениетоваров LIMIT 1").Scan(&posted); err != nil {
+		t.Fatal(err)
+	}
 	if posted {
 		t.Error("помеченный документ не должен быть проведён")
 	}
@@ -142,7 +146,9 @@ func TestServerMarkForDeletion_AutoUnposts(t *testing.T) {
 	w := postOne(t, dp)
 
 	var mov int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov); err != nil {
+		t.Fatal(err)
+	}
 	if mov != 1 {
 		t.Fatalf("до пометки ожидалось 1 движение, получили %d", mov)
 	}
@@ -150,12 +156,16 @@ func TestServerMarkForDeletion_AutoUnposts(t *testing.T) {
 	if err := s.markForDeletion(ctx, doc, w.obj.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov); err != nil {
+		t.Fatal(err)
+	}
 	if mov != 0 {
 		t.Errorf("после пометки движений должно быть 0, получили %d", mov)
 	}
 	var posted, marked bool
-	db.QueryRow(ctx, "SELECT posted, deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&posted, &marked)
+	if err := db.QueryRow(ctx, "SELECT posted, deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&posted, &marked); err != nil {
+		t.Fatal(err)
+	}
 	if posted {
 		t.Error("проведение должно быть снято при пометке")
 	}
@@ -167,7 +177,9 @@ func TestServerMarkForDeletion_AutoUnposts(t *testing.T) {
 	if err := s.markForDeletion(ctx, doc, w.obj.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	db.QueryRow(ctx, "SELECT posted, deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&posted, &marked)
+	if err := db.QueryRow(ctx, "SELECT posted, deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&posted, &marked); err != nil {
+		t.Fatal(err)
+	}
 	if posted {
 		t.Error("снятие пометки не должно проводить документ")
 	}
@@ -185,12 +197,16 @@ func TestDocsRoot_UnpostAndMarkMethods(t *testing.T) {
 	// ОтменитьПроведение → движения 0, posted false.
 	dp.CallMethod("отменитьпроведение", []any{ref})
 	var mov int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM рег_остаткитоваров").Scan(&mov); err != nil {
+		t.Fatal(err)
+	}
 	if mov != 0 {
 		t.Errorf("после ОтменитьПроведение движений 0 ожидалось, получили %d", mov)
 	}
 	var posted bool
-	db.QueryRow(ctx, "SELECT posted FROM поступлениетоваров LIMIT 1").Scan(&posted)
+	if err := db.QueryRow(ctx, "SELECT posted FROM поступлениетоваров LIMIT 1").Scan(&posted); err != nil {
+		t.Fatal(err)
+	}
 	if posted {
 		t.Error("posted=false ожидался после ОтменитьПроведение")
 	}
@@ -198,14 +214,18 @@ func TestDocsRoot_UnpostAndMarkMethods(t *testing.T) {
 	// ПометитьНаУдаление → deletion_mark true.
 	dp.CallMethod("пометитьнаудаление", []any{ref})
 	var marked bool
-	db.QueryRow(ctx, "SELECT deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&marked)
+	if err := db.QueryRow(ctx, "SELECT deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
 	if !marked {
 		t.Error("документ должен быть помечен после ПометитьНаУдаление")
 	}
 
 	// СнятьПометку → deletion_mark false.
 	dp.CallMethod("снятьпометку", []any{ref})
-	db.QueryRow(ctx, "SELECT deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&marked)
+	if err := db.QueryRow(ctx, "SELECT deletion_mark FROM поступлениетоваров LIMIT 1").Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
 	if marked {
 		t.Error("пометка должна быть снята после СнятьПометку")
 	}
@@ -408,7 +428,9 @@ func TestDocWriterPost_DSL_PersistsOnPostFieldEdits(t *testing.T) {
 		t.Fatalf("СуммаДокумента из OnPost не персистилась: в БД %v, ожидалось 1000", total)
 	}
 	var posted bool
-	db.QueryRow(ctx, "SELECT posted FROM расходтоваров LIMIT 1").Scan(&posted)
+	if err := db.QueryRow(ctx, "SELECT posted FROM расходтоваров LIMIT 1").Scan(&posted); err != nil {
+		t.Fatal(err)
+	}
 	if !posted {
 		t.Error("документ должен быть проведён после Провести()")
 	}

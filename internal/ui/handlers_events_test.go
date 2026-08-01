@@ -39,7 +39,7 @@ func TestEventsStream_StreamsBroadcastFrame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("запрос /ui/events: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
 		t.Fatalf("Content-Type = %q, ожидался text/event-stream", ct)
@@ -87,7 +87,7 @@ func TestEventsStream_ReplaysRecentFrame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ui/events: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	frameJSON := readDataFrame(t, resp.Body)
 	var frame struct {
@@ -157,7 +157,7 @@ func TestProcessorRun_PublishesRealtimeToast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ui/events: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	waitSubscriber(t, hub)
 
 	postResp, err := http.PostForm(srv.URL+"/ui/processor/%d1%82%d0%b5%d1%81%d1%82%d0%bf%d1%83%d1%88", url.Values{
@@ -166,7 +166,7 @@ func TestProcessorRun_PublishesRealtimeToast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST processor: %v", err)
 	}
-	postResp.Body.Close()
+	_ = postResp.Body.Close()
 	if postResp.StatusCode != http.StatusOK {
 		t.Fatalf("POST processor status = %d", postResp.StatusCode)
 	}

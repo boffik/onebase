@@ -171,7 +171,9 @@ func TestSelectedTPRows(t *testing.T) {
 	form2.Set("_tp", "Товары")
 	req2 := httptest.NewRequest("POST", "/x", strings.NewReader(form2.Encode()))
 	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req2.ParseForm()
+	if err := req2.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
 	if selectedTPRows(req2, obj) != nil {
 		t.Error("без _tp_selected ждали nil")
 	}
