@@ -170,6 +170,22 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			}
 			return nil
 		},
+		// attrByName ищет реквизит формы (FormAttribute) по имени — нужен managed-
+		// шаблону, чтобы дать ссылочному реквизиту формы пикер (фикс B).
+		"attrByName": func(form *metadata.FormModule, name string) *metadata.FormAttribute {
+			if form == nil {
+				return nil
+			}
+			for _, a := range form.Attributes {
+				if a != nil && a.Name == name {
+					return a
+				}
+			}
+			return nil
+		},
+		// attrRefEntity — имя сущности из ссылочного типа реквизита формы
+		// ("CatalogRef.X" → "X"), пусто если тип не ссылочный.
+		"attrRefEntity": func(typeRef string) string { return attrRefEntityName(typeRef) },
 		// fieldTitleRU достаёт ru-вариант из map[string]string или возвращает fallback.
 		"fieldTitleRU": func(m map[string]string, fallback string) string {
 			if v, ok := m["ru"]; ok && v != "" {
