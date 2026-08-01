@@ -38,7 +38,9 @@ func TestNewNotifyFunctions_NilNotifierIsNoop(t *testing.T) {
 func TestNewNotifyFunctions_ConvertsStructData(t *testing.T) {
 	fn := &fakeNotifier{}
 	pub := NewNotifyFunctions(fn)["ОтправитьУведомление"].(BuiltinFunc)
-	pub([]any{"ivan", "ui.обновитьСписок", NewStructFromMap(map[string]any{"сущность": "Заявка"})}, "", 0)
+	if _, err := pub([]any{"ivan", "ui.обновитьСписок", NewStructFromMap(map[string]any{"сущность": "Заявка"})}, "", 0); err != nil {
+		t.Fatal(err)
+	}
 	m, ok := fn.data.(map[string]any)
 	if !ok {
 		t.Fatalf("DSL-структуру нужно конвертировать в map (иначе на клиент придёт {}): %T", fn.data)
@@ -74,7 +76,9 @@ func TestShowUserNotification_PublishesUINotice(t *testing.T) {
 	}
 	// Важность по умолчанию — «обычное»; алиас ShowUserNotification работает.
 	fn2 := &fakeNotifier{}
-	NewNotifyFunctions(fn2)["ShowUserNotification"].(BuiltinFunc)([]any{"ivan", "T", "X"}, "", 0)
+	if _, err := NewNotifyFunctions(fn2)["ShowUserNotification"].(BuiltinFunc)([]any{"ivan", "T", "X"}, "", 0); err != nil {
+		t.Fatal(err)
+	}
 	if m2 := fn2.data.(map[string]any); m2["важность"] != "обычное" {
 		t.Fatalf("важность по умолчанию должна быть обычное: %+v", m2)
 	}

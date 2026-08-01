@@ -38,14 +38,14 @@ func captureTCP(t *testing.T) (string, <-chan []byte) {
 	require.NoError(t, err)
 	out := make(chan []byte, 1)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			out <- nil
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		data, _ := io.ReadAll(conn)
 		out <- data
 	}()
@@ -136,16 +136,16 @@ func scaleTCP(t *testing.T, reply string) string {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		buf := make([]byte, 16)
-		conn.Read(buf)
-		conn.Write([]byte(reply))
+		_, _ = conn.Read(buf)
+		_, _ = conn.Write([]byte(reply))
 	}()
 	return ln.Addr().String()
 }
@@ -231,10 +231,10 @@ func atolEmulatorHTTP(t *testing.T) string {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"isError":false}`))
+		_, _ = w.Write([]byte(`{"isError":false}`))
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
+		_, _ = w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
 			`{"fnNumber":"9999078900012345","fiscalDocumentNumber":40,"fiscalDocumentSign":"2143256432"}}]}`))
 	})
 	srv := httptest.NewServer(mux)
@@ -281,10 +281,10 @@ func atolEmulatorCapturingHTTP(t *testing.T) (string, *atolCapturedTask) {
 		if err := json.Unmarshal(body, &got); err != nil {
 			t.Errorf("эмулятор: некорректное задание: %v", err)
 		}
-		w.Write([]byte(`{"isError":false}`))
+		_, _ = w.Write([]byte(`{"isError":false}`))
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
+		_, _ = w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
 			`{"fnNumber":"9999078900012345","fiscalDocumentNumber":40,"fiscalDocumentSign":"2143256432"}}]}`))
 	})
 	srv := httptest.NewServer(mux)

@@ -52,7 +52,7 @@ func TestFileBuiltins_RespectSandbox(t *testing.T) {
 	// копирование за пределы корня — должно прерваться
 	outside := filepath.Join(filepath.Dir(root), "evil.txt")
 	assertRaises(t, func() {
-		builtins["копироватьфайл"]([]any{inside, outside}, "", 0)
+		_, _ = builtins["копироватьфайл"]([]any{inside, outside}, "", 0)
 	})
 	if _, err := os.Stat(outside); !os.IsNotExist(err) {
 		t.Error("файл за пределами sandbox не должен быть создан")
