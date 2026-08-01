@@ -21,14 +21,14 @@ func captureServer(t *testing.T) (string, <-chan []byte) {
 	}
 	out := make(chan []byte, 1)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			out <- nil
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		data, _ := io.ReadAll(conn)
 		out <- data
 	}()
@@ -57,7 +57,7 @@ func TestAgent_Print(t *testing.T) {
 	body := `{"driver":"escpos_tcp","params":{"порт":"` + addr + `"},` +
 		`"receipt":{"header":["Магазин"],"items":[{"name":"Хлеб","qty":2,"price":30,"sum":60}],"total":60,"payment":"Наличные"}}`
 	resp := post(t, srv.URL+"/print", "secret", body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("статус %d: %s", resp.StatusCode, b)
@@ -76,7 +76,7 @@ func TestAgent_Print_NoToken(t *testing.T) {
 	defer srv.Close()
 
 	resp := post(t, srv.URL+"/print", "", `{"driver":"escpos_tcp","params":{}}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("ожидался 401, получен %d", resp.StatusCode)
 	}
@@ -90,7 +90,7 @@ func TestAgent_Health(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		t.Fatalf("статус %d", resp.StatusCode)
 	}
@@ -106,7 +106,7 @@ func TestAgent_Drawer(t *testing.T) {
 	defer srv.Close()
 
 	resp := post(t, srv.URL+"/drawer", "secret", `{"driver":"escpos_tcp","params":{"порт":"`+addr+`"}}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("статус %d: %s", resp.StatusCode, b)
@@ -126,7 +126,7 @@ func TestAgent_Display(t *testing.T) {
 
 	body := `{"driver":"display_tcp","params":{"порт":"` + addr + `"},"lines":["Добро пожаловать","Касса №1"]}`
 	resp := post(t, srv.URL+"/display", "secret", body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("статус %d: %s", resp.StatusCode, b)
@@ -148,16 +148,16 @@ func scaleTCP(t *testing.T, reply string) string {
 		t.Fatal(err)
 	}
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		buf := make([]byte, 16)
-		conn.Read(buf)
-		conn.Write([]byte(reply))
+		_, _ = conn.Read(buf)
+		_, _ = conn.Write([]byte(reply))
 	}()
 	return ln.Addr().String()
 }
@@ -168,7 +168,7 @@ func TestAgent_Weight(t *testing.T) {
 	defer srv.Close()
 
 	resp := post(t, srv.URL+"/weight", "secret", `{"driver":"scale_tcp","params":{"порт":"`+addr+`"}}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("статус %d: %s", resp.StatusCode, b)
@@ -185,7 +185,7 @@ func TestAgent_Pay(t *testing.T) {
 	defer srv.Close()
 
 	resp := post(t, srv.URL+"/pay", "secret", `{"driver":"acquiring_tcp","params":{"порт":"`+addr+`"},"amount":250}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("статус %d: %s", resp.StatusCode, b)
@@ -203,10 +203,10 @@ func atolEmulator(t *testing.T) string {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"isError":false}`))
+		_, _ = w.Write([]byte(`{"isError":false}`))
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
+		_, _ = w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` +
 			`{"fnNumber":"9999078900012345","fiscalDocumentNumber":40,"fiscalDocumentSign":"2143256432"}}]}`))
 	})
 	srv := httptest.NewServer(mux)
@@ -225,7 +225,7 @@ func TestAgent_Fiscal(t *testing.T) {
 		`"items":[{"name":"Хлеб","qty":2,"price":30,"sum":60,"vat":"ндс10","itemType":"товар"}],` +
 		`"payments":[{"type":"наличные","sum":60}]}}`
 	resp := post(t, srv.URL+"/fiscal", "secret", body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("статус %d: %s", resp.StatusCode, b)
@@ -247,13 +247,13 @@ func TestAgent_Fiscal_Pay_RequireToken(t *testing.T) {
 	defer srv.Close()
 
 	resp := post(t, srv.URL+"/fiscal", "", `{"driver":"atol_kkt","params":{}}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("/fiscal без токена: статус %d, ожидался 403", resp.StatusCode)
 	}
 
 	resp2 := post(t, srv.URL+"/pay", "", `{"driver":"acquiring_tcp","params":{},"amount":100}`)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != http.StatusForbidden {
 		t.Errorf("/pay без токена: статус %d, ожидался 403", resp2.StatusCode)
 	}
@@ -265,14 +265,14 @@ func TestAgent_Events_SSE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		conn.Write([]byte("AAA111\nBBB222\n"))
-		conn.Close()
+		_, _ = conn.Write([]byte("AAA111\nBBB222\n"))
+		_ = conn.Close()
 	}()
 
 	srv := httptest.NewServer(New("").Handler()) // без токена
@@ -283,7 +283,7 @@ func TestAgent_Events_SSE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
 		t.Errorf("Content-Type = %q", ct)
 	}
@@ -313,7 +313,7 @@ func TestAgent_Page(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		t.Fatalf("статус %d", resp.StatusCode)
 	}
@@ -355,7 +355,7 @@ func TestAgent_AllHardwareRoutes_RequireToken(t *testing.T) {
 
 	for _, path := range []string{"/print", "/drawer", "/display", "/weight", "/pay", "/fiscal"} {
 		resp := post(t, srv.URL+path, "", `{"driver":"escpos_tcp","params":{}}`)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("%s без токена: статус %d, ожидался 401", path, resp.StatusCode)
 		}
@@ -371,7 +371,7 @@ func TestAgent_Events_RequireToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("/events без токена: статус %d, ожидался 401", resp.StatusCode)
 	}
@@ -386,7 +386,7 @@ func TestAgent_Events_AntiSSRF_External(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		b, _ := io.ReadAll(resp.Body)
 		t.Errorf("/events на внешний адрес: статус %d, ожидался 403 (%s)", resp.StatusCode, b)
@@ -399,14 +399,14 @@ func TestAgent_Events_AntiSSRF_LoopbackAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		conn.Write([]byte("AAA111\n"))
-		conn.Close()
+		_, _ = conn.Write([]byte("AAA111\n"))
+		_ = conn.Close()
 	}()
 
 	srv := httptest.NewServer(New("").Handler())
@@ -417,7 +417,7 @@ func TestAgent_Events_AntiSSRF_LoopbackAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("/events на loopback: статус %d, ожидался 200", resp.StatusCode)
 	}
@@ -435,7 +435,7 @@ func TestAgent_CORS_NoToken_OriginRestricted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fr.Body.Close()
+	_ = fr.Body.Close()
 	if got := fr.Header.Get("Access-Control-Allow-Origin"); got != "" {
 		t.Errorf("чужой origin без токена не должен получать CORS, получено %q", got)
 	}
@@ -446,7 +446,7 @@ func TestAgent_CORS_NoToken_OriginRestricted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lr.Body.Close()
+	_ = lr.Body.Close()
 	if got := lr.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:8080" {
 		t.Errorf("локальный origin должен получать CORS, получено %q", got)
 	}
@@ -462,7 +462,7 @@ func TestAgent_CORS_Preflight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Errorf("preflight статус %d, ожидался 204", resp.StatusCode)
 	}
