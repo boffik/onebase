@@ -117,9 +117,15 @@ func TestRollup_FoldsAccumulationRegister(t *testing.T) {
 
 	table := metadata.RegisterTableName(reg.Name)
 	var total, foldedLeft, opening int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total)
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&foldedLeft)
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE recorder_type = ?", RollupRecorderType).Scan(&opening)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&foldedLeft); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE recorder_type = ?", RollupRecorderType).Scan(&opening); err != nil {
+		t.Fatal(err)
+	}
 	if total != 3 {
 		t.Errorf("строк в регистре=%d, ждали 3 (2 опорных + 1 после даты)", total)
 	}
@@ -151,7 +157,9 @@ func TestRollup_FoldsAccumulationRegister(t *testing.T) {
 		t.Fatalf("после повторной свёртки остаток изменился: %v", after2)
 	}
 	var total2 int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total2)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total2); err != nil {
+		t.Fatal(err)
+	}
 	if total2 != 3 {
 		t.Errorf("после повторной свёртки строк=%d, ждали 3", total2)
 	}
@@ -183,7 +191,9 @@ func TestRollup_RejectsTurnoverRegister(t *testing.T) {
 	}
 
 	var total int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.RegisterTableName(reg.Name)).Scan(&total)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.RegisterTableName(reg.Name)).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
 	if total != 1 {
 		t.Fatalf("turnover movements changed: rows=%d, want 1", total)
 	}
@@ -300,7 +310,9 @@ func TestRollup_DeleteDocuments(t *testing.T) {
 		t.Errorf("delete hook calls=%d, ждали 2", len(tombstones))
 	}
 	var left int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.TableName(doc.Name)).Scan(&left)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.TableName(doc.Name)).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
 	if left != 1 {
 		t.Errorf("осталось документов=%d, ждали 1", left)
 	}
@@ -325,7 +337,9 @@ func TestRollup_RejectsUnknownRegisterBeforeDocumentPolicy(t *testing.T) {
 	}
 
 	var left int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.TableName(doc.Name)).Scan(&left)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.TableName(doc.Name)).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
 	if left != 1 {
 		t.Fatalf("document policy ran after invalid selection: documents left=%d, want 1", left)
 	}
@@ -443,8 +457,12 @@ func TestRollup_FoldsAccountRegister(t *testing.T) {
 
 	table := metadata.AccountRegTableName(ar.Name)
 	var foldedLeft, opening int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&foldedLeft)
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE регистратор_тип = ?", RollupRecorderType).Scan(&opening)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&foldedLeft); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE регистратор_тип = ?", RollupRecorderType).Scan(&opening); err != nil {
+		t.Fatal(err)
+	}
 	if foldedLeft != 0 {
 		t.Errorf("проводки до даты остались: %d", foldedLeft)
 	}
@@ -487,7 +505,9 @@ func TestRollup_AccountRegister_NoAuxAccount(t *testing.T) {
 		t.Fatalf("ожидалась пометка о пропуске: %+v", rep.AccountRegisters)
 	}
 	var left int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.AccountRegTableName(ar.Name)).Scan(&left)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.AccountRegTableName(ar.Name)).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
 	if left != 1 {
 		t.Errorf("движения тронуты при пропуске: осталось %d, ждали 1", left)
 	}
@@ -553,8 +573,12 @@ func TestRollup_TrimInfoRegister(t *testing.T) {
 	}
 
 	var total, beforeCut int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total)
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&beforeCut)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE period < ?", cutoff).Scan(&beforeCut); err != nil {
+		t.Fatal(err)
+	}
 	if beforeCut != 2 {
 		t.Errorf("до cutoff осталось строк=%d, ждали 2 (по последнему срезу на товар)", beforeCut)
 	}
@@ -578,7 +602,9 @@ func TestRollup_TrimInfoRegister(t *testing.T) {
 		t.Fatalf("повторная обрезка: %v", err)
 	}
 	var total2 int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total2)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total2); err != nil {
+		t.Fatal(err)
+	}
 	if total2 != 3 {
 		t.Errorf("после повторной обрезки строк=%d, ждали 3", total2)
 	}
@@ -609,7 +635,9 @@ func TestRollup_InfoRegister_NonPeriodicSkipped(t *testing.T) {
 		t.Fatalf("ожидалась пометка о пропуске непериодического: %+v", rep.InfoRegisters)
 	}
 	var left int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.InfoRegTableName(ir.Name)).Scan(&left)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.InfoRegTableName(ir.Name)).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
 	if left != 1 {
 		t.Errorf("данные непериодического регистра тронуты: осталось %d, ждали 1", left)
 	}
@@ -644,7 +672,9 @@ func TestRollup_DanglingRefsGate(t *testing.T) {
 		t.Fatalf("ожидался отказ свёртки из-за повисшей ссылки")
 	}
 	var orders int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.TableName(order.Name)).Scan(&orders)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.TableName(order.Name)).Scan(&orders); err != nil {
+		t.Fatal(err)
+	}
 	if orders != 1 {
 		t.Errorf("документ удалён вопреки гейту: осталось %d, ждали 1", orders)
 	}

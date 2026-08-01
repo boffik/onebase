@@ -27,11 +27,11 @@ func toF(v any) float64 {
 		return 0
 	case []byte:
 		var f float64
-		fmt.Sscanf(string(x), "%g", &f)
+		_, _ = fmt.Sscanf(string(x), "%g", &f)
 		return f
 	case string:
 		var f float64
-		fmt.Sscanf(x, "%g", &f)
+		_, _ = fmt.Sscanf(x, "%g", &f)
 		return f
 	default:
 		return 0

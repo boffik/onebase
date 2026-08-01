@@ -54,7 +54,7 @@ func TestSQLiteInMemory(t *testing.T) {
 	}
 	// Файл с именем «:memory:» не должен появиться в рабочей папке.
 	if _, err := os.Stat(":memory:"); err == nil {
-		os.Remove(":memory:")
+		_ = os.Remove(":memory:")
 		t.Fatal("in-memory подключение создало файл «:memory:» на диске")
 	}
 }

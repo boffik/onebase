@@ -28,7 +28,7 @@ func openClosed(t *testing.T, db *DB, id uuid.UUID) error {
 	t.Helper()
 	_, rc, err := db.OpenBlob(context.Background(), id)
 	if rc != nil {
-		rc.Close()
+		_ = rc.Close()
 	}
 	return err
 }
