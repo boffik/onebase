@@ -17,7 +17,7 @@ func TestScripted_Weight(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 
 	if dev.Kind() != "весы" {
 		t.Errorf("Kind = %q, ожидался «весы» (из параметра)", dev.Kind())

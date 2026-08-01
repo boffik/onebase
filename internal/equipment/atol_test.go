@@ -22,10 +22,10 @@ func atolEmulator(t *testing.T, fiscal string) (string, *atolTask) {
 		if err := json.Unmarshal(body, &got); err != nil {
 			t.Errorf("эмулятор: некорректное задание: %v", err)
 		}
-		w.Write([]byte(`{"isError":false}`))
+		_, _ = w.Write([]byte(`{"isError":false}`))
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` + fiscal + `}]}`))
+		_, _ = w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":` + fiscal + `}]}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -50,7 +50,7 @@ func TestAtol_RegisterReceipt_Result(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	kkt, ok := dev.(FiscalRegistrar)
 	if !ok {
 		t.Fatal("устройство не реализует FiscalRegistrar")
@@ -81,7 +81,7 @@ func TestAtol_TaskMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	if _, err := dev.(FiscalRegistrar).RegisterReceipt(sampleFiscalReceipt()); err != nil {
 		t.Fatalf("RegisterReceipt: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestAtol_TaskMapping(t *testing.T) {
 func TestAtol_ReturnAndDefaults(t *testing.T) {
 	url, got := atolEmulator(t, `{"fnNumber":"1","fiscalDocumentNumber":1,"fiscalDocumentSign":"1"}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 
 	r := FiscalReceipt{
 		Type:     "возвратПрихода",
@@ -150,16 +150,16 @@ func TestAtol_ReturnAndDefaults(t *testing.T) {
 func TestAtol_ServiceError(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"isError":false}`))
+		_, _ = w.Write([]byte(`{"isError":false}`))
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"ready":true,"isError":true,"results":[{"error":{"description":"нет бумаги"}}]}`))
+		_, _ = w.Write([]byte(`{"ready":true,"isError":true,"results":[{"error":{"description":"нет бумаги"}}]}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	dev, _ := Open("atol_kkt", map[string]string{"порт": srv.URL})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	_, err := dev.(FiscalRegistrar).RegisterReceipt(sampleFiscalReceipt())
 	if err == nil || !strings.Contains(err.Error(), "нет бумаги") {
 		t.Errorf("ожидалась ошибка с описанием от ККТ, получено: %v", err)
@@ -169,7 +169,7 @@ func TestAtol_ServiceError(t *testing.T) {
 func TestAtol_NoItems(t *testing.T) {
 	url, _ := atolEmulator(t, `{}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	if _, err := dev.(FiscalRegistrar).RegisterReceipt(FiscalReceipt{Type: "приход"}); err == nil {
 		t.Error("ожидалась ошибка для чека без позиций")
 	}
@@ -181,7 +181,7 @@ func TestAtol_NoItems(t *testing.T) {
 func TestAtol_StateUnknownOnPollFailure(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"isError":false}`)) // задание принято — чек ушёл в ФН
+		_, _ = w.Write([]byte(`{"isError":false}`)) // задание принято — чек ушёл в ФН
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "сервис недоступен", http.StatusInternalServerError) // опрос падает
@@ -190,7 +190,7 @@ func TestAtol_StateUnknownOnPollFailure(t *testing.T) {
 	defer srv.Close()
 
 	dev, _ := Open("atol_kkt", map[string]string{"порт": srv.URL})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	_, err := dev.(FiscalRegistrar).RegisterReceipt(sampleFiscalReceipt())
 	var unknown *FiscalStateUnknownError
 	if !errors.As(err, &unknown) {
@@ -208,7 +208,7 @@ func TestAtol_StateUnknownOnPollFailure(t *testing.T) {
 func TestAtol_RoundsMoneyToKopecks(t *testing.T) {
 	url, got := atolEmulator(t, `{"fnNumber":"9999078900012345","fiscalDocumentNumber":7,"fiscalDocumentSign":"111","receiptDatetime":"2026-06-19T10:00:00+03:00","total":87.15}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 
 	r := FiscalReceipt{
 		Type:     "приход",
@@ -249,16 +249,16 @@ func TestAtol_RejectsUnbalancedReceipt(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/requests", func(w http.ResponseWriter, r *http.Request) {
 		posted = true
-		w.Write([]byte(`{"isError":false}`))
+		_, _ = w.Write([]byte(`{"isError":false}`))
 	})
 	mux.HandleFunc("/api/v2/requests/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":{}}]}`))
+		_, _ = w.Write([]byte(`{"ready":true,"isError":false,"results":[{"result":{}}]}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	dev, _ := Open("atol_kkt", map[string]string{"порт": srv.URL})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 
 	// Позиции на 100, оплата на 90 — расхождение должно отсекаться валидацией.
 	r := FiscalReceipt{
@@ -280,7 +280,7 @@ func TestAtol_RejectsUnbalancedReceipt(t *testing.T) {
 func TestAtol_IdempotencyKeyReusesUUID(t *testing.T) {
 	url, got := atolEmulator(t, `{"fnNumber":"1","fiscalDocumentNumber":1,"fiscalDocumentSign":"1"}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	kkt := dev.(FiscalRegistrar)
 
 	r := sampleFiscalReceipt()
@@ -308,7 +308,7 @@ func TestAtol_IdempotencyKeyReusesUUID(t *testing.T) {
 func TestAtol_ResolveByUUID(t *testing.T) {
 	url, _ := atolEmulator(t, `{"fnNumber":"9999078900012345","fiscalDocumentNumber":42,"fiscalDocumentSign":"222","receiptDatetime":"2026-06-19T10:00:00+03:00","total":60}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	kkt := dev.(FiscalRegistrar)
 
 	res, err := kkt.ResolveByUUID("some-saved-uuid")
@@ -328,7 +328,7 @@ func TestAtol_ResolveByUUID(t *testing.T) {
 func TestAtol_RejectsInvalidReceipt(t *testing.T) {
 	url, _ := atolEmulator(t, `{}`)
 	dev, _ := Open("atol_kkt", map[string]string{"порт": url})
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	kkt := dev.(FiscalRegistrar)
 
 	if _, err := kkt.RegisterReceipt(FiscalReceipt{Type: "приход", Items: []FiscalItem{{Name: "X", Qty: 1, Price: 0}}}); err == nil {

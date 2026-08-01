@@ -19,7 +19,7 @@ func TestDisplay_ShowLines(t *testing.T) {
 	if err := disp.ShowLines([]string{"Молоко 3 шт", "ИТОГО: 150"}); err != nil {
 		t.Fatalf("ShowLines: %v", err)
 	}
-	dev.Disconnect()
+	disconnect(dev)
 
 	got := <-received
 	if !bytes.HasPrefix(got, dispInit) {
@@ -46,7 +46,7 @@ func TestDisplay_IsNotPrinter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	if _, ok := dev.(ReceiptPrinter); ok {
 		t.Error("дисплей покупателя не должен быть ReceiptPrinter")
 	}
