@@ -8,7 +8,9 @@ import (
 
 func TestMergeGenerator_CreateNewCatalog(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "catalogs"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "catalogs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	delta := &DeltaManifest{
 		NewCatalogs: []EntitySpec{
@@ -44,7 +46,9 @@ func TestMergeGenerator_CreateNewCatalog(t *testing.T) {
 
 func TestMergeGenerator_CreateNewDocument(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "documents"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "documents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	delta := &DeltaManifest{
 		NewDocuments: []EntitySpec{
@@ -83,7 +87,9 @@ func TestMergeGenerator_CreateNewDocument(t *testing.T) {
 
 func TestMergeGenerator_AddFieldsToExisting(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "catalogs"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "catalogs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create existing catalog
 	existingYAML := `name: Контрагент
@@ -93,7 +99,9 @@ fields:
   - name: ИНН
     type: string
 `
-	os.WriteFile(filepath.Join(dir, "catalogs", "контрагент.yaml"), []byte(existingYAML), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "catalogs", "контрагент.yaml"), []byte(existingYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	delta := &DeltaManifest{
 		NewFields: map[string][]FieldSpec{

@@ -9,9 +9,15 @@ import (
 func TestCopyDir(t *testing.T) {
 	// Create a temporary source directory with files
 	src := t.TempDir()
-	os.MkdirAll(filepath.Join(src, "config"), 0o755)
-	os.WriteFile(filepath.Join(src, "config", "app.yaml"), []byte("name: test\n"), 0o644)
-	os.WriteFile(filepath.Join(src, "README.md"), []byte("# test\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(src, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "config", "app.yaml"), []byte("name: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	dst := t.TempDir()
 
@@ -30,11 +36,15 @@ func TestCopyDir(t *testing.T) {
 
 func TestCopyDir_NoOverwrite(t *testing.T) {
 	src := t.TempDir()
-	os.WriteFile(filepath.Join(src, "existing.txt"), []byte("original\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(src, "existing.txt"), []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	dst := t.TempDir()
 	existingContent := []byte("do not overwrite\n")
-	os.WriteFile(filepath.Join(dst, "existing.txt"), existingContent, 0o644)
+	if err := os.WriteFile(filepath.Join(dst, "existing.txt"), existingContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := copyDir(src, dst); err != nil {
 		t.Fatalf("copyDir() error: %v", err)
@@ -77,8 +87,12 @@ func TestGenerator_Generate_NoTemplate(t *testing.T) {
 func TestGenerator_Generate_WithTemplate(t *testing.T) {
 	// Create a mock template
 	src := t.TempDir()
-	os.MkdirAll(filepath.Join(src, "config"), 0o755)
-	os.WriteFile(filepath.Join(src, "config", "app.yaml"), []byte("name: test\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(src, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "config", "app.yaml"), []byte("name: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	dst := t.TempDir()
 	g := &Generator{OutputDir: dst}
