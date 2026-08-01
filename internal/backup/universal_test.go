@@ -43,10 +43,16 @@ func buildLegacyOBZ(t *testing.T) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	mf, _ := zw.Create("META.txt")
-	mf.Write([]byte("onebase_full_export\nversion=1.0\ndb_type=sqlite\n"))
+	if _, err := mf.Write([]byte("onebase_full_export\nversion=1.0\ndb_type=sqlite\n")); err != nil {
+		t.Fatal(err)
+	}
 	df, _ := zw.Create("database.db")
-	df.Write([]byte("not a real db"))
-	zw.Close()
+	if _, err := df.Write([]byte("not a real db")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return buf.Bytes()
 }
 
@@ -59,22 +65,32 @@ func extractZip(data []byte, dir string) error {
 	for _, f := range zr.File {
 		outPath := filepath.Join(dir, filepath.FromSlash(f.Name))
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(outPath, 0o755)
+			if err := os.MkdirAll(outPath, 0o755); err != nil {
+				return err
+			}
 			continue
 		}
-		os.MkdirAll(filepath.Dir(outPath), 0o755)
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return err
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
 		out, err := os.Create(outPath)
 		if err != nil {
-			rc.Close()
+			_ = rc.Close()
 			return err
 		}
-		io.Copy(out, rc)
-		out.Close()
-		rc.Close()
+		_, copyErr := io.Copy(out, rc)
+		closeErr := out.Close() // write-close: ошибка важна (файл мог не долететь)
+		_ = rc.Close()          // read-close: best-effort
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
 	}
 	return nil
 }
@@ -552,10 +568,14 @@ func TestAttachmentsExportRestore(t *testing.T) {
 	attDir := t.TempDir()
 	// Write a fake attachment file.
 	subDir := filepath.Join(attDir, "Реализация")
-	os.MkdirAll(subDir, 0o755)
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	attFile := filepath.Join(subDir, "abc123-uuid")
 	attContent := []byte("hello attachment content")
-	os.WriteFile(attFile, attContent, 0o644)
+	if err := os.WriteFile(attFile, attContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	var buf bytes.Buffer
 	if err := ExportUniversal(ctx, db, "file", t.TempDir(), attDir, "test", &buf); err != nil {
@@ -574,7 +594,7 @@ func TestAttachmentsExportRestore(t *testing.T) {
 			// Verify content.
 			rc, _ := f.Open()
 			got, _ := io.ReadAll(rc)
-			rc.Close()
+			_ = rc.Close()
 			if !bytes.Equal(got, attContent) {
 				t.Errorf("attachment content mismatch: got %q, want %q", got, attContent)
 			}
@@ -591,7 +611,9 @@ func TestAttachmentsExportRestore(t *testing.T) {
 	// Restore attachments.
 	dstAttDir := t.TempDir()
 	tmpDir := t.TempDir()
-	extractZip(buf.Bytes(), tmpDir)
+	if err := extractZip(buf.Bytes(), tmpDir); err != nil {
+		t.Fatal(err)
+	}
 	attSrc := filepath.Join(tmpDir, "attachments")
 	existing := filepath.Join(dstAttDir, "Реализация", "abc123-uuid")
 	if err := os.MkdirAll(filepath.Dir(existing), 0o755); err != nil {
@@ -612,12 +634,14 @@ func TestAttachmentsExportRestore(t *testing.T) {
 
 	// Verify the restored file exists with correct content.
 	var restoredContent []byte
-	filepath.WalkDir(dstAttDir, func(path string, d fs.DirEntry, _ error) error {
+	if err := filepath.WalkDir(dstAttDir, func(path string, d fs.DirEntry, _ error) error {
 		if !d.IsDir() {
 			restoredContent, _ = os.ReadFile(path)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(restoredContent, attContent) {
 		t.Errorf("restored content mismatch: got %q, want %q", restoredContent, attContent)
 	}

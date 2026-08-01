@@ -14,6 +14,22 @@ import (
 
 func ptrBool(b bool) *bool { return &b }
 
+// writeAll пишет тело фикстур-сервера; ошибку записи помечает как сбой теста.
+func writeAll(t *testing.T, w io.Writer, b []byte) {
+	t.Helper()
+	if _, err := w.Write(b); err != nil {
+		t.Errorf("write fixture response: %v", err)
+	}
+}
+
+// closeChecked закрывает ресурс; ошибку закрытия помечает как сбой теста.
+func closeChecked(t *testing.T, c io.Closer) {
+	t.Helper()
+	if err := c.Close(); err != nil {
+		t.Errorf("close: %v", err)
+	}
+}
+
 // TestSignV4AWSVector checks our signature against AWS's documented
 // "GET Object" Signature Version 4 example, so a regression in the signer is
 // caught deterministically. See the AWS docs' worked example for these values.
@@ -108,7 +124,7 @@ func TestPutObjectRoundTrip(t *testing.T) {
 func TestPutObjectServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		io.WriteString(w, `<Error><Code>AccessDenied</Code><Message>nope</Message></Error>`)
+		writeAll(t, w, []byte(`<Error><Code>AccessDenied</Code><Message>nope</Message></Error>`))
 	}))
 	defer srv.Close()
 
@@ -134,16 +150,16 @@ func TestListKeysPagination(t *testing.T) {
 		w.Header().Set("Content-Type", "application/xml")
 		if page == 0 && r.URL.Query().Get("continuation-token") == "" {
 			page++
-			fmt.Fprint(w, `<ListBucketResult><IsTruncated>true</IsTruncated>`+
+			writeAll(t, w, []byte(`<ListBucketResult><IsTruncated>true</IsTruncated>`+
 				`<NextContinuationToken>TOK</NextContinuationToken>`+
-				`<Contents><Key>prod/a</Key></Contents></ListBucketResult>`)
+				`<Contents><Key>prod/a</Key></Contents></ListBucketResult>`))
 			return
 		}
 		if r.URL.Query().Get("continuation-token") != "TOK" {
 			t.Errorf("expected continuation-token TOK, got %q", r.URL.Query().Get("continuation-token"))
 		}
-		fmt.Fprint(w, `<ListBucketResult><IsTruncated>false</IsTruncated>`+
-			`<Contents><Key>prod/b</Key></Contents></ListBucketResult>`)
+		writeAll(t, w, []byte(`<ListBucketResult><IsTruncated>false</IsTruncated>`+
+			`<Contents><Key>prod/b</Key></Contents></ListBucketResult>`))
 	}))
 	defer srv.Close()
 
@@ -165,7 +181,7 @@ func TestGetObjectRoundTrip(t *testing.T) {
 		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
 		w.WriteHeader(http.StatusOK)
-		w.Write(payload)
+		writeAll(t, w, payload)
 	}))
 	defer srv.Close()
 
@@ -174,7 +190,7 @@ func TestGetObjectRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject: %v", err)
 	}
-	defer rc.Close()
+	defer closeChecked(t, rc)
 	if gotPath != "/mybucket/blobs/abc" {
 		t.Errorf("path = %s", gotPath)
 	}
@@ -216,14 +232,14 @@ func TestOpenReadSeeker_FullAndRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	full, _ := io.ReadAll(rs)
-	rs.Close()
+	closeChecked(t, rs)
 	if !bytes.Equal(full, payload) {
 		t.Fatalf("full read mismatch (%d bytes)", len(full))
 	}
 
 	// Seek then read a middle window.
 	rs2 := c.OpenReadSeeker(context.Background(), "blobs/x", int64(len(payload)))
-	defer rs2.Close()
+	defer closeChecked(t, rs2)
 	if _, err := rs2.Seek(400, io.SeekStart); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +265,7 @@ func TestOpenReadSeeker_ServeContent(t *testing.T) {
 
 	dl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rs := c.OpenReadSeeker(r.Context(), "blobs/x", int64(len(payload)))
-		defer rs.Close()
+		defer closeChecked(t, rs)
 		http.ServeContent(w, r, "file.bin", time.Time{}, rs)
 	}))
 	defer dl.Close()
@@ -260,7 +276,7 @@ func TestOpenReadSeeker_ServeContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close() // errcheck+bodyclose: явное закрытие тела ответа
 	if resp.StatusCode != 200 || !bytes.Equal(body, payload) {
 		t.Fatalf("full: status=%d len=%d", resp.StatusCode, len(body))
 	}
@@ -273,7 +289,7 @@ func TestOpenReadSeeker_ServeContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	part, _ := io.ReadAll(resp2.Body)
-	resp2.Body.Close()
+	_ = resp2.Body.Close() // errcheck+bodyclose: явное закрытие тела ответа
 	if resp2.StatusCode != http.StatusPartialContent {
 		t.Fatalf("range status = %d, want 206", resp2.StatusCode)
 	}
@@ -285,7 +301,7 @@ func TestOpenReadSeeker_ServeContent(t *testing.T) {
 func TestGetObjectNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		io.WriteString(w, `<Error><Code>NoSuchKey</Code><Message>missing</Message></Error>`)
+		writeAll(t, w, []byte(`<Error><Code>NoSuchKey</Code><Message>missing</Message></Error>`))
 	}))
 	defer srv.Close()
 
