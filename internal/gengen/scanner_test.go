@@ -22,7 +22,9 @@ func TestScanProjectFromFiles_Empty(t *testing.T) {
 
 func TestScanProjectFromFiles_Catalogs(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "catalogs"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "catalogs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a catalog YAML file
 	yamlContent := `name: Контрагент
@@ -32,7 +34,9 @@ fields:
   - name: ИНН
     type: string
 `
-	os.WriteFile(filepath.Join(dir, "catalogs", "контрагент.yaml"), []byte(yamlContent), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "catalogs", "контрагент.yaml"), []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := ScanProjectFromFiles(dir)
 	if err != nil {
@@ -54,7 +58,9 @@ fields:
 
 func TestScanProjectFromFiles_Documents(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "documents"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "documents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	yamlContent := `name: РеализацияТоваров
 fields:
@@ -70,7 +76,9 @@ tableparts:
       - name: Количество
         type: number
 `
-	os.WriteFile(filepath.Join(dir, "documents", "реализация_товаров.yaml"), []byte(yamlContent), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "documents", "реализация_товаров.yaml"), []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := ScanProjectFromFiles(dir)
 	if err != nil {
@@ -95,7 +103,9 @@ tableparts:
 
 func TestScanProjectFromFiles_Enums(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "enums"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "enums"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	yamlContent := `name: СтавкиНДС
 values:
@@ -104,7 +114,9 @@ values:
   - "10%"
   - "20%"
 `
-	os.WriteFile(filepath.Join(dir, "enums", "ставки_ндс.yaml"), []byte(yamlContent), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "enums", "ставки_ндс.yaml"), []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := ScanProjectFromFiles(dir)
 	if err != nil {
@@ -125,7 +137,9 @@ values:
 // читает перечисления нового формата ({name, titles}) и не теряет имена значений.
 func TestScanProjectFromFiles_EnumsNewFormat(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "enums"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "enums"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	yamlContent := `name: Приоритет
 values:
@@ -138,7 +152,9 @@ values:
       en: Medium
   - Низкий
 `
-	os.WriteFile(filepath.Join(dir, "enums", "приоритет.yaml"), []byte(yamlContent), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "enums", "приоритет.yaml"), []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := ScanProjectFromFiles(dir)
 	if err != nil {
@@ -165,9 +181,13 @@ values:
 
 func TestScanProjectFromFiles_DSL(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
-	os.WriteFile(filepath.Join(dir, "src", "отчёт_продажи.os"), []byte("Процедура Сформировать()\nКонецПроцедуры\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "src", "отчёт_продажи.os"), []byte("Процедура Сформировать()\nКонецПроцедуры\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := ScanProjectFromFiles(dir)
 	if err != nil {
