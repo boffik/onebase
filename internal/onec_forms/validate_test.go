@@ -42,6 +42,72 @@ elements:
 	}
 }
 
+func hasWarnCode(warns []Warning, code string) bool {
+	for _, w := range warns {
+		if w.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// Команды объявлены, но не размещены кнопкой (kind: Кнопка) — W014 warn.
+func TestValidate_CommandNotPlaced(t *testing.T) {
+	noBtn := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заявка
+commands:
+  - name: Принять
+    title: { ru: "Принять" }
+    action: КомандаПринятьНажатие
+elements:
+  - kind: ПолеВвода
+    name: ПолеНомер
+    data_path: Объект.Номер
+`
+	warns, _ := Validate(writeYAML(t, noBtn))
+	if !hasWarnCode(warns, W014_CommandNotPlaced) {
+		t.Errorf("W014 не сработал при команде без кнопки: %+v", warns)
+	}
+	// С размещённой кнопкой — W014 молчит.
+	withBtn := strings.Replace(noBtn, "  - kind: ПолеВвода\n    name: ПолеНомер",
+		"  - kind: Кнопка\n    name: КомандаПринять\n  - kind: ПолеВвода\n    name: ПолеНомер", 1)
+	warns2, _ := Validate(writeYAML(t, withBtn))
+	if hasWarnCode(warns2, W014_CommandNotPlaced) {
+		t.Errorf("W014 ложно сработал при наличии kind: Кнопка: %+v", warns2)
+	}
+}
+
+// Form-local реквизит ссылочного типа в ПолеВвода не даёт пикер — W015 warn;
+// то же поле объекта (Объект.X) — молчит.
+func TestValidate_FormLocalRefField(t *testing.T) {
+	local := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заявка
+attributes:
+  - name: Причина
+    type: CatalogRef.ПричинаОтказа
+    save: false
+elements:
+  - kind: ПолеВвода
+    name: ПолеПричина
+    data_path: Причина
+`
+	warns, _ := Validate(writeYAML(t, local))
+	if !hasWarnCode(warns, W015_FormLocalRefField) {
+		t.Errorf("W015 не сработал для form-local reference: %+v", warns)
+	}
+	obj := strings.Replace(local, "data_path: Причина", "data_path: Объект.Причина", 1)
+	warns2, _ := Validate(writeYAML(t, obj))
+	if hasWarnCode(warns2, W015_FormLocalRefField) {
+		t.Errorf("W015 ложно сработал для поля объекта: %+v", warns2)
+	}
+}
+
 // Отсутствие data_path у ПолеВвода — это error W012.
 func TestValidate_MissingDataPath(t *testing.T) {
 	yamlBody := `schema: onebase.form/v1

@@ -305,7 +305,77 @@ func Validate(yamlPath string) ([]Warning, error) {
 		}
 	}
 
+	// 3. Команды объявлены, но не размещены кнопкой. В управляемой форме команду
+	// ОТОБРАЖАЕТ только элемент kind: Кнопка (обработчик <Имя>Нажатие в .form.os) —
+	// секция commands: сама кнопок не создаёт. Форма без единой кнопки при наличии
+	// команд визуально теряет управляемость (в UI видна только «Записать»).
+	if len(form.Commands) > 0 && !hasKind(form.Elements, "Кнопка") {
+		warns.Add(Warning{Severity: SeverityWarn, Code: W014_CommandNotPlaced, Field: "commands",
+			Message: fmt.Sprintf("объявлено команд: %d, но на форме нет ни одной кнопки (kind: Кнопка) — команды не появятся в UI", len(form.Commands)),
+			Suggest: "разместите команды элементами kind: Кнопка в elements (имя = имя обработчика без «Нажатие»); секция commands: кнопок не рисует"})
+	}
+
+	// 4. Реквизит формы ссылочного/перечислимого типа (save:false), показанный
+	// через ПолеВвода, НЕ получит выбор (пикер/список): рендер даёт выбор только
+	// полям сущности (data_path: Объект.X). Реквизит формы → простой ввод без
+	// выбора — оператор не может выбрать значение из справочника.
+	localRef := map[string]string{}
+	for _, a := range form.Attributes {
+		if !a.Save && isRefOrEnumType(a.TypeRef) {
+			localRef[a.Name] = a.TypeRef
+		}
+	}
+	if len(localRef) > 0 {
+		var walkFields func(*IRElement)
+		walkFields = func(el *IRElement) {
+			if el == nil {
+				return
+			}
+			// form-local data_path — простое имя реквизита без префикса «Объект.»/«Список.».
+			if el.Kind == "ПолеВвода" && el.DataPath != "" && !strings.Contains(el.DataPath, ".") {
+				if tr, ok := localRef[el.DataPath]; ok {
+					warns.Add(Warning{Severity: SeverityWarn, Code: W015_FormLocalRefField, Element: el.Name, Field: el.DataPath,
+						Message: fmt.Sprintf("поле привязано к реквизиту формы «%s» типа «%s» (save:false) — выбор из справочника/списка не отрисуется", el.DataPath, tr),
+						Suggest: "используйте поле объекта (data_path: Объект.<поле> ссылочного/перечислимого типа) — пикер даётся только полям сущности"})
+				}
+			}
+			for _, c := range el.Children {
+				walkFields(c)
+			}
+		}
+		for _, el := range form.Elements {
+			walkFields(el)
+		}
+	}
+
 	return []Warning(warns), nil
+}
+
+// hasKind рекурсивно ищет элемент указанного Kind в дереве элементов формы.
+func hasKind(els []*IRElement, kind string) bool {
+	for _, el := range els {
+		if el == nil {
+			continue
+		}
+		if el.Kind == kind {
+			return true
+		}
+		if hasKind(el.Children, kind) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRefOrEnumType сообщает, что тип реквизита — ссылочный или перечисление
+// (для таких полей UI рисует выбор только у полей сущности, не у реквизитов формы).
+func isRefOrEnumType(t string) bool {
+	for _, p := range []string{"CatalogRef.", "DocumentRef.", "EnumRef.", "ChartOfAccountsRef.", "AnyRef"} {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return strings.HasPrefix(t, "enum:") || strings.HasPrefix(t, "Перечисление")
 }
 
 // knownKind возвращает true если el.Kind — известный нам тип элемента
