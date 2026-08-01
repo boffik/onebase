@@ -14,16 +14,16 @@ func scaleServer(t *testing.T, reply string) string {
 		t.Fatal(err)
 	}
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		buf := make([]byte, 16)
-		conn.Read(buf) // запрос веса (ENQ)
-		conn.Write([]byte(reply))
+		_, _ = conn.Read(buf) // запрос веса (ENQ)
+		_, _ = conn.Write([]byte(reply))
 	}()
 	return ln.Addr().String()
 }
@@ -35,7 +35,7 @@ func TestScale_Weight(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	scale, ok := dev.(Scale)
 	if !ok {
 		t.Fatal("устройство не реализует Scale")

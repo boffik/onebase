@@ -14,16 +14,16 @@ func terminalServer(t *testing.T, reply string) string {
 		t.Fatal(err)
 	}
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		buf := make([]byte, 64)
-		conn.Read(buf)
-		conn.Write([]byte(reply))
+		_, _ = conn.Read(buf)
+		_, _ = conn.Write([]byte(reply))
 	}()
 	return ln.Addr().String()
 }
@@ -35,7 +35,7 @@ func TestAcquiring_Pay_Approved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	term, ok := dev.(PaymentTerminal)
 	if !ok {
 		t.Fatal("устройство не реализует PaymentTerminal")
@@ -81,17 +81,17 @@ func chunkedTerminalServer(t *testing.T, chunks ...string) string {
 		t.Fatal(err)
 	}
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		buf := make([]byte, 64)
-		conn.Read(buf)
+		_, _ = conn.Read(buf)
 		for _, c := range chunks {
-			conn.Write([]byte(c))
+			_, _ = conn.Write([]byte(c))
 			time.Sleep(20 * time.Millisecond)
 		}
 	}()
@@ -108,7 +108,7 @@ func TestAcquiring_Pay_ChunkedResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	res, err := dev.(PaymentTerminal).Pay(100)
 	if err != nil {
 		t.Fatalf("Pay: %v", err)
@@ -127,7 +127,7 @@ func TestAcquiring_Pay_ZeroAmount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	if _, err := dev.(PaymentTerminal).Pay(0); err == nil {
 		t.Error("ожидалась ошибка для нулевой суммы")
 	}
