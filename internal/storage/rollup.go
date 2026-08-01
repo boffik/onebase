@@ -347,6 +347,14 @@ func (db *DB) Rollup(ctx context.Context, regs []*metadata.Register, ents []*met
 				metadata.RegisterTableName(reg.Name), db.dialect.Placeholder(1)), cutoff); err != nil {
 				return err
 			}
+			// Итоги (план 80) считаются из движений и поддерживаются только через
+			// WriteMovements. Массовое удаление свёрнутых строк идёт мимо него, поэтому
+			// помесячные строки итогов за периоды до cutoff остались бы на месте, а
+			// опорные остатки легли бы сверху — быстрый путь query отдал бы задвоенные
+			// остатки. Пересчитываем в той же транзакции, уже после удаления.
+			if err := db.RecalcRegisterTotals(ctx, reg); err != nil {
+				return fmt.Errorf("свёртка регистра %s: пересчёт итогов: %w", reg.Name, err)
+			}
 			rep.Registers = append(rep.Registers, RollupRegReport{
 				Name: reg.Name, FoldedMovements: folded, OpeningRows: len(open),
 			})
@@ -823,6 +831,11 @@ func (db *DB) foldAccountReg(ctx context.Context, ar *metadata.AccountRegister, 
 	if _, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE period < %s",
 		metadata.AccountRegTableName(ar.Name), db.dialect.Placeholder(1)), cutoff); err != nil {
 		return rep, err
+	}
+	// См. комментарий в Rollup: удаление свёрнутых проводок идёт мимо
+	// WriteAccountMovements, поэтому итоги бухрегистра пересчитываем явно.
+	if err := db.RecalcAccountRegisterTotals(ctx, ar); err != nil {
+		return rep, fmt.Errorf("свёртка бухрегистра %s: пересчёт итогов: %w", ar.Name, err)
 	}
 	after, err := db.AccountBalances(ctx, ar.Name, ar.Accounts, cutoff, ar.Resources, ar.Subconto)
 	if err != nil {
