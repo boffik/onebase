@@ -141,7 +141,6 @@ func (h *handler) listManagedFormsFromDB(r *http.Request, b *Base) ([]cfgManaged
 	}
 
 	// группируем по entity + name
-	type pair struct{ yaml, os string }
 	groups := map[string]*cfgManagedForm{}
 	for _, f := range files {
 		// f.Path = forms/<entity>/<name>.form.yaml | .form.os

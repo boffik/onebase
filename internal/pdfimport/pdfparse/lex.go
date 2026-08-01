@@ -21,7 +21,6 @@ import (
 //	string, a PDF string literal
 //	keyword, a PDF keyword
 //	name, a PDF name without the leading slash
-//
 type token interface{}
 
 // A name is a PDF name, without the leading slash.
@@ -58,13 +57,6 @@ func newBuffer(r io.Reader, offset int64) *buffer {
 		allowObjptr: true,
 		allowStream: true,
 	}
-}
-
-func (b *buffer) seek(offset int64) {
-	b.offset = offset
-	b.buf = b.buf[:0]
-	b.pos = 0
-	b.unread = b.unread[:0]
 }
 
 func (b *buffer) readByte() byte {

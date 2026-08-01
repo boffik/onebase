@@ -528,11 +528,6 @@ func (s *Server) MountDebug(r chi.Router) {
 	})
 }
 
-type navSection struct {
-	Kind     string
-	Entities []*metadata.Entity
-}
-
 type navItem struct {
 	Label string
 	URL   string

@@ -89,14 +89,6 @@ func newEnv(this This) *env {
 	return e
 }
 
-func (e *env) child() *env {
-	return e.frame(e, e.depth+1)
-}
-
-func (e *env) frame(parent *env, depth int) *env {
-	return e.frameWithModule(parent, e.module, depth)
-}
-
 func (e *env) frameWithModule(parent, module *env, depth int) *env {
 	root := e.root
 	if root == nil {

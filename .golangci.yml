@@ -4,7 +4,8 @@
 # коде (CI остаётся зелёным), остальное включается по мере чистки baseline.
 # Staticcheck включён после закрытия baseline в 2026-07.
 # bodyclose включён по плану 109 (этап A): baseline был 0 находок.
-# Оставшаяся очередь (план 109): unused, errcheck, gosec.
+# unused включён по плану 109 (этап B): 29 находок мёртвого кода удалены.
+# Оставшаяся очередь (план 109): errcheck, gosec.
 # После чистки соответствующего линтера — переносить его в enable.
 version: "2"
 
@@ -15,6 +16,7 @@ linters:
     - ineffassign
     - staticcheck
     - bodyclose
+    - unused
 
 run:
   timeout: 10m

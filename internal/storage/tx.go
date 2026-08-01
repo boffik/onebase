@@ -210,16 +210,3 @@ func (db *DB) exec(ctx context.Context, sql string, args ...any) error {
 	_, err := db.Exec(ctx, sql, args...)
 	return err
 }
-
-// querier returns a query executor that respects the transaction in ctx.
-type querier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
-func (db *DB) q(ctx context.Context) querier {
-	if tx, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
-		return tx
-	}
-	return db.pool
-}

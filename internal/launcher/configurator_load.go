@@ -650,7 +650,6 @@ func (h *handler) listManagedFormsFromDBNoRequest(ctx context.Context, b *Base) 
 	if err != nil {
 		return nil, err
 	}
-	type pair struct{ yaml, os string }
 	groups := map[string]*cfgManagedForm{}
 	for _, f := range files {
 		parts := strings.Split(strings.TrimPrefix(f.Path, "forms/"), "/")

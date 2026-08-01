@@ -53,18 +53,6 @@ func (rec *recorder) count() int {
 	return len(rec.bodies)
 }
 
-func waitFor(t *testing.T, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("условие не выполнилось за 5 секунд")
-}
-
 func TestDispatcher_FiresOnMatchingEvent(t *testing.T) {
 	rec := &recorder{}
 	srv := httptest.NewServer(rec.handler())

@@ -771,25 +771,6 @@ func TestJSONColValue_PassesThroughObject(t *testing.T) {
 	}
 }
 
-// zipOpen returns the contents of name from a zip archive in memory.
-func zipOpen(data []byte, name string) ([]byte, error) {
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return nil, err
-	}
-	for _, f := range zr.File {
-		if f.Name == name {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
-			}
-			defer rc.Close()
-			return io.ReadAll(rc)
-		}
-	}
-	return nil, fs.ErrNotExist
-}
-
 // TestImportTableJSONL_CP1251StringColumn pins down the deploy failure
 // for _audit: a row in the JSONL has a TEXT column whose value is a
 // JSON string literal that contains raw Windows-1251 bytes (e.g. a
