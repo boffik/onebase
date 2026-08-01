@@ -54,9 +54,10 @@
 ассертов доступа (**112/113**) actionable-бэклог такой:
 
 1. **План 109** — поэтапное ужесточение блокирующих CI-линтеров
-   (`bodyclose` → `unused` → `errcheck` → `gosec`). Baseline заморожен 2026-07-27,
-   порядок PR зафиксирован; этап A (`bodyclose`, baseline 0) в работе. Низкий риск,
-   чистое качество, ложится в ритм «один линтер = серия PR».
+   (`bodyclose` → `unused` → `errcheck` → `gosec`). Этапы **A** (`bodyclose`, PR #503)
+   и **B** (`unused`, −253 строки мёртвого кода, PR #508) закрыты и в `main`. Осталось
+   `errcheck` (пересверка 2026-08-01: 1037 находок, 750 prod) и `gosec` — поведенческие,
+   делать по классам риска отдельными PR с regression-тестами.
 2. ~~**План 80** — итоги регистров~~ ✅ **Закрыт** (накопления + бухгалтерии):
    предрасчёт, инкремент в транзакции проводки, быстрый путь остатков/на-момент/
    оборотов, CLI `recalc-totals`, бенч ~150×. Опц. остаток — `totals.period`/свёртка.
@@ -171,7 +172,7 @@
 | № | Файл | Фича | Эстимейт | Статус |
 |---|---|---|---|---|
 | 43 | [43-audit-techdebt.md](43-audit-techdebt.md) | Техдолг по итогам аудита: покрытие непротестированных пакетов, полный graceful shutdown, единый slog, раскол монолитов | 12–18 дней | 🟡 CI/race/coverage, `slog`, `onebase lint`, debugger/processor coverage и graceful shutdown закрыты; остаток — точечное покрытие `ui`/`launcher`/`mcp`/`widget` и раскол монолитов |
-| 109 | [109-ci-linter-hardening.md](109-ci-linter-hardening.md) | Поэтапное включение `bodyclose`, `unused`, `errcheck`, `gosec` в блокирующий CI без широких suppressions | 10.75–17.75 дня | ⬜ Проект; baseline зафиксирован 2026-07-27 |
+| 109 | [109-ci-linter-hardening.md](109-ci-linter-hardening.md) | Поэтапное включение `bodyclose`, `unused`, `errcheck`, `gosec` в блокирующий CI без широких suppressions | 10.75–17.75 дня | 🟡 A (`bodyclose` #503) + B (`unused` #508) в main; осталось `errcheck`/`gosec` (поведенческие, по классам) |
 
 ### Направление З — ИИ для бизнеса
 
@@ -259,7 +260,7 @@
 | 107 | [107-scheduler-full-vars.md](107-scheduler-full-vars.md) | Полный контекст переменных в регламентных заданиях | ✅ Реализовано |
 | 108 | [108-atomic-hook-side-effects.md](108-atomic-hook-side-effects.md) | Атомарность побочных записей хука проведения | ✅ Реализовано |
 | 108 | [108-config-testing-tooling.md](108-config-testing-tooling.md) | `onebase test` — раннер тестов уровня конфигурации (5 шагов) | ✅ Реализовано |
-| 109 | [109-ci-linter-hardening.md](109-ci-linter-hardening.md) | Ужесточение CI-линтеров (`bodyclose`→`unused`→`errcheck`→`gosec`) | 🟡 Этап A (`bodyclose`) в работе |
+| 109 | [109-ci-linter-hardening.md](109-ci-linter-hardening.md) | Ужесточение CI-линтеров (`bodyclose`→`unused`→`errcheck`→`gosec`) | 🟡 A (`bodyclose` #503) + B (`unused` #508) в main; осталось `errcheck`/`gosec` |
 | 110 | [110-s3-external-storage.md](110-s3-external-storage.md) | S3-хранилище вложений/блобов + off-site автобэкап | ✅ Реализовано |
 | 111 | [111-scalability-review.md](111-scalability-review.md) | Ревью масштабируемости на 100+ пользователей | ✅ P0/P1/P2 в `main`; P3-1/P3-2 отложены |
 | 112 | [112-user-cli-and-role-asserts.md](112-user-cli-and-role-asserts.md) | `onebase user` + ассерты матрицы прав ролей в `onebase test` | ✅ Реализовано |
