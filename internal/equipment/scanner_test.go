@@ -68,21 +68,21 @@ func TestScanner_Stream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		conn.Write([]byte("12345\n67890\n"))
-		conn.Close() // EOF завершает Stream
+		_, _ = conn.Write([]byte("12345\n67890\n"))
+		_ = conn.Close() // EOF завершает Stream
 	}()
 
 	dev, err := Open("scanner_tcp", map[string]string{"порт": ln.Addr().String()})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	src, ok := dev.(EventSource)
 	if !ok {
 		t.Fatal("устройство не реализует EventSource")

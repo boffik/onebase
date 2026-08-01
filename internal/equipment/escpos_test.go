@@ -18,14 +18,14 @@ func captureServer(t *testing.T) (string, <-chan []byte) {
 	}
 	out := make(chan []byte, 1)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			out <- nil
 			return
 		}
-		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(time.Second))
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		data, _ := io.ReadAll(conn)
 		out <- data
 	}()
@@ -54,7 +54,7 @@ func TestESCPOS_PrintReceipt(t *testing.T) {
 	if err := printer.PrintReceipt(r); err != nil {
 		t.Fatalf("PrintReceipt: %v", err)
 	}
-	dev.Disconnect() // закрываем — сервер получит EOF и вернёт накопленное
+	disconnect(dev) // закрываем — сервер получит EOF и вернёт накопленное
 
 	got := <-received
 	if !bytes.HasPrefix(got, escInit) {
@@ -76,8 +76,10 @@ func TestESCPOS_OpenDrawer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	dev.(ReceiptPrinter).OpenDrawer()
-	dev.Disconnect()
+	if err := dev.(ReceiptPrinter).OpenDrawer(); err != nil {
+		t.Fatalf("OpenDrawer: %v", err)
+	}
+	disconnect(dev)
 
 	if got := <-received; !bytes.Equal(got, escDrawer) {
 		t.Errorf("импульс ящика = % x, ожидался % x", got, escDrawer)
