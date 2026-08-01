@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // RollupRecorderType — синтетический тип регистратора опорных движений, которые
@@ -768,13 +769,16 @@ func (db *DB) accountOpeningRows(ctx context.Context, ar *metadata.AccountRegist
 			col := metadata.ColumnName(r)
 			// Сырой дебет минус кредит (НЕ b[col]: тот скорректирован по виду
 			// счёта — для пассивного это Кт−Дт, что исказило бы сторону проводки).
-			net := toFloat(b[col+"_дт"]) - toFloat(b[col+"_кт"])
+			// Считаем в decimal: опорные проводки — это денежные суммы, которые
+			// становятся входящим остатком, и округление float64 осело бы в базе
+			// навсегда.
+			net := toDecimal(b[col+"_дт"]).Sub(toDecimal(b[col+"_кт"]))
 			switch {
-			case net > 1e-9:
+			case net.IsPositive():
 				dtRow[r.Name] = net
 				dtHas = true
-			case net < -1e-9:
-				ktRow[r.Name] = -net
+			case net.IsNegative():
+				ktRow[r.Name] = net.Neg()
 				ktHas = true
 			}
 		}
@@ -1126,11 +1130,25 @@ func absFloat(f float64) float64 {
 	return f
 }
 
-// toFloat приводит значение остатка (float64/строка/json.Number/…) к float64.
+// toDecimal приводит значение остатка к decimal.Decimal (деньги считаем точно).
+// Непонятный тип/NULL → 0, как COALESCE в запросах остатков.
+func toDecimal(v any) decimal.Decimal {
+	if d, ok := normalizeNumber(v).(decimal.Decimal); ok {
+		return d
+	}
+	return decimal.Zero
+}
+
+// toFloat приводит значение остатка (decimal/float64/строка/json.Number/…) к
+// float64. Годится для сравнений с допуском, но не для денежной арифметики —
+// для неё toDecimal.
 func toFloat(v any) float64 {
 	switch n := v.(type) {
 	case nil:
 		return 0
+	case decimal.Decimal:
+		f, _ := n.Float64()
+		return f
 	case float64:
 		return n
 	case float32:

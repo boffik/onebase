@@ -159,10 +159,10 @@ func TestAccountBalances_BySubconto(t *testing.T) {
 		switch code {
 		case "41":
 			товар, _ := b["субконто2"].(string)
-			saldo41[товар] = b["сумма"].(float64)
+			saldo41[товар] = toFloat(b["сумма"]) // AccountBalances отдаёт decimal (план 42)
 		case "19.3":
 			count193++
-			saldo193 = b["сумма"].(float64)
+			saldo193 = toFloat(b["сумма"])
 		}
 	}
 

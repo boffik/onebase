@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // EnsureAccountsTable creates the _accounts table for storing chart of accounts data.
@@ -344,8 +345,16 @@ ORDER BY a.code`, selectCols, table, d.Placeholder(1), d.Placeholder(2), groupBy
 	for rows.Next() {
 		var code, name, kind string
 		dests := []any{&code, &name, &kind}
+		// Деньги читаем в any и нормализуем в decimal (план 42): раньше здесь
+		// стоял float64, из-за чего PostgreSQL терял точность NUMERIC уже на
+		// стороне Go — сумма приходила округлённой в отчёт и, что хуже, в опорные
+		// проводки свёртки (accountOpeningRows).
+		// Оговорка: на SQLite точность всё равно ограничена движком — SUM() над
+		// TEXT-колонкой возвращает float64 при любом CAST (NUMERIC/DECIMAL), так
+		// что там decimal лишь сохраняет то, что отдал SQL, без второго
+		// округления. Точный агрегат на SQLite потребовал бы суммирования в Go.
 		for range resourceCols {
-			var v float64
+			var v any
 			dests = append(dests, &v)
 		}
 		subVals := make([]sql.NullString, len(subconto))
@@ -360,19 +369,19 @@ ORDER BY a.code`, selectCols, table, d.Placeholder(1), d.Placeholder(2), groupBy
 		ei := 0
 		for _, r := range resources {
 			col := metadata.ColumnName(r)
-			dtVal := *dests[3+ei*2].(*float64)
-			ktVal := *dests[3+ei*2+1].(*float64)
+			dtVal := scanDecimal(dests[3+ei*2])
+			ktVal := scanDecimal(dests[3+ei*2+1])
 			row[col+"_дт"] = dtVal
 			row[col+"_кт"] = ktVal
 			switch kind {
 			case "active":
-				row[col] = dtVal - ktVal
+				row[col] = dtVal.Sub(ktVal)
 			case "passive":
-				row[col] = ktVal - dtVal
+				row[col] = ktVal.Sub(dtVal)
 			default: // active_passive
-				row[col+"_сальдо_дт"] = max0(dtVal - ktVal)
-				row[col+"_сальдо_кт"] = max0(ktVal - dtVal)
-				row[col] = dtVal - ktVal
+				row[col+"_сальдо_дт"] = max0Dec(dtVal.Sub(ktVal))
+				row[col+"_сальдо_кт"] = max0Dec(ktVal.Sub(dtVal))
+				row[col] = dtVal.Sub(ktVal)
 			}
 			ei++
 		}
@@ -429,7 +438,7 @@ ORDER BY a.code`, selectCols, table, d.Placeholder(1), d.Placeholder(2), d.Place
 		var code, name, kind string
 		dests := []any{&code, &name, &kind}
 		for range resourceCols {
-			var v float64
+			var v any
 			dests = append(dests, &v)
 		}
 		if err := rows.Scan(dests...); err != nil {
@@ -439,8 +448,8 @@ ORDER BY a.code`, selectCols, table, d.Placeholder(1), d.Placeholder(2), d.Place
 		ei := 0
 		for _, r := range resources {
 			col := metadata.ColumnName(r)
-			row[col+"_дт"] = *dests[3+ei*2].(*float64)
-			row[col+"_кт"] = *dests[3+ei*2+1].(*float64)
+			row[col+"_дт"] = scanDecimal(dests[3+ei*2])
+			row[col+"_кт"] = scanDecimal(dests[3+ei*2+1])
 			ei++
 		}
 		result = append(result, row)
@@ -507,9 +516,25 @@ func nullStr(s string) any {
 	return s
 }
 
-func max0(v float64) float64 {
-	if v < 0 {
-		return 0
+// scanDecimal достаёт денежное значение из приёмника Scan (*any) и приводит его
+// к decimal.Decimal: PG отдаёт pgtype.Numeric, SQLite — строку. NULL/непонятный
+// тип → 0, как и COALESCE(...,0) в самом запросе.
+func scanDecimal(dest any) decimal.Decimal {
+	p, ok := dest.(*any)
+	if !ok || p == nil {
+		return decimal.Zero
+	}
+	if d, ok := normalizeNumber(*p).(decimal.Decimal); ok {
+		return d
+	}
+	return decimal.Zero
+}
+
+// max0Dec схлопывает отрицательное сальдо в ноль (развёрнутое сальдо
+// активно-пассивного счёта).
+func max0Dec(v decimal.Decimal) decimal.Decimal {
+	if v.IsNegative() {
+		return decimal.Zero
 	}
 	return v
 }
