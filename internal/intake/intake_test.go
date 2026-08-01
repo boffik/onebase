@@ -151,7 +151,9 @@ func TestIngest_Mismatch(t *testing.T) {
 	var calls int64
 	h := creatingHandler(db, &calls)
 
-	eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "111"}))
+	if _, err := eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "111"})); err != nil {
+		t.Fatal(err)
+	}
 	// Тот же event_id, другое тело → несовпадение → карантин.
 	res, err := eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "222"}))
 	if err != nil {
@@ -253,7 +255,9 @@ func TestReplay(t *testing.T) {
 	in := sampleIntake()
 
 	// Сначала загоняем в карантин сбойным обработчиком.
-	eng.Ingest(ctx, in, failingHandler(db), env(t, "E1", map[string]any{"phone": "111"}))
+	if _, err := eng.Ingest(ctx, in, failingHandler(db), env(t, "E1", map[string]any{"phone": "111"})); err != nil {
+		t.Fatal(err)
+	}
 	open, err := db.ListIntakeDLQ(ctx, "SiteLead", true, 0)
 	if err != nil || len(open) != 1 {
 		t.Fatalf("получить карантин: len=%d err=%v", len(open), err)
@@ -282,7 +286,9 @@ func TestReplay(t *testing.T) {
 func TestReplay_IsIdempotent(t *testing.T) {
 	eng, db, ctx := setup(t)
 	in := sampleIntake()
-	eng.Ingest(ctx, in, failingHandler(db), env(t, "E1", map[string]any{"phone": "111"}))
+	if _, err := eng.Ingest(ctx, in, failingHandler(db), env(t, "E1", map[string]any{"phone": "111"})); err != nil {
+		t.Fatal(err)
+	}
 	open, _ := db.ListIntakeDLQ(ctx, "SiteLead", true, 0)
 
 	var calls int64
@@ -306,7 +312,9 @@ func TestReplay_IsIdempotent(t *testing.T) {
 func TestReplay_StateTransitionFailureRollsBackBusinessObject(t *testing.T) {
 	eng, db, ctx := setup(t)
 	in := sampleIntake()
-	eng.Ingest(ctx, in, failingHandler(db), env(t, "E1", map[string]any{"phone": "111"}))
+	if _, err := eng.Ingest(ctx, in, failingHandler(db), env(t, "E1", map[string]any{"phone": "111"})); err != nil {
+		t.Fatal(err)
+	}
 	open, _ := db.ListIntakeDLQ(ctx, "SiteLead", true, 0)
 
 	// Имитируем сбой записи replay_state. Закрытие DLQ должно быть в той же
@@ -343,8 +351,12 @@ func TestReplay_RejectsSchemaMismatch(t *testing.T) {
 	var calls int64
 	h := creatingHandler(db, &calls)
 
-	eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "111"}))
-	eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "222"}))
+	if _, err := eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "111"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eng.Ingest(ctx, in, h, env(t, "E1", map[string]any{"phone": "222"})); err != nil {
+		t.Fatal(err)
+	}
 	open, _ := db.ListIntakeDLQ(ctx, "SiteLead", true, 0)
 	if len(open) != 1 || open[0].Reason != metadata.DLQSchemaMismatch {
 		t.Fatalf("ожидался schema_mismatch в карантине: %+v", open)

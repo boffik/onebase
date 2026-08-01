@@ -105,7 +105,7 @@ func TestBlobOwnerRoundtrip(t *testing.T) {
 		t.Fatalf("OpenBlob: %v", err)
 	}
 	if rc != nil {
-		rc.Close()
+		_ = rc.Close()
 	}
 	if got.OwnerKind != "catalog" || got.OwnerEntity != "Контрагенты" {
 		t.Fatalf("OpenBlob потерял владельца: kind=%q entity=%q", got.OwnerKind, got.OwnerEntity)
@@ -121,7 +121,7 @@ func TestBlobOwnerRoundtrip(t *testing.T) {
 		t.Fatalf("OpenBlob(без владельца): %v", err)
 	}
 	if rc2 != nil {
-		rc2.Close()
+		_ = rc2.Close()
 	}
 	if got2.OwnerKind != "" || got2.OwnerEntity != "" {
 		t.Fatalf("ожидался пустой владелец, получено kind=%q entity=%q", got2.OwnerKind, got2.OwnerEntity)
@@ -160,7 +160,7 @@ func readBlobBytes(t *testing.T, db *DB, id uuid.UUID) []byte {
 	if err != nil {
 		t.Fatalf("OpenBlob: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	data, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatalf("ReadAll: %v", err)

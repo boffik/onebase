@@ -87,7 +87,9 @@ func TestWriteCatalogRecord_Multiple(t *testing.T) {
 	}
 
 	var count int
-	db.QueryRow(ctx, "SELECT COUNT(*) FROM контрагент").Scan(&count)
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM контрагент").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
 	if count != 6 {
 		t.Errorf("ожидалось 6 записей, получили %d", count)
 	}

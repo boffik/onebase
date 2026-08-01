@@ -67,7 +67,7 @@ func TestAttachmentRoundtrip_S3(t *testing.T) {
 	if _, err := rsc.Seek(0, io.SeekStart); err != nil {
 		t.Errorf("reader must be seekable: %v", err)
 	}
-	rsc.Close()
+	_ = rsc.Close()
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("OpenAttachment содержимое не совпало: %q", got)
 	}
@@ -115,7 +115,7 @@ func TestAttachment_S3Streaming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenAttachment(stream): %v", err)
 	}
-	defer rsc.Close()
+	defer func() { _ = rsc.Close() }()
 	// Seekable (ServeContent так делает): в конец за размером, потом в начало.
 	if sz, err := rsc.Seek(0, io.SeekEnd); err != nil || sz != int64(len(payload)) {
 		t.Fatalf("Seek end = %d, %v; want %d", sz, err, len(payload))
@@ -158,7 +158,7 @@ func TestAttachment_S3ModeSwitchKeepsDisk(t *testing.T) {
 		t.Fatalf("OpenAttachment(disk after switch): %v", err)
 	}
 	got, _ := io.ReadAll(rsc)
-	rsc.Close()
+	_ = rsc.Close()
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("disk-вложение после переключения не прочиталось: %q", got)
 	}
