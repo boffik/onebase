@@ -32,7 +32,7 @@ func TestScriptedDisplay_ShowLines_CP866(t *testing.T) {
 	if err := disp.ShowLines([]string{"Молоко", "ИТОГО 150"}); err != nil {
 		t.Fatalf("ShowLines: %v", err)
 	}
-	dev.Disconnect()
+	disconnect(dev)
 
 	got := <-received
 	if !bytes.HasPrefix(got, []byte{0x1B, 0x40}) {
@@ -67,8 +67,10 @@ func TestScriptedDisplay_UTF8Override(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	dev.(CustomerDisplay).ShowLines([]string{"Чай"})
-	dev.Disconnect()
+	if err := dev.(CustomerDisplay).ShowLines([]string{"Чай"}); err != nil {
+		t.Fatalf("ShowLines: %v", err)
+	}
+	disconnect(dev)
 
 	got := <-received
 	if !bytes.Contains(got, []byte("Чай")) {
@@ -92,8 +94,10 @@ func TestEscpos_CP866Opt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	dev.(ReceiptPrinter).PrintReceipt(Receipt{Header: []string{"Хлеб"}, Items: []ReceiptItem{{Name: "Батон", Qty: 1, Price: 30, Sum: 30}}, Total: 30})
-	dev.Disconnect()
+	if err := dev.(ReceiptPrinter).PrintReceipt(Receipt{Header: []string{"Хлеб"}, Items: []ReceiptItem{{Name: "Батон", Qty: 1, Price: 30, Sum: 30}}, Total: 30}); err != nil {
+		t.Fatalf("PrintReceipt: %v", err)
+	}
+	disconnect(dev)
 
 	got := <-received
 	if !bytes.Contains(got, encodeCP866("Хлеб")) || !bytes.Contains(got, encodeCP866("ИТОГО:")) {

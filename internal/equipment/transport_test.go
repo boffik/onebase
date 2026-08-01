@@ -75,7 +75,9 @@ func TestOpenWriteTransport_TCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("openWriteTransport TCP: %v", err)
 	}
-	wc.Close()
+	if err := wc.Close(); err != nil {
+		t.Errorf("close transport: %v", err)
+	}
 }
 
 // serial-путь выбирается по адресу без двоеточия; несуществующий порт даёт ошибку

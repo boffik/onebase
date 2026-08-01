@@ -19,7 +19,7 @@ func TestScriptedPay_Approved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	term, ok := dev.(PaymentTerminal)
 	if !ok {
 		t.Fatal("scripted_pay не реализует PaymentTerminal")
@@ -45,7 +45,7 @@ func TestScriptedPay_Declined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer dev.Disconnect()
+	defer disconnect(dev)
 	res, err := dev.(PaymentTerminal).Pay(100)
 	if err != nil {
 		t.Fatalf("Pay: %v", err)
