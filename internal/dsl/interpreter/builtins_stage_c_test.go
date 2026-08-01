@@ -62,7 +62,9 @@ func TestFillPropertyValues_All(t *testing.T) {
 func TestFillPropertyValues_IncludeList(t *testing.T) {
 	src := newStruct([]any{"Имя, Возраст, Город", "Иван", float64(30), "Москва"})
 	dst := newStruct([]any{"Имя, Возраст, Город"})
-	fillPropertyValuesFn([]any{dst, src, "Имя, Город"}, "", 0)
+	if _, err := fillPropertyValuesFn([]any{dst, src, "Имя, Город"}, "", 0); err != nil {
+		t.Fatal(err)
+	}
 	if dst.Get("Имя") != "Иван" || dst.Get("Город") != "Москва" {
 		t.Errorf("включённые свойства не скопированы: %v", dst.vals)
 	}
@@ -75,7 +77,9 @@ func TestFillPropertyValues_ExcludeList(t *testing.T) {
 	src := newStruct([]any{"Имя, Возраст, Город", "Иван", float64(30), "Москва"})
 	dst := newStruct([]any{"Имя, Возраст, Город"})
 	// 3-й аргумент пустой → «все свойства», 4-й — исключаемые.
-	fillPropertyValuesFn([]any{dst, src, "", "Город"}, "", 0)
+	if _, err := fillPropertyValuesFn([]any{dst, src, "", "Город"}, "", 0); err != nil {
+		t.Fatal(err)
+	}
 	if dst.Get("Имя") != "Иван" || dst.Get("Возраст") != float64(30) {
 		t.Errorf("неисключённые свойства не скопированы: %v", dst.vals)
 	}

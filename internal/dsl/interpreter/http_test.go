@@ -32,7 +32,7 @@ func TestHTTPGet_Shorthand(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
-		fmt.Fprint(w, `{"ok":true}`)
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
 	}))
 	defer srv.Close()
 
@@ -49,7 +49,7 @@ func TestHTTPConnection_Get(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/rates", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
-		fmt.Fprint(w, "hello")
+		_, _ = fmt.Fprint(w, "hello")
 	}))
 	defer srv.Close()
 
@@ -75,7 +75,7 @@ func TestHTTPConnection_Post(t *testing.T) {
 		gotBody = string(buf[:n])
 		gotHeader = r.Header.Get("Content-Type")
 		w.WriteHeader(201)
-		fmt.Fprint(w, `{"created":true}`)
+		_, _ = fmt.Fprint(w, `{"created":true}`)
 	}))
 	defer srv.Close()
 
@@ -113,7 +113,7 @@ func TestHTTPResponse_GetHeader(t *testing.T) {
 
 func TestHTTPGet_WithJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"rate":75}`)
+		_, _ = fmt.Fprint(w, `{"rate":75}`)
 	}))
 	defer srv.Close()
 
