@@ -39,6 +39,12 @@ elements:
                 data_path: Объект.Дата
                 required: true
               - kind: ПолеВвода
+                name: ПолеОрганизация
+                title:
+                  ru: "Организация"
+                data_path: Объект.Организация
+                required: true
+              - kind: ПолеВвода
                 name: ПолеПокупатель
                 title:
                   ru: "Покупатель"
