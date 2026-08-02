@@ -34,7 +34,8 @@ var userCmd = &cobra.Command{
 
 Примеры:
   onebase user add admin --name "Администратор" --admin --generate
-  onebase user add kladovshchik --name "Кладовщик" --password-stdin < pass.txt
+  onebase user add kladovshchik --name "Кладовщик" --show-in-list --password-stdin < pass.txt
+  onebase user show-in-list kladovshchik --on
   onebase user role assign kladovshchik Кладовщик
   onebase user list --sqlite base.db`,
 	SilenceUsage:  true,
@@ -68,6 +69,13 @@ var userRmCmd = &cobra.Command{
 	RunE:  runUserRm,
 }
 
+var userShowInListCmd = &cobra.Command{
+	Use:   "show-in-list <login>",
+	Short: "Показывать/скрывать пользователя в списках выбора (--on/--off)",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runUserShowInList,
+}
+
 var userRoleCmd = &cobra.Command{
 	Use:   "role",
 	Short: "Назначение ролей пользователям",
@@ -99,11 +107,15 @@ func init() {
 
 	userAddCmd.Flags().String("name", "", "полное имя пользователя")
 	userAddCmd.Flags().Bool("admin", false, "сделать администратором")
+	userAddCmd.Flags().Bool("show-in-list", false, "показывать в списках выбора (reference-пикерах)")
 	addPasswordFlags(userAddCmd)
 	addPasswordFlags(userPasswdCmd)
 
+	userShowInListCmd.Flags().Bool("on", false, "показывать в списках выбора")
+	userShowInListCmd.Flags().Bool("off", false, "скрыть из списков выбора")
+
 	userRoleCmd.AddCommand(userRoleAssignCmd, userRoleRevokeCmd)
-	userCmd.AddCommand(userListCmd, userAddCmd, userPasswdCmd, userRmCmd, userRoleCmd)
+	userCmd.AddCommand(userListCmd, userAddCmd, userPasswdCmd, userRmCmd, userShowInListCmd, userRoleCmd)
 	rootCmd.AddCommand(userCmd)
 }
 
@@ -175,6 +187,9 @@ func runUserList(cmd *cobra.Command, _ []string) error {
 		if u.IsAdmin {
 			line += " [админ]"
 		}
+		if u.ShowInList {
+			line += " [в списках]"
+		}
 		if u.FullName != "" {
 			line += "  — " + u.FullName
 		}
@@ -193,6 +208,7 @@ func runUserAdd(cmd *cobra.Command, args []string) error {
 	}
 	name, _ := cmd.Flags().GetString("name")
 	isAdmin, _ := cmd.Flags().GetBool("admin")
+	showInList, _ := cmd.Flags().GetBool("show-in-list")
 	pw, generated, err := resolvePassword(cmd)
 	if err != nil {
 		return err
@@ -209,12 +225,20 @@ func runUserAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if showInList {
+		if err := env.repo.SetShowInList(ctx, u.ID, true); err != nil {
+			return err
+		}
+	}
 	env.db.LogAction(ctx, "user_create", "user", login, u.ID, "", "cli", "")
 
 	if isAdmin {
 		fmt.Fprintf(os.Stdout, "Создан пользователь %s (администратор)\n", login)
 	} else {
 		fmt.Fprintf(os.Stdout, "Создан пользователь %s\n", login)
+	}
+	if showInList {
+		fmt.Fprintln(os.Stdout, "Показывается в списках выбора")
 	}
 	if generated {
 		fmt.Fprintf(os.Stdout, "Пароль: %s\n", pw)
@@ -272,6 +296,39 @@ func runUserRm(cmd *cobra.Command, args []string) error {
 	}
 	env.db.LogAction(ctx, "user_delete", "user", login, u.ID, "", "cli", "")
 	fmt.Fprintf(os.Stdout, "Пользователь %s удалён\n", login)
+	return nil
+}
+
+func runUserShowInList(cmd *cobra.Command, args []string) error {
+	login := strings.TrimSpace(args[0])
+	on, _ := cmd.Flags().GetBool("on")
+	off, _ := cmd.Flags().GetBool("off")
+	// Требуем ровно один из флагов: без явного намерения не трогаем видимость,
+	// а --on вместе с --off — противоречие.
+	if on == off {
+		return fmt.Errorf("укажите ровно один из флагов --on / --off")
+	}
+
+	env, err := openUserEnv(cmd)
+	if err != nil {
+		return err
+	}
+	defer env.Close()
+
+	ctx := context.Background()
+	u, err := findUserByLogin(ctx, env.repo, login)
+	if err != nil {
+		return err
+	}
+	if err := env.repo.SetShowInList(ctx, u.ID, on); err != nil {
+		return err
+	}
+	env.db.LogAction(ctx, "user_show_in_list", "user", login, u.ID, "", "cli", "")
+	if on {
+		fmt.Fprintf(os.Stdout, "Пользователь %s показывается в списках выбора\n", login)
+	} else {
+		fmt.Fprintf(os.Stdout, "Пользователь %s скрыт из списков выбора\n", login)
+	}
 	return nil
 }
 

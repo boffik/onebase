@@ -23,6 +23,9 @@ func userTestCmd(t *testing.T, projectDir, dbPath string) *cobra.Command {
 	fs.String("db", "", "")
 	fs.String("name", "", "")
 	fs.Bool("admin", false, "")
+	fs.Bool("show-in-list", false, "")
+	fs.Bool("on", false, "")
+	fs.Bool("off", false, "")
 	fs.Bool("generate", false, "")
 	fs.Bool("password-stdin", false, "")
 	mustSet(t, fs, "project", projectDir)
@@ -126,6 +129,141 @@ func TestUserCLI_AddListRoleInvariants(t *testing.T) {
 	cmd = userTestCmd(t, dir, dbPath)
 	if err := runUserRm(cmd, []string{"admin"}); err == nil {
 		t.Fatal("удаление последнего админа должно быть отклонено (ErrLastAdmin)")
+	}
+}
+
+// TestUserCLI_AddShowInList проверяет, что --show-in-list при add выставляет
+// show_in_list=true (пользователь попадает в reference-пикеры ListForSelection),
+// а без флага — нет. Это ядро дефекта: раньше созданный из CLI пользователь
+// никогда не появлялся в списках выбора.
+func TestUserCLI_AddShowInList(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "users.db")
+
+	// Первый пользователь — админ, без --show-in-list.
+	cmd := userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "admin", "true")
+	mustSet(t, cmd.Flags(), "generate", "true")
+	if err := runUserAdd(cmd, []string{"admin"}); err != nil {
+		t.Fatalf("создание админа: %v", err)
+	}
+
+	// Обычный пользователь с --show-in-list.
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "generate", "true")
+	mustSet(t, cmd.Flags(), "show-in-list", "true")
+	if err := runUserAdd(cmd, []string{"klad"}); err != nil {
+		t.Fatalf("создание пользователя: %v", err)
+	}
+
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := auth.NewRepo(db)
+
+	// В списках выбора — только klad; admin создан без флага.
+	sel, err := repo.ListForSelection(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sel) != 1 || sel[0].Login != "klad" {
+		t.Fatalf("ожидался только klad в списке выбора, получено %+v", sel)
+	}
+
+	// Флаг корректно проставлен/не проставлен на самих пользователях.
+	klad, err := findUserByLogin(ctx, repo, "klad")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !klad.ShowInList {
+		t.Fatal("show_in_list должен быть true у klad (--show-in-list передавался)")
+	}
+	admin, err := findUserByLogin(ctx, repo, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admin.ShowInList {
+		t.Fatal("show_in_list должен быть false у admin (флаг не передавался)")
+	}
+}
+
+// TestUserCLI_ShowInListToggle проверяет подкоманду show-in-list --on/--off:
+// включение/выключение видимости уже существующего пользователя в reference-
+// пикерах, валидацию взаимоисключающих флагов и ошибку на неизвестном логине.
+func TestUserCLI_ShowInListToggle(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "users.db")
+
+	// admin (первый — админ) + обычный пользователь без show-in-list.
+	cmd := userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "admin", "true")
+	mustSet(t, cmd.Flags(), "generate", "true")
+	if err := runUserAdd(cmd, []string{"admin"}); err != nil {
+		t.Fatalf("создание админа: %v", err)
+	}
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "generate", "true")
+	if err := runUserAdd(cmd, []string{"klad"}); err != nil {
+		t.Fatalf("создание пользователя: %v", err)
+	}
+
+	// Без флагов — отказ (не трогаем видимость без явного намерения).
+	cmd = userTestCmd(t, dir, dbPath)
+	if err := runUserShowInList(cmd, []string{"klad"}); err == nil {
+		t.Fatal("без --on/--off команда должна быть отклонена")
+	}
+	// Оба флага — отказ (противоречие).
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "on", "true")
+	mustSet(t, cmd.Flags(), "off", "true")
+	if err := runUserShowInList(cmd, []string{"klad"}); err == nil {
+		t.Fatal("с обоими --on и --off команда должна быть отклонена")
+	}
+
+	ctx := context.Background()
+	db, err := storage.ConnectSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := auth.NewRepo(db)
+
+	// --on: klad появляется в списке выбора.
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "on", "true")
+	if err := runUserShowInList(cmd, []string{"klad"}); err != nil {
+		t.Fatalf("--on: %v", err)
+	}
+	sel, err := repo.ListForSelection(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sel) != 1 || sel[0].Login != "klad" {
+		t.Fatalf("после --on ожидался klad в списке выбора, получено %+v", sel)
+	}
+
+	// --off: klad исчезает из списка выбора.
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "off", "true")
+	if err := runUserShowInList(cmd, []string{"klad"}); err != nil {
+		t.Fatalf("--off: %v", err)
+	}
+	sel, err = repo.ListForSelection(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sel) != 0 {
+		t.Fatalf("после --off список выбора должен быть пуст, получено %+v", sel)
+	}
+
+	// Неизвестный логин — ошибка.
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "on", "true")
+	if err := runUserShowInList(cmd, []string{"nope"}); err == nil {
+		t.Fatal("несуществующий логин должен давать ошибку")
 	}
 }
 
