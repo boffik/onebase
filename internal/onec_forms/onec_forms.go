@@ -305,7 +305,69 @@ func Validate(yamlPath string) ([]Warning, error) {
 		}
 	}
 
+	// 3. Команда без action. Управляемая форма рисует команды из commands:
+	// автоматической командной панелью, а элемент kind: Кнопка нужен лишь чтобы
+	// поставить команду в конкретное место. Но панель берёт только команды с
+	// непустым action (ui.unplacedCommands): команда без action не отрисуется
+	// нигде и её нечем вызвать — молча пропадает из интерфейса.
+	for _, c := range form.Commands {
+		if c == nil || strings.TrimSpace(c.Action) != "" {
+			continue
+		}
+		warns.Add(Warning{Severity: SeverityWarn, Code: W014_CommandNoAction, Element: c.Name, Field: "commands",
+			Message: fmt.Sprintf("у команды «%s» не задан action — она не попадёт ни в командную панель, ни на кнопку", c.Name),
+			Suggest: "укажите action: <ИмяПроцедуры> и объявите эту процедуру в одноимённом .form.os"})
+	}
+
+	// 4. Реквизит формы перечислимого типа (save:false), показанный через
+	// ПолеВвода, НЕ получит выбор. Ссылочные реквизиты (CatalogRef./DocumentRef.)
+	// пикер получают — рендер грузит для них варианты справочника
+	// (ui.mergeFormLocalRefOptions), поэтому здесь проверяются только типы,
+	// которые этим путём не покрыты: перечисления, план счетов, AnyRef.
+	localRef := map[string]string{}
+	for _, a := range form.Attributes {
+		if !a.Save && isUnpickableFormLocalType(a.TypeRef) {
+			localRef[a.Name] = a.TypeRef
+		}
+	}
+	if len(localRef) > 0 {
+		var walkFields func(*IRElement)
+		walkFields = func(el *IRElement) {
+			if el == nil {
+				return
+			}
+			// form-local data_path — простое имя реквизита без префикса «Объект.»/«Список.».
+			if el.Kind == "ПолеВвода" && el.DataPath != "" && !strings.Contains(el.DataPath, ".") {
+				if tr, ok := localRef[el.DataPath]; ok {
+					warns.Add(Warning{Severity: SeverityWarn, Code: W015_FormLocalRefField, Element: el.Name, Field: el.DataPath,
+						Message: fmt.Sprintf("поле привязано к реквизиту формы «%s» типа «%s» (save:false) — выбор значения не отрисуется", el.DataPath, tr),
+						Suggest: "используйте поле объекта (data_path: Объект.<поле>) — для перечислений и плана счетов выбор даётся только полям сущности; у реквизита формы выбор из справочника работает лишь для CatalogRef./DocumentRef."})
+				}
+			}
+			for _, c := range el.Children {
+				walkFields(c)
+			}
+		}
+		for _, el := range form.Elements {
+			walkFields(el)
+		}
+	}
+
 	return []Warning(warns), nil
+}
+
+// isUnpickableFormLocalType сообщает, что у реквизита формы такого типа выбор
+// значения не отрисуется. CatalogRef./DocumentRef. сюда НЕ входят: для них
+// ui.mergeFormLocalRefOptions грузит варианты справочника и поле получает
+// полноценный пикер. Остаются перечисления, план счетов и AnyRef — выбор для
+// них рисуется только у полей сущности.
+func isUnpickableFormLocalType(t string) bool {
+	for _, p := range []string{"EnumRef.", "ChartOfAccountsRef.", "AnyRef"} {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return strings.HasPrefix(t, "enum:") || strings.HasPrefix(t, "Перечисление")
 }
 
 // knownKind возвращает true если el.Kind — известный нам тип элемента

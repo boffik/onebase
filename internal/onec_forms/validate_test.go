@@ -1,6 +1,7 @@
 package onec_forms
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,80 @@ elements:
 		if w.Severity == SeverityError {
 			t.Errorf("неожиданный error: %s", w)
 		}
+	}
+}
+
+func hasWarnCode(warns []Warning, code string) bool {
+	for _, w := range warns {
+		if w.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// Команда без action не попадёт ни в автопанель, ни на кнопку — W014 warn.
+// Команда с action молчит: её рисует автоматическая командная панель, наличие
+// элемента kind: Кнопка для этого не требуется.
+func TestValidate_CommandNoAction(t *testing.T) {
+	noAction := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заявка
+commands:
+  - name: Принять
+    title: { ru: "Принять" }
+elements:
+  - kind: ПолеВвода
+    name: ПолеНомер
+    data_path: Объект.Номер
+`
+	warns, _ := Validate(writeYAML(t, noAction))
+	if !hasWarnCode(warns, W014_CommandNoAction) {
+		t.Errorf("W014 не сработал для команды без action: %+v", warns)
+	}
+	// С action — W014 молчит, даже когда на форме нет ни одной kind: Кнопка.
+	withAction := strings.Replace(noAction, `    title: { ru: "Принять" }`,
+		"    title: { ru: \"Принять\" }\n    action: КомандаПринятьНажатие", 1)
+	warns2, _ := Validate(writeYAML(t, withAction))
+	if hasWarnCode(warns2, W014_CommandNoAction) {
+		t.Errorf("W014 ложно сработал для команды с action: %+v", warns2)
+	}
+}
+
+// Реквизит формы перечислимого типа в ПолеВвода не даёт выбор — W015 warn.
+// Для CatalogRef./DocumentRef. выбор рисуется (mergeFormLocalRefOptions), как и
+// для поля объекта, — там W015 молчит.
+func TestValidate_FormLocalEnumField(t *testing.T) {
+	tpl := `schema: onebase.form/v1
+form:
+  name: ФормаОбъекта
+  kind: object
+  entity: Заявка
+attributes:
+  - name: Причина
+    type: %s
+    save: false
+elements:
+  - kind: ПолеВвода
+    name: ПолеПричина
+    data_path: Причина
+`
+	warns, _ := Validate(writeYAML(t, fmt.Sprintf(tpl, "enum:ПричинаОтказа")))
+	if !hasWarnCode(warns, W015_FormLocalRefField) {
+		t.Errorf("W015 не сработал для form-local перечисления: %+v", warns)
+	}
+	for _, typ := range []string{"CatalogRef.ПричинаОтказа", "DocumentRef.Заявка"} {
+		w, _ := Validate(writeYAML(t, fmt.Sprintf(tpl, typ)))
+		if hasWarnCode(w, W015_FormLocalRefField) {
+			t.Errorf("W015 ложно сработал для %s — такой реквизит формы получает пикер: %+v", typ, w)
+		}
+	}
+	obj := strings.Replace(fmt.Sprintf(tpl, "enum:ПричинаОтказа"), "data_path: Причина", "data_path: Объект.Причина", 1)
+	warns2, _ := Validate(writeYAML(t, obj))
+	if hasWarnCode(warns2, W015_FormLocalRefField) {
+		t.Errorf("W015 ложно сработал для поля объекта: %+v", warns2)
 	}
 }
 
