@@ -1,6 +1,7 @@
 package onec_forms
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,9 +52,11 @@ func hasWarnCode(warns []Warning, code string) bool {
 	return false
 }
 
-// Команды объявлены, но не размещены кнопкой (kind: Кнопка) — W014 warn.
-func TestValidate_CommandNotPlaced(t *testing.T) {
-	noBtn := `schema: onebase.form/v1
+// Команда без action не попадёт ни в автопанель, ни на кнопку — W014 warn.
+// Команда с action молчит: её рисует автоматическая командная панель, наличие
+// элемента kind: Кнопка для этого не требуется.
+func TestValidate_CommandNoAction(t *testing.T) {
+	noAction := `schema: onebase.form/v1
 form:
   name: ФормаОбъекта
   kind: object
@@ -61,47 +64,53 @@ form:
 commands:
   - name: Принять
     title: { ru: "Принять" }
-    action: КомандаПринятьНажатие
 elements:
   - kind: ПолеВвода
     name: ПолеНомер
     data_path: Объект.Номер
 `
-	warns, _ := Validate(writeYAML(t, noBtn))
-	if !hasWarnCode(warns, W014_CommandNotPlaced) {
-		t.Errorf("W014 не сработал при команде без кнопки: %+v", warns)
+	warns, _ := Validate(writeYAML(t, noAction))
+	if !hasWarnCode(warns, W014_CommandNoAction) {
+		t.Errorf("W014 не сработал для команды без action: %+v", warns)
 	}
-	// С размещённой кнопкой — W014 молчит.
-	withBtn := strings.Replace(noBtn, "  - kind: ПолеВвода\n    name: ПолеНомер",
-		"  - kind: Кнопка\n    name: КомандаПринять\n  - kind: ПолеВвода\n    name: ПолеНомер", 1)
-	warns2, _ := Validate(writeYAML(t, withBtn))
-	if hasWarnCode(warns2, W014_CommandNotPlaced) {
-		t.Errorf("W014 ложно сработал при наличии kind: Кнопка: %+v", warns2)
+	// С action — W014 молчит, даже когда на форме нет ни одной kind: Кнопка.
+	withAction := strings.Replace(noAction, `    title: { ru: "Принять" }`,
+		"    title: { ru: \"Принять\" }\n    action: КомандаПринятьНажатие", 1)
+	warns2, _ := Validate(writeYAML(t, withAction))
+	if hasWarnCode(warns2, W014_CommandNoAction) {
+		t.Errorf("W014 ложно сработал для команды с action: %+v", warns2)
 	}
 }
 
-// Form-local реквизит ссылочного типа в ПолеВвода не даёт пикер — W015 warn;
-// то же поле объекта (Объект.X) — молчит.
-func TestValidate_FormLocalRefField(t *testing.T) {
-	local := `schema: onebase.form/v1
+// Реквизит формы перечислимого типа в ПолеВвода не даёт выбор — W015 warn.
+// Для CatalogRef./DocumentRef. выбор рисуется (mergeFormLocalRefOptions), как и
+// для поля объекта, — там W015 молчит.
+func TestValidate_FormLocalEnumField(t *testing.T) {
+	tpl := `schema: onebase.form/v1
 form:
   name: ФормаОбъекта
   kind: object
   entity: Заявка
 attributes:
   - name: Причина
-    type: CatalogRef.ПричинаОтказа
+    type: %s
     save: false
 elements:
   - kind: ПолеВвода
     name: ПолеПричина
     data_path: Причина
 `
-	warns, _ := Validate(writeYAML(t, local))
+	warns, _ := Validate(writeYAML(t, fmt.Sprintf(tpl, "enum:ПричинаОтказа")))
 	if !hasWarnCode(warns, W015_FormLocalRefField) {
-		t.Errorf("W015 не сработал для form-local reference: %+v", warns)
+		t.Errorf("W015 не сработал для form-local перечисления: %+v", warns)
 	}
-	obj := strings.Replace(local, "data_path: Причина", "data_path: Объект.Причина", 1)
+	for _, typ := range []string{"CatalogRef.ПричинаОтказа", "DocumentRef.Заявка"} {
+		w, _ := Validate(writeYAML(t, fmt.Sprintf(tpl, typ)))
+		if hasWarnCode(w, W015_FormLocalRefField) {
+			t.Errorf("W015 ложно сработал для %s — такой реквизит формы получает пикер: %+v", typ, w)
+		}
+	}
+	obj := strings.Replace(fmt.Sprintf(tpl, "enum:ПричинаОтказа"), "data_path: Причина", "data_path: Объект.Причина", 1)
 	warns2, _ := Validate(writeYAML(t, obj))
 	if hasWarnCode(warns2, W015_FormLocalRefField) {
 		t.Errorf("W015 ложно сработал для поля объекта: %+v", warns2)

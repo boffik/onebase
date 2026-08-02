@@ -305,23 +305,28 @@ func Validate(yamlPath string) ([]Warning, error) {
 		}
 	}
 
-	// 3. Команды объявлены, но не размещены кнопкой. В управляемой форме команду
-	// ОТОБРАЖАЕТ только элемент kind: Кнопка (обработчик <Имя>Нажатие в .form.os) —
-	// секция commands: сама кнопок не создаёт. Форма без единой кнопки при наличии
-	// команд визуально теряет управляемость (в UI видна только «Записать»).
-	if len(form.Commands) > 0 && !hasKind(form.Elements, "Кнопка") {
-		warns.Add(Warning{Severity: SeverityWarn, Code: W014_CommandNotPlaced, Field: "commands",
-			Message: fmt.Sprintf("объявлено команд: %d, но на форме нет ни одной кнопки (kind: Кнопка) — команды не появятся в UI", len(form.Commands)),
-			Suggest: "разместите команды элементами kind: Кнопка в elements (имя = имя обработчика без «Нажатие»); секция commands: кнопок не рисует"})
+	// 3. Команда без action. Управляемая форма рисует команды из commands:
+	// автоматической командной панелью, а элемент kind: Кнопка нужен лишь чтобы
+	// поставить команду в конкретное место. Но панель берёт только команды с
+	// непустым action (ui.unplacedCommands): команда без action не отрисуется
+	// нигде и её нечем вызвать — молча пропадает из интерфейса.
+	for _, c := range form.Commands {
+		if c == nil || strings.TrimSpace(c.Action) != "" {
+			continue
+		}
+		warns.Add(Warning{Severity: SeverityWarn, Code: W014_CommandNoAction, Element: c.Name, Field: "commands",
+			Message: fmt.Sprintf("у команды «%s» не задан action — она не попадёт ни в командную панель, ни на кнопку", c.Name),
+			Suggest: "укажите action: <ИмяПроцедуры> и объявите эту процедуру в одноимённом .form.os"})
 	}
 
-	// 4. Реквизит формы ссылочного/перечислимого типа (save:false), показанный
-	// через ПолеВвода, НЕ получит выбор (пикер/список): рендер даёт выбор только
-	// полям сущности (data_path: Объект.X). Реквизит формы → простой ввод без
-	// выбора — оператор не может выбрать значение из справочника.
+	// 4. Реквизит формы перечислимого типа (save:false), показанный через
+	// ПолеВвода, НЕ получит выбор. Ссылочные реквизиты (CatalogRef./DocumentRef.)
+	// пикер получают — рендер грузит для них варианты справочника
+	// (ui.mergeFormLocalRefOptions), поэтому здесь проверяются только типы,
+	// которые этим путём не покрыты: перечисления, план счетов, AnyRef.
 	localRef := map[string]string{}
 	for _, a := range form.Attributes {
-		if !a.Save && isRefOrEnumType(a.TypeRef) {
+		if !a.Save && isUnpickableFormLocalType(a.TypeRef) {
 			localRef[a.Name] = a.TypeRef
 		}
 	}
@@ -335,8 +340,8 @@ func Validate(yamlPath string) ([]Warning, error) {
 			if el.Kind == "ПолеВвода" && el.DataPath != "" && !strings.Contains(el.DataPath, ".") {
 				if tr, ok := localRef[el.DataPath]; ok {
 					warns.Add(Warning{Severity: SeverityWarn, Code: W015_FormLocalRefField, Element: el.Name, Field: el.DataPath,
-						Message: fmt.Sprintf("поле привязано к реквизиту формы «%s» типа «%s» (save:false) — выбор из справочника/списка не отрисуется", el.DataPath, tr),
-						Suggest: "используйте поле объекта (data_path: Объект.<поле> ссылочного/перечислимого типа) — пикер даётся только полям сущности"})
+						Message: fmt.Sprintf("поле привязано к реквизиту формы «%s» типа «%s» (save:false) — выбор значения не отрисуется", el.DataPath, tr),
+						Suggest: "используйте поле объекта (data_path: Объект.<поле>) — для перечислений и плана счетов выбор даётся только полям сущности; у реквизита формы выбор из справочника работает лишь для CatalogRef./DocumentRef."})
 				}
 			}
 			for _, c := range el.Children {
@@ -351,26 +356,13 @@ func Validate(yamlPath string) ([]Warning, error) {
 	return []Warning(warns), nil
 }
 
-// hasKind рекурсивно ищет элемент указанного Kind в дереве элементов формы.
-func hasKind(els []*IRElement, kind string) bool {
-	for _, el := range els {
-		if el == nil {
-			continue
-		}
-		if el.Kind == kind {
-			return true
-		}
-		if hasKind(el.Children, kind) {
-			return true
-		}
-	}
-	return false
-}
-
-// isRefOrEnumType сообщает, что тип реквизита — ссылочный или перечисление
-// (для таких полей UI рисует выбор только у полей сущности, не у реквизитов формы).
-func isRefOrEnumType(t string) bool {
-	for _, p := range []string{"CatalogRef.", "DocumentRef.", "EnumRef.", "ChartOfAccountsRef.", "AnyRef"} {
+// isUnpickableFormLocalType сообщает, что у реквизита формы такого типа выбор
+// значения не отрисуется. CatalogRef./DocumentRef. сюда НЕ входят: для них
+// ui.mergeFormLocalRefOptions грузит варианты справочника и поле получает
+// полноценный пикер. Остаются перечисления, план счетов и AnyRef — выбор для
+// них рисуется только у полей сущности.
+func isUnpickableFormLocalType(t string) bool {
+	for _, p := range []string{"EnumRef.", "ChartOfAccountsRef.", "AnyRef"} {
 		if strings.HasPrefix(t, p) {
 			return true
 		}

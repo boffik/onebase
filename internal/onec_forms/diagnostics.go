@@ -60,8 +60,8 @@ const (
 	W011_UnsupportedProp   = "W011"
 	W012_MissingDataPath   = "W012"
 	W013_ResourceMissing   = "W013"
-	W014_CommandNotPlaced  = "W014" // команды объявлены, но не размещены кнопкой (kind: Кнопка)
-	W015_FormLocalRefField = "W015" // form-local реквизит-ссылка в ПолеВвода не даёт пикер
+	W014_CommandNoAction   = "W014" // команда без action — не попадёт ни в командную панель, ни на кнопку
+	W015_FormLocalRefField = "W015" // form-local реквизит перечислимого типа в ПолеВвода не даёт выбор
 
 	W020_CompositeType     = "W020"
 	W021_AnyRef            = "W021"
