@@ -444,6 +444,16 @@ func resolveHandlerProc(form *metadata.FormModule, elementName, eventName string
 	}
 	el := form.GetElementByName(elementName)
 	if el == nil || el.Handlers == nil {
+		// Фикс A: команда, размещённая автоматической командной панелью (не вручную
+		// элементом kind: Кнопка), не имеет элемента в дереве — резолвим по имени
+		// команды на её процедуру-Action.
+		if elementName != "" {
+			for _, c := range form.Commands {
+				if c != nil && c.Name == elementName && c.Action != "" {
+					return c.Action
+				}
+			}
+		}
 		return ""
 	}
 	return el.Handlers[evt]

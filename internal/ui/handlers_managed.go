@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -53,6 +54,14 @@ func (s *Server) renderEntityForm(w http.ResponseWriter, r *http.Request, kind s
 	managed := pickManagedForm(entity, kind)
 	if managed != nil {
 		data["Form"] = managed
+		// Фикс A: команды формы, не размещённые вручную элементом kind: Кнопка,
+		// рисуются автоматической командной панелью (иначе объявленная в commands:
+		// команда в UI не видна — её кнопку рисует только kind: Кнопка). Fire-click
+		// авто-кнопки резолвится на процедуру команды в resolveHandlerProc.
+		data["FormCommands"] = unplacedCommands(managed)
+		// Фикс B: реквизиты формы (save:false) ссылочного типа получают пикер —
+		// грузим их опции и домешиваем в RefOptions (у полей сущности пикер уже был).
+		s.mergeFormLocalRefOptions(r.Context(), managed, data)
 		// Списки значений (СписокВыбора) объявлены на элементах формы, а не на
 		// полях сущности, поэтому собираем их из самой managed-формы. Единая
 		// точка покрывает все пути рендера (new/edit/повторный показ с ошибкой).
@@ -80,6 +89,86 @@ func (s *Server) prepareManagedFormData(data map[string]any, form *metadata.Form
 	if len(warnings) > 0 {
 		data["FormWarnings"] = appendManagedFormWarnings(data["FormWarnings"], warnings)
 	}
+}
+
+// unplacedCommands возвращает команды формы, НЕ размещённые вручную элементом
+// kind: Кнопка (с обработчиком той же процедуры-Action). Для них renderEntityForm
+// рисует автоматическую командную панель — иначе объявленная в commands: команда
+// в UI не видна (кнопку рисует только kind: Кнопка). Так конфигуратору не нужно
+// дублировать каждую команду кнопкой вручную: объявил в commands: — она на форме.
+func unplacedCommands(form *metadata.FormModule) []*metadata.FormCommand {
+	if form == nil || len(form.Commands) == 0 {
+		return nil
+	}
+	placed := map[string]bool{}
+	var walk func(*metadata.FormElement)
+	walk = func(el *metadata.FormElement) {
+		if el == nil {
+			return
+		}
+		if string(el.Kind) == "Кнопка" && el.Handlers != nil {
+			if proc := el.Handlers[metadata.FormEventOnClick]; proc != "" {
+				placed[proc] = true
+			}
+		}
+		for _, c := range el.Children {
+			walk(c)
+		}
+	}
+	for _, el := range form.Elements {
+		walk(el)
+	}
+	out := make([]*metadata.FormCommand, 0, len(form.Commands))
+	for _, c := range form.Commands {
+		if c != nil && c.Action != "" && !placed[c.Action] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// attrRefEntityName извлекает имя сущности-справочника/документа из типа реквизита
+// формы ("CatalogRef.X" / "DocumentRef.X" → "X"). Пусто, если тип не ссылочный.
+func attrRefEntityName(typeRef string) string {
+	for _, p := range []string{"CatalogRef.", "DocumentRef."} {
+		if strings.HasPrefix(typeRef, p) {
+			return strings.TrimPrefix(typeRef, p)
+		}
+	}
+	return ""
+}
+
+// mergeFormLocalRefOptions грузит варианты выбора для реквизитов формы (save:false)
+// ссылочного типа и домешивает их в data["RefOptions"] под именем реквизита. Это
+// даёт таким полям рабочий пикер: managed-рендер сам по себе выбирает варианты
+// только полям сущности, а реквизит формы иначе остаётся вводом без выбора.
+func (s *Server) mergeFormLocalRefOptions(ctx context.Context, form *metadata.FormModule, data map[string]any) {
+	if form == nil || len(form.Attributes) == 0 {
+		return
+	}
+	ref, _ := data["RefOptions"].(map[string][]map[string]any)
+	if ref == nil {
+		ref = map[string][]map[string]any{}
+	}
+	for _, a := range form.Attributes {
+		if a == nil || a.Save {
+			continue
+		}
+		refEntityName := attrRefEntityName(a.TypeRef)
+		if refEntityName == "" {
+			continue
+		}
+		refEntity := s.reg.GetEntity(refEntityName)
+		if refEntity == nil {
+			continue
+		}
+		rows, err := s.initialReferenceOptions(ctx, refEntity, refOptionsChoice, nil)
+		if err != nil {
+			continue
+		}
+		ref[a.Name] = rows
+	}
+	data["RefOptions"] = ref
 }
 
 // managedFormHeaderValues приводит значения шапки к типам event-пути. На

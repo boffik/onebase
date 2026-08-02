@@ -113,9 +113,30 @@ const tplManagedForm = `
         <button type="button" data-ob-file-trigger="file-pick-{{$fn}}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px;white-space:nowrap" title="Выбрать файл">…</button>
       </div>
     {{else}}
-      {{/* Поле не найдено в Entity (возможно реквизит формы, ещё не привязан) */}}
-      <input type="text" name="{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="{{$fn}}" style="background:#fef9c3"{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}
-        title="Реквизит формы '{{$el.DataPath}}' не найден среди полей сущности"{{if $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+      {{$attr := attrByName $ctx.Form $fn}}
+      {{if and $attr (attrRefEntity $attr.TypeRef) (index $ctx.RefOptions $fn)}}
+        {{/* Реквизит формы ссылочного типа — рабочий пикер выбора (фикс B): select
+             из вариантов справочника (mergeFormLocalRefOptions) + кнопка подбора.
+             Условие требует ещё и загруженных опций: mergeFormLocalRefOptions
+             зовётся только из renderEntityForm и только для save:false с сущностью
+             в реестре. Формы обработок рендерят page-managed-form напрямую
+             (handlers_processors.go), и без этой проверки поле там превращалось в
+             пустой select, теряющий текущее значение при записи. Нет опций —
+             остаётся прежний текстовый ввод со значением. */}}
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="ref-{{$fn}}" name="{{$fn}}" style="flex:1" data-ref-entity="{{attrRefEntity $attr.TypeRef}}"{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $el.ReadOnly}} disabled{{end}}{{if $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+            <option value="">— выбрать —</option>
+            {{range index $ctx.RefOptions $fn}}
+            <option value="{{index . "id"}}" {{if eq (index . "id") (index $ctx.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
+            {{end}}
+          </select>
+          <button type="button" data-ob-ref-picker="ref-{{$fn}}"{{if $el.ReadOnly}} disabled{{end}} style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">…</button>
+        </div>
+      {{else}}
+        {{/* Поле не найдено в Entity (возможно реквизит формы, ещё не привязан) */}}
+        <input type="text" name="{{$fn}}" value="{{index $ctx.Values $fn}}" placeholder="{{$fn}}" style="background:#fef9c3"{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}
+          title="Реквизит формы '{{$el.DataPath}}' не найден среди полей сущности"{{if $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+      {{end}}
     {{end}}
     {{if $el.Hint}}<small style="color:#94a3b8;font-size:11px">{{$el.Hint}}</small>{{end}}
   </div>
@@ -516,6 +537,13 @@ const tplManagedForm = `
 {{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}
 
 {{$ctx := .}}
+{{if .FormCommands}}
+<div class="managed-command-bar" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid #e2e8f0">
+  {{range .FormCommands}}
+  <button type="button" class="btn btn-secondary" style="margin:0" data-ob-fire-click="{{.Name}}">{{fieldTitleRU .Title .Name}}</button>
+  {{end}}
+</div>
+{{end}}
 {{range .Form.Elements}}
   {{template "managed-element" (dict "El" . "Ctx" $ctx)}}
 {{end}}
