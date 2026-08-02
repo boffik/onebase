@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ivantit66/onebase/internal/auth"
@@ -212,15 +213,23 @@ func TestUserCLI_ShowInListToggle(t *testing.T) {
 
 	// Без флагов — отказ (не трогаем видимость без явного намерения).
 	cmd = userTestCmd(t, dir, dbPath)
-	if err := runUserShowInList(cmd, []string{"klad"}); err == nil {
-		t.Fatal("без --on/--off команда должна быть отклонена")
+	err := runUserShowInList(cmd, []string{"klad"})
+	if err == nil || !strings.Contains(err.Error(), "--on или --off") {
+		t.Fatalf("без флагов ожидалась ошибка про --on или --off, получено %v", err)
 	}
 	// Оба флага — отказ (противоречие).
 	cmd = userTestCmd(t, dir, dbPath)
 	mustSet(t, cmd.Flags(), "on", "true")
 	mustSet(t, cmd.Flags(), "off", "true")
-	if err := runUserShowInList(cmd, []string{"klad"}); err == nil {
-		t.Fatal("с обоими --on и --off команда должна быть отклонена")
+	err = runUserShowInList(cmd, []string{"klad"})
+	if err == nil || !strings.Contains(err.Error(), "взаимоисключающи") {
+		t.Fatalf("с обоими флагами ожидалась ошибка про взаимоисключающие флаги, получено %v", err)
+	}
+	// Явная форма --on=false равнозначна --off, а не «флаг не задан».
+	cmd = userTestCmd(t, dir, dbPath)
+	mustSet(t, cmd.Flags(), "on", "false")
+	if err := runUserShowInList(cmd, []string{"klad"}); err != nil {
+		t.Fatalf("--on=false должен приниматься как скрытие, получено %v", err)
 	}
 
 	ctx := context.Background()
@@ -259,11 +268,12 @@ func TestUserCLI_ShowInListToggle(t *testing.T) {
 		t.Fatalf("после --off список выбора должен быть пуст, получено %+v", sel)
 	}
 
-	// Неизвестный логин — ошибка.
+	// Неизвестный логин — ошибка с внятным текстом.
 	cmd = userTestCmd(t, dir, dbPath)
 	mustSet(t, cmd.Flags(), "on", "true")
-	if err := runUserShowInList(cmd, []string{"nope"}); err == nil {
-		t.Fatal("несуществующий логин должен давать ошибку")
+	err = runUserShowInList(cmd, []string{"nope"})
+	if err == nil || !strings.Contains(err.Error(), "не найден") {
+		t.Fatalf("для несуществующего логина ожидалась ошибка «не найден», получено %v", err)
 	}
 }
 

@@ -44,7 +44,7 @@ var userCmd = &cobra.Command{
 
 var userListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "Список пользователей (логин, признак админа, полное имя, роли)",
+	Short: "Список пользователей (логин, признак админа, показ в списках выбора, полное имя, роли)",
 	RunE:  runUserList,
 }
 
@@ -225,11 +225,11 @@ func runUserAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if showInList {
-		if err := env.repo.SetShowInList(ctx, u.ID, true); err != nil {
-			return err
-		}
-	}
+	// Пользователь уже в базе (Create идёт в автокоммите, общей транзакции с
+	// SetShowInList нет). Поэтому сперва фиксируем создание в аудите и печатаем
+	// сгенерированный пароль — он живёт только в памяти процесса, и если его не
+	// показать, учётка останется недоступной. Только после этого выставляем
+	// видимость: её сбой не должен стоить пользователю пароля.
 	env.db.LogAction(ctx, "user_create", "user", login, u.ID, "", "cli", "")
 
 	if isAdmin {
@@ -237,11 +237,15 @@ func runUserAdd(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(os.Stdout, "Создан пользователь %s\n", login)
 	}
-	if showInList {
-		fmt.Fprintln(os.Stdout, "Показывается в списках выбора")
-	}
 	if generated {
 		fmt.Fprintf(os.Stdout, "Пароль: %s\n", pw)
+	}
+
+	if showInList {
+		if err := env.repo.SetShowInList(ctx, u.ID, true); err != nil {
+			return fmt.Errorf("пользователь %s создан, но флаг видимости не применён: %w", login, err)
+		}
+		fmt.Fprintf(os.Stdout, "Пользователь %s показывается в списках выбора\n", login)
 	}
 	return nil
 }
@@ -301,12 +305,22 @@ func runUserRm(cmd *cobra.Command, args []string) error {
 
 func runUserShowInList(cmd *cobra.Command, args []string) error {
 	login := strings.TrimSpace(args[0])
+	// Различаем «флаг не передан» и «передан со значением»: cobra допускает явную
+	// форму --on=false, и по одному лишь значению её не отличить от отсутствия
+	// флага. Проверка идёт по факту передачи — как в resolvePassword для
+	// --generate/--password-stdin.
+	onSet := cmd.Flags().Changed("on")
+	offSet := cmd.Flags().Changed("off")
+	switch {
+	case !onSet && !offSet:
+		return fmt.Errorf("укажите --on или --off")
+	case onSet && offSet:
+		return fmt.Errorf("флаги --on и --off взаимоисключающи")
+	}
 	on, _ := cmd.Flags().GetBool("on")
-	off, _ := cmd.Flags().GetBool("off")
-	// Требуем ровно один из флагов: без явного намерения не трогаем видимость,
-	// а --on вместе с --off — противоречие.
-	if on == off {
-		return fmt.Errorf("укажите ровно один из флагов --on / --off")
+	if offSet {
+		off, _ := cmd.Flags().GetBool("off")
+		on = !off
 	}
 
 	env, err := openUserEnv(cmd)
