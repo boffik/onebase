@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // RollupRecorderType — синтетический тип регистратора опорных движений, которые
@@ -346,6 +347,14 @@ func (db *DB) Rollup(ctx context.Context, regs []*metadata.Register, ents []*met
 				"DELETE FROM %s WHERE period < %s",
 				metadata.RegisterTableName(reg.Name), db.dialect.Placeholder(1)), cutoff); err != nil {
 				return err
+			}
+			// Итоги (план 80) считаются из движений и поддерживаются только через
+			// WriteMovements. Массовое удаление свёрнутых строк идёт мимо него, поэтому
+			// помесячные строки итогов за периоды до cutoff остались бы на месте, а
+			// опорные остатки легли бы сверху — быстрый путь query отдал бы задвоенные
+			// остатки. Пересчитываем в той же транзакции, уже после удаления.
+			if err := db.RecalcRegisterTotals(ctx, reg); err != nil {
+				return fmt.Errorf("свёртка регистра %s: пересчёт итогов: %w", reg.Name, err)
 			}
 			rep.Registers = append(rep.Registers, RollupRegReport{
 				Name: reg.Name, FoldedMovements: folded, OpeningRows: len(open),
@@ -760,13 +769,16 @@ func (db *DB) accountOpeningRows(ctx context.Context, ar *metadata.AccountRegist
 			col := metadata.ColumnName(r)
 			// Сырой дебет минус кредит (НЕ b[col]: тот скорректирован по виду
 			// счёта — для пассивного это Кт−Дт, что исказило бы сторону проводки).
-			net := toFloat(b[col+"_дт"]) - toFloat(b[col+"_кт"])
+			// Считаем в decimal: опорные проводки — это денежные суммы, которые
+			// становятся входящим остатком, и округление float64 осело бы в базе
+			// навсегда.
+			net := toDecimal(b[col+"_дт"]).Sub(toDecimal(b[col+"_кт"]))
 			switch {
-			case net > 1e-9:
+			case net.IsPositive():
 				dtRow[r.Name] = net
 				dtHas = true
-			case net < -1e-9:
-				ktRow[r.Name] = -net
+			case net.IsNegative():
+				ktRow[r.Name] = net.Neg()
 				ktHas = true
 			}
 		}
@@ -823,6 +835,11 @@ func (db *DB) foldAccountReg(ctx context.Context, ar *metadata.AccountRegister, 
 	if _, err := db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE period < %s",
 		metadata.AccountRegTableName(ar.Name), db.dialect.Placeholder(1)), cutoff); err != nil {
 		return rep, err
+	}
+	// См. комментарий в Rollup: удаление свёрнутых проводок идёт мимо
+	// WriteAccountMovements, поэтому итоги бухрегистра пересчитываем явно.
+	if err := db.RecalcAccountRegisterTotals(ctx, ar); err != nil {
+		return rep, fmt.Errorf("свёртка бухрегистра %s: пересчёт итогов: %w", ar.Name, err)
 	}
 	after, err := db.AccountBalances(ctx, ar.Name, ar.Accounts, cutoff, ar.Resources, ar.Subconto)
 	if err != nil {
@@ -1113,11 +1130,25 @@ func absFloat(f float64) float64 {
 	return f
 }
 
-// toFloat приводит значение остатка (float64/строка/json.Number/…) к float64.
+// toDecimal приводит значение остатка к decimal.Decimal (деньги считаем точно).
+// Непонятный тип/NULL → 0, как COALESCE в запросах остатков.
+func toDecimal(v any) decimal.Decimal {
+	if d, ok := normalizeNumber(v).(decimal.Decimal); ok {
+		return d
+	}
+	return decimal.Zero
+}
+
+// toFloat приводит значение остатка (decimal/float64/строка/json.Number/…) к
+// float64. Годится для сравнений с допуском, но не для денежной арифметики —
+// для неё toDecimal.
 func toFloat(v any) float64 {
 	switch n := v.(type) {
 	case nil:
 		return 0
+	case decimal.Decimal:
+		f, _ := n.Float64()
+		return f
 	case float64:
 		return n
 	case float32:

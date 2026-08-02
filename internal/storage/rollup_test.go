@@ -471,6 +471,159 @@ func TestRollup_FoldsAccountRegister(t *testing.T) {
 	}
 }
 
+// TestRollup_KeepsRegisterTotalsInSync — регрессия: свёртка удаляет свёрнутые
+// движения массовым DELETE мимо WriteMovements, поэтому итоги (план 80) надо
+// пересчитывать явно. Без пересчёта помесячные строки итогов за периоды до
+// cutoff остаются на месте, а опорные остатки ложатся сверху — быстрый путь
+// query отдаёт задвоенный остаток при верных данных в самом регистре.
+func TestRollup_KeepsRegisterTotalsInSync(t *testing.T) {
+	ctx, db := rollupTestDB(t)
+	reg := &metadata.Register{
+		Name:       "ОстаткиТоваров",
+		Dimensions: []metadata.Field{{Name: "Товар", Type: metadata.FieldTypeString}},
+		Resources:  []metadata.Field{{Name: "Количество", Type: metadata.FieldTypeNumber}},
+		Totals:     metadata.RegisterTotals{Enabled: true},
+	}
+	if err := db.MigrateRegisters(ctx, []*metadata.Register{reg}); err != nil {
+		t.Fatalf("MigrateRegisters: %v", err)
+	}
+	if !reg.TotalsUsable() {
+		t.Fatal("итоги регистра выключены — тест ничего не проверит")
+	}
+
+	mk := func(date, vid, tovar string, kol float64) {
+		d := mustDate(t, date)
+		rows := []map[string]any{{"Товар": tovar, "Количество": kol, "ВидДвижения": vid}}
+		if err := db.WriteMovements(ctx, reg.Name, "ПоступлениеТоваров", uuid.New(), rows, reg, &d); err != nil {
+			t.Fatalf("WriteMovements: %v", err)
+		}
+	}
+	// Три разных месяца до даты свёртки — каждый даёт свою строку в итогах.
+	mk("2025-01-10", "Приход", "Молоко", 10)
+	mk("2025-02-15", "Расход", "Молоко", 3)
+	mk("2025-01-05", "Приход", "Хлеб", 7)
+	mk("2025-06-20", "Приход", "Молоко", 5) // >= cutoff, не сворачивается
+
+	assertTotalsMatch(ctx, t, db, reg, "до свёртки")
+	before := balMap(t, ctx, db, reg, "Товар", "Количество")
+
+	cutoff := mustDate(t, "2025-03-01")
+	if _, err := db.Rollup(ctx, []*metadata.Register{reg}, nil, nil, nil,
+		RollupOptions{Date: cutoff, Registers: []string{"ОстаткиТоваров"}}); err != nil {
+		t.Fatalf("Rollup: %v", err)
+	}
+
+	// Сами движения свёрнуты верно (это проверял и старый пост-чек)...
+	after := balMap(t, ctx, db, reg, "Товар", "Количество")
+	if !sameBal(before, after) {
+		t.Fatalf("остаток по движениям изменился: до=%v после=%v", before, after)
+	}
+	// ...и итоги согласованы с ними — то, что ломалось до фикса.
+	assertTotalsMatch(ctx, t, db, reg, "после свёртки")
+
+	// Строк итогов за свёрнутые месяцы не осталось: всё схлопнуто в месяц cutoff.
+	var stale int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+metadata.RegisterTotalsTableName(reg.Name)+
+		" WHERE "+totalsMonthCol+" < ?", cutoff.Format("2006-01")).Scan(&stale); err != nil {
+		t.Fatal(err)
+	}
+	if stale != 0 {
+		t.Errorf("в итогах остались строки за свёрнутые месяцы: %d", stale)
+	}
+
+	// Повторная свёртка на ту же дату не должна разъезжать итоги.
+	if _, err := db.Rollup(ctx, []*metadata.Register{reg}, nil, nil, nil,
+		RollupOptions{Date: cutoff, Registers: []string{"ОстаткиТоваров"}}); err != nil {
+		t.Fatalf("повторная свёртка: %v", err)
+	}
+	assertTotalsMatch(ctx, t, db, reg, "после повторной свёртки")
+}
+
+// TestRollup_KeepsAccountTotalsInSync — то же для бухрегистра: foldAccountReg
+// удаляет свёрнутые проводки мимо WriteAccountMovements.
+func TestRollup_KeepsAccountTotalsInSync(t *testing.T) {
+	ctx, db := rollupTestDB(t)
+	if err := db.EnsureAccountsTable(ctx); err != nil {
+		t.Fatalf("EnsureAccountsTable: %v", err)
+	}
+	chart := &metadata.ChartOfAccounts{Name: "Основной", Accounts: []metadata.Account{
+		{Code: "000", Name: "Вспомогательный", Kind: "active_passive"},
+		{Code: "41", Name: "Товары", Kind: "active"},
+		{Code: "60", Name: "Поставщики", Kind: "passive"},
+	}}
+	if err := db.SyncAccounts(ctx, []*metadata.ChartOfAccounts{chart}); err != nil {
+		t.Fatalf("SyncAccounts: %v", err)
+	}
+	ar := &metadata.AccountRegister{
+		Name: "Хозрасчетный", Accounts: "Основной",
+		Resources: []metadata.Field{{Name: "Сумма", Type: metadata.FieldTypeNumber}},
+		Totals:    metadata.RegisterTotals{Enabled: true},
+	}
+	if err := db.MigrateAccountRegisters(ctx, []*metadata.AccountRegister{ar}); err != nil {
+		t.Fatalf("MigrateAccountRegisters: %v", err)
+	}
+	if !ar.TotalsUsable() {
+		t.Fatal("итоги бухрегистра выключены — тест ничего не проверит")
+	}
+
+	post := func(date string, sum float64) {
+		d := mustDate(t, date)
+		rows := []map[string]any{{"счётдт": "41", "счёткт": "60", "Сумма": sum}}
+		if err := db.WriteAccountMovements(ctx, ar.Name, "Поступление", uuid.New(), rows, ar, &d); err != nil {
+			t.Fatalf("WriteAccountMovements: %v", err)
+		}
+	}
+	post("2025-01-10", 1000)
+	post("2025-02-15", 500)
+	post("2025-06-20", 200)
+	cutoff := mustDate(t, "2025-03-01")
+
+	totalsTable := metadata.AccountRegTotalsTableName(ar.Name)
+	movTable := metadata.AccountRegTableName(ar.Name)
+	// Инвариант: помесячные обороты Дт/Кт из итогов == обороты по проводкам.
+	assertAcctTotalsMatch := func(stage string) {
+		t.Helper()
+		fromTotals := scanAcctDtKt(t, db, ctx,
+			"SELECT счёт, COALESCE(SUM(сумма_дт),0), COALESCE(SUM(сумма_кт),0) FROM "+totalsTable+" GROUP BY счёт")
+		onTheFlyDt := scanCodeSum(t, db, ctx, "SELECT счётдт, SUM(сумма) FROM "+movTable+" GROUP BY счётдт")
+		onTheFlyKt := scanCodeSum(t, db, ctx, "SELECT счёткт, SUM(сумма) FROM "+movTable+" GROUP BY счёткт")
+		codes := map[string]bool{}
+		for c := range onTheFlyDt {
+			codes[c] = true
+		}
+		for c := range onTheFlyKt {
+			codes[c] = true
+		}
+		if len(codes) == 0 {
+			t.Fatalf("[%s] нет проводок — тест ничего не проверил", stage)
+		}
+		for c := range codes {
+			if absFloat(fromTotals[c].dt-onTheFlyDt[c]) > 1e-6 {
+				t.Errorf("[%s] счёт %s: оборот Дт итогов=%v, на лету=%v", stage, c, fromTotals[c].dt, onTheFlyDt[c])
+			}
+			if absFloat(fromTotals[c].kt-onTheFlyKt[c]) > 1e-6 {
+				t.Errorf("[%s] счёт %s: оборот Кт итогов=%v, на лету=%v", stage, c, fromTotals[c].kt, onTheFlyKt[c])
+			}
+		}
+	}
+
+	assertAcctTotalsMatch("до свёртки")
+	if _, err := db.Rollup(ctx, nil, nil, []*metadata.AccountRegister{ar}, nil,
+		RollupOptions{Date: cutoff, AccountRegisters: []string{"Хозрасчетный"}}); err != nil {
+		t.Fatalf("Rollup: %v", err)
+	}
+	assertAcctTotalsMatch("после свёртки")
+
+	var stale int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM "+totalsTable+
+		" WHERE месяц < ?", cutoff.Format("2006-01")).Scan(&stale); err != nil {
+		t.Fatal(err)
+	}
+	if stale != 0 {
+		t.Errorf("в итогах бухрегистра остались строки за свёрнутые месяцы: %d", stale)
+	}
+}
+
 // TestRollup_AccountRegister_NoAuxAccount — нет вспомогательного счёта → бухрегистр
 // пропускается с пометкой, движения не трогаются.
 func TestRollup_AccountRegister_NoAuxAccount(t *testing.T) {

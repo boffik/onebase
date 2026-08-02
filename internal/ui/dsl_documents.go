@@ -13,7 +13,51 @@ import (
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/ivantit66/onebase/internal/webhook"
 )
+
+// dispatchDocWebhook публикует исходящий веб-хук (план 29) с DSL-пути документов.
+// Путь Документы.X (docWriter/docProxy) не проходит через entityservice.Save, где
+// живёт dispatchSaved, поэтому документы, записанные обработкой, HTTP-сервисом или
+// регламентным заданием, событий не порождали — интеграции их не видели.
+// Справочников это не касалось: catWriter сохраняется через entityservice.Save.
+//
+// Как и в entityservice: если запись идёт внутри явной DSL-транзакции, публикация
+// откладывается до коммита — не сообщаем наружу о данных, которые ещё могут
+// откатиться. record передаётся только там, где поля записи под рукой.
+func (s *Server) dispatchDocWebhook(ctx context.Context, name string, entity *metadata.Entity, id uuid.UUID, fields map[string]any) {
+	if !s.cfg.Webhooks.Enabled() {
+		return
+	}
+	event := webhook.Event{
+		Name:   name,
+		Entity: entity.Name,
+		ID:     id.String(),
+		User:   storage.AuditUserLogin(ctx),
+	}
+	if fields != nil {
+		event.Record = webhookDSLRecord(fields)
+	}
+	dispatch := func() { s.cfg.Webhooks.Dispatch(event) }
+	if storage.DeferUntilTxCommit(ctx, dispatch) {
+		return
+	}
+	dispatch()
+}
+
+// webhookDSLRecord — копия полей для тела хука без служебного псевдо-реквизита
+// «Ссылка» (*interpreter.Ref в шаблоне бесполезен). Зеркалит
+// entityservice.webhookRecord.
+func webhookDSLRecord(fields map[string]any) map[string]any {
+	rec := make(map[string]any, len(fields))
+	for k, v := range fields {
+		if low := strings.ToLower(k); low == "ссылка" || low == "reference" {
+			continue
+		}
+		rec[k] = v
+	}
+	return rec
+}
 
 // docsCtxSource предоставляет «живой» контекст (с открытой DSL-транзакцией,
 // если она есть). Реализуется *interpreter.TxState.
@@ -352,6 +396,9 @@ func (p *docProxy) DeleteRef(uuidStr string) error {
 			return err
 		}
 		p.s.publishDocChange(ctx, p.entity, id, "удалён", delBefore)
+		// Веб-хук <kind>.delete (план 29) — как в UI-обработчике физического
+		// удаления. Пометка на удаление обратима и событием не считается (markRef).
+		p.s.dispatchDocWebhook(ctx, string(p.entity.Kind)+".delete", p.entity, id, nil)
 		return nil
 	})
 }
@@ -378,6 +425,9 @@ func (p *docProxy) unpostRef(uuidStr string) error {
 	if result.DSLError != "" {
 		return fmt.Errorf("%s", result.DSLError)
 	}
+	// Веб-хук document.unpost (план 29) — как в UI-обработчике «Отменить проведение»
+	// (entityservice.Unpost хуки не диспетчеризует, это делает вызывающий).
+	p.s.dispatchDocWebhook(ctx, "document.unpost", p.entity, id, nil)
 	return nil
 }
 
@@ -718,6 +768,9 @@ func (w *docWriter) writeInContext(ctx context.Context) error {
 	})
 	// Живой список (план 87): отложенная до commit публикация «данные.<сущность>».
 	w.s.publishDocChange(ctx, w.entity, w.obj.ID, "записан", changeBefore)
+	// Веб-хук document.save (план 29) — Провести() зовёт write(), поэтому событие
+	// записи приходит и перед document.post, как на пути entityservice.Save.
+	w.s.dispatchDocWebhook(ctx, "document.save", w.entity, w.obj.ID, w.obj.Fields)
 	return nil
 }
 
@@ -787,6 +840,8 @@ func (w *docWriter) postInContext(ctx context.Context) error {
 	}
 	// Живой список (план 87): «проведён» после успешного проведения из DSL.
 	w.s.publishDocChange(ctx, w.entity, w.obj.ID, "проведён", nil)
+	// Веб-хук document.post (план 29).
+	w.s.dispatchDocWebhook(ctx, "document.post", w.entity, w.obj.ID, w.obj.Fields)
 	return nil
 }
 
