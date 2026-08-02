@@ -86,13 +86,20 @@ func ExportUniversal(
 	attachmentsDir string,
 	baseName string,
 	w io.Writer,
-) error {
+) (err error) {
 	zw := zip.NewWriter(w)
+	// Close дописывает центральный каталог zip — без него архив нечитаем.
+	// На успешном пути эта ошибка основная, на пути ошибки — вторичная, но
+	// терять её нельзя: молча «успешный» бэкап хуже явно неудавшегося.
+	defer func() {
+		if cerr := zw.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 
 	// --- 1. DATA tables -------------------------------------------------------
 	appTables, err := listAppTables(ctx, db)
 	if err != nil {
-		zw.Close()
 		return fmt.Errorf("export: list tables: %w", err)
 	}
 	manifest := make(map[string]int)
@@ -100,12 +107,10 @@ func ExportUniversal(
 		entryName := "data/" + tbl + ".jsonl"
 		fw, err := zw.Create(entryName)
 		if err != nil {
-			zw.Close()
 			return err
 		}
 		n, err := dumpTableJSONL(ctx, db, tbl, fw)
 		if err != nil {
-			zw.Close()
 			return fmt.Errorf("export table %s: %w", tbl, err)
 		}
 		manifest[entryName] = n
@@ -116,7 +121,6 @@ func ExportUniversal(
 		entryName := "system/" + tbl + ".jsonl"
 		fw, err := zw.Create(entryName)
 		if err != nil {
-			zw.Close()
 			return err
 		}
 		n, err := dumpTableJSONL(ctx, db, tbl, fw)
@@ -134,7 +138,6 @@ func ExportUniversal(
 		entryName := "exchange/" + tbl + ".jsonl"
 		fw, err := zw.Create(entryName)
 		if err != nil {
-			zw.Close()
 			return err
 		}
 		n, err := dumpTableJSONL(ctx, db, tbl, fw)
@@ -146,7 +149,6 @@ func ExportUniversal(
 
 	// --- 3. SAFE SETTINGS -----------------------------------------------------
 	if n, err := exportSafeSettings(ctx, db, zw); err != nil {
-		zw.Close()
 		return fmt.Errorf("export settings: %w", err)
 	} else if n > 0 {
 		manifest["settings/safe.jsonl"] = n
@@ -154,7 +156,6 @@ func ExportUniversal(
 
 	// --- 4. CONFIG ------------------------------------------------------------
 	if err := exportConfig(ctx, db, configSource, configDir, zw); err != nil {
-		zw.Close()
 		return fmt.Errorf("export config: %w", err)
 	}
 
@@ -171,9 +172,21 @@ func ExportUniversal(
 	}
 
 	// --- 6. manifest.json ----------------------------------------------------
-	manifestJSON, _ := json.MarshalIndent(manifest, "", "  ")
-	mf, _ := zw.Create("manifest.json")
-	mf.Write(manifestJSON)
+	// Манифест — не украшение: восстановление сверяет по нему число строк.
+	// Раньше ошибка zw.Create игнорировалась, а возвращаемый ею nil сделал бы
+	// mf.Write паникой. Перебор 858 сценариев обрыва записи такую комбинацию не
+	// воспроизвёл, но полагаться на недостижимость nil-указателя незачем.
+	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("export: манифест: %w", err)
+	}
+	mf, err := zw.Create("manifest.json")
+	if err != nil {
+		return fmt.Errorf("export: манифест: %w", err)
+	}
+	if _, err := mf.Write(manifestJSON); err != nil {
+		return fmt.Errorf("export: манифест: %w", err)
+	}
 
 	// --- 7. META.txt ----------------------------------------------------------
 	dbType := db.Dialect().Name()
@@ -181,10 +194,15 @@ func ExportUniversal(
 		"onebase_full_export\nversion=2\nformat=universal\nsource_db_type=%s\nsource_base=%s\ndate=%s\nhas_attachments=%v\nhas_exchange_state=%v\n",
 		dbType, baseName, time.Now().UTC().Format(time.RFC3339), hasAttachments, hasExchangeState,
 	)
-	mfw, _ := zw.Create("META.txt")
-	mfw.Write([]byte(meta))
+	mfw, err := zw.Create("META.txt")
+	if err != nil {
+		return fmt.Errorf("export: META.txt: %w", err)
+	}
+	if _, err := mfw.Write([]byte(meta)); err != nil {
+		return fmt.Errorf("export: META.txt: %w", err)
+	}
 
-	return zw.Close()
+	return nil
 }
 
 // listAppTables returns all non-system table names in the database, sorted.
@@ -216,8 +234,12 @@ func listAppTables(ctx context.Context, db *storage.DB) ([]string, error) {
 // Lines 2+: data rows as JSON objects.
 // Returns the number of data rows written.
 func dumpTableJSONL(ctx context.Context, db *storage.DB, tableName string, w io.Writer) (int, error) {
+	// Flush — финализация записи, а не уборка. Раньше ошибка уходила в
+	// `defer bw.Flush()` и терялась здесь; наружу она всё же попадала, потому что
+	// zip.Writer запоминает ошибку нижележащего писателя и отдаёт её на Close.
+	// Полагаться на это не стоит: ошибка приходила без указания таблицы и на
+	// другом этапе. Теперь сбой сброса виден там, где произошёл.
 	bw := bufio.NewWriterSize(w, 256*1024)
-	defer bw.Flush()
 
 	// Detect byte columns.
 	byCols, err := detectByteCols(ctx, db, tableName)
@@ -234,9 +256,13 @@ func dumpTableJSONL(ctx context.Context, db *storage.DB, tableName string, w io.
 		}
 		schemaObj["btypes"] = list
 	}
-	sl, _ := json.Marshal(schemaObj)
-	bw.Write(sl)
-	bw.WriteByte('\n')
+	sl, err := json.Marshal(schemaObj)
+	if err != nil {
+		return 0, fmt.Errorf("dump %s: заголовок схемы: %w", tableName, err)
+	}
+	if err := writeJSONLine(bw, sl); err != nil {
+		return 0, fmt.Errorf("dump %s: заголовок схемы: %w", tableName, err)
+	}
 
 	// Stream rows.
 	rows, err := db.Query(ctx, "SELECT * FROM "+quotedIdent(db, tableName))
@@ -265,11 +291,30 @@ func dumpTableJSONL(ctx context.Context, db *storage.DB, tableName string, w io.
 		if err != nil {
 			return n, err
 		}
-		bw.Write(line)
-		bw.WriteByte('\n')
+		if err := writeJSONLine(bw, line); err != nil {
+			return n, fmt.Errorf("dump %s: строка %d: %w", tableName, n+1, err)
+		}
 		n++
 	}
-	return n, rows.Err()
+	if err := rows.Err(); err != nil {
+		return n, err
+	}
+	// Сброс буфера — часть записи: без него хвост таблицы не попадёт в архив.
+	if err := bw.Flush(); err != nil {
+		return n, fmt.Errorf("dump %s: сброс буфера: %w", tableName, err)
+	}
+	return n, nil
+}
+
+// writeJSONLine пишет одну строку JSONL вместе с переводом строки. Ошибки
+// bufio.Writer «залипают»: после первой все последующие записи возвращают её же,
+// поэтому достаточно проверять результат — но проверять обязательно, иначе
+// обрыв записи останется незамеченным до восстановления.
+func writeJSONLine(bw *bufio.Writer, line []byte) error {
+	if _, err := bw.Write(line); err != nil {
+		return err
+	}
+	return bw.WriteByte('\n')
 }
 
 // detectByteCols returns the set of columns in tableName that store binary data.
@@ -570,7 +615,11 @@ func exportConfig(ctx context.Context, db *storage.DB, configSource, configDir s
 			if err != nil {
 				return err
 			}
-			fw.Write(content)
+			// Ошибку записи конфигурации сообщаем с именем файла: без этого она
+			// всплывала бы позже и безадресно — на Close всего архива.
+			if _, err := fw.Write(content); err != nil {
+				return fmt.Errorf("export config %s: %w", entryPath, err)
+			}
 		}
 		return rows.Err()
 	}
@@ -599,7 +648,9 @@ func exportConfig(ctx context.Context, db *storage.DB, configSource, configDir s
 		if err != nil {
 			return err
 		}
-		fw.Write(content)
+		if _, err := fw.Write(content); err != nil {
+			return fmt.Errorf("export config %s: %w", rel, err)
+		}
 		return nil
 	})
 }
@@ -1581,16 +1632,23 @@ func getTableCols(ctx context.Context, db *storage.DB, tableName string) (map[st
 }
 
 // tableExists reports whether tableName exists in the target DB.
+// Ошибка запроса трактуется как «таблицы нет» — так же, как было до проверки
+// (Scan при ошибке оставлял exists=false), но теперь это записано явно, а не
+// получается само собой из проигнорированного возврата.
 func tableExists(ctx context.Context, db *storage.DB, tableName string) bool {
 	var exists bool
+	var err error
 	if db.IsSQLite() {
-		db.QueryRow(ctx,
+		err = db.QueryRow(ctx,
 			`SELECT COUNT(*)>0 FROM sqlite_master WHERE type='table' AND name=?`, tableName,
 		).Scan(&exists)
 	} else {
-		db.QueryRow(ctx,
+		err = db.QueryRow(ctx,
 			`SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=$1)`, tableName,
 		).Scan(&exists)
+	}
+	if err != nil {
+		return false
 	}
 	return exists
 }

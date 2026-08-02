@@ -27,9 +27,9 @@ func toSnakeCase(s string) string {
 // renameSnakeCols renames old snake_case columns (e.g. тип_контрагента)
 // to the current lowercase style (типконтрагента) if they exist in the table.
 // PG-only: uses information_schema. No-op on SQLite (legacy data isn't a concern there).
-func (db *DB) renameSnakeCols(ctx context.Context, table string, fields []metadata.Field) {
+func (db *DB) renameSnakeCols(ctx context.Context, table string, fields []metadata.Field) error {
 	if db.IsSQLite() {
-		return
+		return nil
 	}
 	for _, f := range fields {
 		newCol := metadata.ColumnName(f)
@@ -37,26 +37,41 @@ func (db *DB) renameSnakeCols(ctx context.Context, table string, fields []metada
 		if oldCol == newCol {
 			continue
 		}
+		// Сбой пробы наличия колонки трактуем как «её нет» и пропускаем поле:
+		// разрушительных действий при этом не выполняется.
 		var oldExists bool
-		db.QueryRow(ctx,
+		if err := db.QueryRow(ctx,
 			`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name=$2)`,
-			table, oldCol).Scan(&oldExists)
-		if !oldExists {
+			table, oldCol).Scan(&oldExists); err != nil || !oldExists {
 			continue
 		}
 		var newExists bool
-		db.QueryRow(ctx,
+		if err := db.QueryRow(ctx,
 			`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name=$2)`,
-			table, newCol).Scan(&newExists)
+			table, newCol).Scan(&newExists); err != nil {
+			continue
+		}
 		if newExists {
-			db.Exec(ctx, fmt.Sprintf(
+			// Перенос данных и удаление старой колонки — одна операция по смыслу.
+			// Раньше обе ошибки игнорировались: неудачный UPDATE с последующим
+			// успешным DROP COLUMN уничтожал единственную копию данных молча.
+			// Теперь сбой переноса прерывает миграцию до удаления.
+			if _, err := db.Exec(ctx, fmt.Sprintf(
 				"UPDATE %s SET %s = %s WHERE %s IS NOT NULL AND %s IS NULL",
-				table, newCol, oldCol, oldCol, newCol))
-			db.Exec(ctx, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", table, oldCol))
+				table, newCol, oldCol, oldCol, newCol)); err != nil {
+				return fmt.Errorf("перенос данных %s.%s → %s: %w", table, oldCol, newCol, err)
+			}
+			if _, err := db.Exec(ctx, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", table, oldCol)); err != nil {
+				return fmt.Errorf("удаление устаревшей колонки %s.%s: %w", table, oldCol, err)
+			}
 		} else {
-			db.Exec(ctx, fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s", table, oldCol, newCol))
+			if _, err := db.Exec(ctx, fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
+				table, oldCol, newCol)); err != nil {
+				return fmt.Errorf("переименование %s.%s → %s: %w", table, oldCol, newCol, err)
+			}
 		}
 	}
+	return nil
 }
 
 // MigrateRegisters creates register tables.
@@ -71,7 +86,9 @@ func (db *DB) MigrateRegisters(ctx context.Context, registers []*metadata.Regist
 			return fmt.Errorf("migrate register %s.period: %w", reg.Name, err)
 		}
 		allFields := append(append([]metadata.Field{}, reg.Dimensions...), append(reg.Resources, reg.Attributes...)...)
-		db.renameSnakeCols(ctx, table, allFields)
+		if err := db.renameSnakeCols(ctx, table, allFields); err != nil {
+			return fmt.Errorf("migrate register %s: %w", reg.Name, err)
+		}
 		for _, f := range allFields {
 			if err := db.AddColumnIfMissing(ctx, table, metadata.ColumnName(f), fieldType(d, f)); err != nil {
 				return fmt.Errorf("migrate register %s.%s: %w", reg.Name, f.Name, err)
@@ -437,7 +454,9 @@ func (db *DB) Migrate(ctx context.Context, entities []*metadata.Entity) error {
 				return fmt.Errorf("migrate %s.posted: %w", e.Name, err)
 			}
 		}
-		db.renameSnakeCols(ctx, table, e.Fields)
+		if err := db.renameSnakeCols(ctx, table, e.Fields); err != nil {
+			return fmt.Errorf("migrate %s: %w", e.Name, err)
+		}
 		for _, f := range e.Fields {
 			if err := db.AddColumnIfMissing(ctx, table, metadata.ColumnName(f), fieldType(d, f)); err != nil {
 				return fmt.Errorf("migrate %s.%s: %w", e.Name, f.Name, err)
