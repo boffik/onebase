@@ -150,8 +150,21 @@ func (s *Server) mergeFormLocalRefOptions(ctx context.Context, form *metadata.Fo
 	if ref == nil {
 		ref = map[string][]map[string]any{}
 	}
+	entity, _ := data["Entity"].(*metadata.Entity)
 	for _, a := range form.Attributes {
 		if a == nil || a.Save {
+			continue
+		}
+		// Имя реквизита формы ничем не связано с именами полей сущности и вполне
+		// может совпасть (в 1С неглавный реквизит формы по умолчанию SaveData=false
+		// и часто называется как реквизит объекта). Шаблон в таком случае рисует
+		// поле сущности, и подмена ключа отдала бы ему варианты чужого справочника,
+		// а текущее значение выпало бы из списка — при следующем сохранении ссылка
+		// молча очищается. Поле сущности всегда важнее: свои опции оно уже собрало.
+		if _, isEntityField := entityFieldByName(entity, a.Name); isEntityField {
+			continue
+		}
+		if _, busy := ref[a.Name]; busy {
 			continue
 		}
 		refEntityName := attrRefEntityName(a.TypeRef)

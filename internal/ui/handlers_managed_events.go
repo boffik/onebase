@@ -442,21 +442,29 @@ func resolveHandlerProc(form *metadata.FormModule, elementName, eventName string
 		}
 		return ""
 	}
-	el := form.GetElementByName(elementName)
-	if el == nil || el.Handlers == nil {
-		// Фикс A: команда, размещённая автоматической командной панелью (не вручную
-		// элементом kind: Кнопка), не имеет элемента в дереве — резолвим по имени
-		// команды на её процедуру-Action.
-		if elementName != "" {
-			for _, c := range form.Commands {
-				if c != nil && c.Name == elementName && c.Action != "" {
-					return c.Action
-				}
-			}
+	// Обработчик самого элемента имеет приоритет — но именно по нужному событию.
+	// Ветвление по «есть ли у элемента вообще Handlers» глушило фолбэк: элемент с
+	// непустой картой без ключа этого события возвращал пустую строку, и кнопка
+	// автопанели с тем же именем оказывалась мёртвой без всякой диагностики.
+	if el := form.GetElementByName(elementName); el != nil && el.Handlers != nil {
+		if proc := el.Handlers[evt]; proc != "" {
+			return proc
 		}
+	}
+	// Команда, размещённая автоматической командной панелью (не вручную элементом
+	// kind: Кнопка), не имеет элемента в дереве — резолвим по имени команды на её
+	// процедуру-Action. Фолбэк ограничен событиями, которые автопанель реально
+	// шлёт: без этого команда выполнялась бы на любом событии, включая ПриИзменении
+	// и мусорные имена.
+	if evt != metadata.FormEventOnClick && evt != metadata.FormEventOnChoice {
 		return ""
 	}
-	return el.Handlers[evt]
+	for _, c := range form.Commands {
+		if c != nil && c.Action != "" && strings.EqualFold(c.Name, elementName) {
+			return c.Action
+		}
+	}
+	return ""
 }
 
 // buildObjectFromForm восстанавливает *runtime.Object из POST-формы.
