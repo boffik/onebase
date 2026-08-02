@@ -55,6 +55,7 @@ func RunFullWithOptions(dir string, opts Options) Result {
 		issues = append(issues, CheckCrossRefs(proj, roles)...)
 		warnings = append(warnings, CheckLayoutWarnings(proj)...)
 		warnings = append(warnings, CheckFormFieldFormat(proj)...)
+		warnings = append(warnings, CheckFormPlacement(dir, proj)...)
 		issues = append(issues, CheckHTTPServices(proj)...)
 		issues = append(issues, CheckExchangePlans(proj)...)
 		issues = append(issues, CheckIntakes(proj)...)
