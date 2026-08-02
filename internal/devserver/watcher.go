@@ -58,6 +58,13 @@ func WatchProjectContext(ctx context.Context, dir string, onChange func()) (<-ch
 	}, onChange)
 }
 
+// debounceWindow — сколько тишины ждать после правки, прежде чем звать onChange.
+// Переменная, а не константа, чтобы тест мог задать заведомо широкое окно:
+// проверка схлопывания серии правок иначе зависит от планировщика раннера, и на
+// нагруженном CI пауза между записями растягивалась за окно, разбивая серию на
+// два вызова (флейк TestWatchContext_Debounces).
+var debounceWindow = 300 * time.Millisecond
+
 func watchContext(ctx context.Context, dir string, accept func(string, bool) bool, onChange func()) (<-chan struct{}, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -100,7 +107,7 @@ func watchContext(ctx context.Context, dir string, accept func(string, bool) boo
 			default:
 			}
 		}
-		debounce.Reset(300 * time.Millisecond)
+		debounce.Reset(debounceWindow)
 	}
 
 	done := make(chan struct{})

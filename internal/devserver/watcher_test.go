@@ -129,6 +129,15 @@ func TestWatchContext_TriggersOnNewSubdir(t *testing.T) {
 }
 
 func TestWatchContext_Debounces(t *testing.T) {
+	// Раньше серия правок растягивалась на 250 мс при штатном окне 300 мс —
+	// запас всего шестикратный, и на нагруженном раннере одна пауза выходила за
+	// окно: таймер срабатывал посреди серии, тест видел два вызова вместо одного.
+	// Теперь окно шире, а правки плотнее: 80 мс серии против 1 с окна.
+	// Проверяемое поведение (N правок → один onChange) не меняется.
+	prev := debounceWindow
+	debounceWindow = time.Second
+	t.Cleanup(func() { debounceWindow = prev })
+
 	dir := t.TempDir()
 	file := filepath.Join(dir, "y.os")
 	if err := os.WriteFile(file, []byte("// initial"), 0o644); err != nil {
@@ -144,10 +153,17 @@ func TestWatchContext_Debounces(t *testing.T) {
 		if err := os.WriteFile(file, []byte("// edited"+string(rune('A'+i))), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
-	// Ждём debounce + запас.
-	time.Sleep(700 * time.Millisecond)
+	// Ждём срабатывания, а не фиксированной паузы: так тест не зависит от того,
+	// насколько быстро раннер донёс события fsnotify.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && atomic.LoadInt32(&changes) == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	// Дать шанс лишним вызовам проявиться — иначе тест не отличит «схлопнулось»
+	// от «второй вызов ещё не пришёл».
+	time.Sleep(debounceWindow)
 
 	got := atomic.LoadInt32(&changes)
 	if got != 1 {
