@@ -445,8 +445,18 @@ func (s *Server) parseSubmitForm(w http.ResponseWriter, r *http.Request, entity 
 	tpRows = parseTablePartRows(r, entity)
 
 	if entity.Hierarchical {
-		fields["parent_id"] = r.FormValue("parent_id")
-		fields["is_folder"] = r.FormValue("is_folder") == "true"
+		// Только если ключи реально пришли в теле. Авто-форма их рендерит
+		// (templates.go), управляемая — нет: безусловное чтение выбрасывало
+		// элемент в корень и снимало признак группы при каждой записи из
+		// managed-формы. Не пришли — восстановятся из БД вместе с прочими
+		// неприсланными полями.
+		submitted := submittedFormKeys(r)
+		if formKeySubmitted(submitted, "parent_id") {
+			fields["parent_id"] = r.FormValue("parent_id")
+		}
+		if formKeySubmitted(submitted, "is_folder") {
+			fields["is_folder"] = r.FormValue("is_folder") == "true"
+		}
 	}
 
 	// Объект для new строится через NewObject+Set (ключи нормализуются в lowercase
@@ -1154,6 +1164,19 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 	obj, _, tpRows, action, ok := s.parseSubmitForm(w, r, entity, &id)
 	if !ok {
 		return
+	}
+	// Управляемая форма партиальна: она рендерит только свои elements, а
+	// ReadOnly-контролы ссылок/перечислений/флажков получают disabled и вовсе не
+	// отправляются. Поле, ключ которого не пришёл, перечитываем из БД — иначе
+	// «открыть карточку и нажать Записать» затирало неразмещённые реквизиты.
+	// Строго до маскирования, проверок построчного доступа и хуков формы: и
+	// предикаты, и DSL должны видеть реальные данные, а ПередЗаписью — иметь
+	// возможность перекрыть восстановленное значение.
+	if form := pickManagedForm(entity, "object"); form != nil {
+		if err := s.restoreUnsubmittedFields(r.Context(), r, entity, form, id, obj.Fields); err != nil {
+			http.Error(w, s.errText(r, err), 500)
+			return
+		}
 	}
 	// План 88: не дать пользователю, видящему поле лишь замаскированным,
 	// перезаписать реальное значение маской/подделкой — восстанавливаем

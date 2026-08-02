@@ -140,6 +140,18 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 	// Построить объект из текущих form-values.
 	obj := buildObjectFromForm(r, entity)
 
+	// Дочитать поля, которых нет на форме (или которые пришли disabled), из БД —
+	// тем же правилом, что и при сохранении. Без этого обработчик видит nil у
+	// неразмещённого реквизита, а applyValues на клиенте очищает такие поля прямо
+	// в DOM ещё до записи. Для новой записи восстанавливать нечего; ошибку чтения
+	// глотаем — событие не должно падать из-за удалённой записи.
+	// Гейт по сырому _id: buildObjectFromForm для новой записи генерирует
+	// случайный uuid, поэтому проверка obj.ID != uuid.Nil была бы всегда истинной
+	// и гоняла бы лишний запрос в БД на каждое событие.
+	if strings.TrimSpace(r.FormValue("_id")) != "" {
+		_ = s.restoreUnsubmittedFields(r.Context(), r, entity, form, obj.ID, obj.Fields)
+	}
+
 	// Подмешать ValueTable-данные из vt.<name>.<idx>.<field>.
 	if vtRows := parseValueTableRows(r, form); vtRows != nil {
 		if obj.TablePartRows == nil {
