@@ -152,6 +152,10 @@ func (s *Server) handleManagedFormEvent(w http.ResponseWriter, r *http.Request) 
 		_ = s.restoreUnsubmittedFields(r.Context(), r, entity, form, obj.ID, obj.Fields)
 	}
 
+	// Реквизиты формы (attributes с save:false) — formToFields их не разбирает,
+	// поэтому без этого шага Объект.<Реквизит> в обработчике всегда nil.
+	s.mergeFormAttrValues(r.Context(), r, form, entity, obj)
+
 	// Подмешать ValueTable-данные из vt.<name>.<idx>.<field>.
 	if vtRows := parseValueTableRows(r, form); vtRows != nil {
 		if obj.TablePartRows == nil {
@@ -261,7 +265,7 @@ func (s *Server) serializeManagedFormEventState(form *metadata.FormModule, entit
 	if obj == nil {
 		return nil, nil, nil, conditionalCSS, msgs
 	}
-	values := serializeFieldsForEntity(obj.Fields, entity)
+	values := normalizeFormAttrKeys(serializeFieldsForEntity(obj.Fields, entity), form, entity)
 	tableParts := serializeTablePartRowsForEntity(obj.TablePartRows, entity)
 	if s.interp != nil {
 		if warnings := applyManagedFormConditionalRules(form, tableParts, values, rules, newInterpEvaluator(s.interp)); len(warnings) > 0 {
