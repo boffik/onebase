@@ -81,6 +81,7 @@ type apiPull struct {
 type apiIssue struct {
 	Number       int          `json:"number"`
 	Title        string       `json:"title"`
+	Body         string       `json:"body"`
 	HTMLURL      string       `json:"html_url"`
 	CreatedAt    string       `json:"created_at"`
 	UpdatedAt    string       `json:"updated_at"`
@@ -92,16 +93,19 @@ type apiIssue struct {
 }
 
 type candidate struct {
-	Number         int    `json:"number"`
-	Title          string `json:"title"`
-	URL            string `json:"url"`
-	Head           string `json:"head"`
-	Depth          int    `json:"review_depth"`
-	Stage          string `json:"stage"`
-	Priority       int    `json:"priority"`
-	PrioritySource string `json:"priority_source"`
-	UpdatedAt      string `json:"updated_at"`
-	IntegrationAt  string `json:"-"`
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Head   string `json:"head"`
+	// EligibilityDigest is a 160-bit prefix of a versioned SHA-256 snapshot.
+	// It reserves an issue in the scheduler; it is never mutation authority.
+	EligibilityDigest string `json:"eligibility_digest,omitempty"`
+	Depth             int    `json:"review_depth"`
+	Stage             string `json:"stage"`
+	Priority          int    `json:"priority"`
+	PrioritySource    string `json:"priority_source"`
+	UpdatedAt         string `json:"updated_at"`
+	IntegrationAt     string `json:"-"`
 }
 
 type finding struct {
@@ -243,7 +247,8 @@ func loadPulls(github *githubRESTClient, repo, fixture string) ([]apiPull, error
 					continue
 				}
 				prs[index].Comments = comments
-				if !needsHeadParents(prs[index]) {
+				owner, _, _ := strings.Cut(repo, "/")
+				if !needsHeadParents(prs[index], owner) {
 					continue
 				}
 				var commitResponse struct {
@@ -431,7 +436,15 @@ func analyze(prs []apiPull, owner string) report {
 				result.MergeCandidates = append(result.MergeCandidates, item)
 			case v1AbortCurrent && currentCompletions == 0:
 				result.ContentReviewCandidates = append(result.ContentReviewCandidates, item)
-			case depth > 0 && headIsBaseSyncMerge(pr) && legacySourceCompletions == 0:
+			case currentCompletions > 0 && depth == currentCompletions && !protocolHistory:
+				// A PR may be opened with a merge commit already at its first HEAD.
+				// With no earlier committed review or base-sync transaction, its
+				// first review is a full content review of that exact HEAD, not a
+				// carried integration review of the merge's first parent. The
+				// independent mutation gate still proves review, ship and CI.
+				item.Stage = "merge"
+				result.MergeCandidates = append(result.MergeCandidates, item)
+			case depth > currentCompletions && headIsBaseSyncMerge(pr) && legacySourceCompletions == 0:
 				// A legacy integration review cannot reconstruct the first parent's
 				// content proof. Do not grant this PR single-flight ownership only to
 				// have the independent GraphQL gate reject it on every retry.
@@ -486,6 +499,15 @@ func analyze(prs []apiPull, owner string) report {
 			result.HumanWaiting = append(result.HumanWaiting, item)
 		case labels["changes-requested"] && !overrideOpen:
 			result.FixCandidates = append(result.FixCandidates, item)
+		case depth > currentCompletions && headIsBaseSyncMerge(pr) && legacySourceCompletions == 0 && !carryDone && !v1AbortCurrent:
+			// A completed review of this HEAD is not enough to turn an earlier
+			// needs-decision review of a different SHA into source proof. Show the
+			// recovery before asking for ship; otherwise the owner is invited into
+			// a merge gate that cannot succeed.
+			item.Stage = "legacy-source-proof-missing"
+			result.HumanWaiting = append(result.HumanWaiting, item)
+			result.add("yellow", "legacy_source_review_missing", pr.Number,
+				"первый родитель merge-коммита не имеет доверенного завершённого REVIEW; ship не поможет: нужен новый обычный content HEAD и полное REVIEW")
 		case labels["reviewed"] && currentCompletions > 0 && !overrideOpen:
 			// Valid-looking current review is waiting for the human ship decision.
 			result.ReviewedWaitingShip = append(result.ReviewedWaitingShip, item)
@@ -614,6 +636,12 @@ func analyzeIssues(result *report, issues []apiIssue, prs []apiPull, owner strin
 				}
 				continue
 			}
+			if issue.CommentCount > len(issue.Thread) {
+				result.addIssue("yellow", "fix_issue_incomplete_comments", issue.Number,
+					"заявка исключена из FIX-очереди: снимок комментариев неполон")
+				continue
+			}
+			item.EligibilityDigest = fixIssueEligibilityDigest(issue)
 			result.FixCandidates = append(result.FixCandidates, item)
 		case labels["needs-decision"]:
 			item.Stage = "human-decision"
@@ -623,6 +651,33 @@ func analyzeIssues(result *report, issues []apiIssue, prs []apiPull, owner strin
 	sortCandidates(result.PlanCandidates)
 	sortCandidates(result.FixCandidates)
 	sortCandidates(result.HumanWaiting)
+}
+
+// fixIssueEligibilityDigest is an election revision, not authorization to
+// change GitHub. A future FIX gate must re-read eligibility and the canonical
+// project protocol immediately before each mutation. The 160-bit prefix fits
+// the scheduler's existing exact-target reservation key (historically HEAD).
+func fixIssueEligibilityDigest(issue apiIssue) string {
+	labels := make([]string, 0, len(issue.Labels))
+	for _, label := range issue.Labels {
+		labels = append(labels, label.Name)
+	}
+	sort.Strings(labels)
+	comments := append([]apiComment(nil), issue.Thread...)
+	sort.Slice(comments, func(i, j int) bool { return comments[i].ID < comments[j].ID })
+	input := struct {
+		Version   int          `json:"version"`
+		Number    int          `json:"number"`
+		State     string       `json:"state"`
+		Title     string       `json:"title"`
+		Body      string       `json:"body"`
+		UpdatedAt string       `json:"updated_at"`
+		Labels    []string     `json:"labels"`
+		Comments  []apiComment `json:"comments"`
+	}{1, issue.Number, issue.State, issue.Title, issue.Body, issue.UpdatedAt, labels, comments}
+	encoded, _ := json.Marshal(input) // fixed Go types cannot fail to marshal
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum[:20])
 }
 
 func openPullsReferencingIssue(number int, prs []apiPull) []int {
@@ -913,12 +968,21 @@ func (result *report) addIssue(severity, code string, issue int, message string)
 }
 
 // needsHeadParents limits the extra commit read to pull requests whose stage
-// can depend on it: an open ship candidate targeting main.
-func needsHeadParents(pr apiPull) bool {
+// can depend on it: ship candidates and reviewed heads with older review proof.
+// The latter need their parents before we can safely ask the owner for ship.
+func needsHeadParents(pr apiPull, owner string) bool {
 	if pr.State != "open" || pr.Base.Ref != "main" || pr.Draft || pr.Head.SHA == "" {
 		return false
 	}
-	return labelSet(pr.Labels)["ship"]
+	labels := labelSet(pr.Labels)
+	if labels["ship"] {
+		return true
+	}
+	if !labels["reviewed"] || labels["hold"] || labels["needs-decision"] || labels["changes-requested"] {
+		return false
+	}
+	current, _, _ := currentProtocolState(pr.Comments, owner, pr.Head.SHA)
+	return reviewDepth(pr.Comments, owner) > current
 }
 
 // headIsBaseSyncMerge reports whether the head commit has the shape every
