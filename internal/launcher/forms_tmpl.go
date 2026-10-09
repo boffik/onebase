@@ -1913,10 +1913,11 @@ func renderPreviewElement(buf *bytes.Buffer, el *metadata.FormElement, tabsCount
 		if el.ReadOnly {
 			buf.WriteString(` readonly`)
 		}
-		buf.WriteString(`></div>`)
+		buf.WriteString(`>`)
 		if el.Hint != "" {
-			fmt.Fprintf(buf, `<div class="hint" style="margin-top:-8px">%s</div>`, html.EscapeString(el.Hint))
+			fmt.Fprintf(buf, `<div class="hint">%s</div>`, html.EscapeString(el.Hint))
 		}
+		buf.WriteString(`</div>`)
 	case metadata.FormElementCheckbox:
 		field := lastSegment(el.DataPath)
 		if field == "" {

@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,6 +37,8 @@ func TestEqualColumns_DesignerHTTPRoundTripAndBrowser(t *testing.T) {
 		return rec
 	}
 	source := strings.Replace(formtest.EqualColumnsYAML(), "    equal_columns: true\n", "", 1)
+	const hint = "Подсказка <поля> & значение"
+	source = strings.Replace(source, "        name: Поле2_0\n", "        name: Поле2_0\n        hint: "+hint+"\n", 1)
 	values := url.Values{"yaml": {source}, "op": {"setProp"}, "node": {"elements.0"}, "key": {"equal_columns"}, "value": {"true"}}
 	rec := post("edit-op", values, h.configuratorFormsEditOp)
 	if rec.Code != 200 {
@@ -57,7 +60,7 @@ func TestEqualColumns_DesignerHTTPRoundTripAndBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fm.Elements) != 4 || !fm.Elements[0].EqualColumns {
+	if len(fm.Elements) != 4 || !fm.Elements[0].EqualColumns || fm.Elements[0].Children[0].Hint != hint {
 		t.Fatal("save/load lost equal_columns")
 	}
 	body, err := os.ReadFile(saved)
@@ -67,6 +70,9 @@ func TestEqualColumns_DesignerHTTPRoundTripAndBrowser(t *testing.T) {
 	preview := post("preview", url.Values{"yaml": {string(body)}, "entity": {"Клиент"}}, h.configuratorFormsPreview)
 	if preview.Code != 200 {
 		t.Fatalf("preview: %d %s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), html.EscapeString(hint)) {
+		t.Fatal("preview lost or did not escape the field hint")
 	}
 	// Turning the flag off must restore the legacy class without affecting siblings.
 	values.Set("yaml", edited.YAML)
