@@ -1061,6 +1061,10 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			s.renderObjectFormError(w, r, entity, true, formHookErr.Error(), hookMsgs, obj.TablePartRows)
 			return
 		}
+		if errors.Is(err, storage.ErrCodeDuplicate) {
+			s.renderObjectFormBadRequest(w, r, entity, true, s.errText(r, err), obj.TablePartRows)
+			return
+		}
 		s.serverError(w, r, err)
 		return
 	}
@@ -1776,6 +1780,10 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 		// он потеряет — но это лучше, чем тихо перетереть чужие.
 		if errors.Is(err, storage.ErrVersionConflict) {
 			s.renderVersionConflict(w, r, entity, id)
+			return
+		}
+		if errors.Is(err, storage.ErrCodeDuplicate) {
+			s.renderObjectFormBadRequest(w, r, entity, false, s.errText(r, err), obj.TablePartRows)
 			return
 		}
 		s.serverError(w, r, err)
