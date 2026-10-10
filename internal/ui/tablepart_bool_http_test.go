@@ -24,11 +24,26 @@ func TestTablePartBoolHTTP1743(t *testing.T) {
 	dbtest.ForEachDialect(t, func(t *testing.T, db *storage.DB) {
 		entity := &metadata.Entity{
 			Name: "Флаги" + uuid.New().String()[:8], Kind: metadata.KindCatalog,
-			Fields: []metadata.Field{{Name: "Наименование", Type: metadata.FieldTypeString}},
+			Fields: []metadata.Field{
+				{Name: "Наименование", Type: metadata.FieldTypeString},
+				{Name: "Единица", Type: metadata.FieldTypeNumber},
+				{Name: "Ноль", Type: metadata.FieldTypeNumber},
+			},
 			TableParts: []metadata.TablePart{{Name: "Строки", Fields: []metadata.Field{
 				{Name: "Имя", Type: metadata.FieldTypeString}, {Name: "Флаг", Type: metadata.FieldTypeBool},
 			}}},
 		}
+		const eventSource = `
+Процедура Проба()
+ Сообщить("ok");
+КонецПроцедуры
+Процедура Переключить()
+ Первая = Объект.Строки.Получить(0);
+ Первая.Флаг = %s;
+ Вторая = Объект.Строки.Получить(1);
+ Вторая.Флаг = %s;
+КонецПроцедуры
+`
 		form := &metadata.FormModule{
 			Name: "ФормаОбъекта", Kind: "object", EntityName: entity.Name, LayoutKind: metadata.FormLayoutManaged,
 			Elements: []*metadata.FormElement{
@@ -37,25 +52,15 @@ func TestTablePartBoolHTTP1743(t *testing.T) {
 				{Kind: metadata.FormElementButton, Name: "Проба", Handlers: map[metadata.FormEventType]string{metadata.FormEventOnClick: "Проба"}},
 				{Kind: metadata.FormElementButton, Name: "Переключить", Handlers: map[metadata.FormEventType]string{metadata.FormEventOnClick: "Переключить"}},
 			},
-			ProgramAST: mustParse(t, `
-Процедура Проба()
- Сообщить("ok");
-КонецПроцедуры
-Процедура Переключить()
- Первая = Объект.Строки.Получить(0);
- Первая.Флаг = Ложь;
- Вторая = Объект.Строки.Получить(1);
- Вторая.Флаг = Истина;
-КонецПроцедуры
-`),
 		}
+		form.ProgramAST = mustParse(t, fmt.Sprintf(eventSource, "Ложь", "Истина"))
 		entity.Forms = []*metadata.FormModule{form}
 		ts := tpw1074Server(t, db, []*metadata.Entity{entity})
 		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		seed := func(t *testing.T) uuid.UUID {
 			t.Helper()
 			id := uuid.New()
-			if err := db.Upsert(context.Background(), entity.Name, id, map[string]any{"Наименование": "Флаги"}, entity); err != nil {
+			if err := db.Upsert(context.Background(), entity.Name, id, map[string]any{"Наименование": "Флаги", "Единица": 1, "Ноль": 0}, entity); err != nil {
 				t.Fatal(err)
 			}
 			if err := db.UpsertTablePartRows(context.Background(), entity.Name, "Строки", id, []map[string]any{
@@ -70,7 +75,7 @@ func TestTablePartBoolHTTP1743(t *testing.T) {
 		}
 		post := func(t *testing.T, id uuid.UUID, rows []map[string]any, event string, named bool) (int, []byte) {
 			t.Helper()
-			body := url.Values{"Наименование": {"Флаги"}, "action": {"save"}}
+			body := url.Values{"Наименование": {"Флаги"}, "Единица": {"1"}, "Ноль": {"0"}, "action": {"save"}}
 			if named {
 				for i, row := range rows {
 					for key, v := range row {
@@ -96,7 +101,11 @@ func TestTablePartBoolHTTP1743(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer resp.Body.Close() //nolint:errcheck // test response
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Errorf("close response: %v", err)
+				}
+			}()
 			data, err := io.ReadAll(resp.Body)
 			if err != nil {
 				t.Fatal(err)
@@ -139,66 +148,78 @@ func TestTablePartBoolHTTP1743(t *testing.T) {
 				}
 			}
 		}
-		t.Run("open-event-save", func(t *testing.T) {
-			id := seed(t)
-			resp, err := client.Get(endpoint(id))
-			if err != nil {
-				t.Fatal(err)
-			}
-			page, err := io.ReadAll(resp.Body)
-			resp.Body.Close() //nolint:errcheck // test response
-			if err != nil || resp.StatusCode != http.StatusOK {
-				t.Fatalf("GET status=%d err=%v: %s", resp.StatusCode, err, page)
-			}
-			match := regexp.MustCompile(`data-sg-rows='([^']*)'`).FindSubmatch(page)
-			if len(match) != 2 {
-				t.Fatalf("missing initial grid rows: %s", page)
-			}
-			var rows []map[string]any
-			if err := json.Unmarshal([]byte(html.UnescapeString(string(match[1]))), &rows); err != nil {
-				t.Fatal(err)
-			}
-			checkJSON(t, rows, []bool{true, false})
-			status, data := post(t, id, rows, "", false)
-			if status != http.StatusSeeOther {
-				t.Fatalf("unchanged save status=%d: %s", status, data)
-			}
-			checkStored(t, id, []bool{true, false})
-			// No-op events may refresh the object from the DB even when the posted
-			// values are already bool. Verify two consecutive events and their save.
-			for range 2 {
-				status, data := post(t, id, rows, "Проба", false)
+		for _, tc := range []struct {
+			name, no, yes string
+		}{
+			{"boolean", "Ложь", "Истина"},
+			{"decimal", "0", "1"},
+			// The form parser supplies number fields as float64; DSL literals use Decimal.
+			{"float", "Объект.Ноль", "Объект.Единица"},
+		} {
+			t.Run("open-event-save/"+tc.name, func(t *testing.T) {
+				form.ProgramAST = mustParse(t, fmt.Sprintf(eventSource, tc.no, tc.yes))
+				id := seed(t)
+				resp, err := client.Get(endpoint(id))
+				if err != nil {
+					t.Fatal(err)
+				}
+				page, err := io.ReadAll(resp.Body)
+				if err := resp.Body.Close(); err != nil {
+					t.Fatalf("close response: %v", err)
+				}
+				if err != nil || resp.StatusCode != http.StatusOK {
+					t.Fatalf("GET status=%d err=%v: %s", resp.StatusCode, err, page)
+				}
+				match := regexp.MustCompile(`data-sg-rows='([^']*)'`).FindSubmatch(page)
+				if len(match) != 2 {
+					t.Fatalf("missing initial grid rows: %s", page)
+				}
+				var rows []map[string]any
+				if err := json.Unmarshal([]byte(html.UnescapeString(string(match[1]))), &rows); err != nil {
+					t.Fatal(err)
+				}
+				checkJSON(t, rows, []bool{true, false})
+				status, data := post(t, id, rows, "", false)
+				if status != http.StatusSeeOther {
+					t.Fatalf("unchanged save status=%d: %s", status, data)
+				}
+				checkStored(t, id, []bool{true, false})
+				// No-op events may refresh the object from the DB even when the posted
+				// values are already bool. Verify two consecutive events and their save.
+				for range 2 {
+					status, data := post(t, id, rows, "Проба", false)
+					if status != http.StatusOK {
+						t.Fatalf("event status=%d: %s", status, data)
+					}
+					event := decodeFormEventResponse(t, data)
+					if !event.OK {
+						t.Fatal(event.Error)
+					}
+					rows = event.TableParts["Строки"]
+					checkJSON(t, rows, []bool{true, false})
+				}
+				status, data = post(t, id, rows, "", false)
+				if status != http.StatusSeeOther {
+					t.Fatalf("save status=%d: %s", status, data)
+				}
+				checkStored(t, id, []bool{true, false})
+				status, data = post(t, id, rows, "Переключить", false)
 				if status != http.StatusOK {
-					t.Fatalf("event status=%d: %s", status, data)
+					t.Fatalf("toggle status=%d: %s", status, data)
 				}
 				event := decodeFormEventResponse(t, data)
 				if !event.OK {
 					t.Fatal(event.Error)
 				}
 				rows = event.TableParts["Строки"]
-				checkJSON(t, rows, []bool{true, false})
-			}
-			status, data = post(t, id, rows, "", false)
-			if status != http.StatusSeeOther {
-				t.Fatalf("save status=%d: %s", status, data)
-			}
-			checkStored(t, id, []bool{true, false})
-			status, data = post(t, id, rows, "Переключить", false)
-			if status != http.StatusOK {
-				t.Fatalf("toggle status=%d: %s", status, data)
-			}
-			event := decodeFormEventResponse(t, data)
-			if !event.OK {
-				t.Fatal(event.Error)
-			}
-			rows = event.TableParts["Строки"]
-			checkJSON(t, rows, []bool{false, true})
-			status, data = post(t, id, rows, "", false)
-			if status != http.StatusSeeOther {
-				t.Fatalf("toggle save status=%d: %s", status, data)
-			}
-			checkStored(t, id, []bool{false, true})
-		})
+				checkJSON(t, rows, []bool{false, true})
+				status, data = post(t, id, rows, "", false)
+				if status != http.StatusSeeOther {
+					t.Fatalf("toggle save status=%d: %s", status, data)
+				}
+				checkStored(t, id, []bool{false, true})
+			})
+		}
 		for _, path := range []string{"grid", "nogrid", "legacy"} {
 			t.Run(path, func(t *testing.T) {
 				if path == "legacy" {
