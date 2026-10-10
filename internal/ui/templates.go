@@ -2600,7 +2600,6 @@ const tplReport = `
 {{$excel := printf "/ui/report/%s/export/excel%s" (lower .Report.Name) $q}}
 {{$pdf := printf "/ui/report/%s/export/pdf%s" (lower .Report.Name) $q}}
 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
-  <a class="btn btn-sm" href="/ui/export-jobs">{{t $.Lang "Мои выгрузки"}}</a>
   {{if eq (lower .Report.OutputFormat) "pdf"}}
   <a class="btn btn-sm" href="{{$pdf}}" style="background:#dc2626;color:#fff" title="{{t $.Lang "Запустить выгрузку PDF"}}">{{t $.Lang "PDF"}}</a>
   <a class="btn btn-sm" href="{{$excel}}" style="background:#16a34a;color:#fff" title="{{t $.Lang "Запустить выгрузку Excel"}}">{{t $.Lang "Excel"}}</a>
@@ -2678,6 +2677,9 @@ const tplReport = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
+<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+  <a class="btn btn-sm" href="/ui/export-jobs">{{t $.Lang "Мои выгрузки"}}</a>
+</div>
 {{if or .ReportParams .Report.Variants .ReportPresets}}
 <details class="card report-block" data-block="params" open style="margin-bottom:16px">
 <summary>{{t $.Lang "Параметры"}}</summary>
