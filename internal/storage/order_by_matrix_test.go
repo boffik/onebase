@@ -90,9 +90,9 @@ func TestOrderByEmptyTextLastMatrix(t *testing.T) {
 	})
 }
 
-// Незаполненное — это один класс, а не два. NULL и '' обязаны давать
+// Незаполненное — это один класс, а не два. NULL и ” обязаны давать
 // одинаковый вторичный ключ, иначе следующий ключ порядка до сравнения не
-// доходит: на SQLite NULL при ASC оказывается раньше '', и Beta без ранга
+// доходит: на SQLite NULL при ASC оказывается раньше ”, и Beta без ранга
 // обгоняет Alpha с пустым рангом вопреки order_by: [Ранг, Наименование].
 // ASCII-имена проверяют вторичный ключ без зависимости от языковой collation базы.
 func TestOrderByEmptyGroupFallsThroughToSecondaryKeyMatrix(t *testing.T) {
