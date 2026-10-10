@@ -315,7 +315,7 @@ func loadIssues(github *githubRESTClient, repo, fixture string, skipLive bool) (
 	}
 	issues := make([]apiIssue, 0, len(all))
 	for _, issue := range all {
-		if issue.PullRequest == nil && issue.CommentCount > 0 {
+		if issue.PullRequest == nil {
 			issues = append(issues, issue)
 		}
 	}
@@ -332,6 +332,9 @@ func loadIssues(github *githubRESTClient, repo, fixture string, skipLive bool) (
 		go func() {
 			defer wg.Done()
 			for index := range jobs {
+				if issues[index].CommentCount == 0 {
+					continue
+				}
 				path := fmt.Sprintf("repos/%s/issues/%d/comments?per_page=100", repo, issues[index].Number)
 				comments, err := getAllPages[apiComment](github, path)
 				if err != nil {
