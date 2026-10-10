@@ -33,18 +33,20 @@ func CheckFormPlacement(dir string, proj *project.Project) []Issue {
 	// Каталоги, которые загрузчик реально просматривает: по одному на сущность
 	// И на обработку — у обработок тоже бывают управляемые формы
 	// (ui.handleProcessorFormEvent, шаблон с forms/<имя обработки>/).
-	known := make(map[string]string) // нижний регистр → оригинальное имя
+	// Исходные имена нельзя объединять через ToLower: I и İ дают один
+	// ключ, хотя EqualFold считает их разными владельцами.
+	known := make(map[string]struct{})
 	for _, ent := range proj.Entities {
 		if ent == nil || ent.Name == "" {
 			continue
 		}
-		known[strings.ToLower(ent.Name)] = ent.Name
+		known[ent.Name] = struct{}{}
 	}
 	for _, pr := range proj.Processors {
 		if pr == nil || pr.Name == "" {
 			continue
 		}
-		known[strings.ToLower(pr.Name)] = pr.Name
+		known[pr.Name] = struct{}{}
 	}
 
 	var warns []Issue
@@ -80,7 +82,7 @@ func CheckFormPlacement(dir string, proj *project.Project) []Issue {
 			// То же Unicode-сравнение, что у managed-загрузчика. ToLower
 			// недостаточно: например, EqualFold("ſ", "S") == true.
 			matched := false
-			for _, name := range known {
+			for name := range known {
 				if strings.EqualFold(parts[0], name) {
 					matched = true
 					break
@@ -107,10 +109,15 @@ func CheckFormPlacement(dir string, proj *project.Project) []Issue {
 }
 
 // suggestFormDirectories перечисляет примеры имён каталогов в стабильном порядке.
-func suggestFormDirectories(known map[string]string) string {
+func suggestFormDirectories(known map[string]struct{}) string {
+	// Нижний регистр нужен только для примеров, не для сопоставления владельцев.
+	examples := make(map[string]struct{})
+	for name := range known {
+		examples[strings.ToLower(name)] = struct{}{}
+	}
 	var names []string
-	for low := range known {
-		names = append(names, low)
+	for name := range examples {
+		names = append(names, name)
 	}
 	sort.Strings(names)
 	if len(names) > 8 {
