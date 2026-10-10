@@ -1031,9 +1031,7 @@ func loadGraphQLSnapshot(client pipelineGraphQLClient, repo string, includePulls
 		if err != nil {
 			return nil, nil, fmt.Errorf("issue #%d: %w", raw.Number, err)
 		}
-		if issue.CommentCount > 0 {
-			issues = append(issues, issue)
-		}
+		issues = append(issues, issue)
 	}
 	return pulls, issues, nil
 }

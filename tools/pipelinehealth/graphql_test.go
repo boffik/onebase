@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,16 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if base := os.Getenv("PIPELINEHEALTH_TEST_REST_CLI"); base != "" {
+		endpoint, err := url.Parse(base)
+		if err != nil {
+			os.Exit(3)
+		}
+		http.DefaultTransport = restCLITestTransport{endpoint: endpoint, transport: http.DefaultTransport}
+		os.Args = []string{os.Args[0], "-transport", "rest", "-json"}
+		main()
+		os.Exit(0)
+	}
 	if os.Getenv("PIPELINEHEALTH_TEST_GH_HELPER") == "1" {
 		if path := os.Getenv("PIPELINEHEALTH_TEST_GH_SEQUENCE"); path != "" {
 			data, err := os.ReadFile(path) //nolint:gosec // G703: this subprocess fixture path is supplied by the parent test under t.TempDir.
@@ -404,8 +416,9 @@ func TestGraphQLSnapshotMapsRESTSemanticsAndLargeDatabaseID(t *testing.T) {
 	if pulls[1].HeadParents != nil {
 		t.Fatalf("non-ship PR unexpectedly received head parents: %+v", pulls[1].HeadParents)
 	}
-	if len(issues) != 1 || issues[0].Number != 20 || issues[0].CommentCount != 1 || issues[0].Thread[0].ID != 5702456240 {
-		t.Fatalf("issue mapping/filter changed REST semantics: %+v", issues)
+	if len(issues) != 2 || issues[0].Number != 20 || issues[0].CommentCount != 1 || issues[0].Thread[0].ID != 5702456240 ||
+		issues[1].Number != 21 || issues[1].CommentCount != 0 || len(issues[1].Thread) != 0 {
+		t.Fatalf("issue mapping changed REST semantics: %+v", issues)
 	}
 	if len(client.calls) != 3 || !strings.Contains(client.calls[1].query, "nodes(ids: $ids)") ||
 		!strings.Contains(client.calls[2].query, "PipelineHealthPullHeads") {
