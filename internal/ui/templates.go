@@ -508,6 +508,12 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		// attrRefEntity — имя сущности из ссылочного типа реквизита формы
 		// ("CatalogRef.X" → "X"), пусто если тип не ссылочный.
 		"attrRefEntity": func(typeRef string) string { return attrRefEntityName(typeRef) },
+		// refHasCard — есть ли у цели ссылки карточка, которую откроет 🔍.
+		// У системной таблицы учётных записей (reference:_users, #1646) её
+		// нет: адрес давал 404, а вкладка с ним не закрывалась (#1684).
+		"refHasCard": func(refEntity string) bool {
+			return strings.TrimSpace(refEntity) != "" && !metadata.IsSystemRefTarget(refEntity)
+		},
 		// formAttrNames — имена скалярных реквизитов формы (save:false), которых
 		// нет среди полей сущности. Клиент по ним восстанавливает введённое после
 		// полной перезагрузки страницы: «Записать» уходит POST'ом с редиректом, и
@@ -585,7 +591,10 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		// elReadOnly / elHidden — итоговое состояние элемента управляемой формы
 		// с учётом условий readonly_when/hidden_when по полям записи. Условия
 		// вычисляются на сервере при отрисовке (и заново после каждого события
-		// формы), а шаблон только читает результат по имени элемента.
+		// формы), а шаблон только читает результат. Ключ карты — путь размещения
+		// элемента, а не имя: пустые и повторяющиеся имена не идентифицируют
+		// конкретное размещение (#1543). Соответствие «указатель → путь» кладёт
+		// в контекст prepareManagedFormData рядом с картами состояний.
 		"elReadOnly": func(ctx map[string]any, el *metadata.FormElement) bool {
 			if el == nil {
 				return false
@@ -594,14 +603,20 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 				return true
 			}
 			set, _ := ctx["ElReadOnly"].(map[string]bool)
-			return set[el.Name]
+			return set[elementStatePath(ctx, el)]
 		},
 		"elHidden": func(ctx map[string]any, el *metadata.FormElement) bool {
 			if el == nil {
 				return false
 			}
 			set, _ := ctx["ElHidden"].(map[string]bool)
-			return set[el.Name]
+			return set[elementStatePath(ctx, el)]
+		},
+		// elPath — путь размещения элемента для якоря data-ob-el-path: по нему
+		// клиент находит свой элемент после события формы, когда имя элемента
+		// пустое или встречается на форме дважды (#1543).
+		"elPath": func(ctx map[string]any, el *metadata.FormElement) string {
+			return elementStatePath(ctx, el)
 		},
 		// visibleFormPages — страницы набора СтраницыФормы, которые надо
 		// отрисовать. Отбор вынесен сюда, а не сделан внутри range, потому что
@@ -621,7 +636,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			hidden, _ := ctx["ElHidden"].(map[string]bool)
 			var out []*metadata.FormElement
 			for _, page := range el.Children {
-				if page == nil || string(page.Kind) != "Страница" || hidden[page.Name] {
+				if page == nil || string(page.Kind) != "Страница" || hidden[elementStatePath(ctx, page)] {
 					continue
 				}
 				out = append(out, page)
@@ -1031,7 +1046,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			return template.JS(b) //nolint:gosec // G203: значение получено json.Marshal — он экранирует < > & в \u-последовательности, поэтому «</script>» из данных не разорвёт тег
 		},
 		// managedTPRowsJSON отдаёт гриду строки табличной части, приводя значения
-		// ДАТ к одному виду.
+		// дат и булевых колонок к одному виду.
 		//
 		// Раньше здесь стоял jsJSON, то есть голый json.Marshal, а он печатает
 		// time.Time в той зоне, в которой его отдал драйвер. Зоны у диалектов
@@ -1045,18 +1060,21 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		// про зоны, ни разбирать две разные метки: он получает готовые стенные
 		// часы и работает с ними как с текстом.
 		"managedTPRowsJSON": func(fields []metadata.Field, rows []map[string]any) template.JS {
-			dateFields := make(map[string]bool, len(fields))
+			fieldTypes := make(map[string]metadata.FieldType, len(fields))
 			for _, f := range fields {
-				if f.Type == metadata.FieldTypeDate {
-					dateFields[strings.ToLower(f.Name)] = true
-				}
+				fieldTypes[strings.ToLower(f.Name)] = f.Type
 			}
 			out := make([]map[string]any, 0, len(rows))
 			for _, row := range rows {
 				copied := make(map[string]any, len(row))
 				for k, v := range row {
-					if dateFields[strings.ToLower(k)] {
+					switch fieldTypes[strings.ToLower(k)] {
+					case metadata.FieldTypeDate:
 						copied[k] = formatDateValueForInput(v)
+						continue
+					case metadata.FieldTypeBool:
+						// SQLite's INTEGER must not leak back into the grid.
+						copied[k] = tpCellNorm(metadata.Field{Type: metadata.FieldTypeBool}, v) == "true"
 						continue
 					}
 					copied[k] = v
@@ -1404,6 +1422,8 @@ h2{font-size:22px;font-weight:600;margin-bottom:20px;color:#1e293b}
 h3{font-size:16px;font-weight:600;margin:24px 0 10px;color:#1e293b}
 .card{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.1);max-width:1400px}
 .main-list .card,.main-list .row-top,.main-list details,.main-list .breadcrumb{max-width:1600px}
+.main-list .ob-list-content{width:100%}
+.main-list .ob-list-content>.card{max-width:none}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;padding:10px 12px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600}
 th a{color:#64748b;text-decoration:none}
@@ -2593,11 +2613,12 @@ const tplReport = `
 {{template "head" .}}{{template "nav" .}}
 <main>
 <h2>{{t $.Lang "Выгрузка отчёта"}}</h2>
+<p><a href="/ui/export-jobs">{{t $.Lang "Мои выгрузки"}}</a></p>
 <div class="card" style="max-width:720px">
   <div style="display:grid;grid-template-columns:140px 1fr;gap:8px 16px;margin-bottom:16px">
     <div style="color:#64748b">{{t $.Lang "Отчёт"}}</div><div>{{.Job.Name}}</div>
     <div style="color:#64748b">{{t $.Lang "Формат"}}</div><div>{{.JobFormatLabel}}</div>
-    <div style="color:#64748b">{{t $.Lang "Статус"}}</div><div>{{.JobStatusLabel}}</div>
+    <div style="color:#64748b">{{t $.Lang "Статус"}}</div><div>{{t $.Lang .JobStatusLabel}}</div>
     <div style="color:#64748b">{{t $.Lang "Создано"}}</div><div>{{.CreatedAtText}}</div>
     {{if .JobDone}}<div style="color:#64748b">{{t $.Lang "Доступно до"}}</div><div>{{.ExpiresAtText}}</div>{{end}}
   </div>
@@ -2617,10 +2638,48 @@ const tplReport = `
 </div>
 </main></body></html>
 {{end}}
+{{define "page-export-jobs"}}
+{{template "head" .}}{{template "nav" .}}
+<main>
+<h2>{{t $.Lang "Мои выгрузки"}}</h2>
+<p>{{t $.Lang "Здесь показаны только доступные выгрузки. Они исчезают после истечения срока или перезапуска сервера."}}</p>
+{{if .Jobs}}
+<div class="card" style="overflow-x:auto">
+<table style="width:100%;border-collapse:collapse">
+  <thead><tr>
+    <th>{{t $.Lang "Отчёт"}}</th>
+    <th>{{t $.Lang "Формат"}}</th>
+    <th>{{t $.Lang "Статус"}}</th>
+    <th>{{t $.Lang "Создано"}}</th>
+    <th>{{t $.Lang "Доступно до"}}</th>
+    <th>{{t $.Lang "Файл"}}</th>
+  </tr></thead>
+  <tbody>
+  {{range .Jobs}}
+  <tr>
+    <td><a href="{{.StatusURL}}">{{.Name}}</a></td>
+    <td>{{.FormatLabel}}</td>
+    <td>{{t $.Lang .StatusLabel}}</td>
+    <td>{{.CreatedText}}</td>
+    <td>{{.ExpiresText}}</td>
+    <td>{{if .Downloadable}}<a href="{{.DownloadURL}}">{{t $.Lang "Скачать файл"}}</a>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p>{{t $.Lang "Доступных выгрузок пока нет."}}</p>
+{{end}}
+</main></body></html>
+{{end}}
 {{define "page-report"}}
 {{template "head" .}}{{template "nav" .}}
 <main>
 <h2>{{.Report.DisplayName $.Lang}}</h2>
+<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+  <a class="btn btn-sm" href="/ui/export-jobs">{{t $.Lang "Мои выгрузки"}}</a>
+</div>
 {{if or .ReportParams .Report.Variants .ReportPresets}}
 <details class="card report-block" data-block="params" open style="margin-bottom:16px">
 <summary>{{t $.Lang "Параметры"}}</summary>
@@ -3348,7 +3407,7 @@ const tplInfoReg = `
     {{if .CanWrite}}<a class="btn" href="/ui/inforeg/{{lower .InfoReg.Name}}/new">+ {{t $.Lang "Добавить запись"}}</a>{{end}}
   </div>
 </div>
-{{template "reg-filter-form" (dict "Fields" .InfoReg.Dimensions "Filter" .Filter "RefOpts" .RefOpts "ShowFromTo" .InfoReg.Periodic "ShowToOnly" false "HasFilters" .HasFilters "ResetURL" .ResetURL "Context" .FilterContext "Lang" $.Lang)}}
+{{template "reg-filter-form" (dict "Fields" .FilterFields "Filter" .Filter "RefOpts" .RefOpts "ShowFromTo" .InfoReg.Periodic "ShowToOnly" false "HasFilters" .HasFilters "ResetURL" .ResetURL "Context" .FilterContext "Lang" $.Lang)}}
 <div style="margin-bottom:8px">{{template "detail-panel-toggle" .}}</div>
 <div class="ob-list-wrap">
 <div class="card">

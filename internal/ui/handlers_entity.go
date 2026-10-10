@@ -21,6 +21,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/exchange"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -1061,6 +1062,10 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			s.renderObjectFormError(w, r, entity, true, formHookErr.Error(), hookMsgs, obj.TablePartRows)
 			return
 		}
+		if errors.Is(err, storage.ErrCodeDuplicate) {
+			s.renderObjectFormBadRequest(w, r, entity, true, s.errText(r, err), obj.TablePartRows)
+			return
+		}
 		s.serverError(w, r, err)
 		return
 	}
@@ -1778,6 +1783,10 @@ func (s *Server) submitEdit(w http.ResponseWriter, r *http.Request) {
 			s.renderVersionConflict(w, r, entity, id)
 			return
 		}
+		if errors.Is(err, storage.ErrCodeDuplicate) {
+			s.renderObjectFormBadRequest(w, r, entity, false, s.errText(r, err), obj.TablePartRows)
+			return
+		}
 		s.serverError(w, r, err)
 		return
 	}
@@ -1901,7 +1910,7 @@ func (s *Server) postDocument(w http.ResponseWriter, r *http.Request) {
 	// берёт pg_advisory_xact_lock до чтения остатков — раньше хук работал вне
 	// транзакции и блокировки вырождались в no-op. Коллектор освобождает
 	// внутрипроцессные мьютексы после коммита/отката.
-	lockCollector := runtime.NewLockCollector()
+	lockCollector := runtime.NewLockCollectorIn(r.Context())
 	defer lockCollector.ReleaseAll()
 	var hookErrMsg string
 	if err := s.store.WithTxScope(r.Context(), func(ctx context.Context) error {
@@ -2624,7 +2633,15 @@ func typedFormFieldValue(f metadata.Field, raw string) (any, error) {
 		}
 		return number, nil
 	case metadata.FieldTypeBool:
-		return raw == "true", nil
+		switch raw {
+		case "true", "1":
+			return true, nil
+		case "false", "0", "":
+			// Missing unchecked checkboxes are still false.
+			return false, nil
+		default:
+			return nil, i18nerr.Errorf("%q не булево значение", raw)
+		}
 	case metadata.FieldTypeDate:
 		if raw == "" {
 			return nil, nil
