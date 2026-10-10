@@ -21,6 +21,7 @@ import (
 	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 	"github.com/ivantit66/onebase/internal/entityservice"
 	"github.com/ivantit66/onebase/internal/exchange"
+	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"github.com/ivantit66/onebase/internal/metadata"
 	"github.com/ivantit66/onebase/internal/runtime"
 	"github.com/ivantit66/onebase/internal/storage"
@@ -2632,7 +2633,15 @@ func typedFormFieldValue(f metadata.Field, raw string) (any, error) {
 		}
 		return number, nil
 	case metadata.FieldTypeBool:
-		return raw == "true", nil
+		switch raw {
+		case "true", "1":
+			return true, nil
+		case "false", "0", "":
+			// Missing unchecked checkboxes are still false.
+			return false, nil
+		default:
+			return nil, i18nerr.Errorf("%q не булево значение", raw)
+		}
 	case metadata.FieldTypeDate:
 		if raw == "" {
 			return nil, nil
