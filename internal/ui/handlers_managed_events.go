@@ -2061,6 +2061,17 @@ func serializeTablePartRowsForEntity(tps map[string][]map[string]any, entity *me
 				break
 			}
 		}
+		boolColumns := make(map[string]bool)
+		for _, tp := range declared {
+			if strings.EqualFold(tp.Name, canonicalName) {
+				for _, field := range tp.Fields {
+					if field.Type == metadata.FieldTypeBool {
+						boolColumns[strings.ToLower(field.Name)] = true
+					}
+				}
+				break
+			}
+		}
 		outRows := make([]map[string]any, len(rows))
 		for i, row := range rows {
 			outRow := make(map[string]any, len(row))
@@ -2080,6 +2091,10 @@ func serializeTablePartRowsForEntity(tps map[string][]map[string]any, entity *me
 					}
 				}
 				if ok {
+					if boolColumns[strings.ToLower(column)] {
+						// A no-op event can refresh rows from SQLite as int64.
+						v = tpCellNorm(metadata.Field{Type: metadata.FieldTypeBool}, v) == "true"
+					}
 					outRow[column] = serializeValue(v)
 				}
 			}
