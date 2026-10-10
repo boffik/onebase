@@ -1046,7 +1046,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			return template.JS(b) //nolint:gosec // G203: значение получено json.Marshal — он экранирует < > & в \u-последовательности, поэтому «</script>» из данных не разорвёт тег
 		},
 		// managedTPRowsJSON отдаёт гриду строки табличной части, приводя значения
-		// ДАТ к одному виду.
+		// дат и булевых колонок к одному виду.
 		//
 		// Раньше здесь стоял jsJSON, то есть голый json.Marshal, а он печатает
 		// time.Time в той зоне, в которой его отдал драйвер. Зоны у диалектов
@@ -1060,18 +1060,21 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		// про зоны, ни разбирать две разные метки: он получает готовые стенные
 		// часы и работает с ними как с текстом.
 		"managedTPRowsJSON": func(fields []metadata.Field, rows []map[string]any) template.JS {
-			dateFields := make(map[string]bool, len(fields))
+			fieldTypes := make(map[string]metadata.FieldType, len(fields))
 			for _, f := range fields {
-				if f.Type == metadata.FieldTypeDate {
-					dateFields[strings.ToLower(f.Name)] = true
-				}
+				fieldTypes[strings.ToLower(f.Name)] = f.Type
 			}
 			out := make([]map[string]any, 0, len(rows))
 			for _, row := range rows {
 				copied := make(map[string]any, len(row))
 				for k, v := range row {
-					if dateFields[strings.ToLower(k)] {
+					switch fieldTypes[strings.ToLower(k)] {
+					case metadata.FieldTypeDate:
 						copied[k] = formatDateValueForInput(v)
+						continue
+					case metadata.FieldTypeBool:
+						// SQLite's INTEGER must not leak back into the grid.
+						copied[k] = tpCellNorm(metadata.Field{Type: metadata.FieldTypeBool}, v) == "true"
 						continue
 					}
 					copied[k] = v
