@@ -129,6 +129,11 @@ func IsKnownFormEventType(event FormEventType) bool {
 type FormElementType string
 
 const (
+	FormDateModeDateTime = "datetime"
+	FormDateModeDate     = "date"
+)
+
+const (
 	FormElementField      FormElementType = "ПолеВвода"      // InputField
 	FormElementLabel      FormElementType = "Надпись"        // Label
 	FormElementButton     FormElementType = "Кнопка"         // Button
@@ -309,8 +314,12 @@ type FormElement struct {
 	// явно предупредить об этом, а не молча проглатывать неизвестный ключ.
 	Format        string `yaml:"format,omitempty"`
 	DisplayFormat string `yaml:"display_format,omitempty"`
-	Type          string `yaml:"type,omitempty"`   // "file" для файлового поля, и т.п.
-	Choice        bool   `yaml:"choice,omitempty"` // включена кнопка выбора у InputField
+	// DateMode выбирает точность ввода даты: date — только календарный день,
+	// datetime — день и время. Пустое значение сохраняет поведение kind:
+	// ПолеДаты показывает день, ПолеВвода и колонки ТЧ — дату со временем.
+	DateMode string `yaml:"date_mode,omitempty"`
+	Type     string `yaml:"type,omitempty"`   // "file" для файлового поля, и т.п.
+	Choice   bool   `yaml:"choice,omitempty"` // включена кнопка выбора у InputField
 	// ChoiceFolders — разрешить выбирать ГРУППЫ иерархического справочника
 	// (1С: ВыборГруппИЭлементов). Подбор ссылочного поля всегда исключает папки,
 	// и для справочника, где значение по смыслу является группой, поле

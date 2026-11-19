@@ -157,7 +157,8 @@ const tplManagedForm = `
         </select>
         {{if or $ro $el.ReadOnlyWhen}}<input type="hidden" name="{{$fn}}" value="{{index $ctx.Values $fn}}" id="ro-mirror-{{$fn}}" data-ob-ro-mirror="1"{{if not $ro}} disabled{{end}}>{{end}}
       {{else if eq (str $f.Type) "date"}}
-        <input type="datetime-local" step="1" name="{{$fn}}" value="{{index $ctx.Values $fn}}"{{if gt $el.DeadlineWarn 0}} data-ob-deadline="{{$el.DeadlineWarn}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+        {{if eq $el.DateMode "date"}}{{$dateValue := tpDateInput (index $ctx.Values $fn)}}<input type="date" name="{{$fn}}" value="{{if ge (len $dateValue) 10}}{{slice $dateValue 0 10}}{{else}}{{$dateValue}}{{end}}"{{if gt $el.DeadlineWarn 0}} data-ob-deadline="{{$el.DeadlineWarn}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+        {{else}}<input type="datetime-local" step="1" name="{{$fn}}" value="{{index $ctx.Values $fn}}"{{if gt $el.DeadlineWarn 0}} data-ob-deadline="{{$el.DeadlineWarn}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>{{end}}
       {{else if eq (str $f.Type) "bool"}}
         <select name="{{$fn}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} disabled{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
           <option value="false" {{if eq (index $ctx.Values $fn) "false"}}selected{{end}}>Нет</option>
@@ -414,7 +415,7 @@ const tplManagedForm = `
         <th style="width:40px"></th>
       </tr>
     </thead>
-    <tbody id="tp-body-{{$tpName}}" {{if $ctx.HideRefCard}}data-tp-hide-ref-card="1" {{end}}{{if $tpCmds}}data-tp-cmd="1" {{end}}{{if $tpReadOnly}}data-ob-table-readonly="1" {{end}}data-tp-choice="{{jsJSON (tpChoiceContexts $ctx $el)}}" data-tp-fields="{{managedTPFieldsAttr $tpPlan}}" data-tp-hidden-cols="{{managedTPHiddenColsJSON $tpPlan}}" data-tp-virtual-cols="{{managedTPVirtualNamesJSON $tpVirtualCols}}">
+    <tbody id="tp-body-{{$tpName}}" {{if $ctx.HideRefCard}}data-tp-hide-ref-card="1" {{end}}{{if $tpCmds}}data-tp-cmd="1" {{end}}{{if $tpReadOnly}}data-ob-table-readonly="1" {{end}}data-tp-choice="{{jsJSON (tpChoiceContexts $ctx $el)}}" data-tp-fields="{{managedTPFieldsAttr $tpPlan}}" data-tp-date-modes="{{managedTPDateModesJSON $tpPlan}}" data-tp-hidden-cols="{{managedTPHiddenColsJSON $tpPlan}}" data-tp-virtual-cols="{{managedTPVirtualNamesJSON $tpVirtualCols}}">
     {{range $i, $row := $tpRows}}
       <tr{{with formRowClass $row}} class="{{.}}"{{end}} tabindex="-1" aria-selected="false">
         {{if $tpCmds}}<td style="text-align:center"><input type="checkbox" class="_tp-sel"{{if $tpReadOnly}} disabled{{end}}></td>{{end}}
@@ -452,7 +453,8 @@ const tplManagedForm = `
                  в сетке и в списке («19.10.2026 09:15:30»: поле даты браузер
                  показал бы с запятой и календарём); иначе — поле даты, как в
                  шапке, шаг в секунду — правка строки не отрежет секунды. */}}
-            {{if $tpReadOnly}}<input type="text" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{fmtDate $v}}" disabled data-ob-date-text>{{else}}<input type="datetime-local" step="1" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{tpDateInput $v}}" data-ob-recalc-tp-row>{{end}}
+            {{$dateValue := tpDateInput $v}}
+            {{if $tpReadOnly}}<input type="text" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{fmtDate $v}}" disabled data-ob-date-text>{{else if and $c.Element (eq $c.Element.DateMode "date")}}<input type="date" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{if ge (len $dateValue) 10}}{{slice $dateValue 0 10}}{{else}}{{$dateValue}}{{end}}" data-ob-recalc-tp-row>{{else}}<input type="datetime-local" step="1" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{$dateValue}}" data-ob-recalc-tp-row>{{end}}
           {{else if eq (str $f.Type) "bool"}}
             <input type="checkbox" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="true"{{if checked $v}} checked{{end}}{{if $tpReadOnly}} disabled{{end}}>
           {{else}}
@@ -548,7 +550,8 @@ const tplManagedForm = `
   {{$dv := index $ctx.Values $fn}}
   {{if $el.HiddenWhen}}<fieldset class="form-group ob-managed-control{{if elFill $el}} ob-el-fill{{end}}{{if $el.TextBold}} ob-text-bold{{end}}" data-ob-el="{{$el.Name}}" data-ob-control-fieldset="1"{{with elPath $ctx $el}} data-ob-el-path="{{.}}"{{end}}{{if elHiddenStyle $ctx $el}} disabled{{end}}{{with elLayoutEx $ctx $el}} style="{{.}}"{{end}}>{{else}}<div class="form-group{{if elFill $el}} ob-el-fill{{end}}{{if $el.TextBold}} ob-text-bold{{end}}" data-ob-el="{{$el.Name}}"{{with elPath $ctx $el}} data-ob-el-path="{{.}}"{{end}}{{with elLayout $el}} style="{{.}}"{{end}}>{{end}}
     <label>{{fieldTitleRU $el.TitleMap $fn}}{{if $effectiveReq}} <span style="color:#dc2626">*</span>{{end}}{{if and $el.Hint (not $el.HintInline)}} <span class="ob-hint" title="{{$el.Hint}}" aria-label="{{$el.Hint}}">ⓘ</span>{{end}}</label>
-    <input type="date" name="{{$fn}}" value="{{if ge (len $dv) 10}}{{slice $dv 0 10}}{{else}}{{$dv}}{{end}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+    {{if eq $el.DateMode "datetime"}}<input type="datetime-local" step="1" name="{{$fn}}" value="{{tpDateInput $dv}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+    {{else}}<input type="date" name="{{$fn}}" value="{{if ge (len $dv) 10}}{{slice $dv 0 10}}{{else}}{{$dv}}{{end}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>{{end}}
     {{if and $el.Hint $el.HintInline}}<small style="color:#94a3b8;font-size:11px">{{$el.Hint}}</small>{{end}}
   {{if $el.HiddenWhen}}</fieldset>{{else}}</div>{{end}}
 {{else if eq (str $el.Kind) "Переключатель"}}

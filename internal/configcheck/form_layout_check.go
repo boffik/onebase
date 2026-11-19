@@ -72,6 +72,14 @@ type layoutDiagnostic struct{ code, msg, fix string }
 
 func layoutDiagnostics(el *metadata.FormElement) []layoutDiagnostic {
 	var out []layoutDiagnostic
+	if el.DateMode != "" && el.DateMode != metadata.FormDateModeDate && el.DateMode != metadata.FormDateModeDateTime {
+		out = append(out, layoutDiagnostic{
+			code: "form.date-mode",
+			msg: fmt.Sprintf("date_mode: %q — вариант даты не из словаря",
+				strings.TrimSpace(el.DateMode)),
+			fix: "Допустимые значения: " + metadata.FormDateModeDateTime + ", " + metadata.FormDateModeDate + ".",
+		})
+	}
 	if el.EqualColumns && !el.UsesEqualColumns() {
 		out = append(out, layoutDiagnostic{
 			code: "form.equal-columns",

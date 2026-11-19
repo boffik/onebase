@@ -260,6 +260,7 @@ type canvasElementInfo struct {
 	Required  bool   `json:"required"`
 	ReadOnly  bool   `json:"readonly"`
 	Hint      string `json:"hint"`
+	DateMode  string `json:"dateMode"`
 	Container bool   `json:"container"`
 	// Свойства batch A (выводятся в панель только там, где влияют на рантайм).
 	Mask      string `json:"mask"`      // ПолеВвода: проверка значения (regexp → pattern)
@@ -344,6 +345,7 @@ func canvasModel(doc *formdoc.Doc) (map[string]canvasElementInfo, error) {
 				Required:      el.Required,
 				ReadOnly:      el.ReadOnly,
 				Hint:          el.Hint,
+				DateMode:      el.DateMode,
 				Container:     el.IsContainer(),
 				Mask:          el.Mask,
 				InputMask:     el.InputMask,

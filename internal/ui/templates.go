@@ -30,6 +30,7 @@ type managedTPColumnJSON struct {
 	RefFilter   string `json:"refFilter,omitempty"`
 	AllowCreate bool   `json:"allowCreate,omitempty"`
 	Enum        bool   `json:"enum,omitempty"`
+	DateMode    string `json:"dateMode,omitempty"`
 	// Virtual — колонка показывается, но не хранится (#845). Флаг нужен клиенту:
 	// такая колонка не редактируется и НЕ попадает в tp_json при отправке формы.
 	Virtual bool `json:"virtual,omitempty"`
@@ -1275,10 +1276,15 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 			cols := make([]managedTPColumnJSON, 0, len(plan)+len(virtual))
 			for _, column := range plan {
 				field := column.Field
+				dateMode := ""
+				if column.Element != nil {
+					dateMode = column.Element.DateMode
+				}
 				cols = append(cols, managedTPColumnJSON{
 					ID:          field.Name,
 					Name:        field.DisplayName(lang),
 					Type:        string(field.Type),
+					DateMode:    dateMode,
 					Ref:         field.RefEntity,
 					RefFilter:   filters[tpName+"."+field.Name],
 					AllowCreate: field.RefEntity != "" && field.InlineCreateEnabled(true) && refWriteAllowed(refWriteAccess, field.RefEntity),
@@ -1358,6 +1364,20 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 				parts = append(parts, part)
 			}
 			return strings.Join(parts, ",")
+		},
+		"managedTPDateModesJSON": func(plan []managedTPColumn) (string, error) {
+			modes := make(map[string]string)
+			for _, column := range plan {
+				if column.Field.Type == metadata.FieldTypeDate && column.Element != nil &&
+					column.Element.DateMode == metadata.FormDateModeDate {
+					modes[column.Field.Name] = metadata.FormDateModeDate
+				}
+			}
+			if len(modes) == 0 {
+				return "{}", nil
+			}
+			encoded, err := json.Marshal(modes)
+			return string(encoded), err
 		},
 		// managedTPHiddenColsJSON — имена скрытых колонок для перерисовки
 		// таблицы после события формы: ячейка остаётся в DOM (иначе значение

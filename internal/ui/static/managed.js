@@ -748,6 +748,7 @@ window.obManagedApplyColumnTitles = obManagedApplyColumnTitles;
         if (refIdx >= 0) return { name: name, type: rest.slice(0, refIdx), ref: rest.slice(refIdx + 1) };
         return { name: name, type: rest, ref: '' };
       });
+      var dateModes = JSON.parse(tbody.getAttribute('data-tp-date-modes') || '{}') || {};
       const virtualNames = obManagedVirtualColumnNames(tbody);
       const hiddenNames = obManagedHiddenColumnNames(tbody);
       const rows = tps[tpName] || [];
@@ -906,9 +907,13 @@ window.obManagedApplyColumnTitles = obManagedApplyColumnTitles;
                 inp.value = window.obManagedDateText(v);
                 inp.setAttribute('data-ob-date-text', '');
               } else {
-                inp.type = 'datetime-local';
-                inp.step = '1';
-                inp.value = window.obManagedDateInputValue(v);
+                inp.type = dateModes[f.name] === 'date' ? 'date' : 'datetime-local';
+                if (inp.type === 'date') {
+                  inp.value = window.obManagedDateInputValue(v).slice(0, 10);
+                } else {
+                  inp.step = '1';
+                  inp.value = window.obManagedDateInputValue(v);
+                }
               }
             } else {
               inp.type = 'text';
@@ -2560,7 +2565,9 @@ function obManagedAddTpRow(btn) {
   var nums = meta.filter(function (f) { return f.type === 'number'; }).map(function (f) { return f.name; });
   var bools = meta.filter(function (f) { return f.type === 'bool'; }).map(function (f) { return f.name; });
   var dates = meta.filter(function (f) { return f.type === 'date'; }).map(function (f) { return f.name; });
-  addTpRow(tpName, fields, nums, tbody.rows.length, tbody, obManagedVirtualColumnNames(tbody), bools, dates);
+  var dateModes = JSON.parse(tbody.getAttribute('data-tp-date-modes') || '{}') || {};
+  var dateOnly = Object.keys(dateModes).filter(function (name) { return dateModes[name] === 'date'; });
+  addTpRow(tpName, fields, nums, tbody.rows.length, tbody, obManagedVirtualColumnNames(tbody), bools, dates, dateOnly);
   // Новая строка строится по data-tp-fields, где скрытые колонки перечислены
   // наравне с показываемыми (без них значения не уехали бы на сервер). Прячем
   // их ячейки так же, как это делают первичный рендер и applyTableParts.
@@ -3706,12 +3713,13 @@ function obGridColumnIds(columns) {
   // умеющий только день, молча обнулял бы его при каждой правке строки.
   function ObDateEditor(args) {
     var input, defaultValue = '';
+    var dateOnly = args.column.dateMode === 'date';
     this.init = function() {
       input = document.createElement('input');
-      input.type = 'datetime-local';
+      input.type = dateOnly ? 'date' : 'datetime-local';
       // Шаг в секунду, как у поля даты в шапке: иначе значение с секундами
       // не проходит проверку поля, а без секунд правка строки отрезала бы их.
-      input.step = '1';
+      if (!dateOnly) input.step = '1';
       input.className = 'editor-text';
       input.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:2px 4px;font-size:13px';
       args.container.appendChild(input);
@@ -3724,9 +3732,9 @@ function obGridColumnIds(columns) {
     this.setValue = function(val) { input.value = (val == null) ? '' : String(val); };
     this.loadValue = function(item) {
       var parts = obManagedSplitDate(item[args.column.field]);
-      input.value = parts
-        ? (parts.date + 'T' + (parts.time || '00:00') + (parts.seconds ? ':' + parts.seconds : ''))
-        : '';
+      input.value = parts ? (dateOnly
+        ? parts.date
+        : parts.date + 'T' + (parts.time || '00:00') + (parts.seconds ? ':' + parts.seconds : '')) : '';
       // Браузер нормализует значение (нулевые секунды опускает), поэтому
       // «не изменено» сверяется с тем, что поле показало, а не с исходной строкой.
       defaultValue = input.value;
@@ -3737,8 +3745,8 @@ function obGridColumnIds(columns) {
     this.applyValue = function(item, state) { item[args.column.field] = state; };
     this.isValueChanged = function() { return String(input.value) !== String(defaultValue); };
     this.validate = function() {
-      // Браузер сам не пускает в datetime-local произвольный текст, но
-      // значение может прийти вставкой. Пустое допустимо — это очистка.
+      // Значение может прийти вставкой, несмотря на нативный редактор даты.
+      // Пустое допустимо — это очистка.
       if (input.value === '' || obManagedSplitDate(input.value)) return {valid: true, msg: null};
       return {valid: false, msg: 'Недопустимая дата «' + input.value + '»'};
     };

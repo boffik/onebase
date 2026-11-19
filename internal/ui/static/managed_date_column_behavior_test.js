@@ -96,6 +96,20 @@ test('редактор — datetime-local, а не свободный текст
   assert.equal(editor.isValueChanged(), false);
 });
 
+test('вариант «Дата» не отдаёт время из SlickGrid-редактора', () => {
+  const container = element('div');
+  const editor = new ObDateEditor({
+    container,
+    column: {field: 'Дат', dateMode: 'date'},
+    item: {'Дат': '1985-03-14T13:45:30'},
+  });
+  const input = container.children[0];
+  assert.equal(input.type, 'date');
+  assert.equal(input.step, undefined);
+  assert.equal(input.value, '1985-03-14');
+  assert.equal(editor.serializeValue(), '1985-03-14');
+});
+
 test('редактор держит секунды и шаг в секунду', () => {
   // Без секунд правка строки отрезала бы их от даты: документ от 13:45:30
   // становился документом от 13:45:00. Шаг в секунду нужен, чтобы поле

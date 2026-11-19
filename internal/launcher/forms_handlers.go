@@ -388,7 +388,7 @@ func objectScaffoldTableParts(proj *project.Project, entity string) []formTableP
 		for _, tp := range e.TableParts {
 			cols := make([]formScaffoldAttr, 0, len(tp.Fields))
 			for _, f := range tp.Fields {
-				cols = append(cols, formScaffoldAttr{Name: f.Name, Title: f.Title})
+				cols = append(cols, formScaffoldAttr{Name: f.Name, Title: f.Title, Type: string(f.Type)})
 			}
 			tps = append(tps, formTablePart{Name: tp.Name, Title: tp.Title, Columns: cols})
 		}

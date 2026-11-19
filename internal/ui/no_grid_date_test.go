@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivantit66/onebase/internal/metadata"
 )
@@ -18,29 +19,35 @@ func TestNoGridDateColumn_RendersDateInputAndRoundTrips(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		readOnly bool
+		dateMode string
 	}{
 		{name: "editable"},
 		{name: "readonly", readOnly: true},
+		{name: "date-only", dateMode: metadata.FormDateModeDate},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tp := metadata.TablePart{Name: "Lines", Fields: []metadata.Field{
 				{Name: "Дата", Type: metadata.FieldTypeDate},
 				{Name: "Действие", Type: metadata.FieldTypeString},
 			}}
-			form := managedObjectForm(
-				fieldEl("NameField", "Object.Name"),
-				&metadata.FormElement{
-					Kind: metadata.FormElementTablePart, Name: "LinesTable",
-					DataPath: "Object.Lines", NoGrid: true, ReadOnly: tc.readOnly,
-				},
-			)
+			table := &metadata.FormElement{
+				Kind: metadata.FormElementTablePart, Name: "LinesTable",
+				DataPath: "Object.Lines", NoGrid: true, ReadOnly: tc.readOnly,
+			}
+			if tc.dateMode != "" {
+				table.Children = []*metadata.FormElement{{
+					Kind: metadata.FormElementColumn, Name: "DateColumn",
+					DataPath: "Object.Lines.Дата", DateMode: tc.dateMode,
+				}}
+			}
+			form := managedObjectForm(fieldEl("NameField", "Object.Name"), table)
 			ent := &metadata.Entity{
 				Name: "NoGridDateRecord", Kind: metadata.KindCatalog,
 				Fields:     []metadata.Field{{Name: "Name", Type: metadata.FieldTypeString}},
 				TableParts: []metadata.TablePart{tp},
 				Forms:      []*metadata.FormModule{form},
 			}
-			srv, _ := newSubmitTestServer(t, []*metadata.Entity{ent})
+			srv, ctx := newSubmitTestServer(t, []*metadata.Entity{ent})
 
 			// Строку пишет форма: у readonly-таблицы браузер строки не шлёт,
 			// поэтому её строку кладём записью с редактируемой формой.
@@ -71,6 +78,9 @@ func TestNoGridDateColumn_RendersDateInputAndRoundTrips(t *testing.T) {
 			}
 			page := open()
 			want := `<input type="datetime-local" step="1" name="tp.Lines.0.Дата" value="2026-10-19T09:15:30"`
+			if tc.dateMode == metadata.FormDateModeDate {
+				want = `<input type="date" name="tp.Lines.0.Дата" value="2026-10-19"`
+			}
 			if tc.readOnly {
 				want = `<input type="text" name="tp.Lines.0.Дата" value="19.10.2026 09:15:30" disabled`
 			}
@@ -82,10 +92,16 @@ func TestNoGridDateColumn_RendersDateInputAndRoundTrips(t *testing.T) {
 				}
 				t.Fatalf("дата строки не полем даты с исходным временем; вокруг ячейки: %q", ctx)
 			}
+			if tc.dateMode == metadata.FormDateModeDate && !strings.Contains(page, `data-tp-date-modes=`) {
+				t.Fatal("режим даты не передан в разметку табличной части")
+			}
 			if tc.readOnly {
 				return
 			}
 
+			if tc.dateMode == metadata.FormDateModeDate {
+				body.Set("tp.Lines.0.Дата", "2026-10-19")
+			}
 			// Пересохранение формы тем значением, что она показала, дату не трогает.
 			rec = httptest.NewRecorder()
 			srv.submitEdit(rec, reqWithChi(http.MethodPost, "/ui/catalog/"+ent.Name+"/"+id.String(), body,
@@ -95,6 +111,16 @@ func TestNoGridDateColumn_RendersDateInputAndRoundTrips(t *testing.T) {
 			}
 			if !strings.Contains(open(), want) {
 				t.Fatal("после пересохранения дата строки изменилась")
+			}
+			if tc.dateMode == metadata.FormDateModeDate {
+				rows, err := srv.store.GetTablePartRows(ctx, ent.Name, tp.Name, id, tp)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, ok := rows[0]["Дата"].(time.Time)
+				if !ok || got.In(time.Local).Format("2006-01-02T15:04:05") != "2026-10-19T00:00:00" {
+					t.Fatalf("date-only строка = %v, ожидалась местная полночь", rows[0]["Дата"])
+				}
 			}
 		})
 	}

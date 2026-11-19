@@ -169,6 +169,21 @@ func TestApplyEditOp_SetProp(t *testing.T) {
 	}
 }
 
+func TestApplyEditOp_DateModeRoundTrip(t *testing.T) {
+	res, err := applyEditOp([]byte(canvasSample), editOpRequest{
+		Op: "setProp", Node: "elements.0.children.1", Key: "date_mode", Value: "date",
+	})
+	if err != nil {
+		t.Fatalf("applyEditOp: %v", err)
+	}
+	if !strings.Contains(res.YAML, "date_mode: date") {
+		t.Fatalf("date_mode не записан в YAML:\n%s", res.YAML)
+	}
+	if got := res.Model["elements.0.children.1"].DateMode; got != "date" {
+		t.Fatalf("dateMode модели = %q, ожидалось date", got)
+	}
+}
+
 // Чекбокс-свойство приходит строкой "true" → в YAML булев скаляр, не строка.
 func TestApplyEditOp_BoolProp(t *testing.T) {
 	res, err := applyEditOp([]byte(canvasSample), editOpRequest{

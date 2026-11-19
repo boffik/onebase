@@ -39,9 +39,25 @@ func TestCheckFormLayout_KnownValuesSilent(t *testing.T) {
 		{Kind: metadata.FormElementField, Name: "Поле", Width: 200, Height: 100},
 		{Kind: metadata.FormElementField, Name: "Поле", HorizontalAlign: "Center", VerticalAlign: "middle"},
 		{Kind: metadata.FormElementField, Name: "Поле", HorizontalAlign: "stretch"},
+		{Kind: metadata.FormElementField, Name: "Поле", DateMode: metadata.FormDateModeDate},
+		{Kind: metadata.FormElementField, Name: "Поле", DateMode: metadata.FormDateModeDateTime},
 	} {
 		if warns := CheckFormLayout(projWithElement(el)); len(warns) != 0 {
 			t.Errorf("рабочая раскладка помечена зря (%+v): %+v", el, warns)
+		}
+	}
+}
+
+func TestCheckFormLayout_UnknownDateModeWarns(t *testing.T) {
+	warns := CheckFormLayout(projWithElement(&metadata.FormElement{
+		Kind: metadata.FormElementField, Name: "Поле", DateMode: "date-only",
+	}))
+	if len(warns) != 1 || warns[0].Code != "form.date-mode" {
+		t.Fatalf("ожидалось предупреждение form.date-mode, получено: %+v", warns)
+	}
+	for _, mode := range []string{metadata.FormDateModeDateTime, metadata.FormDateModeDate} {
+		if !strings.Contains(warns[0].SuggestedFix, mode) {
+			t.Errorf("в подсказке нет значения %q: %s", mode, warns[0].SuggestedFix)
 		}
 	}
 }

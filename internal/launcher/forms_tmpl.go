@@ -860,6 +860,27 @@ function fieldIsRef(dataPath) {
   var declared = String((_attrTypes || {})[lower] || '').toLowerCase();
   return declared.indexOf('catalogref.') === 0 || declared.indexOf('documentref.') === 0;
 }
+function isDateFieldType(type) {
+  var t = String(type || '').trim().toLowerCase().replace(/[\s_-]/g, '');
+  return t === 'date' || t === 'datetime' || t === 'дата' || t === 'датавремя';
+}
+function fieldIsDate(dataPath, fieldName) {
+  var path = String(dataPath || '').split('.');
+  var name = String(fieldName || path[path.length - 1] || '');
+  if (!name) return false;
+  if (path.length >= 3) {
+    var tpName = path[path.length - 2];
+    var tp = (_tablePartsList || []).find(function (item) { return String(item.name).toLowerCase() === tpName.toLowerCase(); });
+    if (tp) {
+      var column = (tp.columns || []).find(function (item) { return String(item.name).toLowerCase() === name.toLowerCase(); });
+      if (column) return isDateFieldType(column.type);
+    }
+  }
+  for (var i = 0; i < (_objAttrs || []).length; i++) {
+    if (String(_objAttrs[i].name).toLowerCase() === name.toLowerCase()) return isDateFieldType(_objAttrs[i].type);
+  }
+  return isDateFieldType((_attrTypes || {})[name.toLowerCase()]);
+}
 var _selected = '';   // текущая цель правки: node-id элемента ИЛИ "form"
 var _lastEl = '';     // последний выбранный элемент (для закладки «Элемент»)
 var _model = {};      // node-id → свойства (для панели свойств)
@@ -1155,6 +1176,14 @@ function renderProps() {
   h.appendChild(sk); panel.appendChild(h);
   addTextProp(panel, 'Заголовок (ru)', 'title.ru', info.titleRu || '');
   addTextProp(panel, 'Имя', 'name', info.name || '');
+  if (fieldIsDate(info.dataPath, info.field) &&
+      (info.kind === 'ПолеВвода' || info.kind === 'ПолеДаты' || info.kind === 'Колонка')) {
+    var defaultDateMode = info.kind === 'ПолеДаты' ? 'date' : 'datetime';
+    addSelectRaw(panel, 'Вариант даты', info.dateMode || defaultDateMode, [
+      { value: 'datetime', label: 'Дата и время' },
+      { value: 'date', label: 'Дата' }
+    ], function (value) { setProp('date_mode', value); });
+  }
   if (info.kind === 'ПолеКартинки') {
     addTextProp(panel, 'Картинка (путь)', 'picture', info.picture || '');
     // У картинки width/height ограничивают её саму, а не блок вокруг (так было
