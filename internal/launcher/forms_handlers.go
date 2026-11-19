@@ -320,6 +320,10 @@ type formScaffoldAttr struct {
 	Name  string `json:"name"`
 	Title string `json:"title"`          // синоним/подпись; пустой → подставляется Name
 	Type  string `json:"type,omitempty"` // тип поля (string/date/bool/reference:…/enum:…) — для «умного» дропа реквизита
+	// RefEntity — справочник, на который ссылается реквизит (пусто — не ссылка).
+	// Нужен панели свойств: галка «Ввод по строке» имеет смысл только у
+	// ссылочного поля, и предлагать её у строкового — обещать то, чего нет.
+	RefEntity string `json:"refEntity,omitempty"`
 }
 
 // objectScaffoldAttrs возвращает реквизиты объекта <entity> для заготовки новой
@@ -335,7 +339,7 @@ func objectScaffoldAttrs(proj *project.Project, entity string) []formScaffoldAtt
 		if strings.EqualFold(e.Name, entity) {
 			attrs := make([]formScaffoldAttr, 0, len(e.Fields))
 			for _, f := range e.Fields {
-				attrs = append(attrs, formScaffoldAttr{Name: f.Name, Title: f.Title, Type: string(f.Type)})
+				attrs = append(attrs, formScaffoldAttr{Name: f.Name, Title: f.Title, Type: string(f.Type), RefEntity: f.RefEntity})
 			}
 			return attrs
 		}
@@ -431,6 +435,11 @@ func formKindTitle(kind string) string {
 // (например, обработка без параметров) — группа остаётся пустой, без хардкодного
 // поля «Наименование» (issue #133).
 //
+// Группа получает orientation: horizontal — это умолчание НОВОЙ группы: ряд
+// реквизитов собирается без дополнительной настройки, а вариант виден в YAML
+// сразу, а не прячется в умолчании рендера. Формы, написанные раньше, ключа не
+// имеют и остаются вертикальными.
+//
 // Форма списка (kind: list) описывает не карточку, а КОЛОНКИ списка: элементы
 // кладутся плоско, без группы — группировать колонки списка не во что.
 func newFormYAMLTemplate(entity, name, kind string, attrs []formScaffoldAttr) string {
@@ -470,6 +479,7 @@ elements:
 
 	b.WriteString(`  - kind: ГруппаФормы
     name: Реквизиты
+    orientation: horizontal
     title:
       ru: "Реквизиты"
 `)

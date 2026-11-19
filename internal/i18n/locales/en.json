@@ -1528,6 +1528,8 @@
   "UUID записи справочника": "Catalog record UUID",
   "Условия идут по порядку и соединяются через И. Для подбора обязателен уникальный id выше.": "Conditions are evaluated in order and joined with AND. A unique element ID above is required for filtering.",
   "Устойчивый id элемента": "Stable element ID",
+  "Ввод по строке": "Type-ahead input",
+  "Начните вводить наименование": "Start typing the name",
   "Команда формы ещё выполняется. Дождитесь её завершения.": "A form command is still running. Wait for it to finish.",
   "Форма изменилась во время выполнения команды — переход не выполнен": "The form changed while the command was running — navigation was not performed",
   "Форма содержит несохранённые изменения — переход не выполнен": "The form has unsaved changes — navigation was not performed",
@@ -1594,6 +1596,8 @@
   "Повреждённая личная настройка пропущена. Показано общее меню; сохранение или сброс исправит этот слой.": "Invalid personal settings were skipped. The common menu is shown; save or reset to repair this layer.",
   "Повреждённая общая настройка пропущена. Обратитесь к администратору базы.": "Invalid common settings were skipped. Contact your database administrator.",
   "Равные колонки": "Equal columns",
+  "Отображать заголовок": "Show group title",
+  "Выделять группу": "Draw group frame",
   "Закрыть просмотр изображения": "Close image viewer",
   "Предыдущее изображение": "Previous image",
   "Следующее изображение": "Next image",
@@ -1609,5 +1613,10 @@
   "Изменённая сборка": "Modified distribution",
   "Поставщик сборки": "Distribution supplier",
   "Переводы поля «%s» для языка %s изменены по-разному в двух редакторах. Укажите одинаковое значение и сохраните снова": "The translation of field \"%s\" for language %s was changed differently in the two editors. Enter the same value and save again",
-  "Результаты поиска по всему справочнику": "Search results across the whole catalog"
+  "Результаты поиска по всему справочнику": "Search results across the whole catalog",
+  "Вид форм": "Form style",
+  "Обычный": "Standard",
+  "Новый вид — плотная компоновка": "New style — compact layout",
+  "Действует на карточки документов и справочников после перезапуска базы. Списки и отчёты не меняются.": "Applies to document and catalog cards after the base restarts. Lists and reports are unchanged.",
+  "Неизвестный вид формы": "Unknown form style"
 }

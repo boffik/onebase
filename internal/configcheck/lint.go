@@ -642,6 +642,7 @@ func formModuleYAMLSchema() *yamlLintSchema {
 		"halign", "valign", "readonly", "readonly_when", "hidden_when", "use_grid", "no_grid", "auto_sum", "hint", "mask",
 		"accesskey", "hotkey", "multiline", "format", "display_format", "type", "choice", "unknown_xml", "view",
 		"scroll_x", "primary", "editable_admin_only", "choice_folders", "choice_dropdown",
+		"input_by_string",
 		// Явная видимость кнопки «Открыть карточку» у поля — сильнее ключей
 		// формы (#1876).
 		"ref_card_button",
@@ -650,6 +651,9 @@ func formModuleYAMLSchema() *yamlLintSchema {
 		// документированный «language» у kind: ПолеКода не давал примеру
 		// пройти собственную проверку (#1014).
 		"orientation", "equal_columns", "background", "text_bold", "input_mask", "language", "virtual_columns",
+		// Оформление группы: заголовок и рамка. Оба ключа читает рендер
+		// (GroupTitleVisible/GroupBordered), оба включены по умолчанию.
+		"show_title", "bordered",
 		"deadline_warn",
 		"conceal", "reveal_when",
 		"title_from",

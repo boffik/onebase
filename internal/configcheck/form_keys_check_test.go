@@ -9,6 +9,10 @@ import (
 	"github.com/ivantit66/onebase/internal/project"
 )
 
+// groupFrameBool — значение ключа оформления группы (show_title/bordered):
+// указатель отличает снятую галку от отсутствующего ключа.
+func groupFrameBool(v bool) *bool { return &v }
+
 func formKeysProject(elements ...*metadata.FormElement) *project.Project {
 	city := &metadata.Entity{
 		Name: "АдресныйКлассификатор", Kind: metadata.KindCatalog, Hierarchical: true,
@@ -102,9 +106,20 @@ func TestCheckFormKeyPlacementWarnsAboutIgnoredKeys(t *testing.T) {
 		{"ключи подбора у строкового поля", &metadata.FormElement{
 			Kind: metadata.FormElementField, Name: "ПолеКомментарий", DataPath: "Объект.Комментарий", ChoiceDropdown: &collapsed,
 		}, "не выбирает ссылку"},
+		{"ввод по строке у строкового поля", &metadata.FormElement{
+			Kind: metadata.FormElementField, Name: "ПолеКомментарий", DataPath: "Объект.Комментарий", InputByString: true,
+		}, "input_by_string"},
+		{"ввод по строке вместе с маской", &metadata.FormElement{
+			Kind: metadata.FormElementField, Name: "ПолеФилиал", DataPath: "Объект.Филиал", InputByString: true, InputMask: "00",
+		}, "input_mask"},
 		{"группы у неиерархического справочника", &metadata.FormElement{
 			Kind: metadata.FormElementField, Name: "ПолеФилиал", DataPath: "Объект.Филиал", ChoiceFolders: true,
 		}, "нет иерархии"},
+		// Заголовок и рамку рисует только группа: у поля эти ключи молчат.
+		{"оформление группы у поля", &metadata.FormElement{
+			Kind: metadata.FormElementField, Name: "ПолеКомментарий", DataPath: "Объект.Комментарий",
+			ShowTitle: groupFrameBool(false),
+		}, "show_title/bordered"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -117,8 +132,11 @@ func TestCheckFormKeyPlacementWarnsAboutIgnoredKeys(t *testing.T) {
 
 	good := formKeysProject(
 		&metadata.FormElement{Kind: metadata.FormElementGroupBox, Name: "Действия", Orientation: "horizontal", ScrollX: true},
+		&metadata.FormElement{Kind: metadata.FormElementGroupBox, Name: "БезРамки", Bordered: groupFrameBool(false)},
+		&metadata.FormElement{Kind: metadata.FormElementGroupBox, Name: "БезЗаголовка", ShowTitle: groupFrameBool(false)},
 		&metadata.FormElement{Kind: metadata.FormElementButton, Name: "КнОК", Primary: true},
 		&metadata.FormElement{Kind: metadata.FormElementField, Name: "ПолеГород", DataPath: "Объект.НаселённыйПункт", ChoiceFolders: true, ChoiceDropdown: &collapsed},
+		&metadata.FormElement{Kind: metadata.FormElementField, Name: "ПолеФилиал", DataPath: "Объект.Филиал", InputByString: true},
 	)
 	if warns := CheckFormKeyPlacement(good); len(warns) != 0 {
 		t.Fatalf("корректные объявления получили предупреждение: %s", messages(warns))

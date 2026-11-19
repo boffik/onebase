@@ -536,6 +536,25 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		"choiceDropdownCollapsed": func(element *metadata.FormElement) bool {
 			return element != nil && element.ChoiceDropdown != nil && !*element.ChoiceDropdown
 		},
+		// refOptionLabel — подпись текущего значения ссылочного поля для видимого
+		// текста ввода по строке (input_by_string). Значение хранится UUID, а
+		// оператору нужен текст: берём подпись варианта, загруженного сервером;
+		// варианта нет (значение вне отбора или страницы) — пусто, и тогда поле
+		// остаётся пустым, а не показывает UUID.
+		"refOptionLabel": func(ctx map[string]any, element *metadata.FormElement, field string) string {
+			selected := formContextValue(ctx, field)
+			if selected == "" {
+				return ""
+			}
+			for _, row := range managedRefOptionRows(ctx, element, field) {
+				if refValueString(row["id"]) == selected {
+					if label, _ := row["_label"].(string); label != "" {
+						return label
+					}
+				}
+			}
+			return ""
+		},
 		// adminOnlyLocked — поле заперто, потому что смотрит не администратор.
 		// Тот же запрет входит в ответы событий формы и в разбор записи: иначе
 		// ложное readonly_when разблокировало бы поле после первого round trip.
@@ -682,6 +701,18 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		},
 		"elBackground": func(el *metadata.FormElement) template.CSS {
 			return template.CSS(metadata.FormElementBackgroundCSS(el)) //nolint:gosec // G203: значение прошло csssafe.Color, иначе пустая строка
+		},
+		// elGroupStyle — style группы: фон и раскладка. Рамки и внутренних отступов
+		// здесь НЕТ: они в CSS (.form-group-box и .ob-group-plain), иначе ключ
+		// bordered: false не мог бы их снять (inline-стиль сильнее класса), а вид
+		// формы — переопределить оформление группы своим.
+		"elGroupStyle": func(el *metadata.FormElement) template.CSS {
+			return template.CSS(metadata.FormElementBackgroundCSS(el) + metadata.FormElementLayoutCSS(el)) //nolint:gosec // G203: оба слагаемых нормализованы (csssafe.Color и словари раскладки)
+		},
+		// groupPlainClass — класс группы без рамки: одна строка на шаблон,
+		// холст и предпросмотр конструктора (metadata.FormGroupPlainClass).
+		"groupPlainClass": func() string {
+			return metadata.FormGroupPlainClass
 		},
 		"elFill": func(el *metadata.FormElement) bool {
 			return metadata.FormElementFillsHeight(el)
@@ -1518,7 +1549,7 @@ func templateSource() string {
 
 const tplHead = `
 {{define "head"}}<!DOCTYPE html>
-<html lang="ru"><head><meta charset="UTF-8">
+<html lang="ru"{{if .Cfg.NewStyleFormStyle}} class="ob-style-new"{{end}}><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1e293b">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -1544,6 +1575,7 @@ const tplHead = `
   "imageArea" (t (or $.Lang "ru") "Область просмотра изображения")
 )}}</script>
 {{messagesMeta .}}<script src="/static/ui.js"></script>
+{{if .Cfg.NewStyleFormStyle}}<link rel="stylesheet" href="/static/theme-new-style.css">{{end}}
 <style>
 .ob-embedded .topbar,.ob-embedded .subsys-bar,.ob-embedded #ob-nav{display:none!important}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2644,7 +2676,7 @@ const tplForm = `
 {{end}}
 {{end}}{{/* end if not .IsPopup */}}
 
-<div class="card">
+<div class="card ob-form-card">
 <form id="main-form" method="POST" autocomplete="off" data-ob-dirty-watch="1"{{if enterSubmitsForm (index . "Form")}} data-ob-enter-submits="1"{{end}}>
 {{if and (not .IsNew) (index .Values "_version")}}<input type="hidden" name="_version" value="{{index .Values "_version"}}">{{end}}
 {{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}
