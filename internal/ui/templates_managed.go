@@ -32,8 +32,19 @@ const tplManagedForm = `
 {{/* Кнопка, скрытая hidden_when при отрисовке, рисуется с display:none, а не пропускается: иначе после события формы, снявшего условие, показать её нечем — «Утвердить» после «ОК» появлялась только при повторном открытии. Остальные виды пока пропускаются (поля — #1914). Защитой hidden_when не служит: событие кнопки сервер принимает и без неё в разметке. */}}
 {{if and (elHidden $ctx $el) (ne (str $el.Kind) "Кнопка")}}
 {{else if eq (str $el.Kind) "ГруппаФормы"}}
-  <fieldset class="form-group-box{{if eq $el.Orientation "horizontal"}} managed-group-horizontal{{end}}{{if $el.ScrollX}} managed-group-scrollx{{end}}{{if $el.UsesEqualColumns}} ob-equal-columns{{end}}" data-ob-el="{{$el.Name}}"{{with elPath $ctx $el}} data-ob-el-path="{{.}}"{{end}} style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;{{elBackground $el}}{{elLayout $el}}">
-    {{if $el.TitleMap}}<legend style="font-weight:600;color:#475569;padding:0 6px;font-size:13px">{{fieldTitleRU $el.TitleMap $el.Name}}</legend>{{end}}
+  {{/* Вариант группировки вешается классом всегда: managed-group-horizontal у
+       горизонтальной группы, managed-group-vertical у остальных (в том числе
+       когда ключ не задан — раскладка тогда вертикальная, как была). Класс
+       вертикали в обычном виде ничего не меняет, а в новом задаёт минимальный шаг
+       между элементами столбца.
+       Рамка и внутренние отступы заданы правилом .form-group-box, а не inline-
+       стилем: иначе ключ bordered: false не мог бы их снять (inline сильнее
+       класса) и вид формы не мог бы переопределить оформление группы. Заголовок
+       убирает show_title: false.
+       Вложенность рендерится рекурсией: каждая группа раскладывает только своих
+       детей, и вариант родителя на вложенную группу не переносится. */}}
+  <fieldset class="form-group-box{{if $el.HorizontalGrouping}} managed-group-horizontal{{else}} managed-group-vertical{{end}}{{if $el.ScrollX}} managed-group-scrollx{{end}}{{if $el.UsesEqualColumns}} ob-equal-columns{{end}}{{if not $el.GroupBordered}} {{groupPlainClass}}{{end}}" data-ob-el="{{$el.Name}}"{{with elPath $ctx $el}} data-ob-el-path="{{.}}"{{end}}{{with elGroupStyle $el}} style="{{.}}"{{end}}>
+    {{if and $el.TitleMap $el.GroupTitleVisible}}<legend style="font-weight:600;color:#475569;padding:0 6px;font-size:13px">{{fieldTitleRU $el.TitleMap $el.Name}}</legend>{{end}}
     <div class="managed-group-body">
       {{range $el.Children}}{{template "managed-element" (dict "El" . "Ctx" $ctx)}}{{end}}
     </div>
@@ -100,12 +111,28 @@ const tplManagedForm = `
     {{if $f}}
       {{if isRef (str $f.Type)}}
         <div class="managed-control-row" style="display:flex;gap:6px;align-items:center">
-          <select class="managed-fill-control" id="ref-{{$fn}}" name="{{$fn}}" style="flex:1" data-ref-entity="{{$f.RefEntity}}"{{with $el.ReferencePage}} data-ref-page="{{.}}"{{end}}{{if $ctx.RefFilter}}{{with index $ctx.RefFilter $fn}} data-ref-filter="{{.}}"{{end}}{{end}}{{if $choiceCtx}} data-ref-choice-context="{{$choiceCtx}}"{{end}}{{if choiceDropdownCollapsed $el}} data-ref-choice-dropdown="false"{{end}}{{if $el.ChoiceContext}} data-ref-context="{{choiceContextJSON $el}}" data-ref-element="{{$el.Name}}" data-ref-source-entity="{{$ctx.Entity.Name}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if and ($f.InlineCreateEnabled false) (refWriteAllowed $ctx.RefWriteAccess $f.RefEntity)}} data-ref-allow-create="1"{{end}}{{if $ro}} disabled{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+          {{/* input_by_string: <select> остаётся носителем значения (UUID) и всей
+               прочей механики — кнопка подбора, отбор и зеркало readonly находят
+               его здесь же. Видимое текстовое поле и выпадающий список создаёт
+               managed.js; он же прячет select. Без JS поле остаётся обычным
+               списком, а не пустым вводом. native required переезжает на текст:
+               скрытый select браузер не может сфокусировать. */}}
+          <select class="managed-fill-control" id="ref-{{$fn}}" name="{{$fn}}" style="flex:1" data-ref-entity="{{$f.RefEntity}}"{{if $el.InputByString}} data-ob-ref-typing="1"{{end}}{{with $el.ReferencePage}} data-ref-page="{{.}}"{{end}}{{if $ctx.RefFilter}}{{with index $ctx.RefFilter $fn}} data-ref-filter="{{.}}"{{end}}{{end}}{{if $choiceCtx}} data-ref-choice-context="{{$choiceCtx}}"{{end}}{{if choiceDropdownCollapsed $el}} data-ref-choice-dropdown="false"{{end}}{{if $el.ChoiceContext}} data-ref-context="{{choiceContextJSON $el}}" data-ref-element="{{$el.Name}}" data-ref-source-entity="{{$ctx.Entity.Name}}"{{end}}{{if and $req (not $ro) (not $el.InputByString)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if and ($f.InlineCreateEnabled false) (refWriteAllowed $ctx.RefWriteAccess $f.RefEntity)}} data-ref-allow-create="1"{{end}}{{if $ro}} disabled{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
             <option value="">{{if $ro}}—{{else}}— выбрать —{{end}}</option>
             {{range managedRefOptions $ctx $el $fn}}
             <option value="{{index . "id"}}"{{refOptionStyle .}}{{if index . "_choice_outside_filter"}} data-ob-choice-outside-filter="1"{{end}} {{if eq (index . "id") (index $ctx.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
+          {{if $el.InputByString}}
+          {{/* Видимый ввод по строке: пока скрипт не отработал, поле остаётся
+               обычным списком (прогрессивное улучшение) — managed.js прячет
+               select и показывает этот ввод. Одно совпадение подставляется
+               само, пустая выдача пишет «не найдено». */}}
+          <div class="ob-ref-combo" style="position:relative;flex:1;min-width:0;display:none">
+            <input type="text" autocomplete="off" class="managed-fill-control" style="width:100%" value="{{refOptionLabel $ctx $el $fn}}" data-ob-ref-text="ref-{{$fn}}" placeholder="{{t $ctx.Lang "Начните вводить наименование"}}"{{if and $req (not $ro)}} required{{end}}{{if $ro}} readonly{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}>
+            <div class="ob-ref-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #e2e8f0;border-radius:7px;box-shadow:0 6px 16px rgba(15,23,42,.16);max-height:240px;overflow-y:auto;font-size:13px"></div>
+          </div>
+          {{end}}
           {{/* Нередактируемому полю кнопка подбора не нужна — выбирать нечего, а
                серая «…» рядом заставляет читать значение как незаполненный ввод.
                «Открыть карточку» остаётся и остаётся РАБОЧЕЙ: посмотреть связанный
@@ -130,7 +157,8 @@ const tplManagedForm = `
         </select>
         {{if or $ro $el.ReadOnlyWhen}}<input type="hidden" name="{{$fn}}" value="{{index $ctx.Values $fn}}" id="ro-mirror-{{$fn}}" data-ob-ro-mirror="1"{{if not $ro}} disabled{{end}}>{{end}}
       {{else if eq (str $f.Type) "date"}}
-        <input type="datetime-local" step="1" name="{{$fn}}" value="{{index $ctx.Values $fn}}"{{if gt $el.DeadlineWarn 0}} data-ob-deadline="{{$el.DeadlineWarn}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+        {{if eq $el.DateMode "date"}}{{$dateValue := tpDateInput (index $ctx.Values $fn)}}<input type="date" name="{{$fn}}" value="{{if ge (len $dateValue) 10}}{{slice $dateValue 0 10}}{{else}}{{$dateValue}}{{end}}"{{if gt $el.DeadlineWarn 0}} data-ob-deadline="{{$el.DeadlineWarn}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+        {{else}}<input type="datetime-local" step="1" name="{{$fn}}" value="{{index $ctx.Values $fn}}"{{if gt $el.DeadlineWarn 0}} data-ob-deadline="{{$el.DeadlineWarn}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>{{end}}
       {{else if eq (str $f.Type) "bool"}}
         <select name="{{$fn}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} disabled{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
           <option value="false" {{if eq (index $ctx.Values $fn) "false"}}selected{{end}}>Нет</option>
@@ -201,12 +229,19 @@ const tplManagedForm = `
              пустой select, теряющий текущее значение при записи. Нет опций —
              остаётся прежний текстовый ввод со значением. */}}
         <div class="managed-control-row" style="display:flex;gap:6px;align-items:center">
-          <select class="managed-fill-control" id="ref-{{$fn}}" name="{{$fn}}" style="flex:1" data-ref-entity="{{attrRefEntity $attr.TypeRef}}"{{with $el.ReferencePage}} data-ref-page="{{.}}"{{end}}{{if $ctx.RefFilter}}{{with index $ctx.RefFilter $fn}} data-ref-filter="{{.}}"{{end}}{{end}}{{if $choiceCtx}} data-ref-choice-context="{{$choiceCtx}}"{{end}}{{if choiceDropdownCollapsed $el}} data-ref-choice-dropdown="false"{{end}}{{if $el.ChoiceContext}} data-ref-context="{{choiceContextJSON $el}}" data-ref-element="{{$el.Name}}" data-ref-source-entity="{{$ctx.Entity.Name}}"{{end}}{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} disabled{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+          <select class="managed-fill-control" id="ref-{{$fn}}" name="{{$fn}}" style="flex:1" data-ref-entity="{{attrRefEntity $attr.TypeRef}}"{{if $el.InputByString}} data-ob-ref-typing="1"{{end}}{{with $el.ReferencePage}} data-ref-page="{{.}}"{{end}}{{if $ctx.RefFilter}}{{with index $ctx.RefFilter $fn}} data-ref-filter="{{.}}"{{end}}{{end}}{{if $choiceCtx}} data-ref-choice-context="{{$choiceCtx}}"{{end}}{{if choiceDropdownCollapsed $el}} data-ref-choice-dropdown="false"{{end}}{{if $el.ChoiceContext}} data-ref-context="{{choiceContextJSON $el}}" data-ref-element="{{$el.Name}}" data-ref-source-entity="{{$ctx.Entity.Name}}"{{end}}{{if and $req (not $ro) (not $el.InputByString)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} disabled{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
             <option value="">{{if $ro}}—{{else}}— выбрать —{{end}}</option>
             {{range managedRefOptions $ctx $el $fn}}
             <option value="{{index . "id"}}"{{refOptionStyle .}}{{if index . "_choice_outside_filter"}} data-ob-choice-outside-filter="1"{{end}} {{if eq (index . "id") (index $ctx.Values $fn)}}selected{{end}}>{{index . "_label"}}</option>
             {{end}}
           </select>
+          {{if $el.InputByString}}
+          {{/* Видимый ввод по строке (см. ветку поля сущности): скрипт прячет select и показывает этот ввод; без скрипта остаётся список. */}}
+          <div class="ob-ref-combo" style="position:relative;flex:1;min-width:0;display:none">
+            <input type="text" autocomplete="off" class="managed-fill-control" style="width:100%" value="{{refOptionLabel $ctx $el $fn}}" data-ob-ref-text="ref-{{$fn}}" placeholder="{{t $ctx.Lang "Начните вводить наименование"}}"{{if and $req (not $ro)}} required{{end}}{{if $ro}} readonly{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}>
+            <div class="ob-ref-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #e2e8f0;border-radius:7px;box-shadow:0 6px 16px rgba(15,23,42,.16);max-height:240px;overflow-y:auto;font-size:13px"></div>
+          </div>
+          {{end}}
           <button type="button" data-ob-ref-picker="closest"{{if $ro}} disabled{{end}} style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px">…</button>
           {{if and (or (not $ro) (index $ctx.Values $fn)) (not (hideRefCard $ctx $el)) (refHasCard (attrRefEntity $attr.TypeRef))}}
           <button type="button" data-ob-ref-current="closest" data-ob-readonly-navigation="1" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;cursor:pointer;font-size:13px" title="Открыть карточку">🔍</button>
@@ -380,7 +415,7 @@ const tplManagedForm = `
         <th style="width:40px"></th>
       </tr>
     </thead>
-    <tbody id="tp-body-{{$tpName}}" {{if $ctx.HideRefCard}}data-tp-hide-ref-card="1" {{end}}{{if $tpCmds}}data-tp-cmd="1" {{end}}{{if $tpReadOnly}}data-ob-table-readonly="1" {{end}}data-tp-choice="{{jsJSON (tpChoiceContexts $ctx $el)}}" data-tp-fields="{{managedTPFieldsAttr $tpPlan}}" data-tp-hidden-cols="{{managedTPHiddenColsJSON $tpPlan}}" data-tp-virtual-cols="{{managedTPVirtualNamesJSON $tpVirtualCols}}">
+    <tbody id="tp-body-{{$tpName}}" {{if $ctx.HideRefCard}}data-tp-hide-ref-card="1" {{end}}{{if $tpCmds}}data-tp-cmd="1" {{end}}{{if $tpReadOnly}}data-ob-table-readonly="1" {{end}}data-tp-choice="{{jsJSON (tpChoiceContexts $ctx $el)}}" data-tp-fields="{{managedTPFieldsAttr $tpPlan}}" data-tp-date-modes="{{managedTPDateModesJSON $tpPlan}}" data-tp-hidden-cols="{{managedTPHiddenColsJSON $tpPlan}}" data-tp-virtual-cols="{{managedTPVirtualNamesJSON $tpVirtualCols}}">
     {{range $i, $row := $tpRows}}
       <tr{{with formRowClass $row}} class="{{.}}"{{end}} tabindex="-1" aria-selected="false">
         {{if $tpCmds}}<td style="text-align:center"><input type="checkbox" class="_tp-sel"{{if $tpReadOnly}} disabled{{end}}></td>{{end}}
@@ -418,7 +453,8 @@ const tplManagedForm = `
                  в сетке и в списке («19.10.2026 09:15:30»: поле даты браузер
                  показал бы с запятой и календарём); иначе — поле даты, как в
                  шапке, шаг в секунду — правка строки не отрежет секунды. */}}
-            {{if $tpReadOnly}}<input type="text" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{fmtDate $v}}" disabled data-ob-date-text>{{else}}<input type="datetime-local" step="1" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{tpDateInput $v}}" data-ob-recalc-tp-row>{{end}}
+            {{$dateValue := tpDateInput $v}}
+            {{if $tpReadOnly}}<input type="text" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{fmtDate $v}}" disabled data-ob-date-text>{{else if and $c.Element (eq $c.Element.DateMode "date")}}<input type="date" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{if ge (len $dateValue) 10}}{{slice $dateValue 0 10}}{{else}}{{$dateValue}}{{end}}" data-ob-recalc-tp-row>{{else}}<input type="datetime-local" step="1" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="{{$dateValue}}" data-ob-recalc-tp-row>{{end}}
           {{else if eq (str $f.Type) "bool"}}
             <input type="checkbox" name="tp.{{$tpName}}.{{$i}}.{{$f.Name}}" value="true"{{if checked $v}} checked{{end}}{{if $tpReadOnly}} disabled{{end}}>
           {{else}}
@@ -514,7 +550,8 @@ const tplManagedForm = `
   {{$dv := index $ctx.Values $fn}}
   {{if $el.HiddenWhen}}<fieldset class="form-group ob-managed-control{{if elFill $el}} ob-el-fill{{end}}{{if $el.TextBold}} ob-text-bold{{end}}" data-ob-el="{{$el.Name}}" data-ob-control-fieldset="1"{{with elPath $ctx $el}} data-ob-el-path="{{.}}"{{end}}{{if elHiddenStyle $ctx $el}} disabled{{end}}{{with elLayoutEx $ctx $el}} style="{{.}}"{{end}}>{{else}}<div class="form-group{{if elFill $el}} ob-el-fill{{end}}{{if $el.TextBold}} ob-text-bold{{end}}" data-ob-el="{{$el.Name}}"{{with elPath $ctx $el}} data-ob-el-path="{{.}}"{{end}}{{with elLayout $el}} style="{{.}}"{{end}}>{{end}}
     <label>{{fieldTitleRU $el.TitleMap $fn}}{{if $effectiveReq}} <span style="color:#dc2626">*</span>{{end}}{{if and $el.Hint (not $el.HintInline)}} <span class="ob-hint" title="{{$el.Hint}}" aria-label="{{$el.Hint}}">ⓘ</span>{{end}}</label>
-    <input type="date" name="{{$fn}}" value="{{if ge (len $dv) 10}}{{slice $dv 0 10}}{{else}}{{$dv}}{{end}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+    {{if eq $el.DateMode "datetime"}}<input type="datetime-local" step="1" name="{{$fn}}" value="{{tpDateInput $dv}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>
+    {{else}}<input type="date" name="{{$fn}}" value="{{if ge (len $dv) 10}}{{slice $dv 0 10}}{{else}}{{$dv}}{{end}}"{{if and $req (not $ro)}} required{{end}}{{if $el.AccessKey}} accesskey="{{$el.AccessKey}}"{{end}}{{if $ro}} readonly{{end}}{{if and $roUnlockable $hChg}} data-ob-fire-change="{{$el.Name}}"{{end}}>{{end}}
     {{if and $el.Hint $el.HintInline}}<small style="color:#94a3b8;font-size:11px">{{$el.Hint}}</small>{{end}}
   {{if $el.HiddenWhen}}</fieldset>{{else}}</div>{{end}}
 {{else if eq (str $el.Kind) "Переключатель"}}
@@ -575,6 +612,15 @@ const tplManagedForm = `
 input.ob-deadline-soon,.form-group input.ob-deadline-soon[readonly]{background:#fef3c7 !important;border-color:#f59e0b !important;color:#92400e !important}
 input.ob-deadline-over,.form-group input.ob-deadline-over[readonly]{background:#fee2e2 !important;border-color:#ef4444 !important;color:#991b1b !important;font-weight:600}
 .ob-managed-control{border:0;padding:0;min-width:0}
+/* Рамка и внутренние отступы группы. Раньше они стояли inline-стилем, и ключ
+   bordered: false не мог их снять. Селектор с именем элемента (fieldset) выбран
+   намеренно: правила медиазапроса ниже (.form-group-box{padding:10px 12px})
+   специфичностью не выше, а inline-стиль раньше их и вовсе перебивал — то есть
+   на узком экране оформление группы обязано остаться прежним, а не «поехать»
+   оттого, что ключ перестал быть inline. */
+fieldset.form-group-box{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px}
+/* Группа без рамки: остаётся только раскладка детей. */
+fieldset.form-group-box.ob-group-plain{border:0;border-radius:0;padding:0}
 .managed-group-horizontal>.managed-group-body{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 /* scroll_x: ряд действий не рвётся на вторую строку, а прокручивается. */
 .managed-group-scrollx>.managed-group-body{flex-wrap:nowrap;overflow-x:auto}
@@ -816,7 +862,7 @@ select[data-ref-choice-context][data-ob-choice-error="1"]{border-color:#dc2626;b
 </div>
 {{end}}
 
-<div class="card">
+<div class="card ob-form-card">
 <form id="main-form" method="POST" autocomplete="off"{{if .ConcealContext}} data-ob-conceal-context="{{.ConcealContext}}" action="{{.ConcealAction}}"{{end}} data-ob-grid-sync{{if enterSubmitsForm (index . "Form")}} data-ob-enter-submits="1"{{end}} {{if .IsProcessor}}action="/ui/processor/{{lower .Processor.Name}}" enctype="multipart/form-data"{{end}}>
 {{if and (not .IsNew) (index .Values "_version")}}<input type="hidden" name="_version" value="{{index .Values "_version"}}">{{end}}
 {{if .IsPopup}}<input type="hidden" name="_popup" value="1">{{end}}

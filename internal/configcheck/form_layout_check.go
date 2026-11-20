@@ -72,6 +72,14 @@ type layoutDiagnostic struct{ code, msg, fix string }
 
 func layoutDiagnostics(el *metadata.FormElement) []layoutDiagnostic {
 	var out []layoutDiagnostic
+	if el.DateMode != "" && el.DateMode != metadata.FormDateModeDate && el.DateMode != metadata.FormDateModeDateTime {
+		out = append(out, layoutDiagnostic{
+			code: "form.date-mode",
+			msg: fmt.Sprintf("date_mode: %q — вариант даты не из словаря",
+				strings.TrimSpace(el.DateMode)),
+			fix: "Допустимые значения: " + metadata.FormDateModeDateTime + ", " + metadata.FormDateModeDate + ".",
+		})
+	}
 	if el.EqualColumns && !el.UsesEqualColumns() {
 		out = append(out, layoutDiagnostic{
 			code: "form.equal-columns",
@@ -94,6 +102,14 @@ func layoutDiagnostics(el *metadata.FormElement) []layoutDiagnostic {
 			msg: fmt.Sprintf("valign: %q — значение не из словаря, выравнивание не применится",
 				strings.TrimSpace(el.VerticalAlign)),
 			fix: "Допустимые значения: " + strings.Join(metadata.FormVAlignValues, ", ") + " (middle — синоним center).",
+		})
+	}
+	if _, ok := metadata.NormalizeFormGroupOrientation(el.Orientation); !ok {
+		out = append(out, layoutDiagnostic{
+			code: "form.layout-orientation",
+			msg: fmt.Sprintf("orientation: %q — значение не из словаря, группа разложит детей вертикально",
+				strings.TrimSpace(el.Orientation)),
+			fix: "Допустимые значения: " + strings.Join(metadata.FormGroupOrientationValues, ", ") + ".",
 		})
 	}
 	out = append(out, layoutSizeDiagnostic("width", el.Width)...)
