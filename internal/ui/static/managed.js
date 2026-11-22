@@ -808,6 +808,7 @@ window.obManagedApplyColumnTitles = obManagedApplyColumnTitles;
         if (refIdx >= 0) return { name: name, type: rest.slice(0, refIdx), ref: rest.slice(refIdx + 1) };
         return { name: name, type: rest, ref: '' };
       });
+      var dateModes = JSON.parse(tbody.getAttribute('data-tp-date-modes') || '{}') || {};
       const virtualNames = obManagedVirtualColumnNames(tbody);
       const hiddenNames = obManagedHiddenColumnNames(tbody);
       const rows = tps[tpName] || [];
@@ -966,9 +967,13 @@ window.obManagedApplyColumnTitles = obManagedApplyColumnTitles;
                 inp.value = window.obManagedDateText(v);
                 inp.setAttribute('data-ob-date-text', '');
               } else {
-                inp.type = 'datetime-local';
-                inp.step = '1';
-                inp.value = window.obManagedDateInputValue(v);
+                inp.type = dateModes[f.name] === 'date' ? 'date' : 'datetime-local';
+                if (inp.type === 'date') {
+                  inp.value = window.obManagedDateInputValue(v).slice(0, 10);
+                } else {
+                  inp.step = '1';
+                  inp.value = window.obManagedDateInputValue(v);
+                }
               }
             } else {
               inp.type = 'text';
@@ -2633,7 +2638,9 @@ function obManagedAddTpRow(btn) {
   var nums = meta.filter(function (f) { return f.type === 'number'; }).map(function (f) { return f.name; });
   var bools = meta.filter(function (f) { return f.type === 'bool'; }).map(function (f) { return f.name; });
   var dates = meta.filter(function (f) { return f.type === 'date'; }).map(function (f) { return f.name; });
-  addTpRow(tpName, fields, nums, tbody.rows.length, tbody, obManagedVirtualColumnNames(tbody), bools, dates);
+  var dateModes = JSON.parse(tbody.getAttribute('data-tp-date-modes') || '{}') || {};
+  var dateOnly = Object.keys(dateModes).filter(function (name) { return dateModes[name] === 'date'; });
+  addTpRow(tpName, fields, nums, tbody.rows.length, tbody, obManagedVirtualColumnNames(tbody), bools, dates, dateOnly);
   // Новая строка строится по data-tp-fields, где скрытые колонки перечислены
   // наравне с показываемыми (без них значения не уехали бы на сервер). Прячем
   // их ячейки так же, как это делают первичный рендер и applyTableParts.
@@ -3779,12 +3786,13 @@ function obGridColumnIds(columns) {
   // умеющий только день, молча обнулял бы его при каждой правке строки.
   function ObDateEditor(args) {
     var input, defaultValue = '';
+    var dateOnly = args.column.dateMode === 'date';
     this.init = function() {
       input = document.createElement('input');
-      input.type = 'datetime-local';
+      input.type = dateOnly ? 'date' : 'datetime-local';
       // Шаг в секунду, как у поля даты в шапке: иначе значение с секундами
       // не проходит проверку поля, а без секунд правка строки отрезала бы их.
-      input.step = '1';
+      if (!dateOnly) input.step = '1';
       input.className = 'editor-text';
       input.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:2px 4px;font-size:13px';
       args.container.appendChild(input);
@@ -3797,9 +3805,9 @@ function obGridColumnIds(columns) {
     this.setValue = function(val) { input.value = (val == null) ? '' : String(val); };
     this.loadValue = function(item) {
       var parts = obManagedSplitDate(item[args.column.field]);
-      input.value = parts
-        ? (parts.date + 'T' + (parts.time || '00:00') + (parts.seconds ? ':' + parts.seconds : ''))
-        : '';
+      input.value = parts ? (dateOnly
+        ? parts.date
+        : parts.date + 'T' + (parts.time || '00:00') + (parts.seconds ? ':' + parts.seconds : '')) : '';
       // Браузер нормализует значение (нулевые секунды опускает), поэтому
       // «не изменено» сверяется с тем, что поле показало, а не с исходной строкой.
       defaultValue = input.value;
@@ -3810,8 +3818,8 @@ function obGridColumnIds(columns) {
     this.applyValue = function(item, state) { item[args.column.field] = state; };
     this.isValueChanged = function() { return String(input.value) !== String(defaultValue); };
     this.validate = function() {
-      // Браузер сам не пускает в datetime-local произвольный текст, но
-      // значение может прийти вставкой. Пустое допустимо — это очистка.
+      // Значение может прийти вставкой, несмотря на нативный редактор даты.
+      // Пустое допустимо — это очистка.
       if (input.value === '' || obManagedSplitDate(input.value)) return {valid: true, msg: null};
       return {valid: false, msg: 'Недопустимая дата «' + input.value + '»'};
     };
@@ -5307,6 +5315,386 @@ document.addEventListener('DOMContentLoaded', function () {
     window.history.replaceState(window.history.state, '', url.toString());
   }
 });
+
+// ─── Ввод по строке у ссылочного поля (input_by_string) ─────────────────────
+//
+// Реквизит формы ссылается на элемент справочника, и включать «ввод по строке»
+// иногда нужно именно здесь: оператор знает наименование, а список из первых
+// пятидесяти записей ему ничего не говорит. Ключ вешается на элемент формы и
+// по умолчанию выключен, поэтому вид существующих полей не меняется.
+//
+// Устройство: <select> остаётся НОСИТЕЛЕМ ЗНАЧЕНИЯ — в нём UUID, его отправляет
+// форма, к нему привязаны кнопка подбора, отбор (data-ref-filter), контекст
+// выбора и зеркало readonly. Поверх списка ставится текстовое поле: набирается
+// наименование, варианты приходят с сервера (/ui/_ref-options/<entity>?by=name),
+// выбирается один — он попадает в select, и в форму уходит ссылка. Так ключ не
+// заводит второй способ хранения значения, и всё остальное поведение поля
+// остаётся прежним.
+//
+// Порог ввода — три символа: более короткая подстрока совпадает почти со всем
+// справочником, и список был бы бесполезен, а запрос дорогим. Тот же порог
+// проверяет сервер (refInputByStringMinChars). Одно совпадение подставляется
+// само; пустая выдача пишет «не найдено».
+function obRefTypingMin() {
+  return 3;
+}
+
+// obRefTypingMatches — сколько символов нужно набрать. Считаются символы, а не
+// байты: предел тот же, что у сервера (utf8.RuneCountInString).
+function obRefTypingReady(text, min) {
+  return Array.from(String(text == null ? '' : text).trim()).length >= (min || 3);
+}
+
+// obRefTypingLabel — подпись варианта. Всегда текст: подсказка — это строка в
+// списке, и объект вместо неё показал бы «[object Object]».
+function obRefTypingLabel(row) {
+  if (!row) return '';
+  var label = row._label != null ? row._label : row.label;
+  return label == null ? '' : String(label);
+}
+
+// obRefTypingDecide — что делать с ответом сервера на набранный текст.
+// Один вариант — подставляем сразу (как в 1С), несколько — показываем список,
+// ни одного — пишем «не найдено».
+function obRefTypingDecide(rows) {
+  var items = Array.isArray(rows) ? rows : [];
+  if (items.length === 0) return {kind: 'empty', items: items};
+  if (items.length === 1) return {kind: 'single', items: items};
+  return {kind: 'list', items: items};
+}
+
+// obRefTypingMount — превращает select ссылочного поля с data-ob-ref-typing во
+// «ввод по строке»: прячет список, показывает текстовое поле и рисует
+// выпадающую подсказку. Без этого ключ ничего бы не менял в интерфейсе.
+function obRefTypingMount(select) {
+  if (!select || select.getAttribute('data-ob-ref-typing') !== '1' || select._obRefTyping) return null;
+  var combo = select.parentNode && select.parentNode.querySelector('.ob-ref-combo');
+  if (!combo) return null;
+  var input = combo.querySelector('[data-ob-ref-text]');
+  var list = combo.querySelector('.ob-ref-suggest');
+  if (!input || !list) return null;
+
+  var min = obRefTypingMin(select);
+  var seq = 0;
+  var timer = null;
+  var active = -1;
+  var shown = [];
+
+  // Сервер ищет по реквизиту «Наименование» (by=name). Отбор подбора и права
+  // остаются теми же, что у обычного подбора: подсказка показывает ровно те
+  // записи, которые поле вправе выбрать.
+  //
+  // У поля с choice_filter запрос идёт с контекстом выбора (form_entity/form/
+  // element/sources) — иначе подсказка показала бы записи вне отбора, а
+  // выбранная из неё ссылка нарушила бы условие подбора. Этот же контракт
+  // использует форма подбора (ui.js, obRefChoiceQuery).
+  function requestUrl(q) {
+    var entity = select.getAttribute('data-ref-entity') || '';
+    if (!entity) return '';
+    var url = '/ui/_ref-options/' + encodeURIComponent(entity) +
+      '?limit=20&by=name&q=' + encodeURIComponent(q || '');
+    var choice = '';
+    if (typeof window.obRefChoiceQuery === 'function') {
+      try {
+        choice = window.obRefChoiceQuery(select) || '';
+      } catch (e) {
+        choice = '';
+      }
+    }
+    if (!choice) return url + (typeof window.obRefFilterParam === 'function' ? window.obRefFilterParam(select) : '');
+    // Сервер разрешает контекст выбора по идентичности формы и элемента, а она
+    // известна только у управляемой формы; иначе контекст не примут, и подсказка
+    // промолчит. Это не поломка: поле с зависимым подбором остаётся списком,
+    // а если контекст разрешим — поиск идёт по допустимым записям.
+    return url + choice;
+  }
+
+  function closeList() {
+    list.style.display = 'none';
+    list.innerHTML = '';
+    active = -1;
+    shown = [];
+  }
+
+  function paintActive() {
+    var nodes = list.querySelectorAll('[data-idx]');
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].style.background = (i === active) ? '#eef2ff' : '';
+    }
+    if (active >= 0 && nodes[active] && nodes[active].scrollIntoView) {
+      nodes[active].scrollIntoView({block: 'nearest'});
+    }
+  }
+
+  function renderRows(rows) {
+    list.innerHTML = '';
+    for (var i = 0; i < rows.length; i++) {
+      var row = document.createElement('div');
+      row.setAttribute('data-idx', String(i));
+      row.setAttribute('data-id', String(rows[i].id || ''));
+      row.textContent = obRefTypingLabel(rows[i]);
+      row.style.cssText = 'padding:6px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9';
+      (function (item) {
+        row.addEventListener('mouseenter', function () {
+          active = i;
+          paintActive();
+        });
+        // mousedown, а не click: blur текстового поля закрыл бы список раньше.
+        row.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          choose(item);
+        });
+      })(rows[i]);
+      list.appendChild(row);
+    }
+    list.style.display = 'block';
+    active = 0;
+    paintActive();
+  }
+
+  function renderNote(text) {
+    list.innerHTML = '';
+    var note = document.createElement('div');
+    note.textContent = text;
+    note.style.cssText = 'padding:8px 10px;color:#94a3b8;font-style:italic';
+    list.appendChild(note);
+    list.style.display = 'block';
+    active = -1;
+    shown = [];
+  }
+
+  // choose — выбранный вариант становится значением поля: UUID уходит в select
+  // (его отправляет форма), подпись — в текст, событие change — обработчику
+  // формы, как при обычном выборе из списка.
+  function choose(row) {
+    if (!row || !row.id) return;
+    var id = String(row.id);
+    var found = false;
+    for (var i = 0; i < select.options.length; i++) {
+      if (String(select.options[i].value) === id) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      var opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = obRefTypingLabel(row);
+      select.appendChild(opt);
+    }
+    select.value = id;
+    input.value = obRefTypingLabel(row);
+    closeList();
+    try {
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+    } catch (e) {}
+  }
+
+  // clear — стёртый текст означает пустое значение: ссылка тоже очищается,
+  // иначе остался бы прежний UUID при видимом пустом поле.
+  function clear() {
+    if (select.value) {
+      select.value = '';
+      try {
+        select.dispatchEvent(new Event('change', {bubbles: true}));
+      } catch (e) {}
+    }
+  }
+
+  function search(q) {
+    var url = requestUrl(q);
+    if (!url || !window.fetch) return;
+    var current = ++seq;
+    fetch(url, {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
+      .then(function (data) {
+        if (current !== seq || document.activeElement !== input) return; // ответ устарел
+        var rows = ((data && data.items) || []).map(function (row) {
+          return {id: row && row.id, _label: obRefTypingLabel(row)};
+        }).filter(function (row) {
+          return row.id != null && row.id !== '';
+        });
+        var decision = obRefTypingDecide(rows);
+        if (decision.kind === 'single') {
+          choose(decision.items[0]);
+          return;
+        }
+        if (decision.kind === 'empty') {
+          renderNote('не найдено');
+          return;
+        }
+        shown = decision.items;
+        renderRows(decision.items);
+      })
+      .catch(function () {
+        if (current !== seq) return;
+        renderNote('не найдено');
+      });
+  }
+
+  function scheduleSearch(value) {
+    var q = String(value == null ? '' : value).trim();
+    if (!obRefTypingReady(q, min)) {
+      seq++;
+      closeList();
+      return;
+    }
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { search(q); }, 180);
+  }
+
+  input.addEventListener('input', function () {
+    if (String(input.value).trim() === '') clear();
+    scheduleSearch(input.value);
+  });
+  input.addEventListener('keydown', function (e) {
+    var key = e.key || '';
+    if (key === 'ArrowDown' || key === 'ArrowUp') {
+      if (list.style.display === 'none' || !shown.length) return;
+      e.preventDefault();
+      active = key === 'ArrowDown'
+        ? (active + 1) % shown.length
+        : (active - 1 + shown.length) % shown.length;
+      paintActive();
+      return;
+    }
+    if (key === 'Enter') {
+      if (list.style.display !== 'none' && active >= 0 && shown[active]) {
+        e.preventDefault();
+        choose(shown[active]);
+        return;
+      }
+      // Enter без открытого списка — обычное действие формы (submit/переход).
+    }
+    if (key === 'Escape') closeList();
+  });
+  input.addEventListener('blur', function () {
+    // Задержка нужна mousedown по пункту списка: blur приходит раньше него.
+    setTimeout(closeList, 120);
+  });
+  // Текущее значение поменяли не текстом (подбор «…», сброс формы, ответ
+  // события) — подпись обязана догнать select, иначе поле показывало бы старое.
+  function syncFromSelect() {
+    var id = select.value;
+    if (!id) {
+      input.value = '';
+      return;
+    }
+    var label = '';
+    for (var i = 0; i < select.options.length; i++) {
+      if (String(select.options[i].value) === String(id)) {
+        label = select.options[i].textContent || '';
+        break;
+      }
+    }
+    if (document.activeElement !== input || input.value === '') input.value = label;
+  }
+  select.addEventListener('change', syncFromSelect);
+  if (window.MutationObserver) {
+    new window.MutationObserver(syncFromSelect).observe(select, {childList: true, subtree: true});
+  }
+  // Значение select меняют и в обход текста: подбор «…», ответ события формы,
+  // сброс (applyValues присваивает select.value). Присваивание не шлёт ни
+  // change, ни мутацию DOM, поэтому подпись не догнала бы UUID — перехватываем
+  // сеттер самого элемента. Нативный сеттер остаётся прежним.
+  var proto = window.HTMLSelectElement && window.HTMLSelectElement.prototype;
+  var nativeValue = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+  if (nativeValue && nativeValue.set && nativeValue.get) {
+    Object.defineProperty(select, 'value', {
+      configurable: true,
+      get: function () { return nativeValue.get.call(this); },
+      set: function (next) {
+        nativeValue.set.call(this, next);
+        syncFromSelect();
+      }
+    });
+  }
+  syncFromSelect();
+
+  select.style.display = 'none';
+  combo.style.display = 'block';
+  select._obRefTyping = true;
+  return {select: select, input: input, search: search, choose: choose, clear: clear};
+}
+
+// obManagedInitRefTyping — включить ввод по строке у всех полей, объявивших
+// ключ. Вызывается после отрисовки; повторный вызов ничего не ломает
+// (объявленный select помечен). Поле в табличной части ключ не объявляет —
+// там ввод по строке уже работает своим редактором ячейки.
+function obManagedInitRefTyping() {
+  document.querySelectorAll('select[data-ob-ref-typing="1"]').forEach(function (select) {
+    obRefTypingMount(select);
+  });
+}
+window.obManagedInitRefTyping = obManagedInitRefTyping;
+
+// obRefTypingUnresolved — поле ввода по строке, в котором что-то набрано, но
+// ссылка не выбрана: текст совпал с несколькими вариантами или с ни одним.
+// Такое поле нельзя отправлять молча — в базу ушла бы пустая ссылка при
+// заполненном на вид поле, и правку заметили бы не сразу.
+function obRefTypingUnresolved(select, input) {
+  if (!select || !input || select.disabled) return null;
+  // Копия поля, скрытая hidden_when, не отправляется: блокировать форму из-за
+  // неё значило бы не пустить сохранить то, что видно. Отправится видимая копия,
+  // и именно её проверка и остановит.
+  if (select.closest && select.closest('fieldset[disabled]')) return null;
+  if (String(select.value || '') !== '') return null; // значение уже выбрано
+  if (String(input.value == null ? '' : input.value).trim() === '') return null; // поле пустое
+  // Точное совпадение подписи из уже загруженных вариантов подставляем сами:
+  // пользователь мог выбрать вариант мышью и потом дописать/переписать текст.
+  var text = String(input.value).trim().toLowerCase();
+  for (var i = 0; i < select.options.length; i++) {
+    var opt = select.options[i];
+    if (opt.value && String(opt.textContent || '').trim().toLowerCase() === text) {
+      select.value = opt.value;
+      return null;
+    }
+  }
+  return input;
+}
+
+// Проверка перед отправкой: незавершённый ввод останавливает форму и получает
+// фокус, вместо тихой записи пустой ссылки.
+function obRefTypingValidateForm(form) {
+  if (!form || !form.querySelectorAll) return true;
+  var selects = form.querySelectorAll('select[data-ob-ref-typing="1"]');
+  for (var i = 0; i < selects.length; i++) {
+    var select = selects[i];
+    var combo = select.parentNode && select.parentNode.querySelector('.ob-ref-combo');
+    var input = combo && combo.querySelector('[data-ob-ref-text]');
+    var bad = obRefTypingUnresolved(select, input);
+    if (!bad) continue;
+    bad.focus();
+    var list = combo.querySelector('.ob-ref-suggest');
+    if (list) {
+      list.innerHTML = '';
+      var note = document.createElement('div');
+      note.textContent = 'выберите значение из списка';
+      note.style.cssText = 'padding:8px 10px;color:#dc2626';
+      list.appendChild(note);
+      list.style.display = 'block';
+    }
+    return false;
+  }
+  return true;
+}
+window.obRefTypingValidateForm = obRefTypingValidateForm;
+
+// Перехватываем отправку ДО обработчиков формы: молча потерять выбранное
+// значение — худший исход, чем остановленная отправка с подсказкой.
+document.addEventListener('submit', function (e) {
+  var form = e.target;
+  if (!form || !form.querySelectorAll) return;
+  if (!obRefTypingValidateForm(form)) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
+
+obManagedReady(obManagedInitRefTyping);
 
 // ─── deadline_warn: поле-срок ───────────────────────────────────────────────
 //
