@@ -650,10 +650,7 @@ func formModuleYAMLSchema() *yamlLintSchema {
 		// неизвестными, а гейт CI считает предупреждение ошибкой — то есть
 		// документированный «language» у kind: ПолеКода не давал примеру
 		// пройти собственную проверку (#1014).
-		"orientation", "equal_columns", "background", "text_bold", "input_mask", "language", "virtual_columns",
-		// Оформление группы: заголовок и рамка. Оба ключа читает рендер
-		// (GroupTitleVisible/GroupBordered), оба включены по умолчанию.
-		"show_title", "bordered",
+		"orientation", "equal_columns", "background", "label_color", "text_bold", "input_mask", "language", "virtual_columns",
 		"deadline_warn",
 		"conceal", "reveal_when",
 		"title_from",
@@ -724,6 +721,10 @@ func formModuleYAMLSchema() *yamlLintSchema {
 		// ok.post — «ОК» проводит документ, как в 1С.
 		"ok":    obj("visible", "post"),
 		"close": action,
+		// copy.visible:false убирает «Скопировать» у документа, который не
+		// копируют по смыслу (звонок, заявка — свидетельство конкретного
+		// обращения, #2241). Право создания и адрес ?copy= не меняются.
+		"copy": action,
 		// attachments.visible:false скрывает панель вложений выбранной
 		// managed-формы (план 181C, #1621); attachment endpoint не меняется.
 		"attachments": action,
