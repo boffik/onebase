@@ -129,6 +129,11 @@ func IsKnownFormEventType(event FormEventType) bool {
 type FormElementType string
 
 const (
+	FormDateModeDateTime = "datetime"
+	FormDateModeDate     = "date"
+)
+
+const (
 	FormElementField      FormElementType = "ПолеВвода"      // InputField
 	FormElementLabel      FormElementType = "Надпись"        // Label
 	FormElementButton     FormElementType = "Кнопка"         // Button
@@ -247,6 +252,22 @@ type FormElement struct {
 	HeaderBackground  string `yaml:"header_background,omitempty"`
 	HeaderBorderColor string `yaml:"header_border_color,omitempty"`
 	ReadOnly          bool   `yaml:"readonly,omitempty"` // только чтение
+	Background string `yaml:"background,omitempty"` // фон контейнера; читается только у ГруппаФормы (#1547), цвет проверяет csssafe.Color
+	// ShowTitle / Bordered — оформление ГруппаФормы. Оба ключа по умолчанию
+	// включены, поэтому хранятся указателем: false — это осознанно снятая
+	// галка, nil — «ключа нет», то есть прежний вид. Обычный bool не отличил бы
+	// одно от другого, и любая новая форма получала бы в YAML лишние ключи.
+	//
+	// show_title: false убирает заголовок группы (<legend>). Нужно там, где
+	// группа — только раскладка: рамка разделяет блоки, а подпись над ней
+	// повторяет заголовок закладки или соседней надписи.
+	//
+	// bordered: false убирает у группы рамку и внутренние отступы, оставляя
+	// только раскладку детей: полоса кнопок или строка реквизитов перестаёт
+	// читаться отдельным блоком.
+	ShowTitle *bool `yaml:"show_title,omitempty"`
+	Bordered  *bool `yaml:"bordered,omitempty"`
+	ReadOnly  bool  `yaml:"readonly,omitempty"` // только чтение
 	// EditableAdminOnly — поле редактирует только администратор, остальным оно
 	// нередактируемо всегда. В отличие от ReadOnlyWhen условие тут не от данных
 	// записи, а от того, кто смотрит, поэтому вычисляется на сервере при
@@ -310,8 +331,12 @@ type FormElement struct {
 	// явно предупредить об этом, а не молча проглатывать неизвестный ключ.
 	Format        string `yaml:"format,omitempty"`
 	DisplayFormat string `yaml:"display_format,omitempty"`
-	Type          string `yaml:"type,omitempty"`   // "file" для файлового поля, и т.п.
-	Choice        bool   `yaml:"choice,omitempty"` // включена кнопка выбора у InputField
+	// DateMode выбирает точность ввода даты: date — только календарный день,
+	// datetime — день и время. Пустое значение сохраняет поведение kind:
+	// ПолеДаты показывает день, ПолеВвода и колонки ТЧ — дату со временем.
+	DateMode string `yaml:"date_mode,omitempty"`
+	Type     string `yaml:"type,omitempty"`   // "file" для файлового поля, и т.п.
+	Choice   bool   `yaml:"choice,omitempty"` // включена кнопка выбора у InputField
 	// ChoiceFolders — разрешить выбирать ГРУППЫ иерархического справочника
 	// (1С: ВыборГруппИЭлементов). Подбор ссылочного поля всегда исключает папки,
 	// и для справочника, где значение по смыслу является группой, поле
@@ -331,6 +356,15 @@ type FormElement struct {
 	ChoiceDropdown *bool `yaml:"choice_dropdown,omitempty"`
 	// ReferencePage opens a custom page with the selected reference UUID in ?ref= instead of its card.
 	ReferencePage string `yaml:"reference_page,omitempty"`
+	// InputByString — «ввод по строке» у ссылочного поля: вместо списка
+	// вариантов пользователь набирает часть наименования, а браузер предлагает
+	// подходящие элементы справочника выпадающим списком (1С: ввод по строке).
+	// Поиск начинается с трёх символов и идёт по реквизиту «Наименование»;
+	// единственный найденный вариант подставляется сам, при пустой выдаче поле
+	// пишет «не найдено». Ключ меняет только вид ввода: значение по-прежнему
+	// хранится ссылкой, а форма подбора, кнопка 🔍 и choice_filter работают как
+	// прежде. По умолчанию выключено — у существующих форм вид поля не меняется.
+	InputByString bool `yaml:"input_by_string,omitempty"`
 	// RefCardButton — показывать ли у ЭТОГО ссылочного поля кнопку «Открыть
 	// карточку» (🔍). Явное значение у поля сильнее обоих ключей формы
 	// (ref_card_button и ref_card_button_admin_only) в обе стороны: может и

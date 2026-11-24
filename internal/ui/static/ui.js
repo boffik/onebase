@@ -3957,7 +3957,7 @@ function obTPEnumOrder() {
 
 // boolFields — список булевых колонок: тип колонки в разметке автоформы больше
 // нигде не виден, а флажок вместо текстового поля нужен и в добавленной строке.
-function addTpRow(tpName, fields, numFields, idx, tbodyOverride, virtualFields, boolFields, dateFields) {
+function addTpRow(tpName, fields, numFields, idx, tbodyOverride, virtualFields, boolFields, dateFields, dateOnlyFields) {
   var tbody = tbodyOverride || document.getElementById('tp-body-' + tpName);
   var table = tbody && tbody.closest ? tbody.closest('table[data-ob-dom-table]') : null;
   var domWritable = !!(table && !obDOMTableReadOnly(table));
@@ -3969,6 +3969,7 @@ function addTpRow(tpName, fields, numFields, idx, tbodyOverride, virtualFields, 
   var bools = Array.isArray(boolFields) ? boolFields : [];
   var choiceContexts={};try{choiceContexts=JSON.parse(tbody.getAttribute("data-tp-choice")||"{}")||{};}catch(e){}
   var dates = Array.isArray(dateFields) ? dateFields : [];
+  var dateOnly = Array.isArray(dateOnlyFields) ? dateOnlyFields : [];
   if (tbody && tbody.getAttribute('data-tp-cmd') === '1') {
     var tdSel = document.createElement('td');
     tdSel.style.textAlign = 'center';
@@ -4056,8 +4057,8 @@ function addTpRow(tpName, fields, numFields, idx, tbodyOverride, virtualFields, 
         inp.setAttribute('data-ob-tp-recalc', '');
       } else if (dates.indexOf(fn) !== -1) {
         // Новая строка простой таблицы — то же поле даты, что у записанных.
-        inp.type = 'datetime-local';
-        inp.step = '1';
+        inp.type = dateOnly.indexOf(fn) !== -1 ? 'date' : 'datetime-local';
+        if (inp.type !== 'date') inp.step = '1';
       } else {
         inp.type = 'text';
       }
