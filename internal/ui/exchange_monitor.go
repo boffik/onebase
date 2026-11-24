@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/exchange"
+	"github.com/boffik/onebase/internal/exchange"
 )
 
 type exchangeNodeView struct {

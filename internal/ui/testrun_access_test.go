@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // writeAccessProject создаёт проект с сущностями, ролью Оператор (field_access +

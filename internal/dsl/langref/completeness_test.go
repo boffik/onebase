@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // notDocumented — имена из реестра, которые НЕ документируются как функции

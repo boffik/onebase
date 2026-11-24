@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // #1612: элемент с readonly_when клиент может разблокировать без перезагрузки,

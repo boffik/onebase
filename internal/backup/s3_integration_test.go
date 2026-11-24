@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // TestCreateAutoBackup_S3EndToEnd drives the real path: dumpAutoTarget dumps a

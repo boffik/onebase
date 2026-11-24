@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func TestScheduledRunByID_ЧитаетНачатыйИЗавершённыйПрогон(t *testing.T) {

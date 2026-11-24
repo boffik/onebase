@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/richtext"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // richtext-ресурс регистра сведений редактируется тем же редактором, что и

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compform"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compform"
 	"gopkg.in/yaml.v3"
 )
 

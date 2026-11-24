@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestGen_LatestPerKey_SQLite(t *testing.T) {

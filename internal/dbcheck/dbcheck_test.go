@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // testEnv собирает настоящий проект на диске и мигрированную базу: проверки

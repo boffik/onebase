@@ -14,12 +14,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/scheduler"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // toggleTestServer — сервер с планировщиком и двумя заданиями: включённым и

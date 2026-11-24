@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/widget"
 )
 
 // План 182D: интерактивные фильтры list-виджета. Контракт строгий на этапе

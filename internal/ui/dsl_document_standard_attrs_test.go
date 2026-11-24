@@ -18,8 +18,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 const standardAttrsPostingOS = `Процедура ОбработкаПроведения()

@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // itemFormField — реквизит формы элемента с признаком «только просмотр»

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // E2E-регрессия issue #39: запрос со скалярными 1С-функциями (ОКР/АБС/ЦЕЛ)

@@ -21,7 +21,7 @@ import (
 
 // PublicKey — открытый ключ подписи, base64 (std). ПОДСТАВЛЯЕТСЯ ПРИ СБОРКЕ:
 //
-//	go build -ldflags "-X github.com/ivantit66/onebase/internal/selfupdate.PublicKey=<base64>"
+//	go build -ldflags "-X github.com/boffik/onebase/internal/selfupdate.PublicKey=<base64>"
 //
 // Не константа в исходниках намеренно. Форк, собравший платформу из исходников,
 // подписывает свои релизы СВОИМ ключом и вшивает свой открытый — иначе его

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 // StateFileName — состояние обновлений: что известно о новых версиях, что уже

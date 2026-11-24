@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/installtest"
 )
 
 // privateInstallDirLocal — каталог установки, который проверка приватности

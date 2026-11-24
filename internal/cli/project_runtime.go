@@ -3,10 +3,10 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/api"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/api"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/scheduler"
 )
 
 // registryFromProject assembles a complete, unpublished registry generation.

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/httpservice"
 )
 
 // Секрет сервиса задан ссылкой на окружение: разыменовывается при проверке

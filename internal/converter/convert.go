@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/converter/parser1c"
-	"github.com/ivantit66/onebase/internal/converter/writer"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/converter/parser1c"
+	"github.com/boffik/onebase/internal/converter/writer"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/onec_forms"
 	"gopkg.in/yaml.v3"
 )
 

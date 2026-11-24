@@ -19,8 +19,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/ivantit66/onebase/internal/pridentity"
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/pridentity"
+	"github.com/boffik/onebase/internal/reviewrouting"
 	"golang.org/x/text/encoding/charmap"
 )
 

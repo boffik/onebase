@@ -12,11 +12,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/onec_forms"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // ── Управляемые формы в конфигураторе (план 37, этап 4) ──────────────────────

@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/converter"
+	"github.com/boffik/onebase/internal/converter"
 	"github.com/spf13/cobra"
 )
 

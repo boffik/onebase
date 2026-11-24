@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/csssafe"
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compose"
-	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/boffik/onebase/internal/csssafe"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/widget"
 )
 
 // renderComposedTable строит единую <table> с раскрываемыми группами,

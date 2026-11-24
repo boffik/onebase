@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Поведение подсветки поля-срока — в браузере, проверяется node на настоящем

@@ -9,7 +9,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 func TestDeleteUser_ReferencedByAppTable(t *testing.T) {

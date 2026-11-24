@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/ast"
 )
 
 // issue #171: у обработки исполняемый раздел модуля (операторы вне процедур)

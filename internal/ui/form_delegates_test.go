@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func TestPageForm_DelegatedHandlers(t *testing.T) {

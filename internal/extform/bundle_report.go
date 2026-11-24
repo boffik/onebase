@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 	"gopkg.in/yaml.v3"
 )
 

@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/spf13/cobra"
 )
 

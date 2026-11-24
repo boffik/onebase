@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/boffik/onebase/internal/llm"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/llm"
 )
 
 // DefaultListPageSize — сколько строк показывать на странице списков по

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Итоги регистра накопления (план 80): таблица итоги_<рег> хранит чистый знаковый

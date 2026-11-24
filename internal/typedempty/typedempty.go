@@ -12,7 +12,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Descriptor is the immutable part of field metadata needed to materialize an

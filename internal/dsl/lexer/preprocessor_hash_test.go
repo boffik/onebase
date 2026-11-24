@@ -3,8 +3,8 @@ package lexer_test
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/token"
 )
 
 // #19: директива препроцессора 1С пропускается только в начале строки (в т.ч.

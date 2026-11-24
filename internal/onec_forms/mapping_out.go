@@ -3,7 +3,7 @@ package onec_forms
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // NormalizeForExport — обратная операция к NormalizeForImport:

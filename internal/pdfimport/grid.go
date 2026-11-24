@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // Параметры алгоритма (в пунктах PDF, если не указано иное).

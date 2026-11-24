@@ -25,13 +25,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/entityservice"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/entityservice"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // heldRecorderStore держит строку регистратора захваченной: после настоящего

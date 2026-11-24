@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/dblock"
 )
 
 type entityDDLKey struct{}

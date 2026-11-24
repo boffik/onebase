@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/spf13/cobra"
 )
 

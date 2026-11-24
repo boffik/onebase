@@ -1,6 +1,6 @@
 package query
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // scopedBoolOutputColumns proves each direct output field against its own
 // SELECT sources. A nested filter does not invalidate the outer projection;

@@ -3,8 +3,8 @@ package ui
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/richtext"
 )
 
 // fieldDisplayText — ОДНА точка превращения значения реквизита в текст для

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/richtext"
 )
 
 func richtextEntity() *metadata.Entity {

@@ -6,13 +6,13 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/dsl/token"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // paramRefRe выбирает имена параметров запроса (&Имя), чтобы подставить их как

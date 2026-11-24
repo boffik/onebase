@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/processcontrol"
+	"github.com/boffik/onebase/internal/processcontrol"
 )
 
 func controlTestBase(t *testing.T, ts *httptest.Server, token string) *Base {

@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/converter"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/converter"
 )
 
 func (h *handler) configuratorPage(w http.ResponseWriter, r *http.Request) {

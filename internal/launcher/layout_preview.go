@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/sheet"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // layout_preview.go — предпросмотр макета печатной формы в дизайнере

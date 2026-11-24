@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/richtext"
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // declarative.go — декларативный движок печатных форм (план 64, этап 3).

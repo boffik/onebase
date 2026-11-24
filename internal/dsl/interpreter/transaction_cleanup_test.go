@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 type cleanupFakeDB struct {

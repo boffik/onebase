@@ -21,8 +21,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/exchange"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/exchange"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 type bypassEnums struct{ enums []*metadata.Enum }

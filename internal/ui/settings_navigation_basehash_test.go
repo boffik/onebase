@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/navigation"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/navigation"
+	"github.com/boffik/onebase/internal/storage"
 	"golang.org/x/net/html"
 )
 

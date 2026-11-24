@@ -3,7 +3,7 @@ package entityservice
 import (
 	"context"
 
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 type hookObjectStateKey struct{}

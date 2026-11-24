@@ -15,13 +15,13 @@ import (
 	"github.com/google/uuid"
 	cronlib "github.com/robfig/cron/v3"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dslvars"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/mailer"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dslvars"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/mailer"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 var (

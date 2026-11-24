@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/version"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/version"
 )
 
 // Exercise the HTTP launch endpoint and its visible return page, including

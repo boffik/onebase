@@ -3,8 +3,8 @@ package ui
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 // Сервер штатно поднимается без БД (ui.New(reg, nil, ...) — см. тесты

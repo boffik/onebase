@@ -9,10 +9,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 // Параметр обработки типа enum:<Перечисление> на форме — Переключатель

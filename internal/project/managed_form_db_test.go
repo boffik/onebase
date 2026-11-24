@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestLoadFromDB_MixedCaseManagedFormPreservesColumnOrder(t *testing.T) {

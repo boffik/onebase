@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // D2/D3: фактическая защита от XSS у image-поля — на стороне отдачи. Закрепляем

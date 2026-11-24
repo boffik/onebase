@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 	"github.com/jackc/pgx/v5"
 )
 

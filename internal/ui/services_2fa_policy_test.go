@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/httpservice"
 )
 
 // `auth: basic` в HTTP-сервисе обязан подчиняться политике входа. Иначе он

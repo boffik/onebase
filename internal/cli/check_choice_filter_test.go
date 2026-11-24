@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/configcheck"
 )
 
 func TestCheckChoiceFilterReportedOnce(t *testing.T) {

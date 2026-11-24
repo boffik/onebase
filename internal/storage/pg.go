@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/boffik/onebase/internal/userdata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/userdata"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

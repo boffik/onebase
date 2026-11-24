@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/processcontrol"
+	"github.com/boffik/onebase/internal/processcontrol"
 )
 
 func processControlRequest(s *Server, method, path string, headers map[string]string) *httptest.ResponseRecorder {

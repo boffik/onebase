@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // applyAppAISettings applies deploy-time AI settings from app.yaml to _settings.

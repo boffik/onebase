@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func renderObjectFormGET(t *testing.T, s *Server, ent *metadata.Entity, id uuid.UUID) string {

@@ -5,8 +5,8 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/ivantit66/onebase/internal/pridentity"
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/pridentity"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 type apiRepository struct {

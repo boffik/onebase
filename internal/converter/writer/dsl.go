@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/converter/parser1c"
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/converter/parser1c"
+	"github.com/boffik/onebase/internal/fsmode"
 )
 
 // preprocDirectiveLow матчит строку-директиву препроцессора 1С (рус/англ),

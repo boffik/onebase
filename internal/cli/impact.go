@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/project"
-	querylang "github.com/ivantit66/onebase/internal/query"
+	"github.com/boffik/onebase/internal/project"
+	querylang "github.com/boffik/onebase/internal/query"
 	"github.com/spf13/cobra"
 )
 

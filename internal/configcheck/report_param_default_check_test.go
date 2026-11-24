@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/project"
 )
 
 func TestLintProject_ReportSelectDefaultMustBeAnOption(t *testing.T) {

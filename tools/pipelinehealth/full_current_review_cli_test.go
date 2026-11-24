@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 // A merge-shaped HEAD has an older source review, a negative current review,

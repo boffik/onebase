@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/report"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/report"
 )
 
 func testProj() *project.Project {

@@ -11,15 +11,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/boffik/onebase/internal/auth"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/version"
+	"github.com/boffik/onebase/internal/widget"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/selfupdate"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/version"
-	"github.com/ivantit66/onebase/internal/widget"
 )
 
 func (s *Server) about(w http.ResponseWriter, r *http.Request) {

@@ -3,8 +3,8 @@ package interpreter
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
 )
 
 func evalBreakFunc(t *testing.T, code string, extra ...map[string]any) any {

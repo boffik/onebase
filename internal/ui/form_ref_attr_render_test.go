@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 // refAttrForm — форма с одним ссылочным реквизитом формы, показанным через

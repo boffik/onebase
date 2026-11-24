@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/dblock"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/dblock"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // OpenDB opens a storage.DB for the given base, routing by DBType.

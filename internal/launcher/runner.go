@@ -19,11 +19,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/bugreport"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/processcontrol"
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/bugreport"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/processcontrol"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 type managedProc struct {

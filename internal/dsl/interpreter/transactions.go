@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // TxDB is the minimal storage interface needed for DSL transactions.

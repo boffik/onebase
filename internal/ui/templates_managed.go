@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // tplManagedForm — шаблон рендеринга «управляемой формы» из FormModule
 // (план 37, этап 3). В отличие от tplForm, который автоматически выводит

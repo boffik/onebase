@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/userhelp"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/userhelp"
 	"github.com/spf13/cobra"
 )
 

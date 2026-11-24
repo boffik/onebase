@@ -32,7 +32,7 @@ OneBase распространяется по MIT; полный текст на�
 `DistributionSupplier`. Например, из корня исходников:
 
 ```sh
-go build -ldflags="-X github.com/ivantit66/onebase/internal/version.Build=v0.13.0 -X github.com/ivantit66/onebase/internal/version.DistributionName=Example -X github.com/ivantit66/onebase/internal/version.DistributionVersion=2.1 -X github.com/ivantit66/onebase/internal/version.DistributionSupplier=ExampleLtd" -o onebase ./cmd/onebase
+go build -ldflags="-X github.com/boffik/onebase/internal/version.Build=v0.13.0 -X github.com/boffik/onebase/internal/version.DistributionName=Example -X github.com/boffik/onebase/internal/version.DistributionVersion=2.1 -X github.com/boffik/onebase/internal/version.DistributionSupplier=ExampleLtd" -o onebase ./cmd/onebase
 ```
 
 `Build` — версия исходной платформы; версия форка задаётся отдельно. Значения

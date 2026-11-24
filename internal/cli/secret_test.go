@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/secrets"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func testKey(t *testing.T) *secrets.Key {

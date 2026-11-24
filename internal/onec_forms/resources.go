@@ -3,8 +3,8 @@ package onec_forms
 import (
 	"errors"
 	"fmt"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/fsmode"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"io"
 	"os"
 	"path/filepath"

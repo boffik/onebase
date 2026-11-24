@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Группировка виртуальной таблицы по периоду — календарная операция, и она

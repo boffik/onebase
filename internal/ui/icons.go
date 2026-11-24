@@ -5,8 +5,8 @@ import (
 	"html/template"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/webassets"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/webassets"
 )
 
 // Иконки навигации. Подход (B), план 73: весь Lucide одним SVG-спрайтом

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/processor"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/processor"
 )
 
 // Параметр обработки типа file был обрезан одним мегабайтом вместо заявленных

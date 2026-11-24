@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/formtest"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/formtest"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 func TestEqualColumns_RuntimeHTTPAndBrowser(t *testing.T) {

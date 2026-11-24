@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/httpservice"
 )
 
 // serviceOpenAPI — GET /hs/openapi.json.

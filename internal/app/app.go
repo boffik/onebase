@@ -10,14 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/api"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metrics"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/scheduler"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/boffik/onebase/internal/api"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metrics"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/ui"
 )
 
 type Config struct {

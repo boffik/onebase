@@ -1,8 +1,8 @@
 package xlsxtemplate
 
 import (
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/testutil/xlsxadvisory"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/testutil/xlsxadvisory"
 	"testing"
 )
 

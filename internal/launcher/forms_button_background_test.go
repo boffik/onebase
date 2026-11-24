@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Exercise the registered, authenticated configurator routes, including YAML

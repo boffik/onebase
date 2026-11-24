@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Переименование таблиц и колонок с длинными именами в короткие (#1946).

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Неизвестный вид элемента (напр. выдуманный «ПолеИзображения») даёт блокирующую

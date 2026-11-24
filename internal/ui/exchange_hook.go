@@ -6,11 +6,11 @@ package ui
 // ре-экспорты для Go-путей приёма (онлайн push, CLI load/sync).
 
 import (
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dslvars"
-	"github.com/ivantit66/onebase/internal/exchange"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dslvars"
+	"github.com/boffik/onebase/internal/exchange"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // ExchangeHookName — имя обработчика конфликта в общем модуле (.module.os).

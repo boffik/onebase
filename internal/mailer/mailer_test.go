@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/mailer"
+	"github.com/boffik/onebase/internal/mailer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

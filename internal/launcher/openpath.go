@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 func openPathLog() *slog.Logger {

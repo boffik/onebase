@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // updateGolden управляет перегенерацией golden-файлов: `go test -run Golden -update`.

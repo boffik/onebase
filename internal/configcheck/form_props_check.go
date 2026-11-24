@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckFormProps предупреждает о ключах `props`, которых не читает ни один

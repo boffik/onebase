@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dbcheck"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dbcheck"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 var adminTmpl = template.Must(template.New("admin").Parse(tplAdminUsers + tplAdminUserCard + tplAdminUserForm + tplAdminPasswd + tplAdminSessions + tplAdminAPITokens + tplAdminCleanup + tplAdminRoles + tplAdminUserRoles + tplAdminAudit + tplAdminWebhooks + tplAdminRLS + tplAdminAuth + tplAdminAuthProvider + tplProfile2FA))

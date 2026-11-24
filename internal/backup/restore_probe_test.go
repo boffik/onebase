@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/dbtest"
 )
 
 func openRawSQLiteForProbeTest(t *testing.T, path string) *sql.DB {

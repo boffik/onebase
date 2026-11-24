@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	processorpkg "github.com/ivantit66/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	processorpkg "github.com/boffik/onebase/internal/processor"
 )
 
 // Порядок колонок таблиц управляемой формы — за пользователем, как в 1С:

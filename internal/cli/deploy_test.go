@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/project"
 )
 
 func TestDeployVersionMessage(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Случай из заявки #1784: ссылочный реквизит на системную таблицу учётных

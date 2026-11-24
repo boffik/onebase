@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/configfmt"
-	"github.com/ivantit66/onebase/internal/configyaml"
+	"github.com/boffik/onebase/internal/configfmt"
+	"github.com/boffik/onebase/internal/configyaml"
 	"gopkg.in/yaml.v3"
 )
 

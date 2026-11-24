@@ -8,7 +8,7 @@ package compose
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 )
 
 // ApplyFilters возвращает подмножество rows, удовлетворяющих всем f (AND).

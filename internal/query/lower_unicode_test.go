@@ -2,9 +2,9 @@ package query_test
 
 import (
 	"context"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

@@ -24,14 +24,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/text/encoding/charmap"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/extform"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/secrets"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/extform"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // ErrLegacyFormat is returned by ImportUniversal when the archive is not in

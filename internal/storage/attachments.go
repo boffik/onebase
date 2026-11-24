@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 )
 
 var ErrAttachmentTooLarge = errors.New("attachment exceeds maximum size")

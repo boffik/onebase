@@ -16,16 +16,16 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/httpservice"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Число исполнений обработчика считается по записям справочника: каждый вызов

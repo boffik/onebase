@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 )
 
 // Scaffold adds a minimal handbook without replacing any existing file.

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 // Реквизиты формы в событийном пути.

@@ -74,7 +74,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/llm"
 )
 
 var aiExplainSystem = "Ты помогаешь разработчику конфигурации OneBase понять ошибки " +

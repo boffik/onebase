@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // OrphanMovements не должна зависать на единственном SQLite-соединении

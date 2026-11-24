@@ -3,7 +3,7 @@ package configcheck
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckFormOKPost предупреждает об actions.ok.post у формы непроводимой

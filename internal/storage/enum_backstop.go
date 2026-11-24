@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // ErrEnumValueUnknown — запись отклонена страховкой: значение не входит в

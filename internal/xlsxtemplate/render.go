@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
 )

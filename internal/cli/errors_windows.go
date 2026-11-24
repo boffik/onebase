@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"golang.org/x/sys/windows"
 )
 

@@ -3,7 +3,7 @@ package ui
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // ПередЗакрытием исполняется в одном запросе close-intent: клиент ждёт решение

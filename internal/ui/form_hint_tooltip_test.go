@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/metadata"
 	"golang.org/x/net/html"
 )
 

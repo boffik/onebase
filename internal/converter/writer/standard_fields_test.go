@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/converter/parser1c"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/converter/parser1c"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Импортированный из 1С документ приезжал вообще без «Номера», «Даты», блока

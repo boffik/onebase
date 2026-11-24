@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/navigation"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/websec"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/navigation"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/websec"
 	"golang.org/x/net/html"
 )
 

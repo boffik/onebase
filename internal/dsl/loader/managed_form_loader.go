@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // ManagedFormLoader загружает управляемые формы из <project>/forms/<entity>/*.form.yaml.

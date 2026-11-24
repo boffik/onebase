@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
 )
 
 // chromiumCandidates возвращает возможные пути Chromium-браузеров в порядке

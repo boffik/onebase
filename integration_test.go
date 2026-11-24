@@ -14,16 +14,16 @@ import (
 	"testing"
 	"time"
 
+	runtimeapp "github.com/boffik/onebase/internal/app"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/ui"
 	"github.com/google/uuid"
-	runtimeapp "github.com/ivantit66/onebase/internal/app"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/scheduler"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/ui"
 )
 
 func mustDSN(t *testing.T) string {

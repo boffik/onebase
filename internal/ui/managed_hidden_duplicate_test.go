@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/net/html"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Реквизит «Улица» стоит на форме дважды: одна копия видна, пока заявка не

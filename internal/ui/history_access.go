@@ -19,9 +19,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // loadAuthorizedRecordHistory читает журнал изменений объекта с применёнными

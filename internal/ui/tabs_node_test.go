@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
 )
 
 // Execute the shell fetched through its public route and real authentication.

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func createRestoreTestDatabase(t *testing.T, path string, values ...string) {

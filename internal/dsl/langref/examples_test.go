@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/token"
 )
 
 // backslash — один символ «\». Записан кодом, чтобы сам тест не зависел от

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/configdb"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configdb"
 	"gopkg.in/yaml.v3"
 )
 

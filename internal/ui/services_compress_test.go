@@ -14,16 +14,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/httpservice"
-	"github.com/ivantit66/onebase/internal/incident"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/websec"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/websec"
 )
 
 const compressHandlersSrc = `

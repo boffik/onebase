@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/processcontrol"
+	"github.com/boffik/onebase/internal/processcontrol"
 )
 
 const (

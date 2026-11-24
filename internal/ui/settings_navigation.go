@@ -11,9 +11,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/navigation"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/navigation"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 const maxNavigationFormBytes = 2 << 20

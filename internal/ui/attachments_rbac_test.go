@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // attachTestServer returns a Server backed by a temp SQLite DB whose file

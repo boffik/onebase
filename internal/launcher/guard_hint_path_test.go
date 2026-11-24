@@ -22,9 +22,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ivantit66/onebase/internal/scheduler"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/boffik/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/ui"
 )
 
 // guillemetFragments — подстроки в «ёлочках»: ровно те строки интерфейса,

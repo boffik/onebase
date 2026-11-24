@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	reportpkg "github.com/boffik/onebase/internal/report"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
 )
 
 func TestExportJobListHTTPFiltersOwnerAndShowsLiveJobs(t *testing.T) {

@@ -23,7 +23,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/richtext"
 )
 
 const (

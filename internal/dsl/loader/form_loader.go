@@ -7,10 +7,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // FormLoader loads form modules from .os files

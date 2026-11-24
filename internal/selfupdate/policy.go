@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 

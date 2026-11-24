@@ -6,8 +6,8 @@ import (
 	"html/template"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/ui"
 )
 
 var launcherBundle *i18n.Bundle

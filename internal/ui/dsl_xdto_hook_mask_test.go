@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // The public processor path must carry the user and the writer's field origin

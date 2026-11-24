@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Иконка теперь не инлайнится, а ссылается на символ общего спрайта (план 73),

@@ -3,9 +3,9 @@ package ui
 import (
 	"context"
 
+	"github.com/boffik/onebase/internal/entityservice"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/entityservice"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 type hookXDTOOriginKey struct{}

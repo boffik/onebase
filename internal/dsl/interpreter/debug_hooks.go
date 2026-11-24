@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/ast"
 	"github.com/shopspring/decimal"
 )
 

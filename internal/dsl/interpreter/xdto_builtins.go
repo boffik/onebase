@@ -18,9 +18,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/xdto"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/xdto"
 )
 
 // XDTOEntityLookup — то, что сериализатору нужно от реестра конфигурации.

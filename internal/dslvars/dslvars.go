@@ -18,11 +18,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/aiassist"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/typedempty"
+	"github.com/boffik/onebase/internal/aiassist"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/typedempty"
 )
 
 // Common — параметры базовой DSL-карты. Заполните поля и вызовите Build().

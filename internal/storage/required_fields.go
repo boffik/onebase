@@ -24,8 +24,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // ErrRequiredFieldEmpty — запись отклонена: обязательный реквизит пуст.

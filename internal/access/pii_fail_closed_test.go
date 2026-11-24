@@ -3,8 +3,8 @@ package access
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Признак ПДн у поля (pii: true) закрывает реквизит по умолчанию: роль, которая

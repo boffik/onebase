@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // #1528 (план 158 срез A): ПоказатьВопрос — двухфазный диалог. Фаза 1 кладёт

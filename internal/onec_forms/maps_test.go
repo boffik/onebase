@@ -3,7 +3,7 @@ package onec_forms
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Карты элементов должны быть симметричными: 1С→OneBase→1С даёт исходное

@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // nameSet — множество имён объектов конфигурации (сравнение регистронезависимо,

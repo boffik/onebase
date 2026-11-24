@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/onec_forms"
 )
 
 // formsCmd — родительская команда для работы с управляемыми формами.

@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/pdfimport"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/sheet"
 	"github.com/go-chi/chi/v5"
 	fpdf "github.com/go-pdf/fpdf"
-	"github.com/ivantit66/onebase/internal/pdfimport"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/sheet"
 )
 
 // План 64, этап 6, фаза 2: эндпоинт импорта макета из PDF.

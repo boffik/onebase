@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/boffik/onebase/internal/pdfimport"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/pdfimport"
 )
 
 // ── Импорт макета из PDF (план 64, этап 6, фаза 2) ──────────────────────────

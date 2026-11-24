@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/widget"
 	"github.com/shopspring/decimal"
 )
 

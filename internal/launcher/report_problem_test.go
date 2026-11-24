@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/bugreport"
+	"github.com/boffik/onebase/internal/bugreport"
 )
 
 func renderReportProblemPage(t *testing.T, data map[string]any) string {

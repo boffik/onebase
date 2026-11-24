@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/realtime"
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/realtime"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 func orderRegistry(notify bool) *runtime.Registry {

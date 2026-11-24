@@ -3,8 +3,8 @@ package access_test
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // brokenPolicyRole — роль с политикой, которая не компилируется ни для одного

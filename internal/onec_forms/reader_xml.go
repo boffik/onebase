@@ -3,7 +3,7 @@ package onec_forms
 import (
 	"encoding/xml"
 	"fmt"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"io"
 	"os"
 	"strconv"

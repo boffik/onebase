@@ -6,7 +6,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // styleCache переносит оформление ячейки Excel в ячейку макета.

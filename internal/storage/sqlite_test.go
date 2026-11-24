@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 func TestIsInMemorySQLite(t *testing.T) {

@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/dblock"
-	"github.com/ivantit66/onebase/internal/installtest"
-	"github.com/ivantit66/onebase/internal/selfupdate"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // isolatedUpdatesHome уводит ~/.onebase во временный каталог: тесты не должны

@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Реальный редактор: выбор на холсте -> панель -> HTTP edit-op -> сохранение

@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/realtime"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/realtime"
 )
 
 // hubNotifier адаптирует *realtime.Hub к interpreter.Notifier: DSL-функция

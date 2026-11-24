@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/boffik/onebase/internal/fsmode"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/fsmode"
 )
 
 // directorySwap is a prepared, same-volume directory snapshot. stage and

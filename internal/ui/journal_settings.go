@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 const maxJournalSettingsBytes = 32 * 1024

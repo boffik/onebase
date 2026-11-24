@@ -11,8 +11,8 @@ package configcheck
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 // CheckSecretHygiene возвращает предупреждения о секретах, записанных значением.

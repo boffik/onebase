@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/page"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/page"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/runtime"
 	"golang.org/x/net/html"
 )
 

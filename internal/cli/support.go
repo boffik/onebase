@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/bugreport"
-	"github.com/ivantit66/onebase/internal/launcher"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/bugreport"
+	"github.com/boffik/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/userdata"
 	"github.com/spf13/cobra"
 )
 

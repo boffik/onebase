@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Этапы объекта (план 121): доступ к значению, гейт переходов и сериализация

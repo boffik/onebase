@@ -3,7 +3,7 @@ package onec_forms
 import (
 	"bufio"
 	"fmt"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"os"
 	"regexp"
 	"sort"

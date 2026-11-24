@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/stretchr/testify/assert"
 )
 

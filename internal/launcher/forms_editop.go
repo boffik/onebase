@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/formdoc"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/formdoc"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Эндпоинт визуальной правки формы (#164, слайс 5).

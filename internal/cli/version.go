@@ -23,7 +23,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/version"
 	"github.com/spf13/cobra"
 )
 

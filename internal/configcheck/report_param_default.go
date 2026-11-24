@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckLintReports validates advisory report settings that require the loaded

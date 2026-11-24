@@ -7,8 +7,8 @@ package configcheck
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/project"
 )
 
 func TestCheckHTTPServiceAuthWarnings(t *testing.T) {

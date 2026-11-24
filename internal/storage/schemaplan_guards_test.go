@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Сторожа реструктуризации (план 81, разбор в ишью #586).

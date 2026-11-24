@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/testutil/browseracceptance"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/testutil/browseracceptance"
 )
 
 // Real managed HTML, static JS, ref-options, RLS and save routes are served by

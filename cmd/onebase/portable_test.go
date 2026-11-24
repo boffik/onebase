@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/userdata"
 	"gopkg.in/yaml.v3"
 )
 

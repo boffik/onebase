@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // logCfgAI пишет обращение к ИИ из конфигуратора в журнал _ai_audit, если в

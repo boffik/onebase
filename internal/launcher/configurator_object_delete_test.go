@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/configdb"
 )
 
 // Контекстное меню дерева отправляет обработки, справочники и документы в

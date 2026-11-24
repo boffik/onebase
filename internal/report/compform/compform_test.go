@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/report/compform"
+	"github.com/boffik/onebase/internal/report/compform"
 )
 
 func TestParse(t *testing.T) {

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // placementProject собирает временный проект с одной сущностью и заданными

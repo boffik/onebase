@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/bugreport"
+	"github.com/boffik/onebase/internal/bugreport"
 )
 
 // setSupportFlag ставит флаг команды и возвращает его в исходное состояние

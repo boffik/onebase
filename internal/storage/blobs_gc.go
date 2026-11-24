@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // GCStats — результат прохода сборки мусора.

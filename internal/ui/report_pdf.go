@@ -8,8 +8,8 @@ package ui
 import (
 	"net/http"
 
-	reportpkg "github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/sheet"
+	reportpkg "github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 func (s *Server) reportPDF(w http.ResponseWriter, r *http.Request) {

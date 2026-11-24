@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/configdb"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/configdb"
 )
 
 // configuratorCheck is the per-fragment endpoint. It accepts ad-hoc text from

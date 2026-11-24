@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // renumberProbeTimeout — сколько ждём подсчёт объёма (без записи). Считается

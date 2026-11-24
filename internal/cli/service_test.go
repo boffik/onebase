@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/launcher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

@@ -7,8 +7,8 @@ package ui
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 // crossSheetRows строит заголовки и строки данных для excel.ExportList из

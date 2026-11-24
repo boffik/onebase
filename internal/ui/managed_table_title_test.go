@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/net/html"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Открываем карточку через публичный маршрут: у ValueTable заголовок должен

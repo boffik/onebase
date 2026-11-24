@@ -9,8 +9,8 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // grid — лист, разобранный в матрицу ячеек макета.

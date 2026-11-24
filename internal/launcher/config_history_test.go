@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func TestRenderConfigHistory_EscapesAndShowsDiff(t *testing.T) {

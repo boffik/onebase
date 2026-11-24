@@ -8,8 +8,8 @@ package ui
 import (
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 func refTestCatalog() *metadata.Entity {

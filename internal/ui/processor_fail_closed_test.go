@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
 )
 
 // Exercise the production HTTP routes and the actual chat tool dispatcher.

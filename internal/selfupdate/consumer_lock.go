@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/version"
 )
 
 const EnvBinaryPendingEntry = "ONEBASE_BINARY_PENDING_AT_ENTRY"

@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 func authLog() *slog.Logger { return oblog.Component("auth") }

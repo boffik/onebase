@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/extform"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/extform"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 var extReportTmpl = template.Must(template.New("extreports").Parse(tplAdminExtReports))

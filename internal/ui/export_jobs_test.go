@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	reportpkg "github.com/ivantit66/onebase/internal/report"
+	reportpkg "github.com/boffik/onebase/internal/report"
 )
 
 func TestExportJobStoreLifecycleAndCleanup(t *testing.T) {

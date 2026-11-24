@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 // resolveLang передавал baseLang="ru" в i18n.Resolve, и Accept-Language

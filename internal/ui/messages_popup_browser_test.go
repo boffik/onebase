@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/page"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/testutil/browseracceptance"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dsl/loader"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/page"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/testutil/browseracceptance"
 )
 
 // Real HTTP, DSL, store, managed form and polling scripts; the browser delays

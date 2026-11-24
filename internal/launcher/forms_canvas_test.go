@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/formdoc"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/formdoc"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 const canvasSample = `schema: onebase.form/v1

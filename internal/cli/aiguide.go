@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/langref"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/dsl/langref"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/onec_forms"
 	"github.com/spf13/cobra"
 )
 
@@ -393,7 +393,7 @@ null, XML — undefined, внешние Go-интерфейсы — nil.
 ## Рабочий цикл (всё headless, текст/JSON)
 
 Все команды — через бинарь ` + "`onebase`" + `. Если оболочка отвечает ` + "`onebase: command not found`" + `,
-он не установлен в PATH. Установка (нужен Go): ` + "`go install github.com/ivantit66/onebase/cmd/onebase@latest`" + `
+он не установлен в PATH. Установка (нужен Go): ` + "`go install github.com/boffik/onebase/cmd/onebase@latest`" + `
 и убедись, что каталог ` + "`go env GOPATH`/bin" + ` есть в PATH. Из исходников:
 ` + "`go build -o <dir-в-PATH>/onebase ./cmd/onebase`" + `. Проверка: ` + "`onebase --help`" + `.
 Внутри проекта флаг ` + "`--project`" + ` можно опускать — берётся текущий каталог.

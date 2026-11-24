@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/bugreport"
-	"github.com/ivantit66/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/bugreport"
+	"github.com/boffik/onebase/internal/incident"
 )
 
 const (

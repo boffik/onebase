@@ -2,13 +2,13 @@ package writer
 
 import (
 	"fmt"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/fsmode"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/converter/parser1c"
+	"github.com/boffik/onebase/internal/converter/parser1c"
 	"gopkg.in/yaml.v3"
 )
 

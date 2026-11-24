@@ -5,7 +5,7 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/boffik/onebase/internal/ui"
 )
 
 var navigationEditorTmpl = template.Must(template.New("navigation-editor").Funcs(template.FuncMap{

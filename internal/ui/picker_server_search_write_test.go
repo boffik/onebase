@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/scheduler"
 )
 
 // Поиск уходит отдельным запросом вне очереди записывающих form-event.

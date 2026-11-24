@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func formChoiceElementTarget(owner *metadata.Entity, form *metadata.FormModule, el *metadata.FormElement) string {

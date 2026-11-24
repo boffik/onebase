@@ -7,15 +7,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/httpservice"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/page"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/userhelp"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/httpservice"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/page"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/userhelp"
 )
 
 func registryLog() *slog.Logger {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // normalizeDate приводит дату-строку из SQLite к time.Time; так загруженный

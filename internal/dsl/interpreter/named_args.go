@@ -3,7 +3,7 @@ package interpreter
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/ast"
 )
 
 // BindNamedArgs связывает именованные значения (параметры обработки) с

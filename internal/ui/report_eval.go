@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/report/expreval"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/report/expreval"
 )
 
 // newInterpEvaluator строит evaluator условий/показателей компоновки. Раньше

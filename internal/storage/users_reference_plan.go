@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // UsersReference describes a physical metadata column targeting _users(id).

@@ -11,9 +11,9 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/token"
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/report"
 )
 
 type Row = map[string]any

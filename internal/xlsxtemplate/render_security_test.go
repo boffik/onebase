@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // TestRenderBytes_MaliciousTemplateNoPanic: на книге с атакой рендер не

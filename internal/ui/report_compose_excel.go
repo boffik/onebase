@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 // measureCellForExcel выбирает значение ячейки показателя для Excel так, чтобы

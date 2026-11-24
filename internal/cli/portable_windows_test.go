@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 func TestPortableStartupRejectsWebviewProfileOverflow(t *testing.T) {

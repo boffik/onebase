@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // SQLite historically treated a NUMBER dimension's physical TEXT spelling as

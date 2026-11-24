@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 // РасшифроватьСекрет — enc:-значение из данных базы в открытый текст в момент

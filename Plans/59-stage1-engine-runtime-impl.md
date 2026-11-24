@@ -195,7 +195,7 @@ package compose
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 )
 
 // fakeEval — всегда совпадение по подстроке "<0" при отрицательной Сумме (для поздних тестов).
@@ -257,7 +257,7 @@ package compose
 import (
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 )
 
 type Row = map[string]any
@@ -817,8 +817,8 @@ package ui
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 func TestInterpEvaluator(t *testing.T) {
@@ -853,11 +853,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 // interpEvaluator вычисляет DSL-условия `when` на интерпретаторе.
@@ -944,8 +944,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 func TestRenderComposedTable(t *testing.T) {
@@ -986,8 +986,8 @@ import (
 	"html/template"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 // renderComposedTable строит единую <table> с раскрываемыми группами,
@@ -1277,7 +1277,7 @@ git commit -m "feat(ui): декларативный график составн�
 	})
 ```
 
-Добавить импорт `"github.com/ivantit66/onebase/internal/report/compose"` в блок импортов (рядом с `reportpkg`).
+Добавить импорт `"github.com/boffik/onebase/internal/report/compose"` в блок импортов (рядом с `reportpkg`).
 
 - [ ] **Step 2: Шаблон — вывести ComposedHTML + JS-сворачивание**
 
@@ -1350,8 +1350,8 @@ package configcheck
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/report"
 )
 
 func projWith(c *report.Composition) *project.Project {

@@ -7,8 +7,8 @@ package ui
 // в одном месте, потребитель лишь решает, как нарисовать каждую строку.
 
 import (
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 // composeSink принимает события обхода в порядке рендера:

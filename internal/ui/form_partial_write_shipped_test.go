@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
 )
 
 // Проверка на НАСТОЯЩЕЙ поставляемой конфигурации examples/crm: КонтактноеЛицо

@@ -15,12 +15,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/navigation"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/ui"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/navigation"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/ui"
 	"gopkg.in/yaml.v3"
 )
 

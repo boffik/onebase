@@ -6,7 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 )
 
 // noEval — заглушка Evaluator: оформление не применяется (для тестов без условий).

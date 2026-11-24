@@ -17,9 +17,9 @@ import (
 
 	"archive/zip"
 
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // adoptedBase поднимает живую базу так, как её видит лаунчер после перезапуска:

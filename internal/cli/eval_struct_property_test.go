@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 	"github.com/spf13/pflag"
 )
 

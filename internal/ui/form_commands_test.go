@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // unplacedCommands исключает команды, уже размещённые вручную элементом kind:Кнопка

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 // Comments/merge shape alone cannot distinguish full content re-review from

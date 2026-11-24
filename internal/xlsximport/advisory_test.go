@@ -1,7 +1,7 @@
 package xlsximport
 
 import (
-	"github.com/ivantit66/onebase/internal/testutil/xlsxadvisory"
+	"github.com/boffik/onebase/internal/testutil/xlsxadvisory"
 	"testing"
 )
 

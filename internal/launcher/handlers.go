@@ -13,16 +13,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/version"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/incident"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/version"
 )
 
 // normalizeSQLitePath приводит ввод пути к файлу SQLite к одному виду:

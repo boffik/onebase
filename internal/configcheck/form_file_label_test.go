@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Заявка #1356: локатор предупреждения печатался по `form.Name`, а не по имени

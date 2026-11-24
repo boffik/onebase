@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // TestCMSMediaDeclaresCompositeImportClaim keeps the example configuration

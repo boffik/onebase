@@ -3,7 +3,7 @@ package interpreter
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/equipment"
+	"github.com/boffik/onebase/internal/equipment"
 )
 
 // dslDevice — DSL-обёртка над equipment.Device. Создаётся через

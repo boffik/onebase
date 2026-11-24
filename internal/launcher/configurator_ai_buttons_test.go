@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/webassets"
+	"github.com/boffik/onebase/internal/webassets"
 )
 
 // TestConfiguratorJS_AiBootWaitsForDOMReady — регрессия: плавающие кнопки ИИ

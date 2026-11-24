@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/processcontrol"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/processcontrol"
 )
 
 // Supervisor — режим пересборки для разработчика платформы (`onebase dev

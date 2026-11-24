@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Итоги бухрегистра (план 80): таблица итоги_акк_<name> хранит ПОМЕСЯЧНЫЕ обороты

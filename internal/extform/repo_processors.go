@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // ProcessorRecord — одна запись внешней обработки (таблица _ext_processors).

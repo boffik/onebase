@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/userhelp"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/userhelp"
 	"github.com/spf13/cobra"
 )
 

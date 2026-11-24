@@ -3,8 +3,8 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
 )
 
 // FuzzParseProgram — QUAL-03 / issue #792. Парсер DSL обрабатывает сложный и

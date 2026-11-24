@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 // StartupLogLines — сколько строк стартового следа кладём в отчёт. Файл

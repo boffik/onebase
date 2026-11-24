@@ -8,7 +8,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 	"golang.org/x/sys/windows"
 )
 

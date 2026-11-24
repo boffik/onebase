@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/realtime"
-	"github.com/ivantit66/onebase/internal/testutil/browseracceptance"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/realtime"
+	"github.com/boffik/onebase/internal/testutil/browseracceptance"
 )
 
 func TestNavigationSettingsPaletteBrowserAcceptance(t *testing.T) {

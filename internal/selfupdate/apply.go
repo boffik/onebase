@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/fsmode"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // Options — что и откуда обновляем. Пустые поля берутся из состояния и

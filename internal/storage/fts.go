@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"unicode"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/richtext"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/richtext"
 )
 
 // Полнотекстовый (глобальный) поиск — план 82.

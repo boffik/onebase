@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/httpservice"
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 func passwordPolicyServer(t *testing.T) (*Server, *auth.User, context.Context) {

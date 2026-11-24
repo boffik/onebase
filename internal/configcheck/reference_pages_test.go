@@ -1,8 +1,8 @@
 package configcheck
 
 import (
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/page"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/page"
 	"testing"
 )
 

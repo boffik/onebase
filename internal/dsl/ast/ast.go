@@ -3,7 +3,7 @@ package ast
 import (
 	"time"
 
-	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/dsl/token"
 )
 
 type Node interface{ nodeType() string }

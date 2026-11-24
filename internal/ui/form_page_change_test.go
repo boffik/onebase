@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
 )
 
 // ПриСменеСтраницы: набор страниц шлёт событие с именем открытой страницы,

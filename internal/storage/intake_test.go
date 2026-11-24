@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func newIntakeDB(t *testing.T) (*storage.DB, context.Context) {

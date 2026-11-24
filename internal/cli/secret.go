@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/secrets"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/spf13/cobra"
 )
 

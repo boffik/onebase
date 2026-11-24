@@ -3,7 +3,7 @@ package widget
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Ссылка карточки-счётчика ведёт к списку/отчёту с нужным отбором. Принимается

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/gengen"
+	"github.com/boffik/onebase/internal/gengen"
 	"github.com/spf13/cobra"
 )
 

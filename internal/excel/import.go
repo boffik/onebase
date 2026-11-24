@@ -14,7 +14,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/net/html/charset"
 
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
 )
 
 const (

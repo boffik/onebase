@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 // Сбой разбора формы обязан приводить к отказу, а не к продолжению с пустыми

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/converter"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/converter"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 const catalogXML = `<?xml version="1.0" encoding="UTF-8"?>

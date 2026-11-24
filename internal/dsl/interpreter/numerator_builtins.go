@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // NumeratorStore — то, что объекту Нумераторы нужно от хранилища. Реализуется

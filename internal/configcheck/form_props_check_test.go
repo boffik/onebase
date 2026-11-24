@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // Заявка #1492: автор потратил вечер на подбор props, которые платформа молча

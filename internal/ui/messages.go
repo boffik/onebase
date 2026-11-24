@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
 )
 
 const (

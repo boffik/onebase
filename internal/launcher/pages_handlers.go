@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/boffik/onebase/internal/page"
+	"github.com/boffik/onebase/internal/ui"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/page"
-	"github.com/ivantit66/onebase/internal/ui"
 )
 
 // ── Страницы в конфигураторе (план 66, доработка 2) ──────────────────────────

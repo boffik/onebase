@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 	"gopkg.in/yaml.v3"
 )
 

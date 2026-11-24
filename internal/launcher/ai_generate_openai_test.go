@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/llm"
 )
 
 const scaffoldReasoning = "opaque-test-value"

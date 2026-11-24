@@ -11,11 +11,11 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/metadata"
 	"gopkg.in/yaml.v3"
 )
 

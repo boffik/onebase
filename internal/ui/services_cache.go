@@ -23,8 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/httpservice"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // defaultServiceCacheMaxBytes — общий предел памяти под кэш ответов.

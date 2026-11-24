@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/configdb"
 )
 
 // Порядок версий стабилен даже при создании многих версий в один момент

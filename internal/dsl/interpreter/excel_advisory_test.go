@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/testutil/xlsxadvisory"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/testutil/xlsxadvisory"
 )
 
 func TestExcelImport_PublicAdvisories(t *testing.T) {

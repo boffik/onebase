@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/search"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/search"
 )
 
 // Глобальный поиск в REST (план 82). Права считает общий слой internal/search

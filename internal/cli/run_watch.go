@@ -6,12 +6,12 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/api"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/devserver"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/api"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/devserver"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/scheduler"
 )
 
 func startServerWatch(ctx context.Context, enabled bool, configSource, dir string, cfgRepo *configdb.Repo, loadedVersion string, reg *runtime.Registry, sched *scheduler.Scheduler, srv *api.Server, log *slog.Logger) func() {

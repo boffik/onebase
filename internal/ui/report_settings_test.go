@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	reportpkg "github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	reportpkg "github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func reportSettingsTestReport(name string) *reportpkg.Report {

@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/ivantit66/onebase/internal/auth"
-	oblog "github.com/ivantit66/onebase/internal/logging"
 )
 
 const (

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/richtext"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // Предел тела формы и предел самого richtext жили порознь: тело ограничивалось

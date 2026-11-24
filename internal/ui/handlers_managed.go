@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
+	processorpkg "github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/report/compose"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	processorpkg "github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/report/compose"
 )
 
 // pickManagedForm возвращает первую managed-форму нужного Kind из Entity.Forms

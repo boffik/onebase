@@ -3,8 +3,8 @@ package interpreter
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/token"
 )
 
 // These limits keep recursive expression parsing bounded for text supplied at

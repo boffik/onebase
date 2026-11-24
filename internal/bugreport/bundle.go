@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 )
 
 // maxAttachmentBytes — предел на один вложенный файл. Журнал базы растёт без

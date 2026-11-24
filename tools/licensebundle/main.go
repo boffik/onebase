@@ -22,7 +22,7 @@ import (
 	"unicode/utf8"
 )
 
-const modulePath = "github.com/ivantit66/onebase"
+const modulePath = "github.com/boffik/onebase"
 
 type pin struct {
 	Path   string `json:"path"`

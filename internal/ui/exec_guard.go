@@ -9,7 +9,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // ErrExecLocked — текст отказа, видимый пользователю (DSL-ошибка, ловится

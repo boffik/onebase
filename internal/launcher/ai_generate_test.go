@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/project"
 )
 
 const validCatalogYAML = "name: Клиент\nfields:\n  - {name: Наименование, type: string}\n"

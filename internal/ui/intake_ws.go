@@ -21,11 +21,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/intake"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/secrets"
-	"github.com/ivantit66/onebase/internal/wsclient"
+	"github.com/boffik/onebase/internal/intake"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/wsclient"
 )
 
 // wsIntakeEntry — одно живое соединение и признаки, по которым решается,

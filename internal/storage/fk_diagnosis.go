@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // execAllowingFKDiagnosis выполняет запись так, чтобы после нарушения внешнего

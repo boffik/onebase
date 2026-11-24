@@ -4,7 +4,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // buildFallback строит макет без линий сетки: кластеризуем слова по строкам

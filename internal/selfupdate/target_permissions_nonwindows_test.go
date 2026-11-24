@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/installtest"
 )
 
 func TestSharedWritableTargetIsExplicitlyRejected(t *testing.T) {

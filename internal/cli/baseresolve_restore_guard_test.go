@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestOpenCLIStorageRecoversHotWALAfterUncleanShutdown(t *testing.T) {

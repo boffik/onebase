@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/auth"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/auth"
 	"github.com/shopspring/decimal"
 )
 

@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metrics"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/metrics"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 // Обработчик события управляемой формы обязан отрубаться по дедлайну и

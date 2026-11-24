@@ -1,9 +1,9 @@
 package configcheck
 
 import (
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/navigation"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/navigation"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // navigationObjects projects only targets supported by the current runtime nav.

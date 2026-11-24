@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/project"
 )
 
 func fullPlacementProject(t *testing.T, kind, owner string, formPaths ...string) string {

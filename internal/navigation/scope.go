@@ -3,7 +3,7 @@ package navigation
 import (
 	"sort"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 var kinds = []struct{ kind, title string }{

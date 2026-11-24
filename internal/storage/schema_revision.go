@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // Ревизия схемы (issue #1057).

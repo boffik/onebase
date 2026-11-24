@@ -14,12 +14,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/entityservice"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/realtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/entityservice"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/realtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // changePublisher реализует entityservice.ChangePublisher поверх Server.

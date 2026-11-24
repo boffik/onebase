@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/configdb"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/configdb"
 )
 
 // applyableSubdirs — подкаталоги метаданных, куда разрешено применять

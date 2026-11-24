@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/formdoc"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/formdoc"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Конструктор форм и рантайм обязаны показывать ОДНУ форму: раскладка

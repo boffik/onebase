@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 var (

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"html/template"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 

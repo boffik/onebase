@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestPool_ПопыткиОднойЗадачиУчитываютсяРаздельно(t *testing.T) {

@@ -316,7 +316,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // notDocumented — имена из реестра, которые НЕ документируются как функции
@@ -891,7 +891,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/langref"
+	"github.com/boffik/onebase/internal/dsl/langref"
 	"github.com/spf13/cobra"
 )
 ```
@@ -989,7 +989,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/langref"
+	"github.com/boffik/onebase/internal/dsl/langref"
 )
 
 // configuratorLangref отдаёт справочник встроенного языка (статический, из

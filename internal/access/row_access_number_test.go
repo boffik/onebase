@@ -4,11 +4,11 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 )

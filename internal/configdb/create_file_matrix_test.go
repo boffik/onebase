@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // CreateFile обязан одинаково работать на SQLite и PostgreSQL: из двух

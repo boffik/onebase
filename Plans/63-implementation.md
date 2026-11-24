@@ -356,7 +356,7 @@ func TestSkipsPreprocessorLines(t *testing.T) {
 ```
 
 (если в файле нет импорта `token` — добавить
-`"github.com/ivantit66/onebase/internal/dsl/token"`).
+`"github.com/boffik/onebase/internal/dsl/token"`).
 
 - [x] **Step 2: Убедиться, что тест падает**
 
@@ -552,7 +552,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 func writeTemplateSrc(t *testing.T, sourceDir, kind, owner, name string) {
@@ -664,7 +664,7 @@ Expected: FAIL — «rep.ProcessorLayouts undefined» (ошибка компил
 ```
 
      и далее существующий цикл `for _, t := range tmpls` заменить на `for _, t := range rest`;
-   - новая функция (импорты `sort`, `gopkg.in/yaml.v3`, `github.com/ivantit66/onebase/internal/printform` добавить):
+   - новая функция (импорты `sort`, `gopkg.in/yaml.v3`, `github.com/boffik/onebase/internal/printform` добавить):
 
 ```go
 // writeProcessorLayouts пишет для каждой обработки src/<имя>.proc.layout.yaml:
@@ -769,7 +769,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 // resolveLang передавал baseLang="ru" в i18n.Resolve, и Accept-Language
@@ -879,7 +879,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 func testBundle(t *testing.T) *i18n.Bundle {
@@ -979,7 +979,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 // Error — ошибка с шаблоном-ключом и аргументами.
@@ -1129,7 +1129,7 @@ func (s *Server) errText(r *http.Request, err error) string {
 }
 ```
 
-(импорт `github.com/ivantit66/onebase/internal/i18n/i18nerr`).
+(импорт `github.com/boffik/onebase/internal/i18n/i18nerr`).
 
 - [ ] **Step 2: Механический прогон http.Error**
 

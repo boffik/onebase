@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/onec_forms"
 	"github.com/spf13/cobra"
 )
 

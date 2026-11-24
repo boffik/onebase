@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/selfupdate"
 )
 
 func TestBlockMessage_TextDiffersByReason(t *testing.T) {

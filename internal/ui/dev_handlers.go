@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/gengen"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/gengen"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 // ─── Query Console ──────────────────────────────────────────────────────────

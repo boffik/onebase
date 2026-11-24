@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // Связывание SSO-личности с УЖЕ СУЩЕСТВУЮЩЕЙ локальной учёткой требует явного

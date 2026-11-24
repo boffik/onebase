@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // These references occur only in a child's clause, so the outer SELECT must

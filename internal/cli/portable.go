@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 // PrepareUserData selects portable storage before startup logs or update state

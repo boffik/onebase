@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/ast"
 )
 
 // Регрессия (план критических фиксов, #2): HTTP-сервис, названный как

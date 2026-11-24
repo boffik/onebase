@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/typedempty"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/typedempty"
 )
 
 // Ссылочная константа не должна выдавать UUID за наименование (#1536):

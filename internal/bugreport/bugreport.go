@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/incident"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/selfupdate"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/incident"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // Env — окружение, в котором воспроизвелась ошибка.

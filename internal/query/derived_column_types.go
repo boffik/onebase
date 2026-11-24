@@ -1,6 +1,6 @@
 package query
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // buildScalarColumnTypes propagates proven projection types from child SELECTs
 // to their derived-table aliases before calendar functions are rewritten.

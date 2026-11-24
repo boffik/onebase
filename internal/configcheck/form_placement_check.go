@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckFormPlacement возвращает НЕблокирующие предупреждения о файлах управляемых

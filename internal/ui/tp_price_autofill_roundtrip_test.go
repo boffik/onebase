@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func TestTablePartOnChangeFillsPriceInResponse(t *testing.T) {

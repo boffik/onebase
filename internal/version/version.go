@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Build is set via -ldflags="-X github.com/ivantit66/onebase/internal/version.Build=v1.2.3"
+// Build is set via -ldflags="-X github.com/boffik/onebase/internal/version.Build=v1.2.3"
 var Build = ""
 
 // Distribution metadata is optional and set by a fork's supplier using -ldflags

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ivantit66/onebase/internal/dsl/langref"
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/dsl/langref"
+	"github.com/boffik/onebase/internal/fsmode"
 	"github.com/spf13/cobra"
 )
 

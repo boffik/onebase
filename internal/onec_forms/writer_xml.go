@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // WriteFormXML сериализует IRForm в Form.xml формата управляемой формы

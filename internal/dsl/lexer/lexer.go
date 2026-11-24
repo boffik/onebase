@@ -3,7 +3,7 @@ package lexer
 import (
 	"unicode"
 
-	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/dsl/token"
 )
 
 type Lexer struct {

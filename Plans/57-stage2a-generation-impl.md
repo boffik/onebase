@@ -320,8 +320,8 @@ Expected: FAIL — методов нет.
 
 - [ ] **Step 3: Дописать методы в `internal/launcher/ai_generate.go`**
 
-Добавить импорты `"github.com/ivantit66/onebase/internal/configcheck"` и
-`"github.com/ivantit66/onebase/internal/project"` к блоку импортов, и методы:
+Добавить импорты `"github.com/boffik/onebase/internal/configcheck"` и
+`"github.com/boffik/onebase/internal/project"` к блоку импортов, и методы:
 
 ```go
 // check валидирует overlay без исполнения кода: CheckDir (парс YAML) + project.Load
@@ -416,7 +416,7 @@ git commit -m "feat(configurator): genSession check/showObject/diff (план 57
 - [ ] **Step 1: Дописать падающий тест**
 
 Добавить в `internal/launcher/ai_generate_test.go` (импорт `"context"` и
-`"github.com/ivantit66/onebase/internal/llm"` добавить в тест-файл):
+`"github.com/boffik/onebase/internal/llm"` добавить в тест-файл):
 
 ```go
 func TestGenTools_Dispatch(t *testing.T) {
@@ -450,7 +450,7 @@ Expected: FAIL — метода `tools` нет.
 
 - [ ] **Step 3: Добавить `tools()` в `internal/launcher/ai_generate.go`**
 
-Добавить импорты `"context"` и `"github.com/ivantit66/onebase/internal/llm"`, затем:
+Добавить импорты `"context"` и `"github.com/boffik/onebase/internal/llm"`, затем:
 
 ```go
 func strInput(call llm.ToolCall, key string) string {

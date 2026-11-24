@@ -1,6 +1,6 @@
 package onec_forms
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // elementMap — соответствие между именем элемента в Form.xml (1С)
 // и каноническим типом OneBase (FormElementType из internal/metadata).

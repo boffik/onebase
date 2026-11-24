@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ivantit66/onebase/internal/api"
-	"github.com/ivantit66/onebase/internal/deviceagent"
-	"github.com/ivantit66/onebase/internal/equipment"
+	"github.com/boffik/onebase/internal/api"
+	"github.com/boffik/onebase/internal/deviceagent"
+	"github.com/boffik/onebase/internal/equipment"
 )
 
 var deviceAgentCmd = &cobra.Command{

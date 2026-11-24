@@ -3,7 +3,7 @@ package interpreter
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // Макет wraps a LayoutTemplate as a DSL-accessible object.

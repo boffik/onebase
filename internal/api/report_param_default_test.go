@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
+	reportpkg "github.com/boffik/onebase/internal/report"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
 )
 
 // Умолчание параметра отчёта должно работать и по REST, иначе API расходится с

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 // Ротация мастер-ключа и enc:-значения в файлах конфигурации.

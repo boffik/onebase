@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/version"
 )
 
 func TestCheckMinimumEngineVersion(t *testing.T) {

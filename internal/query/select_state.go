@@ -3,7 +3,7 @@ package query
 import (
 	"strconv"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // The token scope, rather than parenthesis depth, owns reference navigation:

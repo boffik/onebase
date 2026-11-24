@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // RegFilter — отбор для списков регистров: точные значения измерений и период

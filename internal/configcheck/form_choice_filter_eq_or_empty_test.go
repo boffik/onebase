@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // eq_or_empty — та же пара «ссылка ↔ ссылочный источник», что у eq, и ничего

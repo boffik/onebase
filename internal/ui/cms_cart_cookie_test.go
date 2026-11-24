@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // TestCMSCartCookieIsScopedToShopService идёт через поставляемый HTTP-сервис

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // triggerWriter вызывает fire ровно один раз — на первой записи в архив: так

@@ -24,9 +24,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/typedempty"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/typedempty"
 )
 
 // queryRunner — то, что умеет исполнять SQL. Интерфейс, а не *storage.DB,

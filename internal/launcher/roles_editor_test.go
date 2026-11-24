@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Роль в том виде, в каком её пишут руками: помимо матричных секций — права на

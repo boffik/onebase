@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 )
 
 // C1/C4: ячейка показателя в Excel должна совпадать с HTML — применять Format

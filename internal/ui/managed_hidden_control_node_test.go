@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Пути и начальные состояния берём из GET формы, карты обновлений — из POST

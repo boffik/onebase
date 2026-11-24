@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // secretFromEnrollPage вытаскивает секрет TOTP со страницы настройки — он

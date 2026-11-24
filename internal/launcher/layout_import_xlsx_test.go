@@ -16,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/xuri/excelize/v2"
 
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // План 155: эндпоинт импорта макета из бланка Excel.

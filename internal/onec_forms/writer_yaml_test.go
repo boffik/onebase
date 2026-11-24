@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/dsl/loader"
 )
 
 func TestWriteFormYAML_Minimal(t *testing.T) {

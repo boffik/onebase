@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Оболочка вкладок (issue #129/#130, фаза 1) должна рендериться, переиспользуя

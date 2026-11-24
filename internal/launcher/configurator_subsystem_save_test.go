@@ -9,7 +9,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/configdb"
 	"gopkg.in/yaml.v3"
 )
 

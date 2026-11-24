@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/richtext"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/richtext"
 	"golang.org/x/net/html"
 )
 

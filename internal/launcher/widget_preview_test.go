@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/widget"
 )
 
 // Для графика предпросмотр строит таблицу «ось X + по колонке на серию» и

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/formdoc"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/formdoc"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Панель свойств табличной части предлагала одно событие из шести и не знала

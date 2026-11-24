@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/widget"
 )
 
 // План 182D: интерактивные фильтры list-виджета. Значение приходит только по

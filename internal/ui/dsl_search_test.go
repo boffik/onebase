@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
 )
 
 // Встроенная функция DSL ПолнотекстовыйПоиск (план 82). Права — пользователя

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 func renderRegisterMovementsForUser(f *registerMaskFixture, user *auth.User) (int, string) {

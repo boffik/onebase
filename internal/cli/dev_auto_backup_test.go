@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/installtest"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestDevAutoBackupTargetUsesOpenedCanonicalSQLiteFile(t *testing.T) {

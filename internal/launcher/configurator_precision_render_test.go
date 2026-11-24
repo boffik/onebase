@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 func renderCfgTree(t *testing.T, data *configuratorData) string {

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/entityservice"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/entityservice"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func managedRequiredFieldEntity(field metadata.Field, elementRequired bool) *metadata.Entity {

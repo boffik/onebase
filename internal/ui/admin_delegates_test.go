@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/dbcheck"
+	"github.com/boffik/onebase/internal/dbcheck"
 )
 
 func TestAdminTemplatesUseDelegatedHandlers(t *testing.T) {

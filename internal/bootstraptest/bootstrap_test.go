@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/installtest"
 )
 
 // Exercise the actual shipped scripts and real native processes with release

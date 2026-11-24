@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Processor forms keep their existing text fallback unless a form attribute

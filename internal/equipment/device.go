@@ -10,7 +10,7 @@ package equipment
 import (
 	"context"
 	"fmt"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"sort"
 	"sync"
 )

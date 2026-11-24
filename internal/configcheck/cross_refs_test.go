@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckCrossRefs должен ловить ссылки на несуществующие объекты (документы в

@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/version"
 	"gopkg.in/yaml.v3"
 )
 

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/selfupdate"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/version"
 )
 
 func renderUpdatesPage(t *testing.T, vm updatesVM) string {

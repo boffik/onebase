@@ -40,7 +40,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func TestSchemaText_Entities(t *testing.T) {
@@ -98,7 +98,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // NamedTitle — имя + синоним для объектов, у которых в срез идут только они
@@ -341,7 +341,7 @@ func (s *Server) aiSchemaText() string {
 }
 ```
 
-Затем добавить импорт `"github.com/ivantit66/onebase/internal/aicontext"` и запустить
+Затем добавить импорт `"github.com/boffik/onebase/internal/aicontext"` и запустить
 `goimports`/`go build` — удалить ставшие неиспользуемыми импорты (вероятно `metadata`,
 а `fmt` оставить только если используется в другом месте файла). Если `go build`
 ругается на неиспользуемый импорт — убрать его.
@@ -382,9 +382,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/report"
 )
 
 // projectSchemaText строит срез из загруженного проекта — проверяем на литерале.
@@ -416,8 +416,8 @@ Expected: FAIL — функции `projectSchemaText` нет.
 - [ ] **Step 3: Добавить `projectSchemaText` и `configSchemaText`**
 
 В `internal/launcher/ai_assist.go` добавить импорты `"context"` (уже есть),
-`"github.com/ivantit66/onebase/internal/aicontext"`,
-`"github.com/ivantit66/onebase/internal/project"` и функции:
+`"github.com/boffik/onebase/internal/aicontext"`,
+`"github.com/boffik/onebase/internal/project"` и функции:
 
 ```go
 // projectSchemaText строит текстовый срез конфигурации из загруженного проекта.

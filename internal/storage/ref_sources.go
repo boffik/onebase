@@ -1,6 +1,6 @@
 package storage
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // referenceSource is the shared physical inventory for deletion and navigation.
 // It never contains identifiers supplied by a request.

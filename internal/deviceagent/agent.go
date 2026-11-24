@@ -18,9 +18,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/boffik/onebase/internal/equipment"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/equipment"
-	oblog "github.com/ivantit66/onebase/internal/logging"
 )
 
 func deviceAgentLog() *slog.Logger {

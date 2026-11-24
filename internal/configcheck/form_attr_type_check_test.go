@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/onec_forms"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // Нераспознанный тип реквизита формы не ошибка и не пустое место: значение

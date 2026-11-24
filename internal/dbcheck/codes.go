@@ -16,7 +16,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 type codesCheck struct{}

@@ -3,7 +3,7 @@ package interpreter
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // TestMaketGetArea_NewFields ensures the new LayoutCell properties

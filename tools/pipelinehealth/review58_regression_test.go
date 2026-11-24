@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 // Private review probes; synthetic peers only, no live transport.

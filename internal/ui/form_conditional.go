@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/report/compose"
 )
 
 const (

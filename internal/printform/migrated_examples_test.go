@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // TestMigratedExamples_RenderSmoke — спот-чек реальных мигрированных макетов из

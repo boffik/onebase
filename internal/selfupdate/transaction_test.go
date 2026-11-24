@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/installtest"
 )
 
 func transactionInstallation(t *testing.T, version string) (string, StagedInfo) {

@@ -10,7 +10,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // ErrNetworkLocked — текст отказа, видимый пользователю (DSL-ошибка, тело

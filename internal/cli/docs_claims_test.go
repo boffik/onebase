@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/langref"
+	"github.com/boffik/onebase/internal/dsl/langref"
 )
 
 var languageCountsPattern = regexp.MustCompile(`([0-9]+) функци(?:й|и), ([0-9]+) метод(?:ов|а)`)

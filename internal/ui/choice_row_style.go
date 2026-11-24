@@ -8,12 +8,12 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/csssafe"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/report/compose"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/csssafe"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/report/compose"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Оформление строк выбора ссылок (choice_row_style справочника): выпадающий

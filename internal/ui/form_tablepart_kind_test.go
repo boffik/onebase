@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/project"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/project"
 )
 
 // Элемент ТЧ, описанный только ключом `table_part:`, обязан пройти весь путь

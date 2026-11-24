@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/text/encoding/charmap"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -13,8 +13,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestScheduledEnabled_ТриСостоянияRoundTrip(t *testing.T) {

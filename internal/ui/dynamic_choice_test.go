@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // При объявленном НачалоВыбора у ПолеСписка рендер навешивает data-el и

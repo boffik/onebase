@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // ensureTestChart заводит _accounts и план счетов plan с перечисленными кодами.

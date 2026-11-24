@@ -3,7 +3,7 @@ package ui
 import (
 	"net/http"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // setFormMode пишет режим открытия форм текущего пользователя (поле формы

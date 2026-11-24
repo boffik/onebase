@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/objstore"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/objstore"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // applyFileStorageS3 attaches the S3-compatible blob store to db when app.yaml

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // ReportRecord — одна запись внешнего отчёта (таблица _ext_reports).

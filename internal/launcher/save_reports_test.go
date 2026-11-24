@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // dbBackedBase поднимает базу с конфигурацией в БД (таблица _onebase_config

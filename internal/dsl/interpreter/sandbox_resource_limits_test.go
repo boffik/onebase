@@ -6,7 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 func TestSandboxResourceLimitsCoverOperatorsAndBuiltinFormatting(t *testing.T) {

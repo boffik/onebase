@@ -4,7 +4,7 @@ package interpreter_test
 // Empty number fields are covered through HTTP/DSL and storage in
 // ui/tp_empty_number_zero_test.go and query_typed_empty_matrix_test.go.
 import (
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

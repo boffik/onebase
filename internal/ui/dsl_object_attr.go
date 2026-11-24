@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/typedempty"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/typedempty"
 )
 
 // objectAttributeValue реализует DSL-функцию ЗначениеРеквизитаОбъекта(Ссылка,

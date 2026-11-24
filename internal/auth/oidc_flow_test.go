@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // mockIssuer — минимальный провайдер OIDC: discovery, JWKS и token endpoint.

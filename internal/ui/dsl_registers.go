@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // accumRegsRoot — DSL-глобал РегистрыНакопления / AccumulationRegisters.

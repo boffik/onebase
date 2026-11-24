@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/objstore"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/scheduler"
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/objstore"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 const (

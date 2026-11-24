@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/webhook"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/webhook"
 )
 
 func hygieneObjects(warnings []Issue) map[string]string {

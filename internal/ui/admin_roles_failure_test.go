@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // authRepoWithoutSchema даёт репозиторий поверх пустой базы: таблиц ролей в ней

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/aicontext"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/project"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/aicontext"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/project"
 )
 
 // builtinReference — отсортированный список известных функций DSL для контекста

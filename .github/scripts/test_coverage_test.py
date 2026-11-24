@@ -12,8 +12,8 @@ import unittest
 
 
 RUNNER = Path(__file__).with_name("test-coverage.py")
-UI = "github.com/ivantit66/onebase/internal/ui"
-LAUNCHER = "github.com/ivantit66/onebase/internal/launcher"
+UI = "github.com/boffik/onebase/internal/ui"
+LAUNCHER = "github.com/boffik/onebase/internal/launcher"
 
 # This is a child process replacing only Go at the external command boundary.
 # The real Go fixture below checks the actual -run/subtest/seed semantics.
@@ -22,9 +22,9 @@ import json, os, pathlib, re, sys
 args = sys.argv[1:]
 mode = os.environ.get('SCENARIO', '')
 print('go: downloading fixture dependency', file=sys.stderr)
-ui = 'github.com/ivantit66/onebase/internal/ui'
-launcher = 'github.com/ivantit66/onebase/internal/launcher'
-other = 'github.com/ivantit66/onebase/other'
+ui = 'github.com/boffik/onebase/internal/ui'
+launcher = 'github.com/boffik/onebase/internal/launcher'
+other = 'github.com/boffik/onebase/other'
 with open('calls.jsonl', 'a') as f: f.write(json.dumps(args)+'\n')
 if args == ['list', './...']:
     if mode == 'list-failure': sys.exit(2)
@@ -137,14 +137,14 @@ class CoverageCLI(unittest.TestCase):
         self.assertEqual(lines, ["mode: atomic",
                                 LAUNCHER+"/sample.go:1.1,2.2 2 3",
                                 UI+"/sample.go:1.1,2.2 2 10",
-                                "github.com/ivantit66/onebase/other/sample.go:1.1,2.2 2 7"])
+                                "github.com/boffik/onebase/other/sample.go:1.1,2.2 2 7"])
         calls = [json.loads(s) for s in (self.root / "calls.jsonl").read_text().splitlines()]
         self.assertEqual(len(calls), 10)  # list, two inventories, other, UI4, launcher2
         self.assertNotIn(UI, calls[3])
         self.assertNotIn(LAUNCHER, calls[3])
         self.assertIn("-p=2", calls[3])
         self.assertNotIn("-run", calls[3])
-        self.assertEqual(calls[3][-1:], ["github.com/ivantit66/onebase/other"])
+        self.assertEqual(calls[3][-1:], ["github.com/boffik/onebase/other"])
         self.assertTrue(all("-p=2" not in call for call in calls[4:]))
         self.assertEqual([c[-1] for c in calls[4:]], [UI]*4+[LAUNCHER]*2)
 
@@ -182,7 +182,7 @@ class CoverageCLI(unittest.TestCase):
                     self.assertFalse((self.root / "coverage.out").exists())
 
     def test_real_go_examples_fuzz_subtests_and_dynamic_discovery(self):
-        (self.root / "go.mod").write_text("module github.com/ivantit66/onebase\n\ngo 1.26.0\n")
+        (self.root / "go.mod").write_text("module github.com/boffik/onebase\n\ngo 1.26.0\n")
         ui = self.root / "internal/ui"
         ui.mkdir(parents=True)
         (ui / "value.go").write_text("package ui\nfunc Value() int { return 42 }\n")

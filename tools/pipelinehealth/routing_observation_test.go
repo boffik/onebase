@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 func TestPublicRoutingObservationKeepsEvidenceAndLifetimeBudget(t *testing.T) {

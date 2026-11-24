@@ -8,7 +8,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // Бланк для тестов собирается excelize прямо здесь: бинарный фикстур в репозитории

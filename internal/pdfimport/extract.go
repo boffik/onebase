@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	pdf "github.com/ivantit66/onebase/internal/pdfimport/pdfparse"
+	pdf "github.com/boffik/onebase/internal/pdfimport/pdfparse"
 )
 
 // textRun — один кусочек текста на странице с координатами в пунктах (pt).

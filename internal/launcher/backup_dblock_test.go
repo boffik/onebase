@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dblock"
-	"github.com/ivantit66/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/installtest"
 )
 
 func TestRestoreRefusesDatabaseOwnedByAnotherProcessAndReleasesGates(t *testing.T) {

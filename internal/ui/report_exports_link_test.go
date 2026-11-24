@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	reportpkg "github.com/boffik/onebase/internal/report"
 	"github.com/go-chi/chi/v5"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
 )
 
 func TestReportMyExportsLinkHTTP(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/ui"
+	"github.com/boffik/onebase/internal/ui"
 )
 
 // План 73: конфигуратор рисует превью иконки ссылкой на общий спрайт, а список

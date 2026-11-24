@@ -27,7 +27,7 @@ func TestAPIDoesNotImportUI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unquote import in %s: %v", entry.Name(), err)
 			}
-			if path == "github.com/ivantit66/onebase/internal/ui" {
+			if path == "github.com/boffik/onebase/internal/ui" {
 				t.Errorf("%s imports internal/ui; assemble API and UI in internal/app", entry.Name())
 			}
 		}

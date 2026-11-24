@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Регрессия (план критических фиксов, #1): удаление одной строки периодического

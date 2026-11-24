@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
 )
 
 // MinimumWarning checks an optional configuration requirement against this

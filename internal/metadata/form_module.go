@@ -252,7 +252,6 @@ type FormElement struct {
 	HeaderBackground  string `yaml:"header_background,omitempty"`
 	HeaderBorderColor string `yaml:"header_border_color,omitempty"`
 	ReadOnly          bool   `yaml:"readonly,omitempty"` // только чтение
-	Background string `yaml:"background,omitempty"` // фон контейнера; читается только у ГруппаФормы (#1547), цвет проверяет csssafe.Color
 	// ShowTitle / Bordered — оформление ГруппаФормы. Оба ключа по умолчанию
 	// включены, поэтому хранятся указателем: false — это осознанно снятая
 	// галка, nil — «ключа нет», то есть прежний вид. Обычный bool не отличил бы
@@ -267,7 +266,6 @@ type FormElement struct {
 	// читаться отдельным блоком.
 	ShowTitle *bool `yaml:"show_title,omitempty"`
 	Bordered  *bool `yaml:"bordered,omitempty"`
-	ReadOnly  bool  `yaml:"readonly,omitempty"` // только чтение
 	// EditableAdminOnly — поле редактирует только администратор, остальным оно
 	// нередактируемо всегда. В отличие от ReadOnlyWhen условие тут не от данных
 	// записи, а от того, кто смотрит, поэтому вычисляется на сервере при

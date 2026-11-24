@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/secrets"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/secrets"
 )
 
 func exchangeNoRows(err error) bool {

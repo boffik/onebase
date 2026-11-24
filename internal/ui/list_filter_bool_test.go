@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/net/html"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Панель «Отбор» списка: булев реквизит — выбор «— все — / Да / Нет», а не

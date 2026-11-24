@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // TestAcceptanceRealCorpus прогоняет ImportPage на реальных PDF пользователя

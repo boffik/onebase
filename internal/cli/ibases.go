@@ -5,7 +5,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/launcher"
 	"github.com/spf13/cobra"
 )
 

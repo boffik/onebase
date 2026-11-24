@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	reportpkg "github.com/boffik/onebase/internal/report"
 )
 
 // Вторая половина намеренного расхождения (первая — в internal/ui): экран

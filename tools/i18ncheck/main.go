@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 // keyPatterns — список регулярных выражений для извлечения i18n-ключей.

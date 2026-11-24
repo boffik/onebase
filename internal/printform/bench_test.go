@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // bench_test.go — перф-прогон декларативного движка на «накладной 1000 строк»

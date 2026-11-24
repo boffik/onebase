@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ivantit66/onebase/internal/navigation"
+	"github.com/boffik/onebase/internal/navigation"
 )
 
 const (

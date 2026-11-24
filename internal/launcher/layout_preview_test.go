@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // План 64, этап 5b, блок C/D: тесты эндпоинта предпросмотра макета.

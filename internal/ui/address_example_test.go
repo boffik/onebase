@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // The shipped example runs through HTTP save/print and the public processor

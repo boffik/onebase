@@ -3,8 +3,8 @@ package configcheck
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/report"
 )
 
 func projWithReport(rep *report.Report) *project.Project {

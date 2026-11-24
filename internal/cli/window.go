@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/launcher"
 	"github.com/spf13/cobra"
 )
 

@@ -118,14 +118,14 @@ jobs:
             echo "::warning::RELEASE_PUBLIC_KEY не задан — сборки выйдут без проверки подписи"
           fi
           ldflags="-s -w"
-          ldflags="$ldflags -X github.com/ivantit66/onebase/internal/version.Build=$BUILD_VER"
-          ldflags="$ldflags -X github.com/ivantit66/onebase/internal/selfupdate.PublicKey=$RELEASE_PUBLIC_KEY"
+          ldflags="$ldflags -X github.com/boffik/onebase/internal/version.Build=$BUILD_VER"
+          ldflags="$ldflags -X github.com/boffik/onebase/internal/selfupdate.PublicKey=$RELEASE_PUBLIC_KEY"
           # Жёсткий режим: релиз без .sig отвергается (#1195). Пока он был
           # мягким, подпись обходилась её отсутствием — обладателю доступа к
           # релизам не нужно подделывать подпись, достаточно не класть её.
           # Без вшитого открытого ключа флаг не меняет ничего: проверка
           # выключена целиком, и форк без ключей не задет.
-          ldflags="$ldflags -X github.com/ivantit66/onebase/internal/selfupdate.RequireSignature=1"
+          ldflags="$ldflags -X github.com/boffik/onebase/internal/selfupdate.RequireSignature=1"
           go build "-ldflags=$ldflags" -o onebase${{ matrix.ext }} ./cmd/onebase
 
       # Гейт по goarch, а не только по goos: шаг требует CGO_ENABLED=1, то есть
@@ -141,12 +141,12 @@ jobs:
           RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
         run: |
           $ldflags = "-s -w -H windowsgui"
-          $ldflags += " -X github.com/ivantit66/onebase/internal/version.Build=$env:BUILD_VER"
-          $ldflags += " -X github.com/ivantit66/onebase/internal/selfupdate.PublicKey=$env:RELEASE_PUBLIC_KEY"
+          $ldflags += " -X github.com/boffik/onebase/internal/version.Build=$env:BUILD_VER"
+          $ldflags += " -X github.com/boffik/onebase/internal/selfupdate.PublicKey=$env:RELEASE_PUBLIC_KEY"
           # Тот же жёсткий режим, что и в CLI-бинаре (#1195). Оба обязаны идти
           # с ним: на Windows лаунчер может быть запущен из любого из двух, и
           # мягкий GUI-бинарь оставил бы дыру открытой на основной платформе.
-          $ldflags += " -X github.com/ivantit66/onebase/internal/selfupdate.RequireSignature=1"
+          $ldflags += " -X github.com/boffik/onebase/internal/selfupdate.RequireSignature=1"
           go build -tags webview "-ldflags=$ldflags" -o onebase-gui.exe ./cmd/onebase
 
       - name: Collect licenses for the actual release binaries

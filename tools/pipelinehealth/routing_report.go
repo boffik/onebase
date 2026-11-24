@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 type routingContract struct {

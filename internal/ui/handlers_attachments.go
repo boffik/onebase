@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // Нормализация имени вложения (защита от path-traversal/XSS/DoS) вынесена в

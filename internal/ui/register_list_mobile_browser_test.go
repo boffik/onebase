@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 // Use mounted production pages and assets: checking the overflow wrapper alone

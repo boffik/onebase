@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 func TestLookupSessionKindSeparatesConfiguratorAndEnterprise(t *testing.T) {

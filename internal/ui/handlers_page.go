@@ -10,13 +10,13 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/page"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/widget"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/page"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/widget"
 )
 
 // pageChartData конвертирует чарт-блок страницы (план 66) в widget.ChartData,

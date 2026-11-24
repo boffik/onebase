@@ -15,10 +15,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/launcher"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // renumberContractFixture — проект с нумератором и база, где у двух записей

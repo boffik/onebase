@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/secrets"
 	"gopkg.in/yaml.v3"
 )
 

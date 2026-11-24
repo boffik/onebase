@@ -158,7 +158,7 @@ Run: `go test ./internal/launcher/ -run 'Layout|QueryBuilder|Langref|Home' -v 2>
 - [ ] **Step 4: Полный прогон пакета — зелёный**
 
 Run: `go test ./internal/launcher/ 2>&1 | tail -5`
-Expected: `ok  github.com/ivantit66/onebase/internal/launcher`.
+Expected: `ok  github.com/boffik/onebase/internal/launcher`.
 
 - [ ] **Step 5: Коммит**
 

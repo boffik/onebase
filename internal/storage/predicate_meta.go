@@ -1,6 +1,6 @@
 package storage
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // RegisterPredicateEntity adapts register metadata to the field model used by
 // row-level predicates. The returned value is not a persisted entity.

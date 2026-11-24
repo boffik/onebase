@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 type Repo struct {

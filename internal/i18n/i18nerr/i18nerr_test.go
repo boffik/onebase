@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 func testBundle(t *testing.T) *i18n.Bundle {

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/onec_forms"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/encoding/charmap"
 )

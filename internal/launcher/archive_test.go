@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func zipNames(t *testing.T, raw []byte) []string {

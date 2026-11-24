@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/spf13/cobra"
 )
 

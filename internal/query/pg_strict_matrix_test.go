@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/jackc/pgx/v5"
 )
 

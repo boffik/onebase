@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/userhelp"
+	"github.com/boffik/onebase/internal/userhelp"
 )
 
 func write(t *testing.T, dir, file, body string) {

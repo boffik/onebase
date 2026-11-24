@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // Запись в уже начатый HTTP-ответ.

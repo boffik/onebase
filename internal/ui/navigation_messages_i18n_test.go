@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Сообщения отмены перехода ОткрытьФорму приходят в managed.js из шаблона, а не

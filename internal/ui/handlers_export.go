@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/excel"
+	"github.com/boffik/onebase/internal/excel"
 )
 
 // listExcel exports an entity list (with current filters) as XLSX.

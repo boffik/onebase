@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dblock"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // migrateGateFixture — минимальная конфигурация: одного справочника достаточно,

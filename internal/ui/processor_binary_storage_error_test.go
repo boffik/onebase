@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Faults use a per-server file factory, so they work on Windows and under root

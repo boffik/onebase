@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 var listRefreshHrefRE = regexp.MustCompile(`<a class="btn btn-secondary btn-sm" data-ob-list-refresh href="([^"]+)"`)

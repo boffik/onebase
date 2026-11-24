@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // TestUpsertVersioned_HappyPath: запись новой записи → Get → запись с

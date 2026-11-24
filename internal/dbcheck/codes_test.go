@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func codesEnv(t *testing.T, rows []map[string]any) (*Env, *metadata.Entity) {

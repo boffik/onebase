@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/launcher"
 )
 
 // `run --id` для записи клиентского подключения обязан отказать ДО любых

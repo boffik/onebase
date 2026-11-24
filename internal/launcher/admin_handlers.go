@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/version"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/version"
 )
 
 // ── Admin panel handlers for configurator ────────────────────────────────────

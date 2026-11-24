@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // ensureChart заводит _accounts и план счетов plan с перечисленными кодами:

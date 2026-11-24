@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/websec"
+	"github.com/boffik/onebase/internal/websec"
 )
 
 func TestLauncherBrowserOriginIsCookieIsolatedFromBasePorts(t *testing.T) {

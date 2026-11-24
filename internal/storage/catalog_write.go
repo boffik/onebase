@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // WriteCatalogRecord upserts a catalog record from DSL code

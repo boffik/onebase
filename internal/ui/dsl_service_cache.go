@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // registerServiceCacheBuiltins добавляет функции сброса кэша в DSL-окружение.

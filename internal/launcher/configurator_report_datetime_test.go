@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/report"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/report"
 )
 
 // Значение типа берём из настоящей формы: POST с вручную заданным datetime

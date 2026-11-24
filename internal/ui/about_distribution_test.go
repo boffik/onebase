@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/version"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/version"
 )
 
 func TestAboutDistributionHTTP(t *testing.T) {

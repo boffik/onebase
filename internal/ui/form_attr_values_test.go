@@ -5,10 +5,10 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/runtime"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/onec_forms"
-	"github.com/ivantit66/onebase/internal/runtime"
 )
 
 // attrEventServer — сервер с управляемой формой, у которой есть ссылочный и

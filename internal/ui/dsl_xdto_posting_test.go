@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // Выполнение обработки, как в procrun: штатные DSL-менеджеры, проведение,

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configfmt"
+	"github.com/boffik/onebase/internal/configfmt"
 )
 
 func TestSchemaByKind_Aliases(t *testing.T) {

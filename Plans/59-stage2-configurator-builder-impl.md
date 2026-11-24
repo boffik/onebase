@@ -140,7 +140,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 )
 
 // parseCompositionForm собирает report.Composition из полей формы comp.*.
@@ -327,7 +327,7 @@ func applyReportComposition(raw []byte, f url.Values) ([]byte, error) {
    ```go
    Composition *report.Composition `yaml:"composition,omitempty"`
    ```
-   (импорт `report` уже есть — `report.LoadFile`/типы используются; если нет — добавить `"github.com/ivantit66/onebase/internal/report"`.)
+   (импорт `report` уже есть — `report.LoadFile`/типы используются; если нет — добавить `"github.com/boffik/onebase/internal/report"`.)
 2. В `updateReportFile` (~2466) после `rep.ChartProc = chartProc` добавить:
    ```go
    if c, present := parseCompositionForm(r.Form); present {
@@ -448,7 +448,7 @@ func TestReportBuilderRender(t *testing.T) {
 > 	return buf.String()
 > }
 > ```
-> Импорты теста: `bytes`, `strings`, `testing`, `github.com/ivantit66/onebase/internal/report`.
+> Импорты теста: `bytes`, `strings`, `testing`, `github.com/boffik/onebase/internal/report`.
 
 - [ ] **Step 2: Запустить — FAIL**
 

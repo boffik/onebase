@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	reportpkg "github.com/ivantit66/onebase/internal/report"
+	reportpkg "github.com/boffik/onebase/internal/report"
 )
 
 // TestReportVariantsSelect проверяет, что форма отчёта с вариантами компоновки

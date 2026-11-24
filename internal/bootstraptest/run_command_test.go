@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/installtest"
 )
 
 func TestPrintedRunShellLiteral(t *testing.T) {

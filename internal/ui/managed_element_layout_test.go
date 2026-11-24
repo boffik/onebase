@@ -18,7 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/net/html"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func layoutTestEntity(el *metadata.FormElement) *metadata.Entity {

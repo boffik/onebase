@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/configdb"
 )
 
 // TestSaveConfigFiles_FileMode: пакетная запись пишет все файлы и не оставляет

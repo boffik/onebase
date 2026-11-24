@@ -15,8 +15,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/net/html"
 
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // ПолеКартинки с data_path показывает вложение, идентификатор которого лежит в

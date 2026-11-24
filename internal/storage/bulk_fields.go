@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // GetFieldsByIDs reads selected object fields for a batch of object IDs.

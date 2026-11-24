@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // enable2FA заводит пользователя с включённым вторым фактором и возвращает его

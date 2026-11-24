@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/report"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/report"
 	"golang.org/x/net/html"
 )
 

@@ -10,8 +10,8 @@ package ui
 import (
 	"net/http"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // visibleSubsystems возвращает разделы для панели с учётом пользователя.

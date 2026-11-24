@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/llm"
 )
 
 // Прямой доступ к _settings по ключу — для инструментов, которые работают со

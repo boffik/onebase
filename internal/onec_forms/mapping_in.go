@@ -3,7 +3,7 @@ package onec_forms
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // NormalizeForImport преобразует «сырой» IR из reader_xml.go в нормализованный

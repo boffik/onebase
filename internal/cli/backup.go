@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/dblock"
 	"github.com/spf13/cobra"
 )
 

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	reportpkg "github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
+	reportpkg "github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Значение параметра отчёта по умолчанию. Раньше линтер ключ `default` принимал,

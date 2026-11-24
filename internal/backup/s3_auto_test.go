@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // fakeStore is an in-memory ObjectStore for exercising the S3 upload/rotation

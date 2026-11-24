@@ -1,7 +1,7 @@
 package project
 
 import (
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 	"os"
 	"path/filepath"
 )

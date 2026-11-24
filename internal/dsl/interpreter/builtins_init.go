@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // init wires the helpers and ext-functions declared in builtins_helpers.go

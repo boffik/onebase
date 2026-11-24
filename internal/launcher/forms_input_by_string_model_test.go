@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/formdoc"
+	"github.com/boffik/onebase/internal/formdoc"
 )
 
 // Галка «Ввод по строке» в панели свойств конструктора форм: ключ

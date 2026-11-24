@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 	sqlite "modernc.org/sqlite"
 )
 

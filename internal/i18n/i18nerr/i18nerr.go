@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/i18n"
 )
 
 // Error — ошибка с шаблоном-ключом и аргументами.

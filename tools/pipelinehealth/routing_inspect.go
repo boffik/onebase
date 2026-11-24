@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 func inspectRouting(repository, trusted, fixture string, number int, positivePurpose string) (map[string]any, error) {

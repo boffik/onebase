@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // Сорвавшаяся привязка не должна оставлять пользователя без всего сразу.

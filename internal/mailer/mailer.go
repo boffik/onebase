@@ -9,8 +9,8 @@ import (
 	"net/smtp"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 // Config holds SMTP settings from config/app.yaml section "email".

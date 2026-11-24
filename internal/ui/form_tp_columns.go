@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // managedTPColumn — одна колонка табличной части в порядке показа.

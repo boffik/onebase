@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // buildSyntheticTablePDF строит PDF с кириллической таблицей: шапка со спаном,

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/llm"
 )
 
 // fakeSource реализует ConfigSource без реальной БД/сети.

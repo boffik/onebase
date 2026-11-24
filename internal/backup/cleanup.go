@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // Уборка на путях резервного копирования и восстановления.

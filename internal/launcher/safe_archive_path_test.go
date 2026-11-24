@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/backup"
 )
 
 // safeArchivePath защищает распаковку ZIP/OBZ-архивов (config/import-zip,

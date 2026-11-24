@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ivantit66/onebase/internal/bench"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/bench"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 var benchCmd = &cobra.Command{

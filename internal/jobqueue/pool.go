@@ -33,8 +33,8 @@ import (
 
 	"github.com/google/uuid"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/storage"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Значения по умолчанию. Пул малый намеренно: очередь включена на любой базе,

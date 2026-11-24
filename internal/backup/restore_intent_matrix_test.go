@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // The writable SQLite preflight is only a way to make a hot WAL readable.

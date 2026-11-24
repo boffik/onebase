@@ -11,9 +11,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/boffik/onebase/internal/entityservice"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/entityservice"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // dslCatalogDeleter реализует interpreter.CatalogDeleter поверх entityservice.

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/httpservice"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckHTTPServiceAuthWarnings — advisory-предупреждения (issue #786): у сервиса

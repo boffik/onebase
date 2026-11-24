@@ -3,7 +3,7 @@ package storage
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func refTo(name, target string) metadata.Field {

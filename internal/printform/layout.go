@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/csssafe"
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/csssafe"
+	"github.com/boffik/onebase/internal/sheet"
 	"gopkg.in/yaml.v3"
 )
 

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/userdata"
 )
 
 func TestPortableStartupSelectsWebviewProfileBeforeCobra(t *testing.T) {

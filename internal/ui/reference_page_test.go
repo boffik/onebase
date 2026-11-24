@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/project"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/project"
 )
 
 func TestReferencePageHTTP(t *testing.T) {

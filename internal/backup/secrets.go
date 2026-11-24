@@ -14,9 +14,9 @@ package backup
 import (
 	"context"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/secrets"
-	"github.com/ivantit66/onebase/internal/storage"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // PlaintextSecretPaths возвращает пути секретов, лежащих в базе открытым

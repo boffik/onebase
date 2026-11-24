@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ivantit66/onebase/internal/dsl/loader"
+	"github.com/boffik/onebase/internal/dsl/loader"
 )
 
 // Кнопка «Открыть карточку» в конструкторе форм (#1876): флажок панели

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
 )
 
 // newSessionsFixture: sqlite-база с пользователем и двумя сессиями разных видов.

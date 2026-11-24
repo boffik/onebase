@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // Record — одна запись внешней печатной формы.

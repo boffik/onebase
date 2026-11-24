@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dblock"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func universalExportHandler(t *testing.T, withConfig bool) (*handler, *Base) {

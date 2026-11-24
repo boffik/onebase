@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/project"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/project"
 )
 
 // TestConfiguratorSaveApp_UIStyle — вид форм выбирается в панели «Конфигурация»

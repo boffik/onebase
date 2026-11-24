@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/converter/parser1c"
+	"github.com/boffik/onebase/internal/converter/parser1c"
 )
 
 func TestSynonymTitle(t *testing.T) {

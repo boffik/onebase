@@ -6,8 +6,8 @@ package aiassist
 import (
 	"context"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/llm"
 )
 
 // ConfigSource отдаёт текущий LLM-конфиг базы. Реализуется *storage.DB

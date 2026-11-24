@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // baseOnSQLite регистрирует базу, указывающую на файл SQLite по пути dbPath.

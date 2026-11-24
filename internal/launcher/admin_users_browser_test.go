@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // renderCfgAdminUsersBrowserHTML проходит через production middleware и

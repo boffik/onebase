@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/csssafe"
+	"github.com/boffik/onebase/internal/csssafe"
 )
 
 // HTMLOptions — параметры HTML-рендера табличного документа.

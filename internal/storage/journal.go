@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // colExprForDoc returns the SQL expression for a journal column in the given entity's SELECT.

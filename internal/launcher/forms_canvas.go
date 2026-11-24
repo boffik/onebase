@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"html"
 
-	"github.com/ivantit66/onebase/internal/formdoc"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/formdoc"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Интерактивный рендер холста визуального конструктора форм (#164, слайс 4).

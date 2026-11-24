@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // На PostgreSQL смена типа — настоящий ALTER … TYPE … USING, который переписывает

@@ -11,11 +11,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/boffik/onebase/internal/excel"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/excel"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func (s *Server) journalList(w http.ResponseWriter, r *http.Request) {

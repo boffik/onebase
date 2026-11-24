@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/ivantit66/onebase/internal/devserver"
-	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/devserver"
+	"github.com/boffik/onebase/internal/launcher"
 	"github.com/spf13/cobra"
 )
 

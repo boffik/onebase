@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/xlsximport"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/xlsximport"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

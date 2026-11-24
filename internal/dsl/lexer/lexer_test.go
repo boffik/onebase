@@ -3,8 +3,8 @@ package lexer_test
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/token"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/token"
 )
 
 func TestLexer_OnWrite(t *testing.T) {

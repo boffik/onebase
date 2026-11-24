@@ -15,13 +15,13 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/boffik/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/configfmt"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/project"
+	querylang "github.com/boffik/onebase/internal/query"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/configcheck"
-	"github.com/ivantit66/onebase/internal/configfmt"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/project"
-	querylang "github.com/ivantit66/onebase/internal/query"
 )
 
 // GenChange — один предложенный объект в diff генерации.

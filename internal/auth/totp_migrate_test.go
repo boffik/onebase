@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 func TestMigratePlaintextTOTP(t *testing.T) {

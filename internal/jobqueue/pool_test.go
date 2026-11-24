@@ -27,9 +27,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/jobqueue"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/jobqueue"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // fakeExec — исполнитель-заглушка: считает одновременно работающих и отдаёт

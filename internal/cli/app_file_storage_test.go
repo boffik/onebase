@@ -12,9 +12,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func boolPtr(b bool) *bool { return &b }

@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // enrichAuditEntries resolves reference UUIDs and formats dates in audit

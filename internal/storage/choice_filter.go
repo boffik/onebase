@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // ChoicePredicate is a trusted, server-built choice_filter condition. HTTP

@@ -10,7 +10,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/ivantit66/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/incident"
 )
 
 // Incidents возвращает журнал инцидентов процесса. Нужен внешнему коду:

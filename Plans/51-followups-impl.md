@@ -703,7 +703,7 @@ Expected: FAIL/не компилируется (сигнатура `aiSchemaText
 
 - [ ] **Step 3: Переписать `aiSchemaText(ctx)` с фильтром**
 
-В `internal/ui/ai_tools.go` добавить импорт `"github.com/ivantit66/onebase/internal/metadata"` в блок (`:3-16`) и заменить `aiSchemaText` (`:84-106`) на:
+В `internal/ui/ai_tools.go` добавить импорт `"github.com/boffik/onebase/internal/metadata"` в блок (`:3-16`) и заменить `aiSchemaText` (`:84-106`) на:
 ```go
 // aiSchemaText кратко описывает доступные объекты конфигурации для модели. В
 // режиме rbac (план 54) у не-администратора из схемы исключаются объекты-данные

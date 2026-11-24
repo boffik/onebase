@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/version"
 	"github.com/spf13/cobra"
 )
 

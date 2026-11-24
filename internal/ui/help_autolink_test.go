@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/userhelp"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/userhelp"
 )
 
 func TestHelpAutolinkAllowlistPublicRoute(t *testing.T) {

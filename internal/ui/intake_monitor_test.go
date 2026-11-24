@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // seedQuarantine кладёт в БД одно карантинное событие (строка идемпотентности

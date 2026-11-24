@@ -7,8 +7,8 @@ package exchange
 import (
 	"context"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // SyncWithNode выполняет полный онлайн-обмен с узлом peer:

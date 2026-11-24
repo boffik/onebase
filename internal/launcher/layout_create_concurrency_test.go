@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Публичные PDF/XLSX handlers доходят до атомарного create-if-absent в обоих

@@ -3,7 +3,7 @@ package query
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Each entry represents one FROM source, not one qualifier spelling. Repeated

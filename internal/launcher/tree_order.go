@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/fsmode"
 	"gopkg.in/yaml.v3"
 )
 

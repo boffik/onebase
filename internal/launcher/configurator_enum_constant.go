@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
 	"gopkg.in/yaml.v3"
 )
 

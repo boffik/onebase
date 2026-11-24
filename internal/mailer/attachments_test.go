@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // Письмо с вложением разбирается стандартным MIME-парсером: multipart/mixed,

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/onec_forms"
+	"github.com/boffik/onebase/internal/onec_forms"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

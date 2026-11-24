@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // UserFunc достаёт логин из запроса. Параметром, а не прямым обращением к

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	oblog "github.com/boffik/onebase/internal/logging"
 	"github.com/fsnotify/fsnotify"
-	oblog "github.com/ivantit66/onebase/internal/logging"
 )
 
 func watcherLog() *slog.Logger {

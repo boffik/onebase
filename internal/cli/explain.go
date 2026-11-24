@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/project"
-	querylang "github.com/ivantit66/onebase/internal/query"
-	"github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/scheduler"
-	"github.com/ivantit66/onebase/internal/storage"
-	"github.com/ivantit66/onebase/internal/widget"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/project"
+	querylang "github.com/boffik/onebase/internal/query"
+	"github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/widget"
 	"github.com/spf13/cobra"
 )
 

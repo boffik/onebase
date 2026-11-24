@@ -1,6 +1,6 @@
 package metadata
 
-import "github.com/ivantit66/onebase/internal/csssafe"
+import "github.com/boffik/onebase/internal/csssafe"
 
 // FormElementBackgroundCSS возвращает CSS-объявление фона элемента формы
 // или пустую строку. Фон читают ГруппаФормы (#1547) и Кнопка — кнопки разных

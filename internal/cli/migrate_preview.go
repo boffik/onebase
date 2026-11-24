@@ -9,11 +9,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/ivantit66/onebase/internal/backup"
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/dblock"
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/backup"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/dblock"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/spf13/cobra"
 )
 

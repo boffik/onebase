@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/storage"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 func valueCI(values map[string]any, name string) any {

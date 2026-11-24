@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // Клиенты намеренно разные: у метаданных короткий таймаут (проверка обновлений

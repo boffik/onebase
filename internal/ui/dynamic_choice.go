@@ -3,7 +3,7 @@ package ui
 import (
 	"fmt"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // choiceListItem — один пункт динамического списка значений, сформированного

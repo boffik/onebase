@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
 )
 
 // sampleResult — прогон со всеми исходами: pass, fail, error, empty.

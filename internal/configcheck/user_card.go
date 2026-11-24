@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // A new database-backed authorization source must be statically valid in the

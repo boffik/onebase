@@ -1,4 +1,4 @@
-module github.com/ivantit66/onebase
+module github.com/boffik/onebase
 
 go 1.26.0
 

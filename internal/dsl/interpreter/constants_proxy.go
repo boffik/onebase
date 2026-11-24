@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/typedempty"
+	"github.com/boffik/onebase/internal/typedempty"
 )
 
 // ConstantsDB — то, что нужно объекту Константы от хранилища.

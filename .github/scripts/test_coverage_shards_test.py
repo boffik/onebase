@@ -91,11 +91,11 @@ class ShardCLI(unittest.TestCase):
         self.assertEqual((self.root / "coverage.out").read_text().splitlines(), [
             "mode: atomic", legacy.LAUNCHER + "/sample.go:1.1,2.2 2 3",
             legacy.UI + "/sample.go:1.1,2.2 2 10",
-            "github.com/ivantit66/onebase/other/sample.go:1.1,2.2 2 7"])
+            "github.com/boffik/onebase/other/sample.go:1.1,2.2 2 7"])
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
         tests = [call for call in calls if call[0] == "test" and "-list" not in call]
         self.assertEqual(len(tests), 7)
-        self.assertEqual([call[-1] for call in tests], ["github.com/ivantit66/onebase/other"] + [legacy.UI]*4 + [legacy.LAUNCHER]*2)
+        self.assertEqual([call[-1] for call in tests], ["github.com/boffik/onebase/other"] + [legacy.UI]*4 + [legacy.LAUNCHER]*2)
         self.assertTrue(all(all(flag in call for flag in ["-race", "-count=1", "-timeout=20m", "-json", "-covermode=atomic"]) for call in tests))
         self.assertEqual(sum("-p=2" in call for call in tests), 1)
 
@@ -192,7 +192,7 @@ class ContextMismatchCLI(unittest.TestCase):
             names = ["Test" + name for name in ("Alpha", "Bravo", "Charlie", "Delta")]
             series[label] = dict(package=package, names=names, groups=[names[i::count] for i in range(count)])
         self.plan = dict(schema="race-coverage-plan-v1", context=self.current,
-                         packages=["github.com/ivantit66/onebase/other", legacy.UI, legacy.LAUNCHER], series=series)
+                         packages=["github.com/boffik/onebase/other", legacy.UI, legacy.LAUNCHER], series=series)
 
     def reject(self, expected):
         self.plan["context"] = expected
@@ -325,7 +325,7 @@ class RealGoCLI(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.env = dict(os.environ, GOWORK="off", GOPROXY="off", GOSUMDB="off")
         self.git("init", "-q")
-        self.root.joinpath("go.mod").write_text("module github.com/ivantit66/onebase\n\ngo 1.26.0\n")
+        self.root.joinpath("go.mod").write_text("module github.com/boffik/onebase\n\ngo 1.26.0\n")
         for package in ("internal/ui", "internal/launcher", "other"):
             directory = self.root / package
             directory.mkdir(parents=True)

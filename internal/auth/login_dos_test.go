@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 func TestLoginJSON_RejectsOversizedBody(t *testing.T) {

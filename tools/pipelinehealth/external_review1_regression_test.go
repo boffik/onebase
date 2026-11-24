@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 // Reproduce canonical public review #2452 / 6555284057 through the real CLI.

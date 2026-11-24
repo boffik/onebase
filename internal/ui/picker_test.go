@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // План 46, фаза 1: обработчик кнопки вызывает ПоказатьПодбор(Данные,Колонки,

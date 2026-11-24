@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/httpservice"
 )
 
 // applyHeaders прогоняет запрос через тот же путь, что и serviceDispatch:

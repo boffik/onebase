@@ -10,14 +10,14 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/boffik/onebase/internal/csssafe"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/metadata"
+	processorpkg "github.com/boffik/onebase/internal/processor"
+	reportpkg "github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/richtext"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/csssafe"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/metadata"
-	processorpkg "github.com/ivantit66/onebase/internal/processor"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/richtext"
-	"github.com/ivantit66/onebase/internal/storage"
 	"github.com/shopspring/decimal"
 )
 
@@ -737,6 +737,7 @@ func templateFuncs(bundle *i18n.Bundle) template.FuncMap {
 		"tableHeaderVars": func(el *metadata.FormElement) template.CSS {
 			_, vars := metadata.FormTableHeaderColors(el)
 			return template.CSS(vars) //nolint:gosec // G203: цвета прошли csssafe.Color, иначе пустая строка
+		},
 		// elGroupStyle — style группы: фон и раскладка. Рамки и внутренних отступов
 		// здесь НЕТ: они в CSS (.form-group-box и .ob-group-plain), иначе ключ
 		// bordered: false не мог бы их снять (inline-стиль сильнее класса), а вид

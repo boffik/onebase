@@ -3,8 +3,8 @@ package writer
 import (
 	"errors"
 	"fmt"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/fsmode"
+	oblog "github.com/boffik/onebase/internal/logging"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,7 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // templateSource — найденный макет (шаблон) в выгрузке 1С.

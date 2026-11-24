@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/bugreport"
-	"github.com/ivantit66/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/bugreport"
+	"github.com/boffik/onebase/internal/incident"
 )
 
 func renderReportProblem(t *testing.T, data map[string]any) string {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/langref"
+	"github.com/boffik/onebase/internal/dsl/langref"
 )
 
 // dslReferencePath — путь до витрины от каталога пакета.

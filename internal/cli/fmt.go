@@ -3,7 +3,7 @@ package cli
 import (
 	stdfmt "fmt"
 
-	"github.com/ivantit66/onebase/internal/configfmt"
+	"github.com/boffik/onebase/internal/configfmt"
 	"github.com/spf13/cobra"
 )
 

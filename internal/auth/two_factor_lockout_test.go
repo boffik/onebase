@@ -3,7 +3,7 @@ package auth_test
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 // #620: включить требование второго фактора от когорты, у которой он ни у кого не

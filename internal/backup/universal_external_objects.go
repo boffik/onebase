@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 var universalExternalObjectTables = []string{"_attachments", "_blobs"}

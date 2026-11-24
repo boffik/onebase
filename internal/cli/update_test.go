@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/installtest"
-	"github.com/ivantit66/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/installtest"
+	"github.com/boffik/onebase/internal/selfupdate"
 	"github.com/spf13/cobra"
 )
 

@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // REST-эндпоинт глобального поиска (план 82). Права те же, что в списках:

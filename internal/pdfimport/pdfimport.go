@@ -21,9 +21,9 @@ import (
 	"io"
 	"time"
 
-	pdf "github.com/ivantit66/onebase/internal/pdfimport/pdfparse"
+	pdf "github.com/boffik/onebase/internal/pdfimport/pdfparse"
 
-	"github.com/ivantit66/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/printform"
 )
 
 // MaxFileSize — лимит размера PDF (10 МБ). Защита от распухших/враждебных файлов.

@@ -1,6 +1,6 @@
 package onec_forms
 
-import "github.com/ivantit66/onebase/internal/metadata"
+import "github.com/boffik/onebase/internal/metadata"
 
 // eventMap — соответствие имён событий: ключ — имя из Form.xml (англ),
 // значение — FormEventType OneBase (русский).

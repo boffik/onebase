@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/project"
-	"github.com/ivantit66/onebase/internal/scheduler"
+	"github.com/boffik/onebase/internal/project"
+	"github.com/boffik/onebase/internal/scheduler"
 )
 
 func TestRegisterAutoBackup_Defaults(t *testing.T) {

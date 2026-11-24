@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestLogCfgAI_RespectsFlag(t *testing.T) {

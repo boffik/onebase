@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 func TestManagedFormCloseIntentManagerMarkForDeletionPublishesCanonicalState(t *testing.T) {

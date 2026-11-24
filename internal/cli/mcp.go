@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/mcp"
+	"github.com/boffik/onebase/internal/mcp"
 	"github.com/spf13/cobra"
 )
 

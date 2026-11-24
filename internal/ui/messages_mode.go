@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"strconv"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Режим показа сообщений интерфейса (config/home_page.yaml: messages,

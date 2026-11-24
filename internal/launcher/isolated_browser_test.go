@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/processcontrol"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/processcontrol"
 )
 
 func TestChromiumArgs(t *testing.T) {

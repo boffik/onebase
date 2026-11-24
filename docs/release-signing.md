@@ -68,7 +68,7 @@ workflow сверяет приватный ключ с `RELEASE_PUBLIC_KEY`. О�
 Жёсткий режим включён: релизный workflow собирает бинари с
 
 ```
--X github.com/ivantit66/onebase/internal/selfupdate.RequireSignature=1
+-X github.com/boffik/onebase/internal/selfupdate.RequireSignature=1
 ```
 
 Пока он был мягким, отсутствие подписи давало лишь предупреждение в журнале — и

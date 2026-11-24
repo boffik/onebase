@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/realtime"
+	"github.com/boffik/onebase/internal/realtime"
 )
 
 func TestServerShutdownCancelsAndDrainsBackgroundJobs(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 var errInjectedMetadata = errors.New("injected metadata failure")

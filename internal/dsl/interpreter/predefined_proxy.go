@@ -3,7 +3,7 @@ package interpreter
 import (
 	"context"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // PredefinedDB is the minimal storage interface for predefined item lookup.

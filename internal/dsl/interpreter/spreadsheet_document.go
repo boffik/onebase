@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/sheet"
+	"github.com/boffik/onebase/internal/sheet"
 )
 
 // Этот файл — тонкая DSL-обвязка (ТабличныйДокумент/Область/Ячейка) над

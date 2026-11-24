@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
+	processorpkg "github.com/boffik/onebase/internal/processor"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	processorpkg "github.com/ivantit66/onebase/internal/processor"
 )
 
 // Форма обработки: обязательные параметры и индикатор выполнения.

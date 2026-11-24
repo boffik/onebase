@@ -21,7 +21,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 // Config — один веб-хук из app.yaml.

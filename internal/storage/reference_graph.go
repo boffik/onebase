@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // ReferenceSourceKey identifies one physical field and its projected entity.

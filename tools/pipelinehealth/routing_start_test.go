@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 func TestPublicPipelineStartHintRequiresExactCurrentUnfinishedPipeline(t *testing.T) {

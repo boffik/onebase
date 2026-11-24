@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // failingWriter — ResponseWriter, у которого обрывается тело ответа: заголовки

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/typedempty"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/typedempty"
 )
 
 // Статусы safe-match API (ПроверитьСовпадениеПоРеквизиту): кладутся в поле

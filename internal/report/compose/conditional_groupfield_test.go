@@ -3,7 +3,7 @@ package compose
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/report"
 	"github.com/shopspring/decimal"
 )
 

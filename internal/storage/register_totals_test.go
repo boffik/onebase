@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // toF приводит значение остатка (int64/float64/[]byte/string из SQLite) к float64.

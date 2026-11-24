@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/version"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // Проверка идёт через argv и диспетчеризацию cobra, а не вызовом RunE: заявку

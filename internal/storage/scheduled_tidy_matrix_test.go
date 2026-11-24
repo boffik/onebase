@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boffik/onebase/internal/dbtest"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/dbtest"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 func addRun(t *testing.T, ctx context.Context, db *storage.DB, job string, startedAt time.Time, status string) uuid.UUID {

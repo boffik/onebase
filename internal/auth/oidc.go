@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/secrets"
 )
 
 // authProvidersKey — ключ _settings со списком провайдеров.

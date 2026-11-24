@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/incident"
-	"github.com/ivantit66/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/selfupdate"
 )
 
 func TestMarkdown_HasEnvironmentAndIncident(t *testing.T) {

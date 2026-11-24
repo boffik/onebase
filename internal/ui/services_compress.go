@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // compressMinSize — порог включения gzip. На коротком ответе сжатие даёт

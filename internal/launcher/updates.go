@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/selfupdate"
-	"github.com/ivantit66/onebase/internal/version"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/version"
 )
 
 // Обновление платформы из лаунчера (план 92).

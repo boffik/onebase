@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ivantit66/onebase/internal/incident"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Подбор ссылки, брошенный клиентом (новый запрос окна выбора отменил прежний),

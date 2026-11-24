@@ -2,7 +2,7 @@ package gengen
 
 import (
 	"fmt"
-	"github.com/ivantit66/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/fsmode"
 	"io/fs"
 	"os"
 	"path/filepath"

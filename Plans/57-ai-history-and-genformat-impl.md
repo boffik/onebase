@@ -195,8 +195,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 func TestLogCfgAI_RespectsFlag(t *testing.T) {
@@ -239,8 +239,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // logCfgAI пишет обращение к ИИ из конфигуратора в журнал _ai_audit, если в

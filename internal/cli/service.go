@@ -10,8 +10,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/ivantit66/onebase/internal/launcher"
-	"github.com/ivantit66/onebase/internal/userdata"
+	"github.com/boffik/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/userdata"
 	"github.com/spf13/cobra"
 )
 

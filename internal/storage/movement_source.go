@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // movementSource — таблица движений и имена колонок регистратора.

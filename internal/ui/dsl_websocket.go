@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/interpreter"
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/dsl/interpreter"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // wsRoot — DSL-глобал ВебСокет / WebSocket (план 120B): отправка в исходящее

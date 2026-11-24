@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 )
 
 const routingRepositoryQuery = `query PipelineRoutingRepository($owner:String!,$name:String!){repository(owner:$owner,name:$name){id nameWithOwner}}`

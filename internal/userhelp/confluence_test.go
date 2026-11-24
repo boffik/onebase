@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/userhelp"
+	"github.com/boffik/onebase/internal/userhelp"
 )
 
 func TestConfluencePublishRoundTrip(t *testing.T) {

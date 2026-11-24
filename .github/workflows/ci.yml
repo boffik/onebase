@@ -868,7 +868,7 @@ jobs:
           packages=()
           while IFS= read -r package; do
             package="${package%$'\r'}"
-            if [ "$package" != "github.com/ivantit66/onebase/internal/ui" ]; then
+            if [ "$package" != "github.com/boffik/onebase/internal/ui" ]; then
               packages+=("$package")
             fi
           done < "$package_file"

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/httpservice"
+	"github.com/boffik/onebase/internal/httpservice"
 )
 
 // #5: safeJoinWithin не выпускает путь за пределы base (path traversal).

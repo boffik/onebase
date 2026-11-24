@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/fsmode"
-	oblog "github.com/ivantit66/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/fsmode"
+	oblog "github.com/boffik/onebase/internal/logging"
 )
 
 // PackageBinaries перечисляет исполняемые файлы, которые обновление обязано

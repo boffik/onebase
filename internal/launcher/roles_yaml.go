@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 	"gopkg.in/yaml.v3"
 )
 

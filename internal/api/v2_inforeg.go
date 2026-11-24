@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // Чтение регистра сведений в REST (issue #1423). Внешнему клиенту регистр был

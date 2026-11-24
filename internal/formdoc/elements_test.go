@@ -3,7 +3,7 @@ package formdoc
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // Elements должен разворачивать дерево элементов формы вместе с node-id — это

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/selfupdate"
 )
 
 func TestExplainTargetBlock_PermissionsAndLocationDiffer(t *testing.T) {

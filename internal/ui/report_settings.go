@@ -13,9 +13,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	reportpkg "github.com/boffik/onebase/internal/report"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // maxUserSettingsBytes — потолок размера JSON пользовательских настроек отчёта

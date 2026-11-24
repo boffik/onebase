@@ -16,8 +16,8 @@ import subprocess
 import sys
 
 
-UI = "github.com/ivantit66/onebase/internal/ui"
-LAUNCHER = "github.com/ivantit66/onebase/internal/launcher"
+UI = "github.com/boffik/onebase/internal/ui"
+LAUNCHER = "github.com/boffik/onebase/internal/launcher"
 SERIES = [("ui", UI, 4), ("launcher", LAUNCHER, 2)]
 NAME = re.compile(r"(?:Test|Example|Fuzz)\w*\Z")
 BLOCK = re.compile(r"(\S+):([1-9][0-9]*)\.([1-9][0-9]*),"

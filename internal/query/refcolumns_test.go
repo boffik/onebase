@@ -12,8 +12,8 @@ package query_test
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/query"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/query"
 )
 
 func refColumnEntities() []*metadata.Entity {

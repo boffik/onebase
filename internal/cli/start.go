@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/launcher"
-	oblog "github.com/ivantit66/onebase/internal/logging"
-	"github.com/ivantit66/onebase/internal/selfupdate"
+	"github.com/boffik/onebase/internal/launcher"
+	oblog "github.com/boffik/onebase/internal/logging"
+	"github.com/boffik/onebase/internal/selfupdate"
 	"github.com/spf13/cobra"
 )
 

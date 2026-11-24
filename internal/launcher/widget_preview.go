@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/widget"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
-	"github.com/ivantit66/onebase/internal/widget"
 )
 
 // widgetPreviewResponse — render-ready результат прогона виджета для панели

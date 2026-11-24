@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/secrets"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/secrets"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Копия снимается с базы целиком, поэтому открытый секрет в _settings уедет в

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/testutil/xlsxadvisory"
+	"github.com/boffik/onebase/internal/testutil/xlsxadvisory"
 )
 
 func TestImportXLSX_PublicAdvisories(t *testing.T) {

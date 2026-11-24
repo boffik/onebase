@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/i18n"
+	"github.com/boffik/onebase/internal/incident"
+	"github.com/boffik/onebase/internal/webassets"
+	"github.com/boffik/onebase/internal/websec"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/i18n"
-	"github.com/ivantit66/onebase/internal/incident"
-	"github.com/ivantit66/onebase/internal/webassets"
-	"github.com/ivantit66/onebase/internal/websec"
 )
 
 //go:embed static

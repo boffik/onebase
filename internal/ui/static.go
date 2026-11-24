@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"net/http"
 
+	"github.com/boffik/onebase/internal/webassets"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/webassets"
 )
 
 //go:embed static/ui.js

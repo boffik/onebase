@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	reportpkg "github.com/boffik/onebase/internal/report"
 	"github.com/go-chi/chi/v5"
-	reportpkg "github.com/ivantit66/onebase/internal/report"
 )
 
 func TestAPIV2_OpenAPIReportDatetime(t *testing.T) {

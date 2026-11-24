@@ -3,8 +3,8 @@ package launcher
 import (
 	"net/http"
 
+	"github.com/boffik/onebase/internal/dsl/langref"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/dsl/langref"
 )
 
 // configuratorLangref отдаёт справочник встроенного языка (статический, из

@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/boffik/onebase/internal/access"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/metadata"
+	processorpkg "github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/google/uuid"
-	"github.com/ivantit66/onebase/internal/access"
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/metadata"
-	processorpkg "github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 const maxChoiceSourcesJSON = 16 << 10

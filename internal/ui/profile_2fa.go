@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/auth"
 )
 
 const tplProfile2FA = `{{define "profile-2fa"}}` + adminHead + `

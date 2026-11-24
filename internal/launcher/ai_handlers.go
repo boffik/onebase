@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // starterLLMConfig — заготовка конфига для пустой базы: vision-распознавание на

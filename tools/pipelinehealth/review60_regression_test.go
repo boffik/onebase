@@ -3,7 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/ivantit66/onebase/internal/reviewrouting"
+	"github.com/boffik/onebase/internal/reviewrouting"
 	"strings"
 	"testing"
 )

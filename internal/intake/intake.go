@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // Status — бизнес-исход приёмки (в отличие от транспортного ack).

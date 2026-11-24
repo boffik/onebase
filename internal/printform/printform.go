@@ -3,7 +3,7 @@ package printform
 import (
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/metadata"
 )
 
 // RichTextFields возвращает множество имён richtext-полей сущности (в нижнем

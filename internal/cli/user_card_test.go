@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/configcheck"
+	"github.com/boffik/onebase/internal/configcheck"
 )
 
 func cardCheckFixture(t *testing.T, value string, extraAccount bool, targetType string) string {

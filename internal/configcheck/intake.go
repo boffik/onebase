@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // CheckIntakes проверяет intake/*.yaml против модулей и HTTP-сервисов.

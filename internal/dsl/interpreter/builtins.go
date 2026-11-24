@@ -12,7 +12,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // BuiltinFunc is a callable value that can be injected via extraVars (e.g. Сообщить).

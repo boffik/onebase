@@ -5,8 +5,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/runtime"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/runtime"
 )
 
 // Словарь имён контекста события табличной части объявлен в metadata, а значения

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/userhelp"
+	"github.com/boffik/onebase/internal/userhelp"
 )
 
 func execDocs(t *testing.T, args ...string) (string, error) {

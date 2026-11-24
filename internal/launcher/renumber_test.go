@@ -16,9 +16,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/storage"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
-	"github.com/ivantit66/onebase/internal/storage"
 )
 
 // startFailureError воспроизводит ошибку, с которой лаунчер приходит из

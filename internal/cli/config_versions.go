@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/ivantit66/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/configdb"
 	"github.com/spf13/cobra"
 )
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/query"
+	"github.com/boffik/onebase/internal/query"
 )
 
 // Компиляция идёт на КАЖДОМ Запрос.Выполнить(), кэша нет. Бенчмарк меряет её на

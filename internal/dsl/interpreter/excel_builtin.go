@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ivantit66/onebase/internal/excel"
-	"github.com/ivantit66/onebase/internal/i18n/i18nerr"
+	"github.com/boffik/onebase/internal/excel"
+	"github.com/boffik/onebase/internal/i18n/i18nerr"
 )
 
 func init() {

@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/launcher"
+	"github.com/boffik/onebase/internal/launcher"
 )
 
 func TestRunLauncherFrontendHonorsNoGUI(t *testing.T) {

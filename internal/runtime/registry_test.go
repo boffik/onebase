@@ -3,13 +3,13 @@ package runtime
 import (
 	"testing"
 
-	"github.com/ivantit66/onebase/internal/dsl/ast"
-	"github.com/ivantit66/onebase/internal/dsl/lexer"
-	"github.com/ivantit66/onebase/internal/dsl/parser"
-	"github.com/ivantit66/onebase/internal/metadata"
-	"github.com/ivantit66/onebase/internal/printform"
-	"github.com/ivantit66/onebase/internal/processor"
-	"github.com/ivantit66/onebase/internal/report"
+	"github.com/boffik/onebase/internal/dsl/ast"
+	"github.com/boffik/onebase/internal/dsl/lexer"
+	"github.com/boffik/onebase/internal/dsl/parser"
+	"github.com/boffik/onebase/internal/metadata"
+	"github.com/boffik/onebase/internal/printform"
+	"github.com/boffik/onebase/internal/processor"
+	"github.com/boffik/onebase/internal/report"
 )
 
 func TestGetProcedureResolvesOnUnpostAlias(t *testing.T) {

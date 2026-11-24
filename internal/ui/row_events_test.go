@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/boffik/onebase/internal/metadata"
 	"github.com/go-chi/chi/v5"
-	"github.com/ivantit66/onebase/internal/metadata"
 )
 
 // Диспетчер исполняет обработчик ПриДобавленииСтроки, объявленный на элементе ТЧ.

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivantit66/onebase/internal/auth"
-	"github.com/ivantit66/onebase/internal/llm"
-	"github.com/ivantit66/onebase/internal/storage"
+	"github.com/boffik/onebase/internal/auth"
+	"github.com/boffik/onebase/internal/llm"
+	"github.com/boffik/onebase/internal/storage"
 )
 
 // aiChatSystemPrompt — роль ассистента. На фазе F3 у чата ещё нет прямого доступа

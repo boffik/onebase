@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ivantit66/onebase/internal/configdb"
-	"github.com/ivantit66/onebase/internal/fsmode"
-	"github.com/ivantit66/onebase/internal/project"
+	"github.com/boffik/onebase/internal/configdb"
+	"github.com/boffik/onebase/internal/fsmode"
+	"github.com/boffik/onebase/internal/project"
 )
 
 // Конфигуратор пишет файл раньше, чем узнаёт, что получилось. Проверка перед
