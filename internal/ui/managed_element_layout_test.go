@@ -168,11 +168,10 @@ func TestManagedTabs_FormHandlerFramesContentBeforeFollowingFields(t *testing.T)
 		t.Fatalf("открывающий тег контейнера вкладок не закрыт:\n%s", body[tabsAt:])
 	}
 	tabsTag := body[tabsAt : tabsAt+tagEnd]
+	// Рамку, отступы и фон набора закладок задаёт таблица стилей вида, а не
+	// inline-атрибут: иначе ни вид формы, ни своё оформление не перебили бы
+	// их. В теге остаётся только раскладка из YAML.
 	for _, want := range []string{
-		"border:1px solid #e2e8f0",
-		"border-radius:8px",
-		"padding:12px 14px",
-		"margin-bottom:14px",
 		"width:500px",
 		"max-width:100%",
 		"flex:0 0 auto",
@@ -181,6 +180,19 @@ func TestManagedTabs_FormHandlerFramesContentBeforeFollowingFields(t *testing.T)
 		if !strings.Contains(tabsTag, want) {
 			t.Errorf("контейнер вкладок не содержит %q: <%s>", want, tabsTag)
 		}
+	}
+	for _, unwanted := range []string{
+		"border:1px solid",
+		"border-radius:",
+		"padding:",
+		"margin-bottom:",
+	} {
+		if strings.Contains(tabsTag, unwanted) {
+			t.Errorf("оформление контейнера вкладок осталось inline (%q) — таблица стилей его не перебьёт: <%s>", unwanted, tabsTag)
+		}
+	}
+	if !strings.Contains(body, ".managed-tabs{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px}") {
+		t.Error("рамка и отступы набора закладок не заданы правилом .managed-tabs")
 	}
 	if strings.Contains(tabsTag, "ZgotmplZ") {
 		t.Errorf("стиль контейнера вкладок вырезан контекстным экранированием: <%s>", tabsTag)

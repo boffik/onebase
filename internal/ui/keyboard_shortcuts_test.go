@@ -659,8 +659,8 @@ func TestManagedNoGridShortcutsAndReadOnlyRender(t *testing.T) {
 				return node.Type == html.ElementNode && node.Data == "button" && strings.Contains(className, "del-btn")
 			})
 			add := keyboardFindHTML(doc, func(node *html.Node) bool {
-				style, _ := keyboardHTMLAttr(node, "style")
-				return node.Type == html.ElementNode && node.Data == "button" && strings.Contains(style, "margin:0 0 12px")
+				className, _ := keyboardHTMLAttr(node, "class")
+				return node.Type == html.ElementNode && node.Data == "button" && strings.Contains(className, "tp-add-btn-vt")
 			})
 			if field == nil || remove == nil || add == nil {
 				t.Fatal("rendered NoGrid table lost a field or structural button")

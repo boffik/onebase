@@ -3730,7 +3730,7 @@ function obSetImageField(wrap, ref) {
     if (hidden) hidden.value = ref;
     var prev = candidate.querySelector('.img-preview');
     if (prev) {
-      prev.style.display = ref ? '' : 'none';
+      prev.classList.toggle('ob-hidden', !ref);
       var img = prev.querySelector('img');
       if (img) {
         if (ref) img.src = '/ui/_image/' + encodeURIComponent(ref);
@@ -3743,7 +3743,7 @@ function obSetImageField(wrap, ref) {
       }
     }
     var clear = candidate.querySelector('.img-clear-btn');
-    if (clear) clear.style.display = ref ? '' : 'none';
+    if (clear) clear.classList.toggle('ob-hidden', !ref);
   });
 }
 window.obSetImageField = obSetImageField;
@@ -3831,7 +3831,13 @@ function obInitFormDelegates() {
     if (toggleNext) {
       e.preventDefault();
       var next = toggleNext.nextElementSibling;
-      if (next) next.style.display = next.style.display === 'none' ? 'block' : 'none';
+      if (next) {
+        // Скрытие меню задаёт таблица стилей (класс), поэтому «сейчас открыто»
+        // определяется вычисленным стилем, а не inline-объявлением: иначе
+        // первый щелчок по кнопке ничего бы не показал.
+        var shown = window.getComputedStyle(next).display !== 'none';
+        next.style.display = shown ? 'none' : 'block';
+      }
       return;
     }
     var refCurrent = e.target.closest('[data-ob-ref-current]');
@@ -4128,7 +4134,7 @@ function recalcTpTotals(inp) {
     });
     if (totals[fn] !== 0) hasData = true;
   });
-  tfoot.style.display = hasData ? '' : 'none';
+  tfoot.classList.toggle('ob-hidden', !hasData);
 }
 
 obReady(function () {

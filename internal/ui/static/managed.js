@@ -712,9 +712,11 @@ window.obManagedApplyColumnTitles = obManagedApplyColumnTitles;
         obManagedSetPageHidden(path, !!hidden[path]);
         return;
       }
-      // Some managed elements keep their layout only in an inline display
-      // declaration (checkbox and command bar use flex). Remember that value
-      // before the first state update instead of erasing it on hidden=false.
+      // Layout of managed elements now comes from the style table (flex lives
+      // in CSS), so the inline display is usually empty. Remember whatever the
+      // element carries inline before the first state update anyway: a
+      // hand-written or legacy element may still set it, and erasing it on
+      // hidden=false would break that element's layout.
       if (!Object.prototype.hasOwnProperty.call(el, '_obDisplay')) {
         var d = el.style.display || '';
         // Элемент с hidden_when рендерится сервером с display:none, но его
@@ -3162,7 +3164,7 @@ function obGridColumnIds(columns) {
       markDraggable();
       try { updateTotals(state); } catch (e) {}
       var isDefault = obGridColumnIds(state.columns).join("\u0001") === defaultIds.join("\u0001");
-      if (resetBtn) resetBtn.style.display = isDefault ? "none" : "";
+      if (resetBtn) resetBtn.classList.toggle("ob-hidden", isDefault);
       return isDefault;
     }
     markDraggable();

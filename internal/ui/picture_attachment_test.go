@@ -59,7 +59,7 @@ func TestManagedFormPictureFieldShowsAttachment(t *testing.T) {
 			`max-width:240px;max-height:180px`,
 			// Скрытое поле несёт значение как есть — нормализуется только адрес.
 			`name="Наименование" value="` + stored + `" data-ob-picture-for="ПолеФото" data-ob-picture-field="Наименование"`,
-			`data-ob-picture-empty="ПолеФото" style="color:#94a3b8" hidden>`,
+			`data-ob-picture-empty="ПолеФото" class="ob-picture-empty" hidden>`,
 		} {
 			if !strings.Contains(body, want) {
 				t.Errorf("в разметке нет %s", want)
@@ -83,7 +83,7 @@ func TestManagedFormPictureFieldShowsAttachment(t *testing.T) {
 			// отправки формы, не для адреса.
 			`value="javascript:alert(1)" data-ob-picture-for="ПолеФото"`,
 			`data-ob-picture-link="ПолеФото" href="" target="_blank" rel="noopener" title="Открыть в полном размере" hidden>`,
-			`data-ob-picture-empty="ПолеФото" style="color:#94a3b8">Нет изображения`,
+			`data-ob-picture-empty="ПолеФото" class="ob-picture-empty">Нет изображения`,
 		} {
 			if !strings.Contains(body, want) {
 				t.Errorf("в разметке нет %s", want)

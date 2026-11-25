@@ -54,7 +54,16 @@ test('перетаскивание переносит колонку на мес
 // enableColumnReorder напрямую и проверяет оба пользовательских пути.
 function mountedGrid(ids, savedOrder, fetchOrder) {
   const listeners = {}, resetListeners = {}, saves = [];
-  const reset = {style: {}, addEventListener(type, fn) { resetListeners[type] = fn; }};
+  // Кнопку «Стандартный порядок колонок» прячет класс (ob-hidden), а не
+  // inline-стиль: оформление задаёт таблица стилей, состояние — один класс.
+  const resetClasses = new Set();
+  const reset = {
+    classList: {
+      toggle(name, on) { if (on) resetClasses.add(name); else resetClasses.delete(name); },
+      contains(name) { return resetClasses.has(name); }
+    },
+    addEventListener(type, fn) { resetListeners[type] = fn; }
+  };
   const headers = ids.map(() => ({setAttribute() {}, closest(s) { return s === '.slick-header-column' ? this : null; }}));
   const attrs = {
     'data-sg-tp': 'Lines', 'data-sg-el': 'Lines', 'data-sg-layout': 'processor/Test/Form/Lines',
@@ -137,7 +146,7 @@ for (const action of ['drop', 'reset']) {
         assert.deepEqual(state.grid.columns, before);
         assert.equal(state.grid.setCalls, 0);
         assert.deepEqual(state.saves, []);
-        assert.deepEqual(state.reset.style, {});
+        assert.equal(state.reset.classList.contains('ob-hidden'), false, 'кнопка возврата порядка видна');
         state.grid.valid = true;
         if (action === 'drop') state.drop(1, 0); else state.resetOrder();
         assert.equal(state.grid.data.items[0].Price, 99);

@@ -102,8 +102,11 @@ func gridOrderRendered(t *testing.T, s *Server, u *auth.User) (layout, order str
 	if reset == nil {
 		t.Fatal("нет кнопки «Стандартный порядок колонок»")
 	}
-	style, _ := keyboardHTMLAttr(reset, "style")
-	return layout, order, strings.Contains(style, "display:none")
+	// Скрытие кнопки возврата порядка задаёт класс, а не inline-стиль: иначе
+	// вид формы не смог бы переопределить оформление, а состояние пришлось бы
+	// дублировать в двух местах.
+	className, _ := keyboardHTMLAttr(reset, "class")
+	return layout, order, strings.Contains(className, "ob-hidden")
 }
 
 func TestGridOrder_SavedPerUserAndRendered(t *testing.T) {

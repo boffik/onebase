@@ -1785,6 +1785,12 @@ tr:hover td{background:#f8fafc}
    но не ставим disabled — клик по ней объясняет причину. */
 .btn[aria-disabled="true"]{opacity:.5}
 .btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
+/* Скрытие элемента состоянием (служебные поля, строка итогов, кнопка
+   возврата порядка колонок, превью картинки). Оформление — в таблице стилей,
+   а не inline-атрибутом: display у .btn и у темы вида перебивает атрибут
+   hidden, поэтому утилита скрытия обязана быть сильнее компонентных правил —
+   !important здесь про состояние, а не про внешний вид. */
+.ob-hidden{display:none !important}
 .form-group{margin-bottom:16px}
 label{display:block;font-size:13px;font-weight:500;margin-bottom:5px;color:#475569}
 input[type=text],input[type=datetime-local],input[type=date],input[type=number],select{width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none;background:#fff}
@@ -2865,11 +2871,11 @@ const tplForm = `
     {{$iv := index $.Values $fn}}
     <div class="img-field" data-ob-image-field="{{$fn}}" data-ob-image-label="{{$flabel}}">
       <input type="hidden" name="{{$fn}}" value="{{$iv}}">
-      <div class="img-preview"{{if not $iv}} style="display:none"{{end}}><button type="button"{{if not (isImageRef $iv)}} disabled{{end}} data-ob-image-view data-ob-readonly-navigation="1" data-ob-image-ref="{{$iv}}" aria-label="{{$flabel}}"><img src="{{if $iv}}/ui/_image/{{$iv}}{{end}}" alt="{{$flabel}}"></button></div>
+      <div class="img-preview{{if not $iv}} ob-hidden{{end}}"><button type="button"{{if not (isImageRef $iv)}} disabled{{end}} data-ob-image-view data-ob-readonly-navigation="1" data-ob-image-ref="{{$iv}}" aria-label="{{$flabel}}"><img src="{{if $iv}}/ui/_image/{{$iv}}{{end}}" alt="{{$flabel}}"></button></div>
       {{if and (not $ro) $.CanWrite}}
       <div class="img-actions">
-        <label class="btn btn-sm btn-secondary">{{t $.Lang "Загрузить…"}}<input type="file" accept="image/*" style="display:none" data-ob-image-upload="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/_image"></label>
-        <button type="button" class="btn btn-sm img-clear-btn" data-ob-image-clear{{if not $iv}} style="display:none"{{end}}>{{t $.Lang "Очистить"}}</button>
+        <label class="btn btn-sm btn-secondary">{{t $.Lang "Загрузить…"}}<input type="file" accept="image/*" class="ob-hidden" data-ob-image-upload="/ui/{{lower (str $.Entity.Kind)}}/{{lower $.Entity.Name}}/_image"></label>
+        <button type="button" class="btn btn-sm img-clear-btn{{if not $iv}} ob-hidden{{end}}" data-ob-image-clear>{{t $.Lang "Очистить"}}</button>
       </div>
       {{end}}
     </div>
@@ -2939,7 +2945,7 @@ const tplForm = `
     </tr>
   {{end}}
   </tbody>
-  <tfoot id="tp-foot-{{$tpName}}" class="tp-footer" style="display:none"><tr>
+  <tfoot id="tp-foot-{{$tpName}}" class="tp-footer ob-hidden"><tr>
     {{range .Fields}}{{if eq (str .Type) "number"}}<td class="tp-total" data-tp-total="{{$tpName}}.{{.Name}}" style="text-align:right;font-variant-numeric:tabular-nums">0</td>{{else}}<td></td>{{end}}{{end}}<td></td>
   </tr></tfoot>
 </table>

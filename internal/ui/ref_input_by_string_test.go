@@ -161,7 +161,7 @@ func TestManagedRefWithoutInputByStringKeepsSelect(t *testing.T) {
 	html := renderRefTypingForm(t, &metadata.FormElement{
 		Kind: metadata.FormElementField, Name: "ПолеСклад", DataPath: "Объект.Склад",
 	})
-	if strings.Contains(html, "data-ob-ref-typing") || strings.Contains(html, "ob-ref-combo") {
+	if strings.Contains(html, "data-ob-ref-typing") || strings.Contains(html, `class="ob-ref-combo"`) {
 		t.Error("без ключа поле получило ввод по строке")
 	}
 	if !strings.Contains(html, `id="ref-Склад"`) {
