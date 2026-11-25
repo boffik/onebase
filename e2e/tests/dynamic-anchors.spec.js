@@ -30,9 +30,10 @@ test('hidden_when и readonly_when применяются после событ�
   await page.click(SAVE);
   await expect(page).not.toHaveURL(/\/new/);
 
-  // Черновик: украшения отрисованы, командная панель живая. Флажок и панель
-  // держат раскладку инлайновым display:flex — клиент обязан сохранять его
-  // при откате условия, а не затирать пустой строкой.
+  // Черновик: украшения отрисованы, командная панель живая. Раскладку флажка
+  // и панели (display:flex) задаёт таблица стилей вида, а не inline-атрибут:
+  // клиент обязан возвращать элемент к ней при откате условия, а не оставлять
+  // его скрытым или блочным.
   const label = page.locator('[data-ob-el="НадписьСтатуса"]');
   const pictures = [
     page.locator('[data-ob-el="КартинкаСФайлом"]'),
@@ -48,13 +49,17 @@ test('hidden_when и readonly_when применяются после событ�
     }
     await expect(panel).toBeVisible();
     for (const anchor of [checkbox, panel]) {
-      await expect.poll(() => anchor.evaluate((element) => element.style.display)).toBe('flex');
+      // Оформление вынесено в таблицу стилей (см. docs/forms.md), поэтому
+      // inline-объявление здесь пустое, а раскладка приходит из CSS. Проверяем
+      // вычисленный display: после отката условия элемент обязан снова стать
+      // flex — иначе скрытие/показ терял бы раскладку.
+      await expect.poll(() => anchor.evaluate((element) => getComputedStyle(element).display)).toBe('flex');
     }
     for (const button of await panelButtons.all()) await expect(button).toBeEnabled();
   }
   await expectDraft();
 
-  // Первый ответ содержит false: он тоже должен сохранить inline display.
+  // Первый ответ содержит false: он тоже должен сохранить раскладку.
   // Уникальное свойство window доказывает отсутствие перезагрузки документа.
   const documentToken = `anchors-${Date.now()}`;
   await page.evaluate((token) => { window.dynamicAnchorDocumentToken = token; }, documentToken);
@@ -81,11 +86,11 @@ test('hidden_when и readonly_when применяются после событ�
   for (const button of await panelButtons.all()) await expect(button).toBeDisabled();
 
   // Обратное условие приезжает той же картой состояний: false снимает
-  // скрытие, возвращает инлайновый display:flex и отпирает панель.
+  // скрытие, возвращает раскладку display:flex и отпирает панель.
   await changeStage('Черновик');
   await expectDraft();
 
-  // Отдельное скрытие панели проверяет восстановление её display:flex.
+  // Отдельное скрытие панели проверяет восстановление её раскладки.
   await changeStage('Скрыта');
   await expect(panel).toBeHidden();
   await changeStage('Черновик');
